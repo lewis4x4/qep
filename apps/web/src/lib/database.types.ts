@@ -1,5 +1,27 @@
 export type UserRole = "rep" | "admin" | "manager" | "owner";
 export type DocumentSource = "onedrive" | "pdf_upload" | "manual";
+export type VoiceCaptureStatus = "pending" | "processing" | "synced" | "failed";
+export type DealStage =
+  | "initial_contact"
+  | "follow_up"
+  | "demo_scheduled"
+  | "quote_sent"
+  | "negotiation"
+  | "closed_won"
+  | "closed_lost";
+
+export interface ExtractedDealData {
+  customer_name: string | null;
+  company_name: string | null;
+  machine_interest: string | null;
+  attachments_discussed: string | null;
+  deal_stage: DealStage | null;
+  budget_range: string | null;
+  key_concerns: string | null;
+  action_items: string[];
+  next_step: string | null;
+  follow_up_date: string | null;
+}
 
 export interface Database {
   public: {
@@ -64,6 +86,28 @@ export interface Database {
         };
         Insert: Omit<Database["public"]["Tables"]["onedrive_sync_state"]["Row"], "id" | "created_at" | "updated_at">;
         Update: Partial<Database["public"]["Tables"]["onedrive_sync_state"]["Insert"]>;
+      };
+    };
+      voice_captures: {
+        Row: {
+          id: string;
+          user_id: string;
+          audio_storage_path: string | null;
+          duration_seconds: number | null;
+          transcript: string | null;
+          extracted_data: ExtractedDealData;
+          hubspot_deal_id: string | null;
+          hubspot_contact_id: string | null;
+          hubspot_note_id: string | null;
+          hubspot_task_id: string | null;
+          hubspot_synced_at: string | null;
+          sync_status: VoiceCaptureStatus;
+          sync_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["voice_captures"]["Row"], "id" | "created_at" | "updated_at">;
+        Update: Partial<Database["public"]["Tables"]["voice_captures"]["Insert"]>;
       };
     };
     Functions: {

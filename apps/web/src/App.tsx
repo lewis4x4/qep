@@ -3,6 +3,7 @@ import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
 import { ChatPage } from "./components/ChatPage";
 import { AdminPage } from "./components/AdminPage";
+import { VoiceCapturePage } from "./components/VoiceCapturePage";
 
 function App() {
   const { user, profile, loading } = useAuth();
@@ -34,6 +35,14 @@ function App() {
           element={
             ["admin", "manager", "owner"].includes(profile.role)
               ? <AdminPage userRole={profile.role} />
+              : <Navigate to="/" replace />
+          }
+        />
+        <Route
+          path="/voice"
+          element={
+            ["rep", "admin", "manager", "owner"].includes(profile.role)
+              ? <VoiceCapturePage userRole={profile.role} userEmail={profile.email} />
               : <Navigate to="/" replace />
           }
         />
