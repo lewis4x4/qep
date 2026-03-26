@@ -4,6 +4,7 @@ import { LoginPage } from "./components/LoginPage";
 import { ChatPage } from "./components/ChatPage";
 import { AdminPage } from "./components/AdminPage";
 import { VoiceCapturePage } from "./components/VoiceCapturePage";
+import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
 
 function App() {
   const { user, profile, loading } = useAuth();
@@ -43,6 +44,20 @@ function App() {
           element={
             ["rep", "admin", "manager", "owner"].includes(profile.role)
               ? <VoiceCapturePage userRole={profile.role} userEmail={profile.email} />
+              : <Navigate to="/" replace />
+          }
+        />
+        <Route
+          path="/quote"
+          element={
+            ["rep", "manager", "owner"].includes(profile.role)
+              ? (
+                <QuoteBuilderPage
+                  userRole={profile.role}
+                  userEmail={profile.email}
+                  repName={profile.full_name}
+                />
+              )
               : <Navigate to="/" replace />
           }
         />

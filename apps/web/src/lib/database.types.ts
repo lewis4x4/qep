@@ -87,7 +87,6 @@ export interface Database {
         Insert: Omit<Database["public"]["Tables"]["onedrive_sync_state"]["Row"], "id" | "created_at" | "updated_at">;
         Update: Partial<Database["public"]["Tables"]["onedrive_sync_state"]["Insert"]>;
       };
-    };
       voice_captures: {
         Row: {
           id: string;

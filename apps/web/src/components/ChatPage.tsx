@@ -149,6 +149,11 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {["rep", "manager", "owner"].includes(userRole) && (
+            <a href="/quote" className="text-xs text-green-600 hover:underline">
+              Quote
+            </a>
+          )}
           {["rep", "admin", "manager", "owner"].includes(userRole) && (
             <a href="/voice" className="text-xs text-orange-500 hover:underline">
               Field Note
