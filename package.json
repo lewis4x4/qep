@@ -1,0 +1,13 @@
+{
+  "name": "qep-knowledge-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "bun run --filter apps/web dev",
+    "build": "bun run --filter apps/web build",
+    "supabase:start": "supabase start",
+    "supabase:push": "supabase db push",
+    "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts"
+  }
+}

@@ -1,0 +1,145 @@
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk@0.39";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ChatRequest {
+  message: string;
+  history?: ChatMessage[];
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
+    );
+
+    // Verify user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { message, history = [] }: ChatRequest = await req.json();
+
+    if (!message?.trim()) {
+      return new Response(JSON.stringify({ error: "Message is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Generate embedding for the user's question
+    const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+
+    // Use OpenAI embeddings (1536 dims) for pgvector compatibility
+    const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: message,
+      }),
+    });
+    const embeddingData = await embeddingResponse.json();
+    const queryEmbedding = embeddingData.data[0].embedding;
+
+    // Semantic search for relevant chunks
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: chunks, error: searchError } = await supabaseAdmin.rpc("search_chunks", {
+      query_embedding: queryEmbedding,
+      match_threshold: 0.65,
+      match_count: 5,
+    });
+
+    if (searchError) {
+      console.error("Search error:", searchError);
+    }
+
+    // Build context from retrieved chunks
+    const context = chunks && chunks.length > 0
+      ? chunks.map((c: { document_title: string; content: string }) =>
+          `[Source: ${c.document_title}]\n${c.content}`
+        ).join("\n\n---\n\n")
+      : null;
+
+    const systemPrompt = context
+      ? `You are the QEP USA internal knowledge assistant. Answer questions based strictly on the provided company documents. If the answer isn't in the documents, say so clearly — do not make up information.
+
+Here are the relevant excerpts from QEP's internal documents:
+
+${context}
+
+Guidelines:
+- Be concise and direct
+- Cite the source document when relevant
+- If information is not in the provided context, say "I don't have that information in QEP's documents"
+- Never reveal confidential details outside what's shown in context`
+      : `You are the QEP USA internal knowledge assistant. The knowledge base is currently empty or no relevant documents were found for this question. Let the user know you'll be able to answer once QEP's documents (handbook, SOPs, etc.) are loaded into the system.`;
+
+    // Stream response using Claude
+    const stream = await anthropic.messages.stream({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [
+        ...history.slice(-8), // last 4 exchanges for context
+        { role: "user", content: message },
+      ],
+    });
+
+    // Return SSE stream
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            const data = `data: ${JSON.stringify({ text: event.delta.text })}\n\n`;
+            controller.enqueue(encoder.encode(data));
+          }
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+  } catch (error) {
+    console.error("Chat function error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
