@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, NavLink, Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -14,6 +14,7 @@ import {
   PanelLeftOpen,
   ChevronRight,
   Home,
+  Bell,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
 
 interface Profile {
   id: string;
@@ -366,9 +368,51 @@ function NavContent({
   );
 }
 
+function NotificationBell({ count, dark = true }: { count: number; dark?: boolean }) {
+  const iconClass = dark
+    ? "text-[#94A3B8] hover:text-white hover:bg-white/10"
+    : "text-muted-foreground hover:text-foreground hover:bg-muted";
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={`Notifications${count > 0 ? ` (${count})` : ""}`}
+      className={cn("relative", iconClass)}
+    >
+      <Bell className="w-5 h-5" />
+      {count > 0 && (
+        <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#E87722] text-white text-[9px] font-bold leading-none">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Button>
+  );
+}
+
 export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchNotificationCount() {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const [docsResult, voiceResult] = await Promise.all([
+        supabase
+          .from("documents")
+          .select("id", { count: "exact", head: true })
+          .eq("is_active", true)
+          .gte("created_at", since),
+        supabase
+          .from("voice_captures")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", since),
+      ]);
+      setNotificationCount((docsResult.count ?? 0) + (voiceResult.count ?? 0));
+    }
+    fetchNotificationCount();
+  }, []);
 
   const sidebarWidth = isCollapsed ? "lg:w-16" : "lg:w-64";
   const mainPadding = isCollapsed ? "lg:pl-16" : "lg:pl-64";
@@ -411,30 +455,39 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
           <span className="font-bold text-sm text-white">QEP</span>
         </div>
 
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open navigation"
-              className="text-[#94A3B8] hover:text-white hover:bg-white/10"
-            >
-              <Menu className="w-5 h-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0 bg-qep-dark border-r border-white/10">
-            <NavContent
-              profile={profile}
-              onLogout={onLogout}
-              onNavClick={() => setMobileOpen(false)}
-            />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-1">
+          {/* Notification bell */}
+          <NotificationBell count={notificationCount} />
+
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open navigation"
+                className="text-[#94A3B8] hover:text-white hover:bg-white/10"
+              >
+                <Menu className="w-5 h-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0 bg-qep-dark border-r border-white/10">
+              <NavContent
+                profile={profile}
+                onLogout={onLogout}
+                onNavClick={() => setMobileOpen(false)}
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* Main content */}
       <main className={cn("flex-1 transition-all duration-200", mainPadding)}>
-        <div className="pt-14 lg:pt-0 min-h-screen">
+        {/* Desktop top bar */}
+        <div className="hidden lg:flex items-center justify-end px-6 h-12 border-b border-border bg-white">
+          <NotificationBell count={notificationCount} dark={false} />
+        </div>
+        <div className="pt-14 lg:pt-12 min-h-screen">
           {/* Breadcrumb bar (all pages except Dashboard) */}
           <BreadcrumbBar />
           {children}
