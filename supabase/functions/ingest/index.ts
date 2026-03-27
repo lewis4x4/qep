@@ -169,6 +169,51 @@ Deno.serve(async (req) => {
         });
       }
 
+      // SEC-QEP-008: Server-side file type + size validation
+      const ALLOWED_MIME_TYPES = new Set([
+        "application/pdf",
+        "text/plain",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ]);
+      const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+      if (!file.type || !ALLOWED_MIME_TYPES.has(file.type)) {
+        return new Response(
+          JSON.stringify({ error: `File type not allowed: ${file.type || "unknown"}` }),
+          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        return new Response(
+          JSON.stringify({ error: "File exceeds 50 MB limit" }),
+          { status: 413, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Magic byte verification — confirm actual content matches declared MIME type
+      const headerBuffer = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      const isPdf = headerBuffer[0] === 0x25 && headerBuffer[1] === 0x50 &&
+                    headerBuffer[2] === 0x44 && headerBuffer[3] === 0x46; // %PDF
+      const isZip = headerBuffer[0] === 0x50 && headerBuffer[1] === 0x4B &&
+                    headerBuffer[2] === 0x03 && headerBuffer[3] === 0x04; // PK\x03\x04 (DOCX/ZIP)
+
+      if (file.type === "application/pdf" && !isPdf) {
+        return new Response(
+          JSON.stringify({ error: "File content does not match declared type (expected PDF)" }),
+          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+      if (
+        file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
+        !isZip
+      ) {
+        return new Response(
+          JSON.stringify({ error: "File content does not match declared type (expected DOCX)" }),
+          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
       // Extract text — currently supports plain text; PDF parsing done client-side
       // or via a separate PDF-to-text step
       const rawText = await file.text();

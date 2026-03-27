@@ -28,6 +28,14 @@ Deno.serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  // SEC-QEP-007: Reject stale webhooks — replay protection (5-minute window)
+  const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
+  const tsMs = parseInt(requestTimestamp, 10);
+  if (isNaN(tsMs) || Date.now() - tsMs > WEBHOOK_MAX_AGE_MS) {
+    console.warn("Stale or invalid HubSpot webhook timestamp:", requestTimestamp);
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   let events: HubSpotEvent[];
   try {
     events = JSON.parse(body);

@@ -74,6 +74,18 @@ Deno.serve(async (req) => {
       return jsonError("Your role does not have access to voice capture.", 403);
     }
 
+    // SEC-QEP-006: Per-user rate limiting — 5 requests per minute
+    const { data: allowed } = await supabaseAdmin.rpc("check_rate_limit", {
+      p_user_id: user.id,
+      p_endpoint: "voice-capture",
+      p_max_requests: 5,
+      p_window_seconds: 60,
+    });
+
+    if (!allowed) {
+      return jsonError("Rate limit exceeded. Please wait before submitting another recording.", 429);
+    }
+
     // ── Parse multipart form data ─────────────────────────────────────────────
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.includes("multipart/form-data")) {

@@ -18,10 +18,6 @@ interface ChatMessage {
   content: string;
 }
 
-interface ChatRequest {
-  message: string;
-  history?: ChatMessage[];
-}
 
 Deno.serve(async (req) => {
   const ch = corsHeaders(req.headers.get("origin"));
@@ -45,9 +41,77 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { message, history = [] }: ChatRequest = await req.json();
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-    if (!message?.trim()) {
+    // SEC-QEP-005: Verify user has a valid profile (server-side RBAC)
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
+    // SEC-QEP-006: Per-user rate limiting — 10 requests per minute
+    const { data: allowed } = await supabaseAdmin.rpc("check_rate_limit", {
+      p_user_id: user.id,
+      p_endpoint: "chat",
+      p_max_requests: 10,
+      p_window_seconds: 60,
+    });
+
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit exceeded. Please wait before sending another message." }),
+        {
+          status: 429,
+          headers: { ...ch, "Content-Type": "application/json", "Retry-After": "60" },
+        }
+      );
+    }
+
+    const body = await req.json();
+    const rawMessage = body?.message;
+    const rawHistory = body?.history;
+
+    // SEC-QEP-004: Server-side input validation — prevent history injection
+    const MAX_MESSAGE_LENGTH = 8000;
+    const MAX_HISTORY_ITEMS = 20;
+
+    if (typeof rawMessage !== "string" || rawMessage.length > MAX_MESSAGE_LENGTH) {
+      return new Response(JSON.stringify({ error: "Invalid message" }), {
+        status: 400,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
+    const message = rawMessage;
+
+    // Whitelist role field — only "user" and "assistant" are valid
+    const validatedHistory: ChatMessage[] = [];
+    if (Array.isArray(rawHistory)) {
+      for (const item of rawHistory.slice(-MAX_HISTORY_ITEMS)) {
+        if (
+          item &&
+          typeof item === "object" &&
+          (item.role === "user" || item.role === "assistant") &&
+          typeof item.content === "string" &&
+          item.content.length <= MAX_MESSAGE_LENGTH
+        ) {
+          validatedHistory.push({ role: item.role, content: item.content });
+        }
+      }
+    }
+
+    if (!message.trim()) {
       return new Response(JSON.stringify({ error: "Message is required" }), {
         status: 400,
         headers: { ...ch, "Content-Type": "application/json" },
@@ -73,11 +137,6 @@ Deno.serve(async (req) => {
     const queryEmbedding = embeddingData.data[0].embedding;
 
     // Semantic search for relevant chunks
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
     const { data: chunks, error: searchError } = await supabaseAdmin.rpc("search_chunks", {
       query_embedding: queryEmbedding,
       match_threshold: 0.65,
@@ -115,7 +174,7 @@ Guidelines:
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
-        ...history.slice(-8), // last 4 exchanges for context
+        ...validatedHistory,
         { role: "user", content: message },
       ],
     });
