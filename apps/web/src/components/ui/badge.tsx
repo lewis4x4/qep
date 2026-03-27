@@ -4,17 +4,29 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-qep-orange focus:ring-offset-2",
   {
     variants: {
       variant: {
+        // Default — QEP orange badge
         default:
-          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+          "bg-qep-orange text-white border-transparent",
+        // Secondary — neutral gray
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "bg-qep-light-gray text-qep-charcoal border-transparent",
+        // Destructive — red
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
+          "bg-qep-error text-white border-transparent",
+        // Outline
+        outline:
+          "text-qep-charcoal border border-qep-light-gray",
+        // Role / status variants
+        success:
+          "bg-qep-success text-white border-transparent",
+        info:
+          "bg-qep-info text-white border-transparent",
+        warning:
+          "bg-qep-orange text-white border-transparent",
       },
     },
     defaultVariants: {
