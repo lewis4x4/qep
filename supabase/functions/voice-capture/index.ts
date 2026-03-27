@@ -14,10 +14,17 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://blackrockai-qep.netlify.app",
+  "http://localhost:5173",
+];
+function corsHeaders(origin: string | null) {
+  return {
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 interface ExtractedDealData {
   customer_name: string | null;
@@ -33,8 +40,9 @@ interface ExtractedDealData {
 }
 
 Deno.serve(async (req) => {
+  const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   try {
@@ -415,7 +423,7 @@ Return ONLY valid JSON matching this exact structure:
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       }
     );
   } catch (err) {
@@ -429,7 +437,7 @@ Return ONLY valid JSON matching this exact structure:
 function jsonError(message: string, status: number): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...ch, "Content-Type": "application/json" },
   });
 }
 

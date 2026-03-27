@@ -11,18 +11,21 @@ Deno.serve(async (req) => {
   const requestTimestamp = req.headers.get("X-HubSpot-Request-Timestamp");
   const body = await req.text();
 
-  // Verify signature to prevent spoofing
-  if (signature && requestTimestamp) {
-    const clientSecret = Deno.env.get("HUBSPOT_CLIENT_SECRET")!;
-    const sourceString = `${req.method}${req.url}${body}${requestTimestamp}`;
-    const expectedSig = createHmac("sha256", clientSecret)
-      .update(sourceString)
-      .digest("base64");
+  // Verify signature to prevent spoofing — headers are mandatory
+  if (!signature || !requestTimestamp) {
+    console.warn("Missing HubSpot webhook signature headers");
+    return new Response("Unauthorized", { status: 401 });
+  }
 
-    if (signature !== expectedSig) {
-      console.warn("Invalid HubSpot webhook signature");
-      return new Response("Unauthorized", { status: 401 });
-    }
+  const clientSecret = Deno.env.get("HUBSPOT_CLIENT_SECRET")!;
+  const sourceString = `${req.method}${req.url}${body}${requestTimestamp}`;
+  const expectedSig = createHmac("sha256", clientSecret)
+    .update(sourceString)
+    .digest("base64");
+
+  if (signature !== expectedSig) {
+    console.warn("Invalid HubSpot webhook signature");
+    return new Response("Unauthorized", { status: 401 });
   }
 
   let events: HubSpotEvent[];

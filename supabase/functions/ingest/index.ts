@@ -5,10 +5,17 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://blackrockai-qep.netlify.app",
+  "http://localhost:5173",
+];
+function corsHeaders(origin: string | null) {
+  return {
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 const CHUNK_SIZE = 512;      // target tokens per chunk
 const CHUNK_OVERLAP = 50;    // overlap tokens between chunks
@@ -108,8 +115,9 @@ async function ingestDocument(
 }
 
 Deno.serve(async (req) => {
+  const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   try {
@@ -129,7 +137,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
@@ -142,7 +150,7 @@ Deno.serve(async (req) => {
     if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
       return new Response(JSON.stringify({ error: "Forbidden: insufficient role" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
@@ -157,7 +165,7 @@ Deno.serve(async (req) => {
       if (!file) {
         return new Response(JSON.stringify({ error: "No file provided" }), {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
@@ -184,7 +192,7 @@ Deno.serve(async (req) => {
       if (docError || !doc) {
         return new Response(JSON.stringify({ error: docError?.message }), {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
@@ -192,7 +200,7 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, documentId: doc.id, chunks: chunkCount }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...ch, "Content-Type": "application/json" } }
       );
     }
 
@@ -210,7 +218,7 @@ Deno.serve(async (req) => {
       if (!syncState) {
         return new Response(JSON.stringify({ error: "Sync state not found" }), {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
@@ -270,19 +278,19 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, processed }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...ch, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Ingest error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   }
 });

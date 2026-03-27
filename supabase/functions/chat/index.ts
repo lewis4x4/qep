@@ -1,10 +1,17 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://blackrockai-qep.netlify.app",
+  "http://localhost:5173",
+];
+function corsHeaders(origin: string | null) {
+  return {
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -17,8 +24,9 @@ interface ChatRequest {
 }
 
 Deno.serve(async (req) => {
+  const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   try {
@@ -33,7 +41,7 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
@@ -42,7 +50,7 @@ Deno.serve(async (req) => {
     if (!message?.trim()) {
       return new Response(JSON.stringify({ error: "Message is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
@@ -129,7 +137,7 @@ Guidelines:
 
     return new Response(readable, {
       headers: {
-        ...corsHeaders,
+        ...ch,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
@@ -139,7 +147,7 @@ Guidelines:
     console.error("Chat function error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   }
 });

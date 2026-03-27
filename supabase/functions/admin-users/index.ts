@@ -1,9 +1,16 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://blackrockai-qep.netlify.app",
+  "http://localhost:5173",
+];
+function corsHeaders(origin: string | null) {
+  return {
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 type UserRole = "rep" | "admin" | "manager" | "owner";
 
@@ -43,15 +50,16 @@ function isOwner(role: UserRole): boolean {
 }
 
 Deno.serve(async (req: Request) => {
+  const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
     return new Response(JSON.stringify({ error: "Missing authorization" }), {
       status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   }
 
@@ -61,7 +69,7 @@ Deno.serve(async (req: Request) => {
   if (!caller || !canManageUsers(caller.role)) {
     return new Response(JSON.stringify({ error: "Insufficient permissions" }), {
       status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   }
 
@@ -111,7 +119,7 @@ Deno.serve(async (req: Request) => {
 
       return new Response(JSON.stringify({ users }), {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
@@ -130,7 +138,7 @@ Deno.serve(async (req: Request) => {
         if (!body.email || !body.full_name || !body.role) {
           return new Response(JSON.stringify({ error: "email, full_name, and role are required" }), {
             status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...ch, "Content-Type": "application/json" },
           });
         }
 
@@ -142,7 +150,7 @@ Deno.serve(async (req: Request) => {
         if (!allowedRoles.includes(body.role)) {
           return new Response(
             JSON.stringify({ error: "You can only invite users with role: " + allowedRoles.join(", ") }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
           );
         }
 
@@ -158,7 +166,7 @@ Deno.serve(async (req: Request) => {
           if (inviteErr.message.includes("already been registered")) {
             return new Response(JSON.stringify({ error: "A user with that email already exists." }), {
               status: 409,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: { ...ch, "Content-Type": "application/json" },
             });
           }
           throw inviteErr;
@@ -174,7 +182,7 @@ Deno.serve(async (req: Request) => {
 
         return new Response(JSON.stringify({ success: true, userId: newUser?.user?.id }), {
           status: 201,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
@@ -183,14 +191,14 @@ Deno.serve(async (req: Request) => {
         if (!isOwner(caller.role)) {
           return new Response(JSON.stringify({ error: "Only owners can change user roles" }), {
             status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...ch, "Content-Type": "application/json" },
           });
         }
 
         if (!body.userId || !body.role) {
           return new Response(JSON.stringify({ error: "userId and role are required" }), {
             status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...ch, "Content-Type": "application/json" },
           });
         }
 
@@ -198,7 +206,7 @@ Deno.serve(async (req: Request) => {
         if (body.userId === caller.id && body.role !== "owner") {
           return new Response(
             JSON.stringify({ error: "You cannot change your own role" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
           );
         }
 
@@ -211,7 +219,7 @@ Deno.serve(async (req: Request) => {
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
@@ -220,21 +228,21 @@ Deno.serve(async (req: Request) => {
         if (!isOwner(caller.role)) {
           return new Response(JSON.stringify({ error: "Only owners can deactivate users" }), {
             status: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...ch, "Content-Type": "application/json" },
           });
         }
 
         if (!body.userId || body.is_active === undefined) {
           return new Response(JSON.stringify({ error: "userId and is_active are required" }), {
             status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...ch, "Content-Type": "application/json" },
           });
         }
 
         if (body.userId === caller.id) {
           return new Response(
             JSON.stringify({ error: "You cannot deactivate your own account" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
           );
         }
 
@@ -255,26 +263,26 @@ Deno.serve(async (req: Request) => {
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...ch, "Content-Type": "application/json" },
         });
       }
 
       return new Response(JSON.stringify({ error: "Unknown action" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...ch, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
     console.error("[admin-users] error:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...ch, "Content-Type": "application/json" },
     });
   }
 });
