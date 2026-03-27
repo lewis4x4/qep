@@ -95,6 +95,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>("all");
   const [page, setPage] = useState(1);
 
@@ -114,6 +115,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const {
         data: { session },
@@ -133,9 +135,11 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
       if (!res.ok) throw new Error(json.error ?? "Failed to load users");
       setUsers(json.users ?? []);
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setLoadError(message);
       toast({
         title: "Failed to load team",
-        description: err instanceof Error ? err.message : "Unknown error",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -362,6 +366,16 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
             <div key={i} className="h-14 bg-muted rounded-md animate-pulse" />
           ))}
         </div>
+      ) : loadError ? (
+        <Card>
+          <CardContent className="py-12 text-center space-y-3">
+            <p className="text-sm text-destructive font-medium">Failed to load team members</p>
+            <p className="text-xs text-muted-foreground">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={() => void loadUsers()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filteredUsers.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">

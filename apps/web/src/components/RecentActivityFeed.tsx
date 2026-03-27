@@ -68,7 +68,7 @@ export function RecentActivityFeed() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
-      <div className="bg-white rounded-lg border border-border divide-y divide-border">
+      <div className="bg-card rounded-lg border border-border divide-y divide-border">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">

@@ -95,6 +95,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     <Input
                       id="email-pw"
                       type="email"
+                      autoComplete="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@qepusa.com"
@@ -106,6 +107,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     <Input
                       id="password"
                       type="password"
+                      autoComplete="current-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
@@ -125,6 +127,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     <Input
                       id="email-magic"
                       type="email"
+                      autoComplete="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@qepusa.com"

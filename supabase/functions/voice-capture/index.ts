@@ -16,6 +16,7 @@ import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
+  "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return jsonError("Unauthorized", 401);
+      return jsonError("Unauthorized", 401, ch);
     }
 
     // Verify role — parts/service roles cannot use voice capture
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("Your role does not have access to voice capture.", 403);
+      return jsonError("Your role does not have access to voice capture.", 403, ch);
     }
 
     // SEC-QEP-006: Per-user rate limiting — 5 requests per minute
@@ -83,13 +84,13 @@ Deno.serve(async (req) => {
     });
 
     if (!allowed) {
-      return jsonError("Rate limit exceeded. Please wait before submitting another recording.", 429);
+      return jsonError("Rate limit exceeded. Please wait before submitting another recording.", 429, ch);
     }
 
     // ── Parse multipart form data ─────────────────────────────────────────────
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.includes("multipart/form-data")) {
-      return jsonError("Expected multipart/form-data", 400);
+      return jsonError("Expected multipart/form-data", 400, ch);
     }
 
     const formData = await req.formData();
@@ -97,11 +98,11 @@ Deno.serve(async (req) => {
     const hubspotDealId = (formData.get("hubspot_deal_id") as string | null) ?? null;
 
     if (!audioFile || audioFile.size === 0) {
-      return jsonError("audio field is required", 400);
+      return jsonError("audio field is required", 400, ch);
     }
 
     if (audioFile.size > 50 * 1024 * 1024) {
-      return jsonError("Audio file exceeds 50MB limit", 400);
+      return jsonError("Audio file exceeds 50MB limit", 400, ch);
     }
 
     // ── Upload audio to Supabase Storage ──────────────────────────────────────
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
 
     if (uploadError) {
       console.error("Storage upload error:", uploadError.message);
-      return jsonError("Failed to store audio file", 500);
+      return jsonError("Failed to store audio file", 500, ch);
     }
 
     // Create a placeholder capture record — update as pipeline progresses
@@ -135,7 +136,7 @@ Deno.serve(async (req) => {
 
     if (insertError || !captureRecord) {
       console.error("Failed to create capture record:", insertError?.message);
-      return jsonError("Failed to create capture record", 500);
+      return jsonError("Failed to create capture record", 500, ch);
     }
 
     const captureId = captureRecord.id as string;
@@ -172,7 +173,7 @@ Deno.serve(async (req) => {
         .from("voice_captures")
         .update({ sync_status: "failed", sync_error: `Transcription failed: ${errMsg}` })
         .eq("id", captureId);
-      return jsonError("Transcription failed. Please try again.", 500);
+      return jsonError("Transcription failed. Please try again.", 500, ch);
     }
 
     if (!transcript) {
@@ -180,7 +181,7 @@ Deno.serve(async (req) => {
         .from("voice_captures")
         .update({ sync_status: "failed", sync_error: "Empty transcript — no speech detected" })
         .eq("id", captureId);
-      return jsonError("No speech detected in the recording. Please try again.", 422);
+      return jsonError("No speech detected in the recording. Please try again.", 422, ch);
     }
 
     // ── Extract structured data via Claude ───────────────────────────────────
@@ -236,7 +237,7 @@ Return ONLY valid JSON matching this exact structure:
           sync_error: `Data extraction failed: ${errMsg}`,
         })
         .eq("id", captureId);
-      return jsonError("Failed to extract deal data from transcript.", 500);
+      return jsonError("Failed to extract deal data from transcript.", 500, ch);
     }
 
     // ── Persist transcript + extracted data ───────────────────────────────────
@@ -440,16 +441,16 @@ Return ONLY valid JSON matching this exact structure:
     );
   } catch (err) {
     console.error("Voice capture function error:", err);
-    return jsonError("Internal server error", 500);
+    return jsonError("Internal server error", 500, ch);
   }
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function jsonError(message: string, status: number): Response {
+function jsonError(message: string, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { ...ch, "Content-Type": "application/json" },
+    headers: { ...headers, "Content-Type": "application/json" },
   });
 }
 

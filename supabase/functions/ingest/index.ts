@@ -4,9 +4,11 @@
  * Chunks text, generates embeddings, upserts to pgvector
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import pdfParse from "npm:pdf-parse@1.1.1";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
+  "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {
@@ -214,9 +216,34 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Extract text — currently supports plain text; PDF parsing done client-side
-      // or via a separate PDF-to-text step
-      const rawText = await file.text();
+      // Extract text based on file type
+      let rawText: string;
+      if (file.type === "application/pdf") {
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const parsed = await pdfParse(buffer);
+          rawText = parsed.text ?? "";
+          if (!rawText.trim()) {
+            return new Response(
+              JSON.stringify({ error: "PDF contained no extractable text. It may be a scanned image — please use a text-based PDF." }),
+              { status: 422, headers: { ...ch, "Content-Type": "application/json" } }
+            );
+          }
+        } catch (pdfErr) {
+          console.error("PDF parse error:", pdfErr);
+          return new Response(
+            JSON.stringify({ error: "Failed to extract text from PDF. Ensure the file is not password-protected." }),
+            { status: 422, headers: { ...ch, "Content-Type": "application/json" } }
+          );
+        }
+      } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+        return new Response(
+          JSON.stringify({ error: "DOCX upload is not yet supported. Please convert to PDF or plain text before uploading." }),
+          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      } else {
+        rawText = await file.text();
+      }
 
       // Create document record
       const { data: doc, error: docError } = await supabaseAdmin
