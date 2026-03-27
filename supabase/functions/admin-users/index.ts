@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
+  "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {

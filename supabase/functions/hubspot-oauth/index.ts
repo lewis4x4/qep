@@ -4,9 +4,11 @@
  * and stores them in hubspot_connections
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/hubspot-crypto.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
+  "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {
@@ -78,6 +80,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Encrypt tokens before storing — SEC-QEP-008
+    const [encAccessToken, encRefreshToken] = await Promise.all([
+      encryptToken(tokens.access_token),
+      encryptToken(tokens.refresh_token),
+    ]);
+
     // Upsert connection
     const { error: upsertError } = await supabaseAdmin
       .from("hubspot_connections")
@@ -85,8 +93,8 @@ Deno.serve(async (req) => {
         user_id: user.id,
         hub_id: String(portalInfo.hub_id),
         hub_domain: portalInfo.hub_domain,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encAccessToken,
+        refresh_token: encRefreshToken,
         token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
         scopes: tokens.scope?.split(" ") ?? [],
         is_active: true,

@@ -46,6 +46,24 @@ function autoTitle(messages: Message[]): string {
 
 const STORAGE_KEY_HISTORY = "qep-chat-history";
 const STORAGE_KEY_CURRENT = "qep-chat-current";
+const MAX_STORED_CONVERSATIONS = 50;
+const MAX_STORAGE_BYTES = 4 * 1024 * 1024; // 4MB — well below the ~5-10MB browser limit
+
+function saveHistory(convos: ConversationSession[]): void {
+  let trimmed = convos.slice(0, MAX_STORED_CONVERSATIONS);
+  let json = JSON.stringify(trimmed);
+  // Drop oldest conversations until under the byte limit
+  while (json.length > MAX_STORAGE_BYTES && trimmed.length > 0) {
+    trimmed = trimmed.slice(0, -1);
+    json = JSON.stringify(trimmed);
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY_HISTORY, json);
+  } catch {
+    // QuotaExceededError — clear rather than silently fail
+    localStorage.removeItem(STORAGE_KEY_HISTORY);
+  }
+}
 
 function reviveMessages(raw: unknown[]): Message[] {
   return raw.map((m) => {
@@ -95,11 +113,15 @@ export function ChatPage({ userEmail }: ChatPageProps) {
 
   // Persist current messages and history to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(messages));
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(messages));
+    } catch {
+      localStorage.removeItem(STORAGE_KEY_CURRENT);
+    }
   }, [messages]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+    saveHistory(history);
   }, [history]);
 
   // Close history panel on outside click

@@ -13,6 +13,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.39";
+import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -493,8 +494,14 @@ async function getValidToken(
   hubId: string,
   connection: { access_token: string; token_expires_at: string; refresh_token: string }
 ): Promise<string | null> {
+  // Decrypt stored tokens — SEC-QEP-008
+  const [plainAccessToken, plainRefreshToken] = await Promise.all([
+    decryptToken(connection.access_token),
+    decryptToken(connection.refresh_token),
+  ]);
+
   const expiresAt = new Date(connection.token_expires_at).getTime();
-  if (Date.now() < expiresAt - 60000) return connection.access_token;
+  if (Date.now() < expiresAt - 60000) return plainAccessToken;
 
   const res = await fetch("https://api.hubapi.com/oauth/v1/token", {
     method: "POST",
@@ -503,7 +510,7 @@ async function getValidToken(
       grant_type: "refresh_token",
       client_id: Deno.env.get("HUBSPOT_CLIENT_ID")!,
       client_secret: Deno.env.get("HUBSPOT_CLIENT_SECRET")!,
-      refresh_token: connection.refresh_token,
+      refresh_token: plainRefreshToken,
     }),
   });
 
@@ -513,11 +520,17 @@ async function getValidToken(
   }
 
   const tokens = await res.json();
+  const newRefresh = tokens.refresh_token ?? plainRefreshToken;
+  const [encAccess, encRefresh] = await Promise.all([
+    encryptToken(tokens.access_token),
+    encryptToken(newRefresh),
+  ]);
+
   await supabase
     .from("hubspot_connections")
     .update({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token ?? connection.refresh_token,
+      access_token: encAccess,
+      refresh_token: encRefresh,
       token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     })
     .eq("hub_id", hubId);

@@ -3,6 +3,7 @@ import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
+  "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {
