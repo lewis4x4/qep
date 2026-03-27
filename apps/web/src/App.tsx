@@ -35,7 +35,7 @@ function App() {
           path="/admin"
           element={
             ["admin", "manager", "owner"].includes(profile.role)
-              ? <AdminPage userRole={profile.role} />
+              ? <AdminPage userRole={profile.role} userId={profile.id} />
               : <Navigate to="/" replace />
           }
         />

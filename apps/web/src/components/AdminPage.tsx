@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import type { Database, UserRole } from "../lib/database.types";
+import { UsersTab } from "./UsersTab";
 
 type Document = Database["public"]["Tables"]["documents"]["Row"];
+type ActiveTab = "knowledge" | "users";
 
 interface AdminPageProps {
   userRole: UserRole;
+  userId: string;
 }
 
-export function AdminPage({ userRole }: AdminPageProps) {
+export function AdminPage({ userRole, userId }: AdminPageProps) {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("knowledge");
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -16,7 +20,6 @@ export function AdminPage({ userRole }: AdminPageProps) {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   const canManageDocs = ["admin", "manager", "owner"].includes(userRole);
-  const canManageUsers = userRole === "owner";
 
   useEffect(() => {
     loadDocuments();
@@ -109,116 +112,152 @@ export function AdminPage({ userRole }: AdminPageProps) {
         </div>
       </header>
 
+      {/* Tab nav */}
+      <div className="bg-white border-b border-gray-200 px-4">
+        <div className="max-w-4xl mx-auto flex gap-1">
+          <button
+            onClick={() => setActiveTab("knowledge")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === "knowledge"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Knowledge Base
+          </button>
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === "users"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Team Members
+          </button>
+        </div>
+      </div>
+
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
 
-        {/* Document Upload */}
-        {canManageDocs && (
-          <section>
-            <h2 className="text-base font-semibold text-gray-900 mb-3">Upload Document</h2>
-            <div className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
-              <p className="text-sm text-gray-500 mb-3">Upload company handbook, SOPs, or policy documents (.txt, .md files)</p>
-              <label className="cursor-pointer">
-                <span className={`inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}>
-                  {uploading ? "Processing..." : "Choose File"}
-                </span>
-                <input
-                  type="file"
-                  accept=".txt,.md,.csv"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                  className="hidden"
-                />
-              </label>
-              {uploadError && <p className="text-red-600 text-sm mt-3">{uploadError}</p>}
-              {uploadSuccess && <p className="text-green-600 text-sm mt-3">{uploadSuccess}</p>}
-            </div>
-          </section>
+        {/* ── KNOWLEDGE BASE TAB ───────────────────────────────────────────── */}
+        {activeTab === "knowledge" && (
+          <>
+            {/* Document Upload */}
+            {canManageDocs && (
+              <section>
+                <h2 className="text-base font-semibold text-gray-900 mb-3">Upload Document</h2>
+                <div className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
+                  <p className="text-sm text-gray-500 mb-3">Upload company handbook, SOPs, or policy documents (.txt, .md files)</p>
+                  <label className="cursor-pointer">
+                    <span className={`inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}>
+                      {uploading ? "Processing..." : "Choose File"}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".txt,.md,.csv"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                  {uploadError && <p className="text-red-600 text-sm mt-3">{uploadError}</p>}
+                  {uploadSuccess && <p className="text-green-600 text-sm mt-3">{uploadSuccess}</p>}
+                </div>
+              </section>
+            )}
+
+            {/* OneDrive Connect */}
+            {canManageDocs && (
+              <section>
+                <h2 className="text-base font-semibold text-gray-900 mb-3">OneDrive Integration</h2>
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Connect OneDrive to automatically sync company documents from your Microsoft 365 account.
+                  </p>
+                  <a
+                    href={`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`}
+                    className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Connect Microsoft OneDrive
+                  </a>
+                </div>
+              </section>
+            )}
+
+            {/* Documents List */}
+            <section>
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Knowledge Base ({documents.filter(d => d.is_active).length} active documents)</h2>
+              {loading ? (
+                <p className="text-sm text-gray-500">Loading...</p>
+              ) : documents.length === 0 ? (
+                <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+                  <p className="text-gray-500 text-sm">No documents yet. Upload your first document above.</p>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Title</th>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Source</th>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Words</th>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                        {canManageDocs && (
+                          <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {documents.map((doc) => (
+                        <tr key={doc.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900 truncate max-w-48">{doc.title}</td>
+                          <td className="px-4 py-3 text-gray-500 capitalize">{doc.source.replace("_", " ")}</td>
+                          <td className="px-4 py-3 text-gray-500">{doc.word_count?.toLocaleString() ?? "—"}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              doc.is_active
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-500"
+                            }`}>
+                              {doc.is_active ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          {canManageDocs && (
+                            <td className="px-4 py-3">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => toggleDocument(doc.id, doc.is_active)}
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  {doc.is_active ? "Disable" : "Enable"}
+                                </button>
+                                <button
+                                  onClick={() => deleteDocument(doc.id)}
+                                  className="text-xs text-red-500 hover:underline"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
         )}
 
-        {/* OneDrive Connect */}
-        {canManageDocs && (
-          <section>
-            <h2 className="text-base font-semibold text-gray-900 mb-3">OneDrive Integration</h2>
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <p className="text-sm text-gray-600 mb-4">
-                Connect OneDrive to automatically sync company documents from your Microsoft 365 account.
-              </p>
-              <a
-                href={`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`}
-                className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-                Connect Microsoft OneDrive
-              </a>
-            </div>
-          </section>
+        {/* ── TEAM MEMBERS TAB ────────────────────────────────────────────── */}
+        {activeTab === "users" && (
+          <UsersTab callerRole={userRole} callerId={userId} />
         )}
-
-        {/* Documents List */}
-        <section>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Knowledge Base ({documents.filter(d => d.is_active).length} active documents)</h2>
-          {loading ? (
-            <p className="text-sm text-gray-500">Loading...</p>
-          ) : documents.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-              <p className="text-gray-500 text-sm">No documents yet. Upload your first document above.</p>
-            </div>
-          ) : (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Title</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Source</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Words</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                    {canManageDocs && (
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {documents.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900 truncate max-w-48">{doc.title}</td>
-                      <td className="px-4 py-3 text-gray-500 capitalize">{doc.source.replace("_", " ")}</td>
-                      <td className="px-4 py-3 text-gray-500">{doc.word_count?.toLocaleString() ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          doc.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-500"
-                        }`}>
-                          {doc.is_active ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      {canManageDocs && (
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => toggleDocument(doc.id, doc.is_active)}
-                              className="text-xs text-blue-600 hover:underline"
-                            >
-                              {doc.is_active ? "Disable" : "Enable"}
-                            </button>
-                            <button
-                              onClick={() => deleteDocument(doc.id)}
-                              className="text-xs text-red-500 hover:underline"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
