@@ -8,14 +8,12 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const STALLED_THRESHOLD_DAYS = 7;
 
 Deno.serve(async (req) => {
-  // Verify this is called from Supabase scheduler (service role or internal)
+  // Verify this is called from Supabase scheduler
+  // Prefer CRON_SECRET; fall back to SUPABASE_SERVICE_ROLE_KEY — strict equality only
   const authHeader = req.headers.get("Authorization");
-  const cronSecret = Deno.env.get("CRON_SECRET");
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    // Fall back to service role check
-    if (!authHeader?.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "INVALID")) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+  const cronSecret = Deno.env.get("CRON_SECRET") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   const supabase = createClient(

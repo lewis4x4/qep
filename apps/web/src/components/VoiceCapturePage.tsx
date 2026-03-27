@@ -118,11 +118,22 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   }, []);
 
   async function loadRecentCaptures(): Promise<void> {
-    const { data } = await supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setRecentLoading(false);
+      return;
+    }
+    const isElevated = ["manager", "owner"].includes(_userRole);
+    let query = supabase
       .from("voice_captures")
       .select("id, created_at, duration_seconds, sync_status, hubspot_deal_id, transcript")
       .order("created_at", { ascending: false })
       .limit(5);
+    // Defense-in-depth: scope to own rows for non-elevated roles (RLS also enforces this)
+    if (!isElevated) {
+      query = query.eq("user_id", user.id);
+    }
+    const { data } = await query;
     if (data) setRecentCaptures(data);
     setRecentLoading(false);
   }

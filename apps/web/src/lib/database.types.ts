@@ -325,37 +325,37 @@ export type Database = {
       }
       onedrive_sync_state: {
         Row: {
-          access_token_encrypted: string | null
+          access_token: string | null
           created_at: string
           delta_token: string | null
           drive_id: string | null
           id: string
           last_synced_at: string | null
-          refresh_token_encrypted: string | null
+          refresh_token: string | null
           token_expires_at: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
-          access_token_encrypted?: string | null
+          access_token?: string | null
           created_at?: string
           delta_token?: string | null
           drive_id?: string | null
           id?: string
           last_synced_at?: string | null
-          refresh_token_encrypted?: string | null
+          refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
-          access_token_encrypted?: string | null
+          access_token?: string | null
           created_at?: string
           delta_token?: string | null
           drive_id?: string | null
           id?: string
           last_synced_at?: string | null
-          refresh_token_encrypted?: string | null
+          refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id?: string | null

@@ -60,11 +60,13 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   }, []);
 
   async function loadDocuments(): Promise<void> {
+    // This page requires admin/manager/owner role (canManageDocs gate above).
+    // RLS policy "documents_all_elevated" scopes results to authenticated elevated users only.
     const { data, error } = await supabase
       .from("documents")
-      .select("*")
+      .select("id, title, source, source_url, mime_type, word_count, is_active, uploaded_by, created_at, updated_at, metadata")
       .order("created_at", { ascending: false });
-    if (!error && data) setDocuments(data);
+    if (!error && data) setDocuments(data as Document[]);
     setLoading(false);
   }
 

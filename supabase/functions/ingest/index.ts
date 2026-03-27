@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
         : "https://graph.microsoft.com/v1.0/me/drive/root/delta";
 
       const deltaRes = await fetch(deltaUrl, {
-        headers: { Authorization: `Bearer ${syncState.access_token_encrypted}` },
+        headers: { Authorization: `Bearer ${syncState.access_token}` },
       });
       const delta = await deltaRes.json();
 
@@ -241,7 +241,7 @@ Deno.serve(async (req) => {
         // Download file content
         const contentRes = await fetch(
           `https://graph.microsoft.com/v1.0/me/drive/items/${item.id}/content`,
-          { headers: { Authorization: `Bearer ${syncState.access_token_encrypted}` } }
+          { headers: { Authorization: `Bearer ${syncState.access_token}` } }
         );
         const rawText = await contentRes.text();
 
