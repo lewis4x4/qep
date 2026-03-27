@@ -6,7 +6,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const ALLOWED_ORIGINS = [
-  "https://blackrockai-qep.netlify.app",
+  "https://qualityequipmentparts.netlify.app",
   "http://localhost:5173",
 ];
 function corsHeaders(origin: string | null) {
