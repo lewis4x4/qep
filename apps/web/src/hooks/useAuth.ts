@@ -29,23 +29,38 @@ export function useAuth(): AuthState {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchProfile(session.user.id).then(({ profile, error }) => {
-          setState({ user: session.user, session, profile, loading: false, error });
-        });
-      } else {
-        setState((s) => ({ ...s, loading: false }));
-      }
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          return fetchProfile(session.user.id)
+            .then(({ profile, error }) => {
+              setState({ user: session.user, session, profile, loading: false, error });
+            })
+            .catch((err: unknown) => {
+              const message = err instanceof Error ? err.message : "Failed to load your profile.";
+              setState({ user: session.user, session, profile: null, loading: false, error: message });
+            });
+        } else {
+          setState((s) => ({ ...s, loading: false }));
+        }
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Authentication service unavailable.";
+        setState({ user: null, session: null, profile: null, loading: false, error: message });
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const { profile, error } = await fetchProfile(session.user.id);
-        setState({ user: session.user, session, profile, loading: false, error });
-      } else {
-        setState({ user: null, session: null, profile: null, loading: false, error: null });
+      try {
+        if (session?.user) {
+          const { profile, error } = await fetchProfile(session.user.id);
+          setState({ user: session.user, session, profile, loading: false, error });
+        } else {
+          setState({ user: null, session: null, profile: null, loading: false, error: null });
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Authentication state change failed.";
+        setState({ user: null, session: null, profile: null, loading: false, error: message });
       }
     });
 
