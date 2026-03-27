@@ -120,6 +120,22 @@ Guidelines:
       ],
     });
 
+    // Build deduplicated source list for citation UI
+    type ChunkRow = { document_title: string; similarity: number };
+    const sources: { title: string; confidence: number }[] = [];
+    if (chunks && chunks.length > 0) {
+      const seen = new Set<string>();
+      for (const c of chunks as ChunkRow[]) {
+        if (!seen.has(c.document_title)) {
+          seen.add(c.document_title);
+          sources.push({
+            title: c.document_title,
+            confidence: Math.round(c.similarity * 100),
+          });
+        }
+      }
+    }
+
     // Return SSE stream
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
@@ -129,6 +145,10 @@ Guidelines:
             const data = `data: ${JSON.stringify({ text: event.delta.text })}\n\n`;
             controller.enqueue(encoder.encode(data));
           }
+        }
+        // Emit sources before closing so UI can render citations
+        if (sources.length > 0) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
