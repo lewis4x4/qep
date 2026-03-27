@@ -301,7 +301,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
             <div className="space-y-6">
               {/* HubSpot Deal ID input */}
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   <Label htmlFor="deal-id">HubSpot Deal ID</Label>
                   <span className="text-xs text-muted-foreground">(optional)</span>
                   <Tooltip>
@@ -309,9 +309,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       <button
                         type="button"
                         aria-label="HubSpot Deal ID help"
-                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        className="h-11 w-11 min-h-11 min-w-11 inline-flex items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-[200px]">

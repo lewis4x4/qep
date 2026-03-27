@@ -985,8 +985,8 @@ function ProposalPrint({
             <h1 className="text-2xl font-bold text-primary">
               Quality Equipment &amp; Parts, Inc.
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Lake City, FL · qep.blackrockai.co
+            <p className="text-sm leading-5 text-slate-500 mt-0.5">
+              Lake City, FL · qepusa.com
             </p>
           </div>
           <div className="text-right text-sm text-gray-500">
