@@ -281,15 +281,20 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   return (
     <TooltipProvider>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        <div className="xl:max-w-5xl mx-auto px-4 py-6">
 
           {/* Page header */}
-          <div>
+          <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground">Field Note</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Record a quick summary after your visit — we'll pull out the key details and push them to HubSpot.
             </p>
           </div>
+
+          <div className="xl:grid xl:grid-cols-12 xl:gap-8">
+
+          {/* Main recording area — 7 cols */}
+          <div className="xl:col-span-7 space-y-6">
 
           {/* ── IDLE ──────────────────────────────────────────────────────────── */}
           {recordingState === "idle" && (
@@ -646,6 +651,51 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               </Button>
             </div>
           )}
+
+          </div>{/* end main col */}
+
+          {/* Context panel — 5 cols, xl+ only */}
+          <aside className="hidden xl:flex xl:col-span-5 flex-col gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">What to include</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="flex gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with and where</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span><span className="font-medium text-foreground">Equipment interest</span> — model numbers, categories, attachments discussed</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span><span className="font-medium text-foreground">Deal stage</span> — where they are in the buying process</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers or urgency mentioned</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span><span className="font-medium text-foreground">Next steps</span> — follow-up date, callback, quote request</span>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Tips for best results</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
+                <p>Record immediately after the visit while details are fresh.</p>
+                <p>If you know the HubSpot deal ID, paste it before recording to link the note automatically.</p>
+              </CardContent>
+            </Card>
+          </aside>
+
+          </div>{/* end grid */}
         </div>
       </div>
     </TooltipProvider>

@@ -208,8 +208,10 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
       />
 
       <div className="flex flex-col min-h-screen bg-background print:hidden">
+        <main className="flex-1 px-6 py-6">
+
         {/* Page header */}
-        <div className="border-b bg-card px-6 py-4">
+        <div className="mb-6">
           <h1 className="text-lg font-semibold text-foreground">Quote Builder</h1>
           <p className="text-sm text-muted-foreground">
             Build and print equipment proposals for customers
@@ -217,8 +219,8 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
         </div>
 
         {/* Step wizard */}
-        <div className="border-b bg-card px-6 py-4">
-          <div className="flex items-start max-w-md mx-auto">
+        <div className="mb-6">
+          <div className="flex items-start max-w-md">
             {STEPS.map((s, i) => {
               const isDone = currentStepIndex > i;
               const isActive = currentStepIndex === i;
@@ -264,11 +266,10 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
           </div>
         </div>
 
-        <main className="flex-1 px-4 py-6">
-
-          {/* ── STEP 1: Customer Info ───────────────────────────────────── */}
+        {/* ── STEP 1: Customer Info ───────────────────────────────────── */}
           {step === "customer" && (
-            <div className="max-w-lg mx-auto">
+            <div className="xl:grid xl:grid-cols-12 xl:gap-8">
+            <div className="xl:col-span-7">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Customer Information</CardTitle>
@@ -327,6 +328,39 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                   </Button>
                 </CardContent>
               </Card>
+            </div>
+
+            <aside className="hidden xl:flex xl:col-span-5 flex-col gap-4 pt-1">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Before you continue</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <p>Double-check the email — the proposal will reference this address when printed.</p>
+                  <p>Include the company address if delivery or job-site pricing applies.</p>
+                  <p>Phone number is required for follow-up task creation in HubSpot.</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Quote workflow</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex gap-2">
+                    <span className="text-primary font-bold shrink-0">1</span>
+                    <span>Enter customer info</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground font-bold shrink-0">2</span>
+                    <span>Select machine + attachments</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-muted-foreground font-bold shrink-0">3</span>
+                    <span>Review and print proposal</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </aside>
             </div>
           )}
 
@@ -540,7 +574,8 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
 
           {/* ── STEP 3: Proposal Preview ─────────────────────────────────── */}
           {step === "review" && selectedMachine && (
-            <div className="max-w-2xl mx-auto space-y-4">
+            <div className="xl:grid xl:grid-cols-12 xl:gap-8">
+            <div className="xl:col-span-7 space-y-4">
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -725,6 +760,47 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                   New Quote
                 </Button>
               </div>
+            </div>
+
+            <aside className="hidden xl:flex xl:col-span-5 flex-col gap-4 pt-1">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Proposal summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Customer</span>
+                    <span className="font-medium text-foreground text-right max-w-[60%] truncate">{customer.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Company</span>
+                    <span className="font-medium text-foreground text-right max-w-[60%] truncate">{customer.company}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Machine</span>
+                    <span className="font-medium text-foreground text-right max-w-[60%]">{formatCurrency(machineTotal)}</span>
+                  </div>
+                  {selectedAttachmentObjects.map((a) => (
+                    <div key={a.id} className="flex justify-between">
+                      <span className="text-muted-foreground truncate mr-2">{a.name}</span>
+                      <span className="font-medium text-foreground shrink-0">{formatCurrency(a.retailPrice)}</span>
+                    </div>
+                  ))}
+                  <Separator />
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-foreground">Total</span>
+                    <span className="font-bold text-foreground text-lg">{formatCurrency(grandTotal)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 text-sm text-muted-foreground space-y-2">
+                  <p>Pricing valid for 30 days. Print or download PDF to send to the customer.</p>
+                  <p>After printing, consider creating a follow-up in HubSpot to track next steps.</p>
+                </CardContent>
+              </Card>
+            </aside>
             </div>
           )}
         </main>

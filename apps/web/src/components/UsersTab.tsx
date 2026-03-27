@@ -53,10 +53,10 @@ export interface UsersTabProps {
 const ROLE_OPTIONS: UserRole[] = ["rep", "admin", "manager", "owner"];
 
 const ROLE_BADGE_CLASS: Record<UserRole, string> = {
-  rep: "bg-gray-100 text-gray-700",
-  admin: "bg-amber-100 text-amber-700",
-  manager: "bg-blue-100 text-blue-700",
-  owner: "bg-purple-100 text-purple-700",
+  rep: "bg-muted text-muted-foreground",
+  admin: "bg-primary/10 text-primary",
+  manager: "bg-accent/20 text-accent-foreground",
+  owner: "bg-accent text-accent-foreground",
 };
 
 function formatLastLogin(iso: string | null): string {
@@ -337,6 +337,92 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
           </CardContent>
         </Card>
       ) : (
+        <>
+          {/* Mobile card layout — below md */}
+          <div className="md:hidden space-y-2">
+            {filteredUsers.map((user) => {
+              const isMe = user.id === callerId;
+              const busy =
+                pendingAction === user.id + "-role" ||
+                pendingAction === user.id + "-active";
+              return (
+                <Card key={user.id} className={cn(!user.is_active && "opacity-60")}>
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Avatar className="w-9 h-9 shrink-0">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                          {getInitials(user.full_name, user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user.full_name ?? "—"}
+                          {isMe && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                          ROLE_BADGE_CLASS[user.role]
+                        )}
+                      >
+                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                      </span>
+                      <Badge
+                        variant={
+                          !user.is_active
+                            ? "destructive"
+                            : user.status === "pending"
+                            ? "secondary"
+                            : "default"
+                        }
+                        className="text-xs"
+                      >
+                        {!user.is_active
+                          ? "Deactivated"
+                          : user.status === "pending"
+                          ? "Invite Pending"
+                          : "Active"}
+                      </Badge>
+                    </div>
+                    {isOwner && !isMe && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => {
+                            setPendingRole(user.role);
+                            setRoleDialog(user);
+                          }}
+                          className="flex-1 min-h-[44px]"
+                        >
+                          Change Role
+                        </Button>
+                        <Button
+                          variant={user.is_active ? "destructive" : "outline"}
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setDeactivateTarget(user)}
+                          className="flex-1 min-h-[44px]"
+                        >
+                          {user.is_active ? "Deactivate" : "Reactivate"}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Table layout — md and above */}
+          <div className="hidden md:block">
         <Card>
           <Table>
             <TableHeader>
@@ -460,6 +546,8 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
             </TableBody>
           </Table>
         </Card>
+          </div>
+        </>
       )}
 
       {/* Role Change Dialog */}
