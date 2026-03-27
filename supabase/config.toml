@@ -36,4 +36,3 @@ double_confirm_changes = false
 enable_confirmations = false
 
 [functions]
-verify_jwt = true
