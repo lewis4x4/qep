@@ -1,6 +1,13 @@
 node_modules/
 .env
 .env.local
+.secrets
 dist/
 .supabase/
 *.log
+
+# Local Netlify folder
+.netlify
+
+# Supabase temp
+supabase/.temp/
