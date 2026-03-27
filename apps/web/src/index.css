@@ -58,6 +58,8 @@
     --qep-orange: 26 81% 52%;
     --qep-orange-hover: 26 75% 47%;
     --qep-orange-light: 29 100% 95%;
+    /* Accessible orange #D06A1E — passes 4.5:1 on white */
+    --qep-orange-accessible: 22 76% 46%;
     --qep-dark: 213 39% 17%;
     --qep-dark-hover: 212 33% 22%;
     --qep-charcoal: 217 23% 23%;
@@ -100,6 +102,11 @@
   .no-print {
     display: none !important;
   }
+}
+
+/* Safe area inset for mobile notch/home bar (bottom tab bar) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @keyframes waveform {

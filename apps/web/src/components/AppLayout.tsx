@@ -16,7 +16,7 @@ import {
   Home,
   Bell,
 } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -390,6 +390,98 @@ function NotificationBell({ count, dark = true }: { count: number; dark?: boolea
   );
 }
 
+/** Bottom tab bar items — 4 primary items (exclude Admin which goes in the drawer) */
+const BOTTOM_TAB_ITEMS: NavItem[] = NAV_ITEMS.filter((item) =>
+  ["/dashboard", "/chat", "/voice", "/quote"].includes(item.href)
+);
+
+function MobileBottomTabBar({
+  profile,
+  onMenuOpen,
+}: {
+  profile: Profile;
+  onMenuOpen: () => void;
+}) {
+  const location = useLocation();
+
+  const visibleTabs = BOTTOM_TAB_ITEMS.filter((item) =>
+    item.roles.includes(profile.role)
+  );
+
+  return (
+    <nav
+      aria-label="Main navigation"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch bg-qep-dark border-t border-white/10 safe-area-bottom"
+    >
+      {visibleTabs.map((item) => {
+        const isActive =
+          item.href === "/dashboard"
+            ? location.pathname === "/" || location.pathname === "/dashboard"
+            : location.pathname.startsWith(item.href);
+
+        const tabContent = (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[56px] px-2 py-2 text-[10px] font-medium leading-none transition-colors duration-150",
+              isActive
+                ? "text-qep-orange"
+                : item.gated
+                ? "text-[#4A5568] cursor-not-allowed"
+                : "text-[#94A3B8]"
+            )}
+          >
+            <item.icon
+              className={cn("w-5 h-5 shrink-0", isActive ? "text-qep-orange" : "")}
+              aria-hidden="true"
+            />
+            <span className="truncate max-w-[56px] text-center">
+              {item.label.split(" ")[0]}
+            </span>
+            {item.gated && (
+              <Lock className="w-2.5 h-2.5 absolute top-2 right-2 text-[#4A5568]" aria-hidden="true" />
+            )}
+          </div>
+        );
+
+        if (item.gated) {
+          return (
+            <div
+              key={item.href}
+              className="flex-1 flex items-center justify-center relative"
+              aria-label={`${item.label} — connect IntelliDealer to unlock`}
+              role="none"
+            >
+              {tabContent}
+            </div>
+          );
+        }
+
+        return (
+          <NavLink
+            key={item.href}
+            to={item.href}
+            className="flex-1 flex items-center justify-center relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--qep-orange))] focus-visible:outline-offset-[-2px]"
+            aria-label={item.label}
+            aria-current={isActive ? "page" : undefined}
+          >
+            {tabContent}
+          </NavLink>
+        );
+      })}
+
+      {/* More / drawer trigger */}
+      <button
+        onClick={onMenuOpen}
+        className="flex-1 flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[56px] px-2 py-2 text-[10px] font-medium text-[#94A3B8] transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--qep-orange))] focus-visible:outline-offset-[-2px]"
+        aria-label="More options"
+      >
+        <Menu className="w-5 h-5 shrink-0" aria-hidden="true" />
+        <span>More</span>
+      </button>
+    </nav>
+  );
+}
+
 export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -425,6 +517,7 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
           "hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 border-r border-white/10 transition-all duration-200",
           sidebarWidth
         )}
+        aria-label="Sidebar navigation"
       >
         <NavContent
           profile={profile}
@@ -435,51 +528,49 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
         {/* Collapse toggle */}
         <button
           onClick={() => setIsCollapsed((v) => !v)}
-          className={cn(
-            "absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-qep-dark border border-white/20 flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors duration-150 z-10"
-          )}
+          className="absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-qep-dark border border-white/20 flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors duration-150 z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[hsl(var(--qep-orange))]"
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (
-            <PanelLeftOpen className="w-3 h-3" />
+            <PanelLeftOpen className="w-3 h-3" aria-hidden="true" />
           ) : (
-            <PanelLeftClose className="w-3 h-3" />
+            <PanelLeftClose className="w-3 h-3" aria-hidden="true" />
           )}
         </button>
       </aside>
 
-      {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10">
+      {/* Mobile top header (brand + notifications) */}
+      <div
+        className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10"
+        role="banner"
+      >
         <div className="flex items-center gap-2">
-          <HardHat className="w-6 h-6 text-qep-orange" />
+          <HardHat className="w-6 h-6 text-qep-orange" aria-hidden="true" />
           <span className="font-bold text-sm text-white">QEP</span>
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Notification bell */}
-          <NotificationBell count={notificationCount} />
-
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Open navigation"
-                className="text-[#94A3B8] hover:text-white hover:bg-white/10"
-              >
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0 bg-qep-dark border-r border-white/10">
-              <NavContent
-                profile={profile}
-                onLogout={onLogout}
-                onNavClick={() => setMobileOpen(false)}
-              />
-            </SheetContent>
-          </Sheet>
-        </div>
+        <NotificationBell count={notificationCount} />
       </div>
+
+      {/* Mobile full-nav drawer (sheet) */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent
+          side="left"
+          className="w-64 p-0 bg-qep-dark border-r border-white/10"
+        >
+          <NavContent
+            profile={profile}
+            onLogout={onLogout}
+            onNavClick={() => setMobileOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Mobile bottom tab bar */}
+      <MobileBottomTabBar
+        profile={profile}
+        onMenuOpen={() => setMobileOpen(true)}
+      />
 
       {/* Main content */}
       <main className={cn("flex-1 transition-all duration-200", mainPadding)}>
@@ -487,7 +578,8 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
         <div className="hidden lg:flex items-center justify-end px-6 h-12 border-b border-border bg-white">
           <NotificationBell count={notificationCount} dark={false} />
         </div>
-        <div className="pt-14 lg:pt-12 min-h-screen">
+        {/* pt-14: clears mobile top header; pb-16: clears mobile bottom tab bar; lg overrides */}
+        <div className="pt-14 pb-16 lg:pt-12 lg:pb-0 min-h-screen">
           {/* Breadcrumb bar (all pages except Dashboard) */}
           <BreadcrumbBar />
           {children}
