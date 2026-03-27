@@ -1,6 +1,38 @@
 import { useState, useEffect, useCallback } from "react";
+import { MoreHorizontal, UserPlus } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface UserRecord {
   id: string;
@@ -13,56 +45,63 @@ interface UserRecord {
   status: "active" | "pending";
 }
 
-interface UsersTabProps {
+export interface UsersTabProps {
   callerRole: UserRole;
   callerId: string;
 }
 
 const ROLE_OPTIONS: UserRole[] = ["rep", "admin", "manager", "owner"];
 
-const ROLE_COLORS: Record<UserRole, string> = {
+const ROLE_BADGE_CLASS: Record<UserRole, string> = {
   rep: "bg-gray-100 text-gray-700",
-  admin: "bg-blue-100 text-blue-700",
-  manager: "bg-purple-100 text-purple-700",
-  owner: "bg-amber-100 text-amber-700",
+  admin: "bg-amber-100 text-amber-700",
+  manager: "bg-blue-100 text-blue-700",
+  owner: "bg-purple-100 text-purple-700",
 };
 
 function formatLastLogin(iso: string | null): string {
   if (!iso) return "Never";
   const d = new Date(iso);
-  const now = Date.now();
-  const diff = now - d.getTime();
-  const days = Math.floor(diff / 86400000);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 30) return `${days}d ago`;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function getInitials(name: string | null, email: string | null): string {
+  if (name) return name.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2);
+  return email?.[0]?.toUpperCase() ?? "?";
+}
+
+type FilterTab = "all" | "active" | "inactive";
+
 export function UsersTab({ callerRole, callerId }: UsersTabProps) {
+  const { toast } = useToast();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterTab>("all");
 
-  // Invite form state
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("rep");
   const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
-  // Per-row action state
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [roleDialog, setRoleDialog] = useState<UserRecord | null>(null);
+  const [pendingRole, setPendingRole] = useState<UserRole>("rep");
+  const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
 
   const isOwner = callerRole === "owner";
+  const inviteRoleOptions: UserRole[] = isOwner ? ROLE_OPTIONS : ["rep"];
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
       const res = await fetch(
@@ -74,23 +113,28 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
           },
         }
       );
-
-      const json = await res.json() as { users?: UserRecord[]; error?: string };
+      const json = (await res.json()) as { users?: UserRecord[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Failed to load users");
       setUsers(json.users ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      toast({
+        title: "Failed to load team",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
-    loadUsers();
+    void loadUsers();
   }, [loadUsers]);
 
   async function callAdminUsers(body: Record<string, unknown>): Promise<void> {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session) throw new Error("Not authenticated");
 
     const res = await fetch(
@@ -105,19 +149,14 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
         body: JSON.stringify(body),
       }
     );
-
-    const json = await res.json() as { error?: string };
+    const json = (await res.json()) as { error?: string };
     if (!res.ok) throw new Error(json.error ?? "Request failed");
   }
 
-  async function handleInvite(e: React.FormEvent) {
+  async function handleInvite(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!inviteEmail.trim() || !inviteName.trim()) return;
-
     setInviting(true);
-    setInviteError(null);
-    setInviteSuccess(null);
-
     try {
       await callAdminUsers({
         action: "invite",
@@ -125,255 +164,368 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
         full_name: inviteName.trim(),
         role: inviteRole,
       });
-
-      setInviteSuccess(`Invite sent to ${inviteEmail.trim()}`);
+      toast({ title: "Invite sent", description: `Invite sent to ${inviteEmail.trim()}` });
       setInviteEmail("");
       setInviteName("");
       setInviteRole("rep");
       setShowInvite(false);
       await loadUsers();
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : "Invite failed");
+      toast({
+        title: "Invite failed",
+        description: err instanceof Error ? err.message : "Invite failed",
+        variant: "destructive",
+      });
     } finally {
       setInviting(false);
     }
   }
 
-  async function handleRoleChange(userId: string, role: UserRole) {
+  async function confirmRoleChange(): Promise<void> {
+    if (!roleDialog) return;
+    const userId = roleDialog.id;
+    setRoleDialog(null);
     setPendingAction(userId + "-role");
     try {
-      await callAdminUsers({ action: "update-role", userId, role });
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+      await callAdminUsers({ action: "update-role", userId, role: pendingRole });
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: pendingRole } : u)));
+      toast({ title: "Role updated" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Role update failed");
+      toast({
+        title: "Role update failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     } finally {
       setPendingAction(null);
     }
   }
 
-  async function handleToggleActive(userId: string, currentlyActive: boolean) {
-    const label = currentlyActive ? "deactivate" : "reactivate";
-    if (!confirm(`Are you sure you want to ${label} this user?`)) return;
-
+  async function confirmToggleActive(): Promise<void> {
+    if (!deactivateTarget) return;
+    const { id: userId, is_active } = deactivateTarget;
+    setDeactivateTarget(null);
     setPendingAction(userId + "-active");
     try {
-      await callAdminUsers({ action: "set-active", userId, is_active: !currentlyActive });
+      await callAdminUsers({ action: "set-active", userId, is_active: !is_active });
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, is_active: !currentlyActive } : u))
+        prev.map((u) => (u.id === userId ? { ...u, is_active: !is_active } : u))
       );
+      toast({ title: is_active ? "User deactivated" : "User reactivated" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update account status");
+      toast({
+        title: "Failed to update status",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     } finally {
       setPendingAction(null);
     }
   }
 
-  // Roles a caller is allowed to assign when inviting
-  const inviteRoleOptions: UserRole[] = isOwner
-    ? ROLE_OPTIONS
-    : ["rep"];
+  const filteredUsers = users.filter((u) => {
+    if (filter === "active") return u.is_active;
+    if (filter === "inactive") return !u.is_active;
+    return true;
+  });
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-base font-semibold text-gray-900">
-          Team Members ({users.filter((u) => u.is_active).length} active)
-        </h2>
-        <button
-          onClick={() => {
-            setShowInvite((v) => !v);
-            setInviteError(null);
-            setInviteSuccess(null);
-          }}
-          className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Team Members</h2>
+          <p className="text-sm text-muted-foreground">
+            {users.filter((u) => u.is_active).length} active member
+            {users.filter((u) => u.is_active).length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setShowInvite((v) => !v)}>
+          <UserPlus className="w-4 h-4 mr-2" />
           Invite User
-        </button>
+        </Button>
       </div>
 
-      {/* Success toast */}
-      {inviteSuccess && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-2.5 rounded-lg">
-          {inviteSuccess}
-        </div>
-      )}
-
-      {/* Error banner */}
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2.5 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      {/* Invite form */}
       {showInvite && (
-        <div className="mb-5 bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Invite a new team member</h3>
-          <form onSubmit={handleInvite} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  placeholder="Jane Smith"
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Invite a new team member</h3>
+            <form onSubmit={(e) => void handleInvite(e)} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="invite-name">Full Name</Label>
+                  <Input
+                    id="invite-name"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Jane Smith"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="invite-email">Work Email</Label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="jane@qualityequipmentparts.com"
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Work Email</label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="jane@qualityequipmentparts.com"
-                  required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="max-w-48 space-y-1.5">
+                <Label htmlFor="invite-role">Role</Label>
+                <select
+                  id="invite-role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                  className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {inviteRoleOptions.map((r) => (
+                    <option key={r} value={r}>
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-            <div className="max-w-48">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {inviteRoleOptions.map((r) => (
-                  <option key={r} value={r}>
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {inviteError && (
-              <p className="text-red-600 text-sm">{inviteError}</p>
-            )}
-            <div className="flex gap-2 pt-1">
-              <button
-                type="submit"
-                disabled={inviting}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {inviting ? "Sending invite..." : "Send Invite"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowInvite(false)}
-                className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="submit" disabled={inviting} size="sm">
+                  {inviting ? "Sending…" : "Send Invite"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowInvite(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Users table */}
+      <div className="flex gap-1">
+        {(["all", "active", "inactive"] as FilterTab[]).map((f) => (
+          <Button
+            key={f}
+            variant={filter === f ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setFilter(f)}
+            className="capitalize"
+          >
+            {f}
+          </Button>
+        ))}
+      </div>
+
       {loading ? (
-        <p className="text-sm text-gray-500">Loading team members...</p>
-      ) : users.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-          <p className="text-gray-500 text-sm">No team members yet. Invite someone to get started.</p>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-14 bg-muted rounded-md animate-pulse" />
+          ))}
         </div>
+      ) : filteredUsers.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              {filter === "all"
+                ? "No team members yet. Invite someone to get started."
+                : `No ${filter} members.`}
+            </p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Email</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden lg:table-cell">Last Login</th>
-                {isOwner && (
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {users.map((user) => {
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead className="hidden sm:table-cell">Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="hidden md:table-cell">Status</TableHead>
+                <TableHead className="hidden lg:table-cell">Last Login</TableHead>
+                {isOwner && <TableHead className="text-right">Actions</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((user) => {
                 const isMe = user.id === callerId;
-                const roleChanging = pendingAction === user.id + "-role";
-                const activeChanging = pendingAction === user.id + "-active";
+                const busy =
+                  pendingAction === user.id + "-role" ||
+                  pendingAction === user.id + "-active";
 
                 return (
-                  <tr key={user.id} className={`hover:bg-gray-50 ${!user.is_active ? "opacity-60" : ""}`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900 truncate max-w-36">
-                        {user.full_name ?? "—"}
-                        {isMe && <span className="ml-1.5 text-xs text-gray-400">(you)</span>}
+                  <TableRow
+                    key={user.id}
+                    className={cn(!user.is_active && "opacity-60")}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-8 h-8 shrink-0">
+                          <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                            {getInitials(user.full_name, user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {user.full_name ?? "—"}
+                            {isMe && (
+                              <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground sm:hidden">
+                            {user.email}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 sm:hidden truncate">{user.email}</div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 hidden sm:table-cell truncate max-w-48">
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden sm:table-cell truncate max-w-48">
                       {user.email ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isOwner && !isMe ? (
-                        <select
-                          value={user.role}
-                          disabled={roleChanging}
-                          onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
-                          className={`text-xs font-medium px-2 py-1 rounded-full border-0 ring-1 ring-inset ring-gray-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${ROLE_COLORS[user.role]} disabled:opacity-50`}
-                        >
-                          {ROLE_OPTIONS.map((r) => (
-                            <option key={r} value={r}>
-                              {r.charAt(0).toUpperCase() + r.slice(1)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[user.role]}`}>
-                          {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        !user.is_active
-                          ? "bg-red-100 text-red-600"
-                          : user.status === "pending"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-green-100 text-green-700"
-                      }`}>
-                        {!user.is_active ? "Deactivated" : user.status === "pending" ? "Invite Pending" : "Active"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 hidden lg:table-cell text-xs">
-                      {formatLastLogin(user.last_sign_in_at)}
-                    </td>
-                    {isOwner && (
-                      <td className="px-4 py-3">
-                        {!isMe && (
-                          <button
-                            onClick={() => handleToggleActive(user.id, user.is_active)}
-                            disabled={activeChanging}
-                            className={`text-xs hover:underline disabled:opacity-50 ${
-                              user.is_active ? "text-red-500" : "text-green-600"
-                            }`}
-                          >
-                            {activeChanging
-                              ? "Saving..."
-                              : user.is_active
-                              ? "Deactivate"
-                              : "Reactivate"}
-                          </button>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                          ROLE_BADGE_CLASS[user.role]
                         )}
-                      </td>
+                      >
+                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Badge
+                        variant={
+                          !user.is_active
+                            ? "destructive"
+                            : user.status === "pending"
+                            ? "secondary"
+                            : "default"
+                        }
+                        className="text-xs"
+                      >
+                        {!user.is_active
+                          ? "Deactivated"
+                          : user.status === "pending"
+                          ? "Invite Pending"
+                          : "Active"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
+                      {formatLastLogin(user.last_sign_in_at)}
+                    </TableCell>
+                    {isOwner && (
+                      <TableCell className="text-right">
+                        {!isMe && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                className="h-7 w-7 p-0"
+                              >
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setPendingRole(user.role);
+                                  setRoleDialog(user);
+                                }}
+                              >
+                                Change Role
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => setDeactivateTarget(user)}
+                                className={
+                                  user.is_active
+                                    ? "text-destructive focus:text-destructive"
+                                    : ""
+                                }
+                              >
+                                {user.is_active ? "Deactivate" : "Reactivate"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
-    </section>
+
+      {/* Role Change Dialog */}
+      <Dialog open={!!roleDialog} onOpenChange={(open) => !open && setRoleDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Role</DialogTitle>
+            <DialogDescription>
+              Update the role for {roleDialog?.full_name ?? roleDialog?.email ?? "this user"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="role-select" className="text-sm mb-1.5 block">
+              New Role
+            </Label>
+            <select
+              id="role-select"
+              value={pendingRole}
+              onChange={(e) => setPendingRole(e.target.value as UserRole)}
+              className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleDialog(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmRoleChange()}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Confirmation Dialog */}
+      <Dialog
+        open={!!deactivateTarget}
+        onOpenChange={(open) => !open && setDeactivateTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deactivateTarget?.is_active ? "Deactivate" : "Reactivate"} user?
+            </DialogTitle>
+            <DialogDescription>
+              {deactivateTarget?.is_active
+                ? `${deactivateTarget?.full_name ?? deactivateTarget?.email} will lose access immediately.`
+                : `${deactivateTarget?.full_name ?? deactivateTarget?.email} will regain access to the platform.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={deactivateTarget?.is_active ? "destructive" : "default"}
+              onClick={() => void confirmToggleActive()}
+            >
+              {deactivateTarget?.is_active ? "Deactivate" : "Reactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
