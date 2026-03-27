@@ -141,7 +141,7 @@ export function LoginPage({ authError }: LoginPageProps) {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Powered by Quality Equipment Parts USA
+          Powered by Quality Equipment &amp; Parts
         </p>
       </div>
     </div>

@@ -107,14 +107,14 @@ export function ChatMessage({
             )}
           </div>
 
-          {/* Copy button — hover top-right on assistant messages */}
+          {/* Copy button — hover/focus-within top-right on assistant messages; always visible on touch */}
           {message.role === "assistant" && message.content && (
             <button
               onClick={handleCopy}
               aria-label="Copy response"
               className={cn(
-                "absolute -top-2 -right-2 w-7 h-7 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-150",
-                "opacity-0 group-hover:opacity-100"
+                "absolute -top-3 -right-3 h-11 w-11 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-150",
+                "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100 [@media(hover:none)]:opacity-100"
               )}
             >
               {copied ? (
@@ -133,7 +133,7 @@ export function ChatMessage({
             <div className="w-full">
               <button
                 onClick={() => setSourcesOpen((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-qep-gray hover:text-foreground transition-colors duration-150 px-1"
+                className="flex items-center gap-1.5 text-xs text-qep-gray hover:text-foreground transition-colors duration-150 px-2 min-h-[44px]"
               >
                 <FileText className="w-3 h-3" />
                 {message.sources.length}{" "}
@@ -182,7 +182,7 @@ export function ChatMessage({
                 onClick={() => onFeedback(message.id, "up")}
                 aria-label="Helpful"
                 className={cn(
-                  "w-5 h-5 flex items-center justify-center rounded transition-colors duration-150",
+                  "h-11 w-11 flex items-center justify-center rounded transition-colors duration-150",
                   message.feedback === "up"
                     ? "text-qep-success"
                     : "text-muted-foreground hover:text-foreground"
@@ -194,7 +194,7 @@ export function ChatMessage({
                 onClick={() => onFeedback(message.id, "down")}
                 aria-label="Not helpful"
                 className={cn(
-                  "w-5 h-5 flex items-center justify-center rounded transition-colors duration-150",
+                  "h-11 w-11 flex items-center justify-center rounded transition-colors duration-150",
                   message.feedback === "down"
                     ? "text-qep-error"
                     : "text-muted-foreground hover:text-foreground"
@@ -211,12 +211,13 @@ export function ChatMessage({
 }
 
 function formatRelativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffSecs < 60) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return date.toLocaleDateString();
+  const timeStr = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const today = new Date();
+  const isToday =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+  if (isToday) return timeStr;
+  const dateStr = date.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${dateStr} ${timeStr}`;
 }

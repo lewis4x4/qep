@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X } from "lucide-react";
+import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Database, UserRole } from "../lib/database.types";
 import { UsersTab } from "./UsersTab";
@@ -23,6 +23,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -408,84 +414,134 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
               }
 
               return (
-                <Card>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Source</TableHead>
-                        <TableHead className="hidden md:table-cell">Words</TableHead>
-                        <TableHead>Status</TableHead>
-                        {canManageDocs && (
-                          <TableHead className="text-right">Actions</TableHead>
-                        )}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filtered.map((doc) => (
-                        <TableRow key={doc.id}>
-                          <TableCell className="font-medium max-w-48 truncate">
-                            {doc.title}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground capitalize">
-                            {doc.source.replace("_", " ")}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground hidden md:table-cell">
-                            {doc.word_count?.toLocaleString() ?? "—"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={doc.is_active ? "default" : "secondary"}>
-                              {doc.is_active ? "Active" : "Inactive"}
-                            </Badge>
-                          </TableCell>
+                <>
+                  {/* Mobile stacked cards — shown below md */}
+                  <div className="md:hidden space-y-2">
+                    {filtered.map((doc) => (
+                      <Card key={doc.id}>
+                        <CardContent className="py-3 px-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm truncate">{doc.title}</p>
+                              <p className="text-xs text-muted-foreground capitalize mt-0.5">
+                                {doc.source.replace("_", " ")}
+                                {doc.word_count ? ` · ${doc.word_count.toLocaleString()} words` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant={doc.is_active ? "default" : "secondary"}>
+                                {doc.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                              {canManageDocs && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Document actions">
+                                      <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => void toggleDocument(doc)}>
+                                      {doc.is_active ? (
+                                        <><ToggleRight className="w-4 h-4 mr-2 text-primary" />Disable</>
+                                      ) : (
+                                        <><ToggleLeft className="w-4 h-4 mr-2" />Enable</>
+                                      )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={reindexingId === doc.id}
+                                      onClick={() => void reindexDocument(doc)}
+                                    >
+                                      <RefreshCw className={cn("w-4 h-4 mr-2", reindexingId === doc.id && "animate-spin")} />
+                                      Re-index
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => setDeleteTarget(doc)}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Desktop table — shown at md+ */}
+                  <Card className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead className="hidden lg:table-cell">Words</TableHead>
+                          <TableHead>Status</TableHead>
                           {canManageDocs && (
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => void toggleDocument(doc)}
-                                  className="h-7 px-2 text-xs"
-                                >
-                                  {doc.is_active ? (
-                                    <ToggleRight className="w-4 h-4 mr-1 text-primary" />
-                                  ) : (
-                                    <ToggleLeft className="w-4 h-4 mr-1" />
-                                  )}
-                                  {doc.is_active ? "Disable" : "Enable"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled={reindexingId === doc.id}
-                                  onClick={() => void reindexDocument(doc)}
-                                  className="h-7 px-2 text-xs"
-                                >
-                                  <RefreshCw
-                                    className={cn(
-                                      "w-4 h-4 mr-1",
-                                      reindexingId === doc.id && "animate-spin"
-                                    )}
-                                  />
-                                  Re-index
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setDeleteTarget(doc)}
-                                  className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-1" />
-                                  Delete
-                                </Button>
-                              </div>
-                            </TableCell>
+                            <TableHead className="text-right w-12">Actions</TableHead>
                           )}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {filtered.map((doc) => (
+                          <TableRow key={doc.id}>
+                            <TableCell className="font-medium max-w-48 truncate">
+                              {doc.title}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground capitalize">
+                              {doc.source.replace("_", " ")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground hidden lg:table-cell">
+                              {doc.word_count?.toLocaleString() ?? "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={doc.is_active ? "default" : "secondary"}>
+                                {doc.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                            </TableCell>
+                            {canManageDocs && (
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Document actions">
+                                      <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => void toggleDocument(doc)}>
+                                      {doc.is_active ? (
+                                        <><ToggleRight className="w-4 h-4 mr-2 text-primary" />Disable</>
+                                      ) : (
+                                        <><ToggleLeft className="w-4 h-4 mr-2" />Enable</>
+                                      )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={reindexingId === doc.id}
+                                      onClick={() => void reindexDocument(doc)}
+                                    >
+                                      <RefreshCw className={cn("w-4 h-4 mr-2", reindexingId === doc.id && "animate-spin")} />
+                                      Re-index
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => setDeleteTarget(doc)}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </>
               );
             })()}
           </div>

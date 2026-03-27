@@ -41,14 +41,49 @@ function getInitials(email: string | null): string {
 function autoTitle(messages: Message[]): string {
   const first = messages.find((m) => m.role === "user");
   if (!first) return "Conversation";
-  return first.content.slice(0, 42) + (first.content.length > 42 ? "…" : "");
+  return first.content.slice(0, 40) + (first.content.length > 40 ? "…" : "");
+}
+
+const STORAGE_KEY_HISTORY = "qep-chat-history";
+const STORAGE_KEY_CURRENT = "qep-chat-current";
+
+function reviveMessages(raw: unknown[]): Message[] {
+  return raw.map((m) => {
+    const msg = m as Record<string, unknown>;
+    return { ...msg, timestamp: new Date(msg.timestamp as string) } as Message;
+  });
+}
+
+function loadHistory(): ConversationSession[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+    return parsed.map((s) => ({
+      ...s,
+      createdAt: new Date(s.createdAt as string),
+      messages: reviveMessages(s.messages as unknown[]),
+    })) as ConversationSession[];
+  } catch {
+    return [];
+  }
+}
+
+function loadCurrentMessages(): Message[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CURRENT);
+    if (!raw) return [];
+    return reviveMessages(JSON.parse(raw) as unknown[]);
+  } catch {
+    return [];
+  }
 }
 
 export function ChatPage({ userEmail }: ChatPageProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => loadCurrentMessages());
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [history, setHistory] = useState<ConversationSession[]>([]);
+  const [history, setHistory] = useState<ConversationSession[]>(() => loadHistory());
   const [historyOpen, setHistoryOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -57,6 +92,15 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Persist current messages and history to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history));
+  }, [history]);
 
   // Close history panel on outside click
   useEffect(() => {
@@ -337,7 +381,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
             className={cn(
               "flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm",
               "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
-              "disabled:opacity-50 max-h-32 overflow-y-auto min-h-[42px]"
+              "disabled:opacity-50 max-h-32 overflow-y-auto min-h-[44px]"
             )}
           />
           <Button
@@ -345,7 +389,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
             disabled={streaming || !input.trim()}
             size="icon"
             className={cn(
-              "shrink-0 rounded-xl h-[42px] w-[42px] transition-colors duration-150",
+              "shrink-0 rounded-xl h-11 w-11 transition-colors duration-150",
               input.trim() && !streaming
                 ? "bg-qep-orange hover:bg-qep-orange-hover text-white"
                 : "bg-muted text-muted-foreground"
