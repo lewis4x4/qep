@@ -210,14 +210,20 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                         Automatically sync company documents from your Microsoft 365 account.
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
-                      <a
-                        href={`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`}
-                      >
-                        <Cloud className="w-4 h-4 mr-2" />
-                        Connect OneDrive
-                      </a>
-                    </Button>
+                    {import.meta.env.VITE_MSGRAPH_CLIENT_ID ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`}
+                        >
+                          <Cloud className="w-4 h-4 mr-2" />
+                          Connect OneDrive
+                        </a>
+                      </Button>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        Not yet configured
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
