@@ -1,13 +1,57 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Mic,
+  Square,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  User,
+  Building2,
+  Tractor,
+  Wrench,
+  TrendingUp,
+  DollarSign,
+  MessageSquare,
+  ListTodo,
+  Copy,
+  Check,
+  RefreshCw,
+  CloudUpload,
+  FileText,
+  Cpu,
+  Sparkles,
+  HelpCircle,
+  CalendarDays,
+  ChevronDown,
+} from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { UserRole, ExtractedDealData } from "../lib/database.types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
   userEmail: string | null;
 }
 
-type RecordingState = "idle" | "recording" | "recorded" | "processing" | "done" | "error";
+type RecordingState =
+  | "idle"
+  | "recording"
+  | "recorded"
+  | "processing"
+  | "done"
+  | "error";
 
 interface CaptureResult {
   id: string;
@@ -30,7 +74,15 @@ const DEAL_STAGE_LABELS: Record<string, string> = {
   closed_lost: "Closed Lost",
 };
 
-export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps) {
+const PROCESSING_STEPS = [
+  { label: "Uploading", icon: CloudUpload },
+  { label: "Transcribing", icon: FileText },
+  { label: "Extracting", icon: Cpu },
+  { label: "Done", icon: Sparkles },
+];
+
+export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
+  const { toast } = useToast();
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -38,11 +90,15 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
   const [hubspotDealId, setHubspotDealId] = useState("");
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [processingStep, setProcessingStep] = useState(0);
+  const [transcriptCopied, setTranscriptCopied] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clean up object URL on unmount
   useEffect(() => {
@@ -51,8 +107,29 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
     };
   }, [audioBlobUrl]);
+
+  // Advance processing steps while processing
+  useEffect(() => {
+    if (recordingState !== "processing") {
+      setProcessingStep(0);
+      return;
+    }
+    setProcessingStep(0);
+    const advance = (step: number) => {
+      if (step >= 2) return; // hold at "Extracting" until result arrives
+      stepTimerRef.current = setTimeout(() => {
+        setProcessingStep(step + 1);
+        advance(step + 1);
+      }, 2000);
+    };
+    advance(0);
+    return () => {
+      if (stepTimerRef.current) clearTimeout(stepTimerRef.current);
+    };
+  }, [recordingState]);
 
   const startRecording = useCallback(async () => {
     setErrorMessage(null);
@@ -68,7 +145,6 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
       return;
     }
 
-    // Pick the best supported format (webm for Chrome/Android, mp4 for Safari/iOS)
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : MediaRecorder.isTypeSupported("audio/mp4")
@@ -92,7 +168,7 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
       streamRef.current = null;
     };
 
-    recorder.start(250); // collect data every 250ms
+    recorder.start(250);
     setRecordingState("recording");
     setElapsedSeconds(0);
 
@@ -117,17 +193,21 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
     setElapsedSeconds(0);
     setResult(null);
     setErrorMessage(null);
+    setTranscriptOpen(false);
+    setTranscriptCopied(false);
     setRecordingState("idle");
   }, [audioBlobUrl]);
 
-  async function submitCapture() {
+  async function submitCapture(): Promise<void> {
     if (!audioBlob) return;
 
     setRecordingState("processing");
     setErrorMessage(null);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
       const form = new FormData();
@@ -150,16 +230,38 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error ?? "Processing failed");
+        throw new Error((err as { error?: string }).error ?? "Processing failed");
       }
 
       const data = (await res.json()) as CaptureResult;
+
+      // Mark final step complete before showing results
+      setProcessingStep(3);
+      await new Promise((r) => setTimeout(r, 600));
+
       setResult(data);
       setRecordingState("done");
+
+      if (data.hubspot_synced) {
+        toast({
+          title: "Saved to HubSpot",
+          description: "Note and follow-up task added to the deal.",
+        });
+      } else {
+        toast({
+          title: "Saved locally",
+          description: "Will sync to HubSpot once connected.",
+          variant: "destructive",
+        });
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.";
       setErrorMessage(message);
       setRecordingState("error");
+      toast({ title: "Processing failed", description: message, variant: "destructive" });
     }
   }
 
@@ -169,328 +271,422 @@ export function VoiceCapturePage({ userRole, userEmail }: VoiceCapturePageProps)
     return `${m}:${s}`;
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
+  async function copyTranscript(): Promise<void> {
+    if (!result?.transcript) return;
+    await navigator.clipboard.writeText(result.transcript);
+    setTranscriptCopied(true);
+    setTimeout(() => setTranscriptCopied(false), 2000);
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-            <MicIcon className="w-4 h-4 text-white" />
-          </div>
+    <TooltipProvider>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+
+          {/* Page header */}
           <div>
-            <h1 className="text-sm font-semibold text-gray-900">Field Note</h1>
-            <p className="text-xs text-gray-400 capitalize">{userRole}</p>
+            <h1 className="text-xl font-semibold text-foreground">Field Note</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Record a quick summary after your visit — we'll pull out the key details and push them to HubSpot.
+            </p>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="/" className="text-xs text-blue-600 hover:underline">Knowledge</a>
-          {["admin", "manager", "owner"].includes(userRole) && (
-            <a href="/admin" className="text-xs text-blue-600 hover:underline">Admin</a>
-          )}
-          <button onClick={handleSignOut} className="text-xs text-gray-500 hover:text-gray-700">
-            Sign out
-          </button>
-        </div>
-      </header>
 
-      <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
-
-        {/* ── IDLE / PRE-RECORD ─────────────────────────────────────────── */}
-        {(recordingState === "idle") && (
-          <div className="space-y-6">
-            <div className="text-center pt-4">
-              <p className="text-sm text-gray-500">
-                Record a quick summary after your visit. We'll pull out the key details and push them to HubSpot.
-              </p>
-            </div>
-
-            {/* Optional deal ID */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                HubSpot Deal ID <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={hubspotDealId}
-                onChange={(e) => setHubspotDealId(e.target.value)}
-                placeholder="Paste the deal ID if you know it"
-                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Don't know it? We'll try to match by customer name automatically.
-              </p>
-            </div>
-
-            {/* Record button */}
-            <div className="flex flex-col items-center gap-3 pt-4">
-              <button
-                onClick={startRecording}
-                className="w-24 h-24 bg-orange-500 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-orange-600"
-              >
-                <MicIcon className="w-10 h-10 text-white" />
-              </button>
-              <p className="text-sm text-gray-500">Tap to start recording</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── RECORDING ──────────────────────────────────────────────────── */}
-        {recordingState === "recording" && (
-          <div className="flex flex-col items-center gap-6 pt-8">
-            <div className="relative">
-              {/* Pulse rings */}
-              <div className="absolute inset-0 rounded-full bg-red-400 opacity-30 animate-ping" />
-              <div className="absolute inset-2 rounded-full bg-red-400 opacity-20 animate-ping" style={{ animationDelay: "150ms" }} />
-              <button
-                onClick={stopRecording}
-                className="relative w-24 h-24 bg-red-500 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-red-600 z-10"
-              >
-                <StopIcon className="w-10 h-10 text-white" />
-              </button>
-            </div>
-            <div className="text-center">
-              <p className="text-3xl font-mono font-semibold text-gray-800">
-                {formatTime(elapsedSeconds)}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Recording — tap to stop</p>
-            </div>
-            {elapsedSeconds > 90 && (
-              <p className="text-xs text-amber-600 text-center">
-                Try to keep it under 2 minutes for best results.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* ── RECORDED (review before submit) ──────────────────────────── */}
-        {recordingState === "recorded" && audioBlob && (
-          <div className="space-y-5">
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Recording ready</span>
-                <span className="text-xs text-gray-400">{formatTime(elapsedSeconds)}</span>
-              </div>
-              {audioBlobUrl && (
-                <audio controls src={audioBlobUrl} className="w-full h-10" />
-              )}
-            </div>
-
-            {/* Deal ID (editable before submit) */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                HubSpot Deal ID <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={hubspotDealId}
-                onChange={(e) => setHubspotDealId(e.target.value)}
-                placeholder="Paste deal ID if known"
-                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={resetCapture}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-xl py-3 text-sm font-medium hover:bg-gray-50 transition"
-              >
-                Re-record
-              </button>
-              <button
-                onClick={submitCapture}
-                className="flex-2 bg-orange-500 text-white rounded-xl py-3 px-6 text-sm font-medium hover:bg-orange-600 transition flex-1"
-              >
-                Process Note
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── PROCESSING ─────────────────────────────────────────────────── */}
-        {recordingState === "processing" && (
-          <div className="flex flex-col items-center gap-4 pt-12">
-            <div className="w-12 h-12 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-gray-700">Processing your note...</p>
-              <p className="text-xs text-gray-400">Transcribing and pulling out deal details</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── ERROR ──────────────────────────────────────────────────────── */}
-        {(recordingState === "error") && (
-          <div className="space-y-4 pt-4">
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-              <p className="text-sm font-medium text-red-800">Something went wrong</p>
-              {errorMessage && (
-                <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
-              )}
-            </div>
-            <button
-              onClick={resetCapture}
-              className="w-full border border-gray-300 text-gray-700 rounded-xl py-3 text-sm font-medium hover:bg-gray-50 transition"
-            >
-              Start over
-            </button>
-          </div>
-        )}
-
-        {/* ── DONE — show extracted results ─────────────────────────────── */}
-        {recordingState === "done" && result && (
-          <div className="space-y-4">
-            {/* HubSpot sync status */}
-            <div className={`rounded-2xl p-4 flex items-start gap-3 ${
-              result.hubspot_synced
-                ? "bg-green-50 border border-green-200"
-                : "bg-amber-50 border border-amber-200"
-            }`}>
-              {result.hubspot_synced ? (
-                <>
-                  <CheckCircleIcon className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-green-800">Saved to HubSpot</p>
-                    <p className="text-xs text-green-600 mt-0.5">
-                      Note and follow-up task added to the deal.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <AlertIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800">Saved locally</p>
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      HubSpot isn't connected yet — your note is saved and will sync once connected.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Extracted data card */}
-            <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100">
-              <div className="px-4 py-3">
-                <h2 className="text-sm font-semibold text-gray-900">What we pulled out</h2>
-              </div>
-
-              <ExtractedField label="Customer" value={result.extracted_data.customer_name} />
-              <ExtractedField label="Company" value={result.extracted_data.company_name} />
-              <ExtractedField label="Equipment" value={result.extracted_data.machine_interest} />
-              <ExtractedField label="Attachments" value={result.extracted_data.attachments_discussed} />
-              <ExtractedField
-                label="Deal stage"
-                value={
-                  result.extracted_data.deal_stage
-                    ? DEAL_STAGE_LABELS[result.extracted_data.deal_stage] ?? result.extracted_data.deal_stage
-                    : null
-                }
-              />
-              <ExtractedField label="Budget" value={result.extracted_data.budget_range} />
-              <ExtractedField label="Key concerns" value={result.extracted_data.key_concerns} />
-              <ExtractedField label="Next step" value={result.extracted_data.next_step} />
-              <ExtractedField
-                label="Follow-up date"
-                value={
-                  result.extracted_data.follow_up_date
-                    ? new Date(result.extracted_data.follow_up_date).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : null
-                }
-              />
-
-              {result.extracted_data.action_items.length > 0 && (
-                <div className="px-4 py-3">
-                  <p className="text-xs text-gray-400 mb-1.5">Action items</p>
-                  <ul className="space-y-1">
-                    {result.extracted_data.action_items.map((item, i) => (
-                      <li key={i} className="text-sm text-gray-800 flex gap-2">
-                        <span className="text-orange-400 flex-shrink-0">•</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
+          {/* ── IDLE ──────────────────────────────────────────────────────────── */}
+          {recordingState === "idle" && (
+            <div className="space-y-6">
+              {/* HubSpot Deal ID input */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="deal-id">HubSpot Deal ID</Label>
+                  <span className="text-xs text-muted-foreground">(optional)</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[200px]">
+                      Paste the HubSpot deal ID to link this note directly. Don't know it? We'll match by customer name automatically.
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-              )}
-            </div>
-
-            {/* Transcript (collapsible) */}
-            <details className="bg-white rounded-2xl border border-gray-200">
-              <summary className="px-4 py-3 text-sm font-medium text-gray-700 cursor-pointer select-none">
-                Full transcript
-              </summary>
-              <div className="px-4 pb-4">
-                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-                  {result.transcript}
+                <Input
+                  id="deal-id"
+                  type="text"
+                  value={hubspotDealId}
+                  onChange={(e) => setHubspotDealId(e.target.value)}
+                  placeholder="Paste the deal ID if you know it"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Don't know it? We'll try to match by customer name automatically.
                 </p>
               </div>
-            </details>
 
-            <button
-              onClick={resetCapture}
-              className="w-full bg-orange-500 text-white rounded-xl py-3 text-sm font-medium hover:bg-orange-600 transition"
-            >
-              Record another note
-            </button>
-          </div>
-        )}
-      </main>
-    </div>
+              {/* Record button */}
+              <div className="flex flex-col items-center gap-3 pt-4">
+                <button
+                  onClick={startRecording}
+                  className="w-24 h-24 bg-primary rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  aria-label="Start recording"
+                >
+                  <Mic className="w-10 h-10 text-primary-foreground" />
+                </button>
+                <p className="text-sm text-muted-foreground">Tap to Record</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── RECORDING ─────────────────────────────────────────────────────── */}
+          {recordingState === "recording" && (
+            <div className="flex flex-col items-center gap-6 pt-4">
+              <div className="relative flex items-center justify-center">
+                {/* Pulse rings */}
+                <span className="absolute inline-flex h-24 w-24 rounded-full bg-destructive opacity-25 animate-ping" />
+                <span className="absolute inline-flex h-20 w-20 rounded-full bg-destructive opacity-20 animate-ping [animation-delay:150ms]" />
+                <button
+                  onClick={stopRecording}
+                  className="relative z-10 w-24 h-24 bg-destructive rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  aria-label="Stop recording"
+                >
+                  <Square className="w-10 h-10 text-destructive-foreground fill-current" />
+                </button>
+              </div>
+
+              <div className="text-center">
+                <p className="text-3xl font-mono font-semibold tabular-nums">
+                  {formatTime(elapsedSeconds)}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">Recording...</p>
+              </div>
+
+              {elapsedSeconds > 90 && (
+                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+                  Try to keep it under 2 minutes for best results
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* ── RECORDED ──────────────────────────────────────────────────────── */}
+          {recordingState === "recorded" && audioBlob && (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium">Review Recording</CardTitle>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatTime(elapsedSeconds)}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {audioBlobUrl && (
+                    <audio controls src={audioBlobUrl} className="w-full h-10" />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Deal ID (editable) */}
+              <div className="space-y-1.5">
+                <Label htmlFor="deal-id-review">HubSpot Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Input
+                  id="deal-id-review"
+                  type="text"
+                  value={hubspotDealId}
+                  onChange={(e) => setHubspotDealId(e.target.value)}
+                  placeholder="Paste deal ID if known"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={resetCapture}
+                >
+                  Re-record
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={submitCapture}
+                >
+                  Process Note
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── PROCESSING ────────────────────────────────────────────────────── */}
+          {recordingState === "processing" && (
+            <Card>
+              <CardContent className="pt-6 pb-6">
+                <div className="space-y-4">
+                  {PROCESSING_STEPS.map((step, index) => {
+                    const isComplete = processingStep > index;
+                    const isActive = processingStep === index;
+                    const isPending = processingStep < index;
+                    const StepIcon = step.icon;
+                    return (
+                      <div
+                        key={step.label}
+                        className={cn(
+                          "flex items-center gap-3 transition-opacity duration-300",
+                          isPending && "opacity-35"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors",
+                            isComplete && "bg-primary text-primary-foreground",
+                            isActive && "bg-primary/10 text-primary",
+                            isPending && "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {isComplete ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : isActive ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <StepIcon className="w-4 h-4" />
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "text-sm font-medium transition-colors",
+                            isComplete && "text-primary",
+                            isActive && "text-foreground",
+                            isPending && "text-muted-foreground"
+                          )}
+                        >
+                          {step.label}
+                        </span>
+                        {index < PROCESSING_STEPS.length - 1 && (
+                          <div className="flex-1 border-b border-dashed border-border ml-auto w-4" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── ERROR ─────────────────────────────────────────────────────────── */}
+          {recordingState === "error" && (
+            <div className="space-y-4">
+              <Card className="border-destructive/50 bg-destructive/5">
+                <CardContent className="pt-4 flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-destructive">Processing failed</p>
+                    {errorMessage && (
+                      <p className="text-xs text-destructive/80 mt-1">{errorMessage}</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Button variant="outline" className="w-full" onClick={resetCapture}>
+                Start over
+              </Button>
+            </div>
+          )}
+
+          {/* ── DONE ──────────────────────────────────────────────────────────── */}
+          {recordingState === "done" && result && (
+            <div className="space-y-4">
+              {/* HubSpot sync status */}
+              <div className={cn(
+                "flex items-center gap-3 rounded-lg border px-4 py-3",
+                result.hubspot_synced
+                  ? "border-green-200 bg-green-50"
+                  : "border-amber-200 bg-amber-50"
+              )}>
+                {result.hubspot_synced ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-green-800">Saved to HubSpot</p>
+                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task added to the deal.</p>
+                    </div>
+                    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
+                      Synced
+                    </Badge>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-amber-800">Saved locally</p>
+                      <p className="text-xs text-amber-600 mt-0.5">HubSpot isn't connected — will sync once configured.</p>
+                    </div>
+                    <Badge variant="outline" className="text-amber-600 border-amber-300">
+                      Pending
+                    </Badge>
+                  </>
+                )}
+              </div>
+
+              {/* Customer Info */}
+              {(result.extracted_data.customer_name || result.extracted_data.company_name) && (
+                <ResultCard
+                  icon={<User className="w-4 h-4" />}
+                  title="Customer Info"
+                >
+                  <ExtractedField label="Name" value={result.extracted_data.customer_name} icon={<User className="w-3.5 h-3.5" />} />
+                  <ExtractedField label="Company" value={result.extracted_data.company_name} icon={<Building2 className="w-3.5 h-3.5" />} />
+                </ResultCard>
+              )}
+
+              {/* Equipment Interest */}
+              {(result.extracted_data.machine_interest || result.extracted_data.attachments_discussed) && (
+                <ResultCard
+                  icon={<Tractor className="w-4 h-4" />}
+                  title="Equipment Interest"
+                >
+                  <ExtractedField label="Equipment" value={result.extracted_data.machine_interest} icon={<Tractor className="w-3.5 h-3.5" />} />
+                  <ExtractedField label="Attachments" value={result.extracted_data.attachments_discussed} icon={<Wrench className="w-3.5 h-3.5" />} />
+                </ResultCard>
+              )}
+
+              {/* Deal Details */}
+              {(result.extracted_data.deal_stage || result.extracted_data.budget_range || result.extracted_data.key_concerns) && (
+                <ResultCard
+                  icon={<TrendingUp className="w-4 h-4" />}
+                  title="Deal Details"
+                >
+                  <ExtractedField
+                    label="Stage"
+                    value={
+                      result.extracted_data.deal_stage
+                        ? (DEAL_STAGE_LABELS[result.extracted_data.deal_stage] ?? result.extracted_data.deal_stage)
+                        : null
+                    }
+                    icon={<TrendingUp className="w-3.5 h-3.5" />}
+                  />
+                  <ExtractedField label="Budget" value={result.extracted_data.budget_range} icon={<DollarSign className="w-3.5 h-3.5" />} />
+                  <ExtractedField label="Concerns" value={result.extracted_data.key_concerns} icon={<MessageSquare className="w-3.5 h-3.5" />} />
+                </ResultCard>
+              )}
+
+              {/* Action Items */}
+              {(result.extracted_data.next_step || result.extracted_data.follow_up_date || result.extracted_data.action_items.length > 0) && (
+                <ResultCard
+                  icon={<ListTodo className="w-4 h-4" />}
+                  title="Action Items"
+                >
+                  <ExtractedField label="Next step" value={result.extracted_data.next_step} icon={<RefreshCw className="w-3.5 h-3.5" />} />
+                  <ExtractedField
+                    label="Follow-up"
+                    value={
+                      result.extracted_data.follow_up_date
+                        ? new Date(result.extracted_data.follow_up_date).toLocaleDateString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : null
+                    }
+                    icon={<CalendarDays className="w-3.5 h-3.5" />}
+                  />
+                  {result.extracted_data.action_items.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <p className="text-xs text-muted-foreground">Tasks</p>
+                      <ul className="space-y-1">
+                        {result.extracted_data.action_items.map((item, i) => (
+                          <li key={i} className="flex gap-2 text-sm">
+                            <span className="text-primary flex-shrink-0 mt-0.5">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </ResultCard>
+              )}
+
+              {/* Transcript (collapsible) */}
+              <Card>
+                <button
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-t-lg"
+                  onClick={() => setTranscriptOpen((o) => !o)}
+                  aria-expanded={transcriptOpen}
+                >
+                  <span>Full Transcript</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 text-muted-foreground transition-transform duration-200",
+                      transcriptOpen && "rotate-180"
+                    )}
+                  />
+                </button>
+                {transcriptOpen && (
+                  <CardContent className="pt-0 space-y-3">
+                    <div className="relative">
+                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-mono bg-muted rounded-md p-3 pr-10">
+                        {result.transcript}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="absolute top-2 right-2 h-7 w-7 p-0"
+                        onClick={copyTranscript}
+                        aria-label="Copy transcript"
+                      >
+                        {transcriptCopied ? (
+                          <Check className="w-3.5 h-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              <Button className="w-full" onClick={resetCapture}>
+                Record Another Note
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </TooltipProvider>
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// ── Sub-components ──────────────────────────────────────────────────────────────
 
-function ExtractedField({ label, value }: { label: string; value: string | null | undefined }) {
+interface ResultCardProps {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}
+
+function ResultCard({ icon, title, children }: ResultCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-2 pt-4">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <span className="text-muted-foreground">{icon}</span>
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 pb-4">{children}</CardContent>
+    </Card>
+  );
+}
+
+interface ExtractedFieldProps {
+  label: string;
+  value: string | null | undefined;
+  icon?: React.ReactNode;
+}
+
+function ExtractedField({ label, value, icon }: ExtractedFieldProps) {
   if (!value) return null;
   return (
-    <div className="px-4 py-3 flex gap-3">
-      <span className="text-xs text-gray-400 w-24 flex-shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-gray-800 flex-1">{value}</span>
+    <div className="flex gap-3 items-start">
+      {icon && <span className="text-muted-foreground flex-shrink-0 mt-0.5">{icon}</span>}
+      <span className="text-xs text-muted-foreground w-20 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-foreground flex-1">{value}</span>
     </div>
-  );
-}
-
-// ── Inline SVG icons (no external dep) ────────────────────────────────────────
-
-function MicIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2H3v2a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12v-2h-2z" />
-    </svg>
-  );
-}
-
-function StopIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="6" width="12" height="12" rx="2" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <path d="m9 12 2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function AlertIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" strokeLinecap="round" />
-      <line x1="12" y1="16" x2="12.01" y2="16" strokeLinecap="round" />
-    </svg>
   );
 }
