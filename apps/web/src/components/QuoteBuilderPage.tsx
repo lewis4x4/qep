@@ -411,8 +411,8 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 </div>
               )}
 
-              {/* Loading state — skeleton cards */}
-              {catalogLoading && !selectedMachine && (
+              {/* Loading state — skeleton cards; also covers initial render frame before useEffect fires */}
+              {!selectedMachine && (catalogLoading || machines.length === 0) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <Card key={i} className="overflow-hidden">
@@ -550,7 +550,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
               )}
 
               {/* Machine catalog grid */}
-              {!selectedMachine && !catalogLoading && (
+              {!selectedMachine && !catalogLoading && machines.length > 0 && (
                 <>
                   {filteredMachines.length === 0 ? (
                     <div className="flex flex-col items-center py-16 text-center">
@@ -972,28 +972,26 @@ function ProposalPrint({
           body * { visibility: hidden; }
           #qep-proposal, #qep-proposal * { visibility: visible; }
           #qep-proposal { position: absolute; top: 0; left: 0; width: 100%; }
-          @page { margin: 1in; }
-          /* Force QEP brand orange — CSS custom properties may not resolve in all print renderers */
-          #qep-proposal .text-primary { color: #E87722 !important; }
-          #qep-proposal .border-primary { border-color: #E87722 !important; }
+          @page { size: 8.5in 11in; margin: 1in; }
         }
       `}</style>
       <div
         id="qep-proposal"
-        className="hidden print:block p-8 max-w-2xl mx-auto font-sans text-gray-900"
+        className="hidden print:block p-8 max-w-[8.5in] mx-auto font-sans"
+        style={{ color: '#334155' }}
       >
         {/* Letterhead */}
-        <div className="flex items-start justify-between border-b-2 border-primary pb-4 mb-6">
+        <div className="flex items-start justify-between pb-4 mb-6" style={{ borderBottom: '2px solid #E87722' }}>
           <div>
-            <h1 className="text-2xl font-bold text-primary">
+            <h1 className="text-2xl font-bold" style={{ color: '#1e3a5f' }}>
               Quality Equipment &amp; Parts, Inc.
             </h1>
-            <p className="text-sm leading-5 text-slate-500 mt-0.5">
+            <p className="text-sm leading-5 mt-0.5" style={{ color: '#334155' }}>
               Lake City, FL · qepusa.com
             </p>
           </div>
-          <div className="text-right text-sm text-gray-500">
-            <p className="font-semibold text-gray-800">{repName}</p>
+          <div className="text-right text-sm" style={{ color: '#334155' }}>
+            <p className="font-semibold" style={{ color: '#1e3a5f' }}>{repName}</p>
             <p>{repEmail}</p>
             <p>{today}</p>
           </div>
@@ -1001,8 +999,8 @@ function ProposalPrint({
 
         {/* Customer */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Equipment Quote</h2>
-          <div className="text-sm text-gray-600 space-y-0.5">
+          <h2 className="text-lg font-semibold mb-1" style={{ color: '#1e3a5f' }}>Equipment Quote</h2>
+          <div className="text-base space-y-0.5" style={{ color: '#334155' }}>
             <p>
               <span className="font-medium">Customer:</span> {customer.name}
             </p>
@@ -1026,22 +1024,20 @@ function ProposalPrint({
         {/* Line items */}
         <table className="w-full text-sm border-collapse mb-6">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="text-left px-3 py-2 font-semibold text-gray-700 border border-gray-200">
+            <tr style={{ backgroundColor: '#eef2f7' }}>
+              <th className="text-left px-3 py-2 font-semibold" style={{ color: '#1e3a5f', border: '1px solid #d7e0ea' }}>
                 Description
               </th>
-              <th className="text-right px-3 py-2 font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">
+              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap" style={{ color: '#1e3a5f', border: '1px solid #d7e0ea' }}>
                 Unit Price
               </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="px-3 py-2 border border-gray-200">
-                <p className="font-medium">
-                  {selectedMachine.year} {selectedMachine.make} {selectedMachine.model}
-                </p>
-                <p className="text-gray-500 text-xs">
+              <td className="px-3 py-2" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+                <p className="font-medium">{selectedMachine.year} {selectedMachine.make} {selectedMachine.model}</p>
+                <p className="text-xs" style={{ color: '#64748b' }}>
                   {CATEGORY_LABELS[selectedMachine.category]} ·{" "}
                   {selectedMachine.condition === "new"
                     ? "New"
@@ -1051,26 +1047,26 @@ function ProposalPrint({
                     : ""}
                 </p>
               </td>
-              <td className="px-3 py-2 border border-gray-200 text-right font-medium">
+              <td className="px-3 py-2 text-right font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
                 {formatCurrency(machinePrice)}
               </td>
             </tr>
             {selectedAttachments.map((a) => (
               <tr key={a.id}>
-                <td className="px-3 py-2 border border-gray-200">
+                <td className="px-3 py-2" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
                   <p className="font-medium">{a.name}</p>
-                  <p className="text-gray-500 text-xs capitalize">
+                  <p className="text-xs capitalize" style={{ color: '#64748b' }}>
                     {a.category.replace(/_/g, " ")}
                   </p>
                 </td>
-                <td className="px-3 py-2 border border-gray-200 text-right font-medium">
+                <td className="px-3 py-2 text-right font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
                   {formatCurrency(a.retailPrice)}
                 </td>
               </tr>
             ))}
-            <tr className="bg-gray-50">
-              <td className="px-3 py-2 border border-gray-200 font-bold text-right">Total</td>
-              <td className="px-3 py-2 border border-gray-200 text-right font-bold text-primary text-base">
+            <tr style={{ backgroundColor: '#f8fafc' }}>
+              <td className="px-3 py-2 font-bold text-right" style={{ border: '1px solid #d7e0ea', color: '#1e3a5f' }}>Total</td>
+              <td className="px-3 py-2 text-right font-bold text-base" style={{ border: '1px solid #d7e0ea', color: '#E87722' }}>
                 {formatCurrency(grandTotal)}
               </td>
             </tr>
@@ -1080,15 +1076,15 @@ function ProposalPrint({
         {/* Key specs */}
         {selectedMachine.specs.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Key Specifications</h3>
+            <h3 className="text-sm font-semibold mb-2" style={{ color: '#1e3a5f' }}>Key Specifications</h3>
             <table className="w-full text-sm border-collapse">
               <tbody>
                 {selectedMachine.specs.map((s) => (
                   <tr key={s.label}>
-                    <td className="px-3 py-1.5 border border-gray-200 text-gray-500 w-1/2">
+                    <td className="px-3 py-1.5 w-1/2" style={{ border: '1px solid #d7e0ea', color: '#64748b' }}>
                       {s.label}
                     </td>
-                    <td className="px-3 py-1.5 border border-gray-200 font-medium">
+                    <td className="px-3 py-1.5 font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
                       {s.value}
                     </td>
                   </tr>
@@ -1101,15 +1097,15 @@ function ProposalPrint({
         {/* Notes */}
         {notes.trim() && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Notes</h3>
-            <p className="text-sm text-gray-600 whitespace-pre-wrap border border-gray-200 rounded p-3">
+            <h3 className="text-sm font-semibold mb-1" style={{ color: '#1e3a5f' }}>Notes</h3>
+            <p className="text-sm whitespace-pre-wrap rounded p-3" style={{ color: '#334155', border: '1px solid #d7e0ea' }}>
               {notes}
             </p>
           </div>
         )}
 
         {/* Footer */}
-        <div className="border-t border-gray-200 pt-4 text-xs text-gray-400 space-y-1">
+        <div className="pt-4 text-xs space-y-1" style={{ borderTop: '1px solid #d7e0ea', color: '#94a3b8' }}>
           <p>
             Pricing valid for 30 days from {today}. Quote subject to final inventory
             confirmation.

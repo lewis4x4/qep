@@ -391,10 +391,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="HubSpot Deal ID help"
-                        className="h-11 w-11 min-h-11 min-w-11 inline-flex items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        aria-label="What is a HubSpot deal ID?"
+                        className="h-6 w-6 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-[200px]">
