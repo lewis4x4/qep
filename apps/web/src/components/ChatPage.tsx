@@ -272,7 +272,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   const userInitials = getInitials(userEmail);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-[calc(100vh-3rem)]">
+    <div className="flex flex-col h-[calc(100dvh-7.5rem)] lg:h-[calc(100dvh-3rem)]">
       {/* Page header */}
       <div className="border-b bg-card px-6 py-4 shrink-0 flex items-center justify-between">
         <div>
