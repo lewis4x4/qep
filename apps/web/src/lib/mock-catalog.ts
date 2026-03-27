@@ -411,9 +411,16 @@ const MOCK_ATTACHMENTS: Attachment[] = [
   },
 ];
 
+// Simulate network latency so skeleton loading state renders visibly.
+// Remove this delay when swapping in the real IntelliDealer adapter.
+function simulatedDelay(ms = 400): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class MockCatalogAdapter implements CatalogAdapter {
   async getMachines(): Promise<Machine[]> {
-    return Promise.resolve(MOCK_MACHINES);
+    await simulatedDelay();
+    return MOCK_MACHINES;
   }
 
   async getMachine(stockNumber: string): Promise<Machine | null> {

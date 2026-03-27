@@ -973,6 +973,9 @@ function ProposalPrint({
           #qep-proposal, #qep-proposal * { visibility: visible; }
           #qep-proposal { position: absolute; top: 0; left: 0; width: 100%; }
           @page { margin: 1in; }
+          /* Force QEP brand orange — CSS custom properties may not resolve in all print renderers */
+          #qep-proposal .text-primary { color: #E87722 !important; }
+          #qep-proposal .border-primary { border-color: #E87722 !important; }
         }
       `}</style>
       <div
