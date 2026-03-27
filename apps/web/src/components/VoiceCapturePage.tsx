@@ -306,7 +306,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <span className="text-xs text-muted-foreground">(optional)</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                      <button
+                        type="button"
+                        aria-label="HubSpot Deal ID help"
+                        className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                      </button>
                     </TooltipTrigger>
                     <TooltipContent side="right" className="max-w-[200px]">
                       Paste the HubSpot deal ID to link this note directly. Don't know it? We'll match by customer name automatically.

@@ -411,11 +411,25 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 </div>
               )}
 
-              {/* Loading state */}
+              {/* Loading state — skeleton cards */}
               {catalogLoading && !selectedMachine && (
-                <div className="flex flex-col items-center gap-3 py-16">
-                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-muted-foreground">Loading inventory...</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Card key={i} className="overflow-hidden">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="w-full h-24 bg-muted rounded-md mb-3 animate-pulse" />
+                        <div className="h-4 bg-muted rounded animate-pulse mb-1.5 w-3/4" />
+                        <div className="h-3 bg-muted rounded animate-pulse mb-3 w-1/3" />
+                        <div className="flex gap-1.5 mb-2">
+                          <div className="h-5 bg-muted rounded-full animate-pulse w-20" />
+                          <div className="h-5 bg-muted rounded-full animate-pulse w-16" />
+                        </div>
+                        <div className="h-3 bg-muted rounded animate-pulse mb-1 w-full" />
+                        <div className="h-3 bg-muted rounded animate-pulse mb-3 w-4/5" />
+                        <div className="h-5 bg-muted rounded animate-pulse w-24" />
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               )}
 
@@ -966,9 +980,9 @@ function ProposalPrint({
         className="hidden print:block p-8 max-w-2xl mx-auto font-sans text-gray-900"
       >
         {/* Letterhead */}
-        <div className="flex items-start justify-between border-b-2 border-green-600 pb-4 mb-6">
+        <div className="flex items-start justify-between border-b-2 border-primary pb-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-green-700">
+            <h1 className="text-2xl font-bold text-primary">
               Quality Equipment &amp; Parts, Inc.
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
@@ -1053,7 +1067,7 @@ function ProposalPrint({
             ))}
             <tr className="bg-gray-50">
               <td className="px-3 py-2 border border-gray-200 font-bold text-right">Total</td>
-              <td className="px-3 py-2 border border-gray-200 text-right font-bold text-green-700 text-base">
+              <td className="px-3 py-2 border border-gray-200 text-right font-bold text-primary text-base">
                 {formatCurrency(grandTotal)}
               </td>
             </tr>
