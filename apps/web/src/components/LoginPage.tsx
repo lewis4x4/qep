@@ -1,135 +1,148 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { HardHat } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
 interface LoginPageProps {
   authError?: string | null;
 }
 
 export function LoginPage({ authError }: LoginPageProps) {
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [mode, setMode] = useState<"password" | "magic">("password");
 
-  async function handlePasswordLogin(e: React.FormEvent) {
+  useEffect(() => {
+    if (authError) {
+      toast({
+        variant: "destructive",
+        title: "Sign-in problem",
+        description: authError,
+      });
+    }
+  }, [authError]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handlePasswordLogin(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
-    setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Sign-in failed",
+        description: error.message,
+      });
+    }
     setLoading(false);
   }
 
-  async function handleMagicLink(e: React.FormEvent) {
+  async function handleMagicLink(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
-    setError(null);
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: window.location.origin },
     });
-    if (error) setError(error.message);
-    else setMagicLinkSent(true);
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Error sending magic link",
+        description: error.message,
+      });
+    } else {
+      toast({
+        title: "Check your email",
+        description: `We sent a login link to ${email}`,
+      });
+    }
     setLoading(false);
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-secondary via-background to-secondary flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        {/* Brand mark */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-            <span className="text-white text-2xl font-bold">Q</span>
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-primary rounded-2xl mb-4">
+            <HardHat className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">QEP Knowledge Assistant</h1>
-          <p className="text-gray-500 mt-1 text-sm">Sign in to access company resources</p>
+          <p className="text-2xl font-bold text-primary">QEP</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Knowledge Assistant</p>
         </div>
 
-        {authError && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-            <p className="text-red-800 text-sm font-medium">Sign-in problem</p>
-            <p className="text-red-600 text-sm mt-1">{authError}</p>
-          </div>
-        )}
+        <Card>
+          <CardContent className="pt-6">
+            <Tabs defaultValue="password">
+              <TabsList className="w-full mb-6">
+                <TabsTrigger value="password" className="flex-1">
+                  Password
+                </TabsTrigger>
+                <TabsTrigger value="magic" className="flex-1">
+                  Magic Link
+                </TabsTrigger>
+              </TabsList>
 
-        {magicLinkSent ? (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-            <p className="text-green-800 font-medium">Check your email</p>
-            <p className="text-green-600 text-sm mt-1">We sent a login link to {email}</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setMode("password")}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
-                  mode === "password"
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                Password
-              </button>
-              <button
-                onClick={() => setMode("magic")}
-                className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
-                  mode === "magic"
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                Magic Link
-              </button>
-            </div>
-
-            <form onSubmit={mode === "password" ? handlePasswordLogin : handleMagicLink}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@qepusa.com"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                {mode === "password" && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Password
-                    </label>
-                    <input
+              <TabsContent value="password">
+                <form onSubmit={handlePasswordLogin} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-pw">Email</Label>
+                    <Input
+                      id="email-pw"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@qepusa.com"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                )}
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Signing in…" : "Sign In"}
+                  </Button>
+                </form>
+              </TabsContent>
 
-                {error && (
-                  <p className="text-red-600 text-sm">{error}</p>
-                )}
+              <TabsContent value="magic">
+                <form onSubmit={handleMagicLink} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-magic">Email</Label>
+                    <Input
+                      id="email-magic"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@qepusa.com"
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Sending…" : "Send Magic Link"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {loading ? "Signing in..." : mode === "password" ? "Sign In" : "Send Magic Link"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          Powered by Quality Equipment Parts USA
+        </p>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { ChatPage } from "./components/ChatPage";
 import { AdminPage } from "./components/AdminPage";
 import { VoiceCapturePage } from "./components/VoiceCapturePage";
 import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
+import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -14,17 +15,25 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+      <>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          </div>
         </div>
-      </div>
+        <Toaster />
+      </>
     );
   }
 
   if (!user || !profile) {
-    return <LoginPage authError={error} />;
+    return (
+      <>
+        <LoginPage authError={error} />
+        <Toaster />
+      </>
+    );
   }
 
   async function handleLogout() {
@@ -42,6 +51,7 @@ function App() {
               <DashboardPage
                 userRole={profile.role}
                 userEmail={profile.email}
+                userName={profile.full_name}
               />
             }
           />
@@ -91,6 +101,7 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AppLayout>
+      <Toaster />
     </BrowserRouter>
   );
 }
