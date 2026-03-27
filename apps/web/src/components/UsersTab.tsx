@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { MoreHorizontal, UserPlus } from "lucide-react";
+import { MoreHorizontal, UserPlus, HelpCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,8 +31,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  rep: "Field sales rep. Can record voice notes and use the chat assistant.",
+  admin: "Manages knowledge base documents. Can upload and toggle docs.",
+  manager: "Manages team knowledge and documents. Can view all team activity.",
+  owner: "Full access. Manages team members, roles, and all settings.",
+};
+
+const PAGE_SIZE = 10;
 
 interface UserRecord {
   id: string;
@@ -81,6 +96,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [page, setPage] = useState(1);
 
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -223,88 +239,107 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
     }
   }
 
+  const filterCounts = {
+    all: users.length,
+    active: users.filter((u) => u.is_active).length,
+    inactive: users.filter((u) => !u.is_active).length,
+  };
+
   const filteredUsers = users.filter((u) => {
     if (filter === "active") return u.is_active;
     if (filter === "inactive") return !u.is_active;
     return true;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const pagedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Team Members</h2>
           <p className="text-sm text-muted-foreground">
-            {users.filter((u) => u.is_active).length} active member
-            {users.filter((u) => u.is_active).length !== 1 ? "s" : ""}
+            {filterCounts.active} active member
+            {filterCounts.active !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowInvite((v) => !v)}>
+        <Button size="sm" onClick={() => setShowInvite(true)}>
           <UserPlus className="w-4 h-4 mr-2" />
           Invite User
         </Button>
       </div>
 
-      {showInvite && (
-        <Card>
-          <CardContent className="pt-6">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Invite a new team member</h3>
-            <form onSubmit={(e) => void handleInvite(e)} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="invite-name">Full Name</Label>
-                  <Input
-                    id="invite-name"
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    placeholder="Jane Smith"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="invite-email">Work Email</Label>
-                  <Input
-                    id="invite-email"
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="jane@qualityequipmentparts.com"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="max-w-48 space-y-1.5">
+      {/* Invite Dialog */}
+      <Dialog open={showInvite} onOpenChange={setShowInvite}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite team member</DialogTitle>
+            <DialogDescription>
+              They'll receive an email to set up their account.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void handleInvite(e)} className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-name">Full Name</Label>
+              <Input
+                id="invite-name"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Jane Smith"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-email">Work Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="jane@qualityequipmentparts.com"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
                 <Label htmlFor="invite-role">Role</Label>
-                <select
-                  id="invite-role"
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                  className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {inviteRoleOptions.map((r) => (
-                    <option key={r} value={r}>
-                      {r.charAt(0).toUpperCase() + r.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Role info" className="inline-flex items-center justify-center">
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-[220px]">
+                    {ROLE_DESCRIPTIONS[inviteRole]}
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <div className="flex gap-2 pt-1">
-                <Button type="submit" disabled={inviting} size="sm">
-                  {inviting ? "Sending…" : "Send Invite"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowInvite(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+              <select
+                id="invite-role"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {inviteRoleOptions.map((r) => (
+                  <option key={r} value={r}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <DialogFooter className="pt-1">
+              <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={inviting}>
+                {inviting ? "Sending…" : "Send Invite"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex gap-1">
         {(["all", "active", "inactive"] as FilterTab[]).map((f) => (
@@ -312,10 +347,11 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
             key={f}
             variant={filter === f ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setFilter(f)}
+            onClick={() => { setFilter(f); setPage(1); }}
             className="capitalize"
           >
             {f}
+            <span className="ml-1.5 text-xs opacity-60">({filterCounts[f]})</span>
           </Button>
         ))}
       </div>
@@ -340,7 +376,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
         <>
           {/* Mobile card layout — below md */}
           <div className="md:hidden space-y-2">
-            {filteredUsers.map((user) => {
+            {pagedUsers.map((user) => {
               const isMe = user.id === callerId;
               const busy =
                 pendingAction === user.id + "-role" ||
@@ -436,7 +472,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => {
+              {pagedUsers.map((user) => {
                 const isMe = user.id === callerId;
                 const busy =
                   pendingAction === user.id + "-role" ||
@@ -471,32 +507,51 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                       {user.email ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                          ROLE_BADGE_CLASS[user.role]
-                        )}
-                      >
-                        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium cursor-default",
+                              ROLE_BADGE_CLASS[user.role]
+                            )}
+                          >
+                            {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px]">
+                          {ROLE_DESCRIPTIONS[user.role]}
+                        </TooltipContent>
+                      </Tooltip>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      <Badge
-                        variant={
-                          !user.is_active
-                            ? "destructive"
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "w-2 h-2 rounded-full shrink-0",
+                            !user.is_active
+                              ? "bg-destructive"
+                              : user.status === "pending"
+                              ? "bg-amber-400"
+                              : "bg-green-500"
+                          )}
+                        />
+                        <Badge
+                          variant={
+                            !user.is_active
+                              ? "destructive"
+                              : user.status === "pending"
+                              ? "secondary"
+                              : "default"
+                          }
+                          className="text-xs"
+                        >
+                          {!user.is_active
+                            ? "Deactivated"
                             : user.status === "pending"
-                            ? "secondary"
-                            : "default"
-                        }
-                        className="text-xs"
-                      >
-                        {!user.is_active
-                          ? "Deactivated"
-                          : user.status === "pending"
-                          ? "Invite Pending"
-                          : "Active"}
-                      </Badge>
+                            ? "Invite Pending"
+                            : "Active"}
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
                       {formatLastLogin(user.last_sign_in_at)}
@@ -548,6 +603,38 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
         </Card>
           </div>
         </>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-muted-foreground">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="h-8 w-8 p-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Role Change Dialog */}
@@ -615,5 +702,6 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }

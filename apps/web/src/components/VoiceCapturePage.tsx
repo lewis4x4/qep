@@ -23,9 +23,12 @@ import {
   HelpCircle,
   CalendarDays,
   ChevronDown,
+  Send,
+  Clock,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import type { UserRole, ExtractedDealData } from "../lib/database.types";
+import type { UserRole, ExtractedDealData, Database } from "../lib/database.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +67,11 @@ interface CaptureResult {
   hubspot_task_id: string | null;
 }
 
+type RecentCapture = Pick<
+  Database["public"]["Tables"]["voice_captures"]["Row"],
+  "id" | "created_at" | "duration_seconds" | "sync_status" | "hubspot_deal_id" | "transcript"
+>;
+
 const DEAL_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Initial Contact",
   follow_up: "Follow-Up",
@@ -89,16 +97,35 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
   const [hubspotDealId, setHubspotDealId] = useState("");
   const [result, setResult] = useState<CaptureResult | null>(null);
+  const [editedTranscript, setEditedTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [processingStep, setProcessingStep] = useState(0);
   const [transcriptCopied, setTranscriptCopied] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [pushingToHubspot, setPushingToHubspot] = useState(false);
+  const [recentCaptures, setRecentCaptures] = useState<RecentCapture[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load recent captures on mount
+  useEffect(() => {
+    void loadRecentCaptures();
+  }, []);
+
+  async function loadRecentCaptures(): Promise<void> {
+    const { data } = await supabase
+      .from("voice_captures")
+      .select("id, created_at, duration_seconds, sync_status, hubspot_deal_id, transcript")
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (data) setRecentCaptures(data);
+    setRecentLoading(false);
+  }
 
   // Clean up object URL on unmount
   useEffect(() => {
@@ -192,11 +219,53 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setAudioBlobUrl(null);
     setElapsedSeconds(0);
     setResult(null);
+    setEditedTranscript("");
     setErrorMessage(null);
     setTranscriptOpen(false);
     setTranscriptCopied(false);
     setRecordingState("idle");
   }, [audioBlobUrl]);
+
+  async function pushToHubspot(): Promise<void> {
+    if (!result) return;
+    setPushingToHubspot(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-capture-sync`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ capture_id: result.id }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Sync failed" }));
+        throw new Error((err as { error?: string }).error ?? "Sync failed");
+      }
+
+      setResult((prev) => prev ? { ...prev, hubspot_synced: true } : prev);
+      void loadRecentCaptures();
+      toast({ title: "Pushed to HubSpot", description: "Note and task added to the deal." });
+    } catch (err) {
+      toast({
+        title: "HubSpot sync failed",
+        description: err instanceof Error ? err.message : "Sync failed",
+        variant: "destructive",
+      });
+    } finally {
+      setPushingToHubspot(false);
+    }
+  }
 
   async function submitCapture(): Promise<void> {
     if (!audioBlob) return;
@@ -240,7 +309,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       await new Promise((r) => setTimeout(r, 600));
 
       setResult(data);
+      setEditedTranscript(data.transcript);
       setRecordingState("done");
+      void loadRecentCaptures();
 
       if (data.hubspot_synced) {
         toast({
@@ -272,8 +343,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   }
 
   async function copyTranscript(): Promise<void> {
-    if (!result?.transcript) return;
-    await navigator.clipboard.writeText(result.transcript);
+    const text = editedTranscript || result?.transcript;
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
     setTranscriptCopied(true);
     setTimeout(() => setTranscriptCopied(false), 2000);
   }
@@ -350,8 +422,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
             <div className="flex flex-col items-center gap-6 pt-4">
               <div className="relative flex items-center justify-center">
                 {/* Pulse rings */}
-                <span className="absolute inline-flex h-24 w-24 rounded-full bg-destructive opacity-25 animate-ping" />
-                <span className="absolute inline-flex h-20 w-20 rounded-full bg-destructive opacity-20 animate-ping [animation-delay:150ms]" />
+                <span className="absolute inline-flex h-28 w-28 rounded-full bg-destructive opacity-20 animate-ping" />
+                <span className="absolute inline-flex h-24 w-24 rounded-full bg-destructive opacity-15 animate-ping [animation-delay:200ms]" />
                 <button
                   onClick={stopRecording}
                   className="relative z-10 w-24 h-24 bg-destructive rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -359,6 +431,20 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 >
                   <Square className="w-10 h-10 text-destructive-foreground fill-current" />
                 </button>
+              </div>
+
+              {/* Waveform */}
+              <div className="flex items-end gap-1 h-10" aria-hidden="true">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 rounded-full bg-primary"
+                    style={{
+                      animation: `waveform 0.8s ease-in-out ${(i * 0.06).toFixed(2)}s infinite alternate`,
+                      height: `${20 + Math.sin(i * 0.9) * 14}px`,
+                    }}
+                  />
+                ))}
               </div>
 
               <div className="text-center">
@@ -613,7 +699,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 </ResultCard>
               )}
 
-              {/* Transcript (collapsible) */}
+              {/* Transcript (collapsible, editable) */}
               <Card>
                 <button
                   className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-t-lg"
@@ -631,9 +717,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 {transcriptOpen && (
                   <CardContent className="pt-0 space-y-3">
                     <div className="relative">
-                      <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-mono bg-muted rounded-md p-3 pr-10">
-                        {result.transcript}
-                      </p>
+                      <textarea
+                        className="w-full text-sm text-foreground leading-relaxed font-mono bg-muted rounded-md p-3 pr-10 resize-y min-h-[120px] focus:outline-none focus:ring-2 focus:ring-ring border-0"
+                        value={editedTranscript}
+                        onChange={(e) => setEditedTranscript(e.target.value)}
+                        aria-label="Edit transcript"
+                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -652,9 +741,96 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 )}
               </Card>
 
-              <Button className="w-full" onClick={resetCapture}>
-                Record Another Note
-              </Button>
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                {!result.hubspot_synced && (
+                  <Button
+                    className="flex-1"
+                    onClick={() => void pushToHubspot()}
+                    disabled={pushingToHubspot}
+                  >
+                    {pushingToHubspot ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    Push to HubSpot
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  className={cn("flex-1", result.hubspot_synced && "flex-none")}
+                  onClick={resetCapture}
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  {result.hubspot_synced ? "Record Another" : "Discard"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── RECENT RECORDINGS ───────────────────────────────────────────── */}
+          {(recordingState === "idle" || recordingState === "done") && (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-foreground">Recent Recordings</h2>
+              </div>
+              {recentLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-12 bg-muted rounded-md animate-pulse" />
+                  ))}
+                </div>
+              ) : recentCaptures.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recordings yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {recentCaptures.map((cap) => {
+                    const snippet = cap.transcript
+                      ? cap.transcript.slice(0, 60) + (cap.transcript.length > 60 ? "…" : "")
+                      : "No transcript";
+                    return (
+                      <Card key={cap.id}>
+                        <CardContent className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-muted-foreground truncate">{snippet}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {new Date(cap.created_at).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                                {cap.duration_seconds != null && ` · ${formatTime(cap.duration_seconds)}`}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={
+                                cap.sync_status === "synced"
+                                  ? "default"
+                                  : cap.sync_status === "failed"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs shrink-0"
+                            >
+                              {cap.sync_status === "synced"
+                                ? "Synced"
+                                : cap.sync_status === "failed"
+                                ? "Failed"
+                                : cap.sync_status === "processing"
+                                ? "Processing"
+                                : "Pending"}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
