@@ -7,7 +7,7 @@ import { VoiceCapturePage } from "./components/VoiceCapturePage";
 import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
 
 function App() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, error } = useAuth();
 
   if (loading) {
     return (
@@ -21,7 +21,7 @@ function App() {
   }
 
   if (!user || !profile) {
-    return <LoginPage />;
+    return <LoginPage authError={error} />;
   }
 
   return (

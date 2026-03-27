@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
-export function LoginPage() {
+interface LoginPageProps {
+  authError?: string | null;
+}
+
+export function LoginPage({ authError }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +45,13 @@ export function LoginPage() {
           <h1 className="text-2xl font-bold text-gray-900">QEP Knowledge Assistant</h1>
           <p className="text-gray-500 mt-1 text-sm">Sign in to access company resources</p>
         </div>
+
+        {authError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+            <p className="text-red-800 text-sm font-medium">Sign-in problem</p>
+            <p className="text-red-600 text-sm mt-1">{authError}</p>
+          </div>
+        )}
 
         {magicLinkSent ? (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
