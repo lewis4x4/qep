@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Send, History, Plus, ChevronDown } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ function loadCurrentMessages(): Message[] {
 }
 
 export function ChatPage({ userEmail }: ChatPageProps) {
+  const location = useLocation();
   const [messages, setMessages] = useState<Message[]>(() => loadCurrentMessages());
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -106,6 +108,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyPanelRef = useRef<HTMLDivElement>(null);
+  const initialQueryFiredRef = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -123,6 +126,30 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   useEffect(() => {
     saveHistory(history);
   }, [history]);
+
+  // Handle global search handoff: initialQuery from TopBar
+  useEffect(() => {
+    const state = location.state as { initialQuery?: string } | null;
+    if (state?.initialQuery && typeof state.initialQuery === "string" && !initialQueryFiredRef.current) {
+      initialQueryFiredRef.current = true;
+      window.history.replaceState({}, "");
+      void sendMessage(state.initialQuery);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle "New Chat" trigger from TopBar (same-route navigation)
+  const lastNewChatRef = useRef<number | null>(null);
+  useEffect(() => {
+    const state = location.state as { newChat?: number } | null;
+    const ts = state?.newChat;
+    if (ts && ts !== lastNewChatRef.current) {
+      lastNewChatRef.current = ts;
+      window.history.replaceState({}, "");
+      startNewChat();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Close history panel on outside click
   useEffect(() => {

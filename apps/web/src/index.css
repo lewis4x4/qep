@@ -109,6 +109,17 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Nav rail hover-expand transitions */
+.nav-rail-transition {
+  transition: width 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-rail-transition {
+    transition-duration: 0ms !important;
+  }
+}
+
 @keyframes waveform {
   from { transform: scaleY(0.4); }
   to { transform: scaleY(1); }
