@@ -33,7 +33,7 @@ enable_refresh_token_rotation = true
 [auth.email]
 enable_signup = true
 double_confirm_changes = false
-enable_confirmations = false
+enable_confirmations = true  # SEC-QEP-103: enforce email verification for production
 
 [functions]
 

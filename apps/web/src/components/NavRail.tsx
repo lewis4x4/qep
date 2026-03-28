@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   Lock,
+  Plug,
 } from "lucide-react";
 import {
   Dialog,
@@ -88,6 +89,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/admin",
     icon: Settings,
     roles: ["admin", "manager", "owner"],
+  },
+  {
+    label: "Integrations",
+    href: "/admin/integrations",
+    icon: Plug,
+    roles: ["owner"],
   },
 ];
 

@@ -70,8 +70,12 @@ Deno.serve(async (req) => {
     });
 
     if (rlError) {
+      // SEC-QEP-102: Fail closed — return 503 when rate limit check errors
       console.error("Rate limit check failed:", rlError);
-      // Fail open — allow the request if rate limiting is broken
+      return new Response(
+        JSON.stringify({ error: "Service temporarily unavailable. Please try again shortly." }),
+        { status: 503, headers: { ...ch, "Content-Type": "application/json", "Retry-After": "10" } }
+      );
     } else if (allowed === false) {
       return new Response(
         JSON.stringify({ error: "Rate limit exceeded. Please wait before sending another message." }),

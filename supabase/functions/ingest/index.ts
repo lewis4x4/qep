@@ -5,6 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import pdfParse from "npm:pdf-parse@1.1.1";
+import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -294,13 +295,29 @@ Deno.serve(async (req) => {
         });
       }
 
+      // SEC-QEP-101: Decrypt OneDrive access token before use
+      let accessToken: string;
+      try {
+        accessToken = await decryptOneDriveToken(syncState.access_token);
+      } catch (_decryptErr) {
+        // Token is not encrypted — it's a plaintext legacy token that must be invalidated
+        console.error("[ingest] OneDrive access_token is not encrypted. Re-authorization required.");
+        return new Response(
+          JSON.stringify({
+            error: "OneDrive token requires re-authorization. Please reconnect your OneDrive account.",
+            code: "ONEDRIVE_REAUTH_REQUIRED",
+          }),
+          { status: 401, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
       // Fetch delta from Microsoft Graph
       const deltaUrl = syncState.delta_token
         ? `https://graph.microsoft.com/v1.0/me/drive/delta?$deltaToken=${syncState.delta_token}`
         : "https://graph.microsoft.com/v1.0/me/drive/root/delta";
 
       const deltaRes = await fetch(deltaUrl, {
-        headers: { Authorization: `Bearer ${syncState.access_token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
       const delta = await deltaRes.json();
 
@@ -313,7 +330,7 @@ Deno.serve(async (req) => {
         // Download file content
         const contentRes = await fetch(
           `https://graph.microsoft.com/v1.0/me/drive/items/${item.id}/content`,
-          { headers: { Authorization: `Bearer ${syncState.access_token}` } }
+          { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         const rawText = await contentRes.text();
 

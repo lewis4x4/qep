@@ -9,6 +9,7 @@ import { AdminPage } from "./components/AdminPage";
 import { VoiceCapturePage } from "./components/VoiceCapturePage";
 import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
 import { QuoteBuilderGate } from "./components/QuoteBuilderGate";
+import { IntegrationHub } from "./components/IntegrationHub";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
@@ -158,6 +159,16 @@ function App() {
                   ) : (
                     <QuoteBuilderGate />
                   )
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
+            <Route
+              path="/admin/integrations"
+              element={
+                profile.role === "owner" ? (
+                  <IntegrationHub />
                 ) : (
                   <Navigate to="/dashboard" replace />
                 )
