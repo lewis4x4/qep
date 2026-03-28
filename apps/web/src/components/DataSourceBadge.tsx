@@ -15,10 +15,10 @@ interface DataSourceBadgeProps {
 
 const STATE_STYLES: Record<DataSourceState, string> = {
   Live: "bg-[#EFF6FF] text-[#1B2A3D] border-[#BFDBFE]",
-  Demo: "bg-[#FFF7ED] text-[#E87722] border-[#FED7AA]",
+  Demo: "bg-[#FFF7ED] text-[#B45309] border-[#FED7AA]",
   Manual: "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]",
-  Error: "bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]",
-  Stale: "bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]",
+  Error: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
+  Stale: "bg-[#FFFBEB] text-[#A16207] border-[#FDE68A]",
 };
 
 export function DataSourceBadge({ state, className }: DataSourceBadgeProps) {

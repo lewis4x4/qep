@@ -4,8 +4,8 @@
  * Per blueprint §6.2 and CDO design direction §1 (Drawer pattern).
  */
 
-import { useState } from "react";
-import { X, CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Clock, Database } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -21,6 +21,43 @@ import { DataSourceBadge, type DataSourceState } from "./DataSourceBadge";
 import { cn } from "@/lib/utils";
 import type { IntegrationCardConfig } from "./IntegrationHub";
 import { supabase } from "@/lib/supabase";
+
+// Per-integration sync scope definitions
+const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
+  intellidealer: [
+    { key: "inventory", label: "Inventory", description: "Machine listings and stock levels" },
+    { key: "customers", label: "Customers", description: "Customer master records and contacts" },
+    { key: "deals", label: "Deal History", description: "Closed and open deal records" },
+  ],
+  ironguides: [
+    { key: "valuations", label: "Valuations", description: "FMV and retail value estimates" },
+    { key: "comparables", label: "Comparables", description: "Recent comparable sales" },
+  ],
+  rouse: [
+    { key: "rental_rates", label: "Rental Rates", description: "Regional benchmark rates" },
+    { key: "utilization", label: "Utilization", description: "Fleet utilization metrics" },
+  ],
+  aemp: [
+    { key: "telemetry", label: "Telemetry", description: "Machine hours and location" },
+    { key: "fault_codes", label: "Fault Codes", description: "Active diagnostic codes" },
+  ],
+  financing: [
+    { key: "rate_tables", label: "Rate Tables", description: "Current rates by lender" },
+    { key: "programs", label: "Programs", description: "Active promotional programs" },
+  ],
+  manufacturer_incentives: [
+    { key: "incentives", label: "Incentives", description: "OEM rebates and offers" },
+    { key: "programs", label: "Programs", description: "Volume and loyalty programs" },
+  ],
+  auction_data: [
+    { key: "results", label: "Auction Results", description: "Historical hammer prices" },
+    { key: "upcoming", label: "Upcoming Auctions", description: "Scheduled auction events" },
+  ],
+  fred_usda: [
+    { key: "economic", label: "Economic Indicators", description: "FRED macro data series" },
+    { key: "agricultural", label: "Agricultural Data", description: "USDA commodity data" },
+  ],
+};
 
 interface IntegrationPanelProps {
   integration: IntegrationCardConfig | null;
@@ -46,12 +83,27 @@ function statusToDataSource(status: IntegrationCardConfig["status"]): DataSource
 }
 
 export function IntegrationPanel({ integration, open, onClose, onSaved }: IntegrationPanelProps) {
+  const scopes = SYNC_SCOPES[integration?.key ?? ""] ?? [];
+  const defaultScopes = Object.fromEntries(scopes.map((s) => [s.key, true]));
+
   const [credentials, setCredentials] = useState("");
   const [endpointUrl, setEndpointUrl] = useState(integration?.endpointUrl ?? "");
+  const [syncScopes, setSyncScopes] = useState<Record<string, boolean>>(defaultScopes);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Reset all panel state when the selected integration changes
+  useEffect(() => {
+    if (!integration) return;
+    const currentScopes = SYNC_SCOPES[integration.key] ?? [];
+    setCredentials("");
+    setEndpointUrl(integration.endpointUrl ?? "");
+    setSyncScopes(Object.fromEntries(currentScopes.map((s) => [s.key, true])));
+    setTestResult(null);
+    setSaveError(null);
+  }, [integration?.key]);
 
   if (!integration) return null;
 
@@ -66,6 +118,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
           integration_key: integration.key,
           credentials,
           endpoint_url: endpointUrl || null,
+          sync_scopes: syncScopes,
         },
       });
       if (error) throw new Error(error.message);
@@ -73,7 +126,8 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
       onSaved();
       onClose();
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save credentials");
+      console.error("Save credentials error:", err);
+      setSaveError("Could not save your credentials. Check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -109,7 +163,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
     <Sheet open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[520px] flex flex-col p-0 gap-0 overflow-hidden"
+        className="w-full lg:max-w-[460px] [@media(min-width:1440px)]:max-w-[520px] flex flex-col p-0 gap-0 overflow-hidden"
       >
         {/* Header */}
         <SheetHeader className="px-6 py-5 border-b border-[#E2E8F0] shrink-0">
@@ -134,7 +188,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 1: Connection status */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection Status</h4>
+            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection status</h4>
             <div
               className={cn(
                 "rounded-lg border p-4 flex items-start gap-3",
@@ -160,7 +214,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                     ? "Connection error"
                     : integration.status === "demo_mode"
                     ? "Running in demo mode"
-                    : "Credentials required"}
+                    : "Credentials needed"}
                 </p>
                 {integration.lastSyncError && (
                   <p className="text-xs text-[#DC2626] mt-1 break-words">{integration.lastSyncError}</p>
@@ -178,7 +232,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 2: Credential form */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Credentials &amp; Configuration</h4>
+            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Credentials &amp; configuration</h4>
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="credentials" className="text-xs font-medium text-[#374151]">
@@ -226,7 +280,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 3: Connection test */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection Test</h4>
+            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection test</h4>
             <Button
               variant="outline"
               size="sm"
@@ -264,7 +318,9 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                 )}
                 <div>
                   <p className="text-sm font-medium text-[#1B2A3D]">
-                    {testResult.success ? "Connection successful" : "Connection failed"}
+                    {testResult.success
+                      ? "Connection successful"
+                      : "Connection failed — check your credentials and endpoint URL, then try again."}
                   </p>
                   <p className="text-xs text-[#64748B] mt-0.5">
                     {testResult.success
@@ -278,15 +334,111 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           <Separator className="bg-[#F1F5F9]" />
 
-          {/* Section 4: Fallback / demo mode explanation */}
+          {/* Section 4: Sync scope toggles */}
+          {scopes.length > 0 && (
+            <section>
+              <h4 className="text-sm font-semibold text-[#1B2A3D] mb-1">Sync scope</h4>
+              <p className="text-xs text-[#64748B] mb-3">
+                Choose which data types to sync from this integration.
+              </p>
+              <div className="space-y-3">
+                {scopes.map((scope) => (
+                  <div key={scope.key} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#1B2A3D] leading-none">{scope.label}</p>
+                      <p className="text-xs text-[#94A3B8] mt-0.5">{scope.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={syncScopes[scope.key] ?? true}
+                      aria-label={`Toggle ${scope.label} sync`}
+                      onClick={() =>
+                        setSyncScopes((prev) => ({ ...prev, [scope.key]: !(prev[scope.key] ?? true) }))
+                      }
+                      className={cn(
+                        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] focus-visible:ring-offset-1",
+                        (syncScopes[scope.key] ?? true) ? "bg-[#E87722]" : "bg-[#E2E8F0]"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 mt-0.5",
+                          (syncScopes[scope.key] ?? true) ? "translate-x-[18px]" : "translate-x-0.5"
+                        )}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <Separator className="bg-[#F1F5F9]" />
+
+          {/* Section 5: Audit / activity log */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-2">Demo Mode</h4>
+            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Recent activity</h4>
+            {integration.lastSyncAt ? (
+              <div className="space-y-2">
+                <div
+                  className={cn(
+                    "rounded-lg border p-3 flex items-start gap-2.5",
+                    integration.lastSyncError
+                      ? "bg-[#FEF2F2] border-[#FECACA]"
+                      : "bg-[#F0FDF4] border-[#BBF7D0]"
+                  )}
+                >
+                  {integration.lastSyncError ? (
+                    <XCircle className="w-3.5 h-3.5 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-[#1B2A3D]">
+                        {integration.lastSyncError ? "Sync failed" : "Sync completed"}
+                      </p>
+                      <span className="text-[10px] text-[#94A3B8] shrink-0">
+                        {new Date(integration.lastSyncAt).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    {integration.lastSyncError ? (
+                      <p className="text-xs text-[#DC2626] mt-0.5 break-words">{integration.lastSyncError}</p>
+                    ) : integration.syncRecords !== null ? (
+                      <p className="text-xs text-[#64748B] mt-0.5">
+                        <Database className="w-3 h-3 inline mr-1 -mt-px" aria-hidden="true" />
+                        {integration.syncRecords.toLocaleString()} records synced
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-[#94A3B8]">
+                <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <p className="text-xs">No sync history — first sync will run after connecting.</p>
+              </div>
+            )}
+          </section>
+
+          <Separator className="bg-[#F1F5F9]" />
+
+          {/* Section 6: Fallback / demo mode explanation */}
+          <section>
+            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-2">Demo mode</h4>
             <p className="text-sm text-[#64748B] leading-relaxed">
-              While disconnected, the system uses realistic synthetic data from the{" "}
-              <strong className="text-[#1B2A3D]">{integration.name}</strong> mock adapter.
+              While disconnected, the system uses realistic sample data that mirrors what{" "}
+              <strong className="text-[#1B2A3D]">{integration.name}</strong> would provide.
               All Deal Genome Engine features remain fully operational. Data source badges
               will show <span className="font-medium text-[#E87722]">Demo</span> to distinguish
-              live from synthetic data.
+              live from sample data.
             </p>
           </section>
         </div>

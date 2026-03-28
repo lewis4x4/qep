@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, CheckCircle2, Clock, Wifi } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Wifi, Settings } from "lucide-react";
 import { IntegrationCard } from "./IntegrationCard";
 import { IntegrationPanel } from "./IntegrationPanel";
 import { supabase } from "@/lib/supabase";
@@ -89,7 +89,8 @@ const INTEGRATION_DISPLAY: Record<
 
 function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
   const connected = cards.filter((c) => c.status === "connected").length;
-  const demo = cards.filter((c) => c.status === "demo_mode" || c.status === "pending_credentials").length;
+  const demo = cards.filter((c) => c.status === "demo_mode").length;
+  const pendingSetup = cards.filter((c) => c.status === "pending_credentials").length;
   const errors = cards.filter((c) => c.status === "error").length;
   const lastSync = cards
     .filter((c) => c.lastSyncAt)
@@ -103,16 +104,25 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
         <span className="font-semibold">{connected}</span>
         <span className="text-[#64748B]">Connected</span>
       </div>
-      <div className="flex items-center gap-1.5 text-[#E87722]">
-        <Wifi className="w-4 h-4" aria-hidden="true" />
-        <span className="font-semibold">{demo}</span>
-        <span className="text-[#64748B]">Demo</span>
-      </div>
+      {demo > 0 && (
+        <div className="flex items-center gap-1.5 text-[#E87722]">
+          <Wifi className="w-4 h-4" aria-hidden="true" />
+          <span className="font-semibold">{demo}</span>
+          <span className="text-[#64748B]">Demo</span>
+        </div>
+      )}
+      {pendingSetup > 0 && (
+        <div className="flex items-center gap-1.5 text-[#94A3B8]">
+          <Settings className="w-4 h-4" aria-hidden="true" />
+          <span className="font-semibold">{pendingSetup}</span>
+          <span className="text-[#64748B]">Setup required</span>
+        </div>
+      )}
       {errors > 0 && (
         <div className="flex items-center gap-1.5 text-[#DC2626]">
           <AlertTriangle className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{errors}</span>
-          <span className="text-[#64748B]">Attention Needed</span>
+          <span className="text-[#64748B]">Attention needed</span>
         </div>
       )}
       {lastSync && (
@@ -152,7 +162,7 @@ function CardSkeleton() {
       </div>
       <div className="flex justify-between items-center pt-1 border-t border-[#F1F5F9]">
         <div className="h-3 w-20 bg-[#F1F5F9] rounded" />
-        <div className="h-7 w-24 bg-[#F1F5F9] rounded" />
+        <div className="h-11 w-24 bg-[#F1F5F9] rounded" />
       </div>
     </div>
   );
@@ -228,7 +238,7 @@ export function IntegrationHub() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center py-24">
+      <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex items-center justify-center py-24">
         <div className="text-center max-w-sm">
           <AlertTriangle className="w-10 h-10 text-[#DC2626] mx-auto mb-3" aria-hidden="true" />
           <h3 className="text-base font-semibold text-[#1B2A3D] mb-1">Failed to load integrations</h3>
@@ -245,7 +255,7 @@ export function IntegrationHub() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
       {/* Page header */}
       <div className="space-y-3">
         <div>
@@ -262,9 +272,9 @@ export function IntegrationHub() {
         className={cn(
           "grid gap-4",
           "grid-cols-1",
-          "sm:grid-cols-2",
+          "md:grid-cols-2",
           "lg:grid-cols-3",
-          "xl:grid-cols-4"
+          "[@media(min-width:1440px)]:grid-cols-4"
         )}
         aria-label="Integration cards"
         aria-busy={loading}
@@ -288,7 +298,7 @@ export function IntegrationHub() {
             <Wifi className="w-10 h-10 text-[#E2E8F0] mx-auto mb-3" aria-hidden="true" />
             <h3 className="text-base font-semibold text-[#1B2A3D] mb-1">No integrations found</h3>
             <p className="text-sm text-[#64748B]">
-              Run the DGE foundation migration to seed integration records.
+              Your integrations aren't set up yet. Contact your administrator or QEP support to complete initial setup.
             </p>
           </div>
         </div>
