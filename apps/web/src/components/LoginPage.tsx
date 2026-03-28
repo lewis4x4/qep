@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { HardHat, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,8 +13,14 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ authError }: LoginPageProps) {
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
+
+  // Clear any toasts left over from a previous authenticated session so the
+  // auth error amber alert is the only notification the user sees.
+  useEffect(() => {
+    dismiss();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,7 +48,7 @@ export function LoginPage({ authError }: LoginPageProps) {
     if (error) {
       toast({
         variant: "destructive",
-        title: "Error sending magic link",
+        title: "Couldn't send magic link",
         description: error.message,
       });
     } else {
@@ -81,7 +87,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                   Password
                 </TabsTrigger>
                 <TabsTrigger value="magic" className="flex-1">
-                  Magic Link
+                  Magic link
                 </TabsTrigger>
               </TabsList>
 
@@ -112,7 +118,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Signing in…" : "Sign In"}
+                    {loading ? "Signing in…" : "Sign in"}
                   </Button>
                 </form>
               </TabsContent>
@@ -132,7 +138,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Sending…" : "Send Magic Link"}
+                    {loading ? "Sending…" : "Send magic link"}
                   </Button>
                 </form>
               </TabsContent>

@@ -119,8 +119,8 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
         {config.description}
       </p>
 
-      {/* Footer: environment state + actions */}
-      <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#F1F5F9]">
+      {/* Footer: environment state + actions — stacked to prevent overflow at narrow card widths */}
+      <div className="flex flex-col gap-2 pt-1 border-t border-[#F1F5F9]">
         {/* Environment pill */}
         <div className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
           <Plug className="w-3 h-3" aria-hidden="true" />
@@ -136,7 +136,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 justify-end">
           <Button
             variant="ghost"
             size="sm"

@@ -30,11 +30,10 @@ export function SessionExpiredModal({
       >
         <DialogHeader>
           <DialogTitle id="session-expired-title">
-            Session Expired
+            Session expired
           </DialogTitle>
           <DialogDescription id="session-expired-desc">
-            Your session has timed out for security. Please sign in again to
-            continue.
+            Your session expired. Sign in to continue.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -44,7 +43,7 @@ export function SessionExpiredModal({
             autoFocus
           >
             <LogIn className="w-4 h-4 mr-2" aria-hidden="true" />
-            Sign In
+            Sign in
           </Button>
         </DialogFooter>
       </DialogContent>

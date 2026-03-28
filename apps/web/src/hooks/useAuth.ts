@@ -45,7 +45,7 @@ export function useAuth(): AuthState {
         }
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Authentication service unavailable.";
+        const message = err instanceof Error ? err.message : "We can't reach the authentication service. Try refreshing the page.";
         setState({ user: null, session: null, profile: null, loading: false, error: message });
       });
 
@@ -59,7 +59,7 @@ export function useAuth(): AuthState {
           setState({ user: null, session: null, profile: null, loading: false, error: null });
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Authentication state change failed.";
+        const message = err instanceof Error ? err.message : "We had trouble updating your session. Refresh the page or sign in again.";
         setState({ user: null, session: null, profile: null, loading: false, error: message });
       }
     });

@@ -241,7 +241,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                 )}
                 {integration.status === "pending_credentials" && (
                   <p className="text-xs text-[#64748B] mt-1">
-                    Add credentials below to connect this integration. The system will operate in demo mode until connected.
+                    Add your credentials below to connect. It'll run in demo mode until you do.
                   </p>
                 )}
               </div>
@@ -454,7 +454,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
           <section>
             <h4 className="text-sm font-semibold text-[#1B2A3D] mb-2">Demo mode</h4>
             <p className="text-sm text-[#64748B] leading-relaxed">
-              While disconnected, the system uses realistic sample data that mirrors what{" "}
+              While disconnected, we use realistic sample data that mirrors what{" "}
               <strong className="text-[#1B2A3D]">{integration.name}</strong> would provide.
               All Deal Genome Engine features remain fully operational. Data source badges
               will show <span className="font-medium text-[#E87722]">Demo</span> to distinguish

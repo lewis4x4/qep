@@ -116,7 +116,7 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
         <div className="flex items-center gap-1.5 text-[#94A3B8]">
           <Settings className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{pendingSetup}</span>
-          <span className="text-[#64748B]">Setup required</span>
+          <span className="text-[#64748B]">Credentials needed</span>
         </div>
       )}
       {errors > 0 && (
@@ -219,7 +219,7 @@ export function IntegrationHub() {
       setCards(mapped);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load integrations");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred. Refresh the page to try again.");
     } finally {
       setLoading(false);
     }
