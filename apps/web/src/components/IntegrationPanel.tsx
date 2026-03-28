@@ -21,6 +21,7 @@ import { DataSourceBadge, type DataSourceState } from "./DataSourceBadge";
 import { cn } from "@/lib/utils";
 import type { IntegrationCardConfig } from "./IntegrationHub";
 import { supabase } from "@/lib/supabase";
+import { trackIntegrationEvent } from "@/lib/track-event";
 
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -122,6 +123,14 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
         },
       });
       if (error) throw new Error(error.message);
+      void trackIntegrationEvent("integration_config_updated", {
+        integration: integration.key,
+        changed_fields: [
+          ...(credentials.trim() ? ["credentials"] : []),
+          "endpoint_url",
+          "sync_scopes",
+        ],
+      });
       setCredentials("");
       onSaved();
       onClose();
@@ -145,12 +154,23 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
         },
       });
       if (error) throw new Error(error.message);
-      setTestResult(data as TestResult);
+      const result = data as TestResult;
+      setTestResult(result);
+      void trackIntegrationEvent("integration_connection_tested", {
+        integration: integration.key,
+        result: result.success ? "success" : "failure",
+        latency_ms: result.latencyMs,
+        trigger: "panel_test_connection",
+      });
     } catch (err) {
-      setTestResult({
-        success: false,
-        latencyMs: 0,
-        error: err instanceof Error ? err.message : "Test failed",
+      const errMsg = err instanceof Error ? err.message : "Test failed";
+      setTestResult({ success: false, latencyMs: 0, error: errMsg });
+      void trackIntegrationEvent("integration_connection_tested", {
+        integration: integration.key,
+        result: "failure",
+        latency_ms: 0,
+        trigger: "panel_test_connection",
+        error: errMsg,
       });
     } finally {
       setIsTesting(false);

@@ -9,6 +9,7 @@ import {
   Menu,
   HardHat,
   Lock,
+  Plug,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/admin",
     icon: Settings,
     roles: ["admin", "manager", "owner"],
+  },
+  {
+    label: "Integrations",
+    href: "/admin/integrations",
+    icon: Plug,
+    roles: ["owner"],
   },
 ];
 

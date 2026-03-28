@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
@@ -31,6 +31,8 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
 function App() {
   const { user, profile, loading, error } = useAuth();
   const [sessionExpired, setSessionExpired] = useState(false);
+  // Track intentional logouts so SIGNED_OUT doesn't show the expired modal
+  const isIntentionalLogout = useRef(false);
 
   // Detect externally-triggered session expiry (token no longer valid)
   useEffect(() => {
@@ -39,6 +41,12 @@ function App() {
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === "TOKEN_REFRESHED") {
         setSessionExpired(false);
+      } else if (event === "SIGNED_OUT" && !isIntentionalLogout.current) {
+        // Session expired without deliberate user action — show the expired modal
+        setSessionExpired(true);
+      }
+      if (event === "SIGNED_OUT") {
+        isIntentionalLogout.current = false;
       }
     });
     return () => subscription.unsubscribe();
@@ -90,6 +98,7 @@ function App() {
   }
 
   async function handleLogout() {
+    isIntentionalLogout.current = true;
     await supabase.auth.signOut();
   }
 

@@ -530,6 +530,69 @@ export type Database = {
           },
         ]
       }
+      integration_status: {
+        Row: {
+          id: string
+          integration_key: string
+          display_name: string
+          status: Database["public"]["Enums"]["integration_status_enum"]
+          credentials_encrypted: string | null
+          endpoint_url: string | null
+          auth_type: string
+          sync_frequency: Database["public"]["Enums"]["sync_frequency"]
+          last_sync_at: string | null
+          last_sync_records: number
+          last_sync_error: string | null
+          last_test_at: string | null
+          last_test_success: boolean | null
+          last_test_latency_ms: number | null
+          last_test_error: string | null
+          config: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          integration_key: string
+          display_name: string
+          status?: Database["public"]["Enums"]["integration_status_enum"]
+          credentials_encrypted?: string | null
+          endpoint_url?: string | null
+          auth_type?: string
+          sync_frequency?: Database["public"]["Enums"]["sync_frequency"]
+          last_sync_at?: string | null
+          last_sync_records?: number
+          last_sync_error?: string | null
+          last_test_at?: string | null
+          last_test_success?: boolean | null
+          last_test_latency_ms?: number | null
+          last_test_error?: string | null
+          config?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          integration_key?: string
+          display_name?: string
+          status?: Database["public"]["Enums"]["integration_status_enum"]
+          credentials_encrypted?: string | null
+          endpoint_url?: string | null
+          auth_type?: string
+          sync_frequency?: Database["public"]["Enums"]["sync_frequency"]
+          last_sync_at?: string | null
+          last_sync_records?: number
+          last_sync_error?: string | null
+          last_test_at?: string | null
+          last_test_success?: boolean | null
+          last_test_latency_ms?: number | null
+          last_test_error?: string | null
+          config?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -561,11 +624,20 @@ export type Database = {
         | "enrollment_completed"
         | "enrollment_cancelled"
         | "deal_stage_change"
+        | "integration_config_updated"
+        | "integration_connection_tested"
+        | "integration_card_clicked"
+        | "integration_panel_opened"
       document_source: "onedrive" | "pdf_upload" | "manual"
       enrollment_status: "active" | "completed" | "paused" | "cancelled"
       followup_step_type: "task" | "email" | "call_log" | "stalled_alert"
       user_role: "rep" | "admin" | "manager" | "owner"
       voice_capture_status: "pending" | "processing" | "synced" | "failed"
+      integration_status_enum: "connected" | "pending_credentials" | "error" | "demo_mode"
+      sync_frequency: "realtime" | "hourly" | "every_6_hours" | "daily" | "weekly" | "manual"
+      scenario_type: "max_margin" | "balanced" | "win_the_deal"
+      pricing_persona: "value_driven" | "relationship_loyal" | "budget_constrained" | "urgency_buyer"
+      outreach_status: "pending" | "approved" | "sent" | "deferred" | "dismissed"
     }
     CompositeTypes: {
       [_ in never]: never

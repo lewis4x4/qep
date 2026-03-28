@@ -10,6 +10,7 @@ import { IntegrationCard } from "./IntegrationCard";
 import { IntegrationPanel } from "./IntegrationPanel";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { trackIntegrationEvent } from "@/lib/track-event";
 
 export interface IntegrationCardConfig {
   key: string;
@@ -223,9 +224,14 @@ export function IntegrationHub() {
   function handleConfigure(key: string) {
     setSelectedKey(key);
     setPanelOpen(true);
+    void trackIntegrationEvent("integration_panel_opened", { integration: key });
   }
 
   async function handleTestSync(key: string) {
+    void trackIntegrationEvent("integration_connection_tested", {
+      integration: key,
+      trigger: "card_test_sync",
+    });
     const { data } = await supabase.functions.invoke("admin-users", {
       body: { action: "test_integration", integration_key: key },
     });

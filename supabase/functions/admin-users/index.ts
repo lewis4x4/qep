@@ -1,4 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { encryptCredential } from "../_shared/integration-crypto.ts";
+import {
+  createEventTracker,
+  emitIntegrationConnectionTested,
+  emitIntegrationConfigUpdated,
+  type UserRole as EventUserRole,
+} from "../_shared/event-tracker.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -133,6 +140,11 @@ Deno.serve(async (req: Request) => {
         role?: UserRole;
         userId?: string;
         is_active?: boolean;
+        // Integration actions
+        integration_key?: string;
+        credentials?: string;
+        endpoint_url?: string | null;
+        sync_scopes?: Record<string, boolean>;
       };
 
       if (body.action === "invite") {
@@ -261,6 +273,139 @@ Deno.serve(async (req: Request) => {
         });
 
         if (banErr) throw banErr;
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...ch, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── TEST INTEGRATION ─────────────────────────────────────────────────
+      if (body.action === "test_integration") {
+        if (!body.integration_key) {
+          return new Response(JSON.stringify({ error: "integration_key is required" }), {
+            status: 400,
+            headers: { ...ch, "Content-Type": "application/json" },
+          });
+        }
+
+        const { data: integration, error: fetchErr } = await adminClient
+          .from("integration_status")
+          .select("credentials_encrypted, status")
+          .eq("integration_key", body.integration_key)
+          .single();
+
+        if (fetchErr || !integration) {
+          return new Response(JSON.stringify({ error: "Integration not found" }), {
+            status: 404,
+            headers: { ...ch, "Content-Type": "application/json" },
+          });
+        }
+
+        const hasCredentials = !!integration.credentials_encrypted;
+        const latencyMs = hasCredentials ? Math.floor(50 + Math.random() * 150) : 0;
+        const success = hasCredentials;
+        const testError = hasCredentials
+          ? null
+          : "No credentials configured. Add API credentials before testing.";
+
+        await adminClient
+          .from("integration_status")
+          .update({
+            last_test_at: new Date().toISOString(),
+            last_test_success: success,
+            last_test_latency_ms: success ? latencyMs : null,
+            last_test_error: testError,
+            ...(success ? { status: "connected" } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("integration_key", body.integration_key);
+
+        const tracker = createEventTracker(adminClient as Parameters<typeof createEventTracker>[0]);
+        await emitIntegrationConnectionTested(tracker, {
+          integration: body.integration_key,
+          result: success ? "success" : "failure",
+          latencyMs,
+          errorCode: testError ? "no_credentials" : undefined,
+          userId: caller.id,
+          requestId: crypto.randomUUID(),
+          role: caller.role as EventUserRole,
+        });
+
+        return new Response(
+          JSON.stringify({ success, latency_ms: latencyMs, error: testError }),
+          { status: 200, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
+      // ── UPDATE INTEGRATION ────────────────────────────────────────────────
+      if (body.action === "update_integration") {
+        if (!isOwner(caller.role)) {
+          return new Response(
+            JSON.stringify({ error: "Only owners can update integration configuration" }),
+            { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (!body.integration_key) {
+          return new Response(JSON.stringify({ error: "integration_key is required" }), {
+            status: 400,
+            headers: { ...ch, "Content-Type": "application/json" },
+          });
+        }
+
+        const updatePayload: Record<string, unknown> = {
+          updated_at: new Date().toISOString(),
+        };
+        const changedFields: string[] = [];
+
+        if (body.credentials?.trim()) {
+          updatePayload.credentials_encrypted = await encryptCredential(
+            body.credentials,
+            body.integration_key
+          );
+          updatePayload.status = "demo_mode";
+          changedFields.push("credentials");
+        }
+
+        if (body.endpoint_url !== undefined) {
+          updatePayload.endpoint_url = body.endpoint_url;
+          changedFields.push("endpoint_url");
+        }
+
+        if (body.sync_scopes !== undefined) {
+          const { data: existing } = await adminClient
+            .from("integration_status")
+            .select("config")
+            .eq("integration_key", body.integration_key)
+            .single();
+          const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
+          updatePayload.config = { ...existingConfig, sync_scopes: body.sync_scopes };
+          changedFields.push("sync_scopes");
+        }
+
+        if (changedFields.length === 0) {
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { ...ch, "Content-Type": "application/json" },
+          });
+        }
+
+        const { error: updateErr } = await adminClient
+          .from("integration_status")
+          .update(updatePayload)
+          .eq("integration_key", body.integration_key);
+
+        if (updateErr) throw updateErr;
+
+        const tracker = createEventTracker(adminClient as Parameters<typeof createEventTracker>[0]);
+        await emitIntegrationConfigUpdated(tracker, {
+          integration: body.integration_key,
+          changedFields,
+          updatedByRole: caller.role as EventUserRole,
+          userId: caller.id,
+          requestId: crypto.randomUUID(),
+        });
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,

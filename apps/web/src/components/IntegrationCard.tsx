@@ -4,7 +4,8 @@
  */
 
 import { useState } from "react";
-import { Settings, RefreshCw, FileText, Plug } from "lucide-react";
+import { Settings, RefreshCw, Plug } from "lucide-react";
+import { trackIntegrationEvent } from "@/lib/track-event";
 import { Button } from "@/components/ui/button";
 import { DataSourceBadge, type DataSourceState } from "./DataSourceBadge";
 import { cn } from "@/lib/utils";
@@ -55,13 +56,30 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
     }
   }
 
+  function handleCardClick() {
+    void trackIntegrationEvent("integration_card_clicked", { integration: config.key });
+    onConfigure(config.key);
+  }
+
+  function handleCardKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleCardClick();
+    }
+  }
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Configure ${config.name}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       className={cn(
         "group bg-white rounded-xl border border-[#E2E8F0] p-5 flex flex-col gap-4",
-        "transition-all duration-150",
+        "transition-all duration-150 cursor-pointer",
         "hover:-translate-y-px hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]",
-        "focus-within:ring-2 focus-within:ring-[#E87722] focus-within:ring-offset-2"
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] focus-visible:ring-offset-2"
       )}
     >
       {/* Header row: icon + name + status */}
@@ -122,8 +140,8 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs text-[#64748B] hover:text-[#1B2A3D] focus-visible:ring-[#E87722]"
-            onClick={() => void handleTestSync()}
+            className="h-11 px-3 text-xs text-[#64748B] hover:text-[#1B2A3D] focus-visible:ring-[#E87722]"
+            onClick={(e) => { e.stopPropagation(); void handleTestSync(); }}
             disabled={isTesting}
             aria-label={`Test sync for ${config.name}`}
           >
@@ -131,13 +149,13 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
               className={cn("w-3 h-3 mr-1", isTesting && "animate-spin")}
               aria-hidden="true"
             />
-            {isTesting ? "Testing…" : "Test"}
+            {isTesting ? "Testing…" : "Test sync"}
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-3 text-xs border-[#E2E8F0] text-[#1B2A3D] hover:bg-[#F8FAFC] focus-visible:ring-[#E87722]"
-            onClick={() => onConfigure(config.key)}
+            className="h-11 px-3 text-xs border-[#E2E8F0] text-[#1B2A3D] hover:bg-[#F8FAFC] focus-visible:ring-[#E87722]"
+            onClick={(e) => { e.stopPropagation(); onConfigure(config.key); }}
             aria-label={`Configure ${config.name}`}
           >
             <Settings className="w-3 h-3 mr-1" aria-hidden="true" />
