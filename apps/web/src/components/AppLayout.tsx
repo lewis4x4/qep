@@ -382,7 +382,7 @@ function NotificationBell({ count, dark = true }: { count: number; dark?: boolea
     >
       <Bell className="w-5 h-5" />
       {count > 0 && (
-        <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#E87722] text-white text-[9px] font-bold leading-none">
+        <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-qep-orange text-white text-[9px] font-bold leading-none">
           {count > 99 ? "99+" : count}
         </span>
       )}

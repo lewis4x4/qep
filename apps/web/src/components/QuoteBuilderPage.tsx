@@ -753,7 +753,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Trade-in discussed, delivery to Lake City, financing options..."
                   rows={3}
-                  className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                  className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-qep-orange resize-none"
                 />
               </div>
 
@@ -874,7 +874,7 @@ function SelectFilter({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-qep-orange"
     >
       {children}
     </select>

@@ -324,7 +324,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                 id="invite-role"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-qep-orange"
               >
                 {inviteRoleOptions.map((r) => (
                   <option key={r} value={r}>
@@ -579,7 +579,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                                 variant="ghost"
                                 size="sm"
                                 disabled={busy}
-                                className="h-7 w-7 p-0"
+                                className="h-9 w-9 p-0"
                               >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
@@ -631,7 +631,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               size="sm"
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
-              className="h-8 w-8 p-0"
+              className="h-10 w-10 p-0"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
@@ -643,7 +643,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               size="sm"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="h-8 w-8 p-0"
+              className="h-10 w-10 p-0"
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -668,7 +668,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               id="role-select"
               value={pendingRole}
               onChange={(e) => setPendingRole(e.target.value as UserRole)}
-              className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-qep-orange"
             >
               {ROLE_OPTIONS.map((r) => (
                 <option key={r} value={r}>

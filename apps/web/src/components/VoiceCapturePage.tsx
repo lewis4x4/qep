@@ -739,7 +739,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <CardContent className="pt-0 space-y-3">
                     <div className="relative">
                       <textarea
-                        className="w-full text-sm text-foreground leading-relaxed font-mono bg-muted rounded-md p-3 pr-10 resize-y min-h-[120px] focus:outline-none focus:ring-2 focus:ring-ring border-0"
+                        className="w-full text-sm text-foreground leading-relaxed font-mono bg-muted rounded-md p-3 pr-10 resize-y min-h-[120px] focus:outline-none focus:ring-2 focus:ring-qep-orange border-0"
                         value={editedTranscript}
                         onChange={(e) => setEditedTranscript(e.target.value)}
                         aria-label="Edit transcript"
