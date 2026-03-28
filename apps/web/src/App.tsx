@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
 import { AppLayout } from "./components/AppLayout";
@@ -17,6 +17,15 @@ import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
 const isIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
+
+function AnimatedRoutes({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  return (
+    <div key={location.pathname} className="animate-page-in">
+      <Routes location={location}>{children}</Routes>
+    </div>
+  );
+}
 
 function App() {
   const { user, profile, loading, error } = useAuth();
@@ -95,7 +104,7 @@ function App() {
           }}
         />
         <AppLayout profile={profile} onLogout={handleLogout}>
-          <Routes>
+          <AnimatedRoutes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
               path="/dashboard"
@@ -156,7 +165,7 @@ function App() {
             />
             {/* Branded 404 for unknown routes */}
             <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          </AnimatedRoutes>
         </AppLayout>
       </AppErrorBoundary>
       <Toaster />
