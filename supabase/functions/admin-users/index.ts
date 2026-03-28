@@ -354,6 +354,19 @@ Deno.serve(async (req: Request) => {
           });
         }
 
+        const { data: existingRow, error: existErr } = await adminClient
+          .from("integration_status")
+          .select("integration_key")
+          .eq("integration_key", body.integration_key)
+          .single();
+
+        if (existErr || !existingRow) {
+          return new Response(
+            JSON.stringify({ error: { code: "INTEGRATION_NOT_FOUND", message: "Integration not configured" } }),
+            { status: 404, headers: { ...ch, "Content-Type": "application/json" } }
+          );
+        }
+
         const updatePayload: Record<string, unknown> = {
           updated_at: new Date().toISOString(),
         };

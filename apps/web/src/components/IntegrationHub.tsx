@@ -193,8 +193,9 @@ export function IntegrationHub() {
       ]);
 
       if (queryError) throw queryError;
+      if (data === null) throw new Error("Could not connect. Please check your network connection and try again.");
 
-      const rows = (data ?? []) as Array<{
+      const rows = data as Array<{
         integration_key: string;
         status: IntegrationCardConfig["status"];
         last_sync_at: string | null;
@@ -268,7 +269,7 @@ export function IntegrationHub() {
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
+    <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-6 overflow-x-hidden">
       {/* Page header */}
       <div className="space-y-3">
         <div>

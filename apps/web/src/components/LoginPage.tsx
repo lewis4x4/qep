@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { HardHat } from "lucide-react";
+import { useState } from "react";
+import { HardHat, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,16 +17,6 @@ export function LoginPage({ authError }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (authError) {
-      toast({
-        variant: "destructive",
-        title: "Sign-in problem",
-        description: authError,
-      });
-    }
-  }, [authError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handlePasswordLogin(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -75,6 +65,13 @@ export function LoginPage({ authError }: LoginPageProps) {
           <p className="text-2xl font-bold text-primary">QEP</p>
           <p className="text-sm text-muted-foreground mt-0.5">Knowledge Assistant</p>
         </div>
+
+        {authError && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 mb-4 text-sm text-amber-800" role="alert">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>{authError}</span>
+          </div>
+        )}
 
         <Card>
           <CardContent className="pt-6">
