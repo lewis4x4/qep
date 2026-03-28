@@ -264,7 +264,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: "Sorry, something went wrong. Please try again." }
+            ? { ...m, content: "Couldn't get a response. Check your connection and try again." }
             : m
         )
       );

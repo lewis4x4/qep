@@ -71,11 +71,35 @@ export function useAuth(): AuthState {
 }
 
 async function fetchProfile(userId: string): Promise<{ profile: Profile | null; error: string | null }> {
-  const { data, error } = await supabase
+  const profileFetch = supabase
     .from("profiles")
     .select("id, full_name, email, role")
     .eq("id", userId)
     .single();
+
+  // Guard against the query hanging indefinitely (e.g. RLS stall on fresh session
+  // after page reload before the JWT is fully propagated to PostgREST).
+  const timeoutMs = 5000;
+  let result: Awaited<typeof profileFetch>;
+  try {
+    result = await Promise.race([
+      profileFetch,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Profile load timed out")), timeoutMs)
+      ),
+    ]);
+  } catch (err) {
+    const timedOut = err instanceof Error && err.message === "Profile load timed out";
+    console.error("Profile fetch error:", err);
+    return {
+      profile: null,
+      error: timedOut
+        ? "Session could not be verified. Please sign in again."
+        : "Your account was authenticated but your profile could not be loaded. Contact your administrator.",
+    };
+  }
+
+  const { data, error } = result;
 
   if (error) {
     console.error("Profile fetch error:", error);

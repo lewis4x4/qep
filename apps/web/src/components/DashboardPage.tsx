@@ -237,7 +237,7 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
                   onClick={() => navigate(action.href)}
                   className="w-full"
                 >
-                  Go
+                  Open
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </CardContent>

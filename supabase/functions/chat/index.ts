@@ -62,14 +62,17 @@ Deno.serve(async (req) => {
     }
 
     // SEC-QEP-006: Per-user rate limiting — 10 requests per minute
-    const { data: allowed } = await supabaseAdmin.rpc("check_rate_limit", {
+    const { data: allowed, error: rlError } = await supabaseAdmin.rpc("check_rate_limit", {
       p_user_id: user.id,
       p_endpoint: "chat",
       p_max_requests: 10,
       p_window_seconds: 60,
     });
 
-    if (!allowed) {
+    if (rlError) {
+      console.error("Rate limit check failed:", rlError);
+      // Fail open — allow the request if rate limiting is broken
+    } else if (allowed === false) {
       return new Response(
         JSON.stringify({ error: "Rate limit exceeded. Please wait before sending another message." }),
         {
@@ -171,7 +174,7 @@ Guidelines:
 
     // Stream response using Claude
     const stream = await anthropic.messages.stream({
-      model: "claude-sonnet-4-5",
+      model: "claude-3-5-sonnet-20241022",
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -200,15 +203,20 @@ Guidelines:
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
       async start(controller) {
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            const data = `data: ${JSON.stringify({ text: event.delta.text })}\n\n`;
-            controller.enqueue(encoder.encode(data));
+        try {
+          for await (const event of stream) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              const data = `data: ${JSON.stringify({ text: event.delta.text })}\n\n`;
+              controller.enqueue(encoder.encode(data));
+            }
           }
-        }
-        // Emit sources before closing so UI can render citations
-        if (sources.length > 0) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
+          // Emit sources before closing so UI can render citations
+          if (sources.length > 0) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
+          }
+        } catch (streamError) {
+          console.error("Stream error:", streamError);
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: "Sorry, I encountered an error generating a response. Please try again." })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();

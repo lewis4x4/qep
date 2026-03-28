@@ -76,7 +76,7 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
-    label: "Voice Capture",
+    label: "Field Note",
     href: "/voice",
     icon: Mic,
     roles: ["rep", "admin", "manager", "owner"],
@@ -115,7 +115,7 @@ const ROLE_BADGE_VARIANT: Record<
 
 const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge Chat",
-  "/voice": "Voice Capture",
+  "/voice": "Field Note",
   "/quote": "Quote Builder",
   "/admin": "Admin",
 };

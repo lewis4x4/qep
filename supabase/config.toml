@@ -36,3 +36,24 @@ double_confirm_changes = false
 enable_confirmations = false
 
 [functions]
+
+[functions.chat]
+verify_jwt = false
+
+[functions.voice-capture]
+verify_jwt = false
+
+[functions.ingest]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false
+
+[functions.hubspot-webhook]
+verify_jwt = false
+
+[functions.hubspot-oauth]
+verify_jwt = false
+
+[functions.hubspot-scheduler]
+verify_jwt = false

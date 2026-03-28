@@ -77,14 +77,16 @@ Deno.serve(async (req) => {
     }
 
     // SEC-QEP-006: Per-user rate limiting — 5 requests per minute
-    const { data: allowed } = await supabaseAdmin.rpc("check_rate_limit", {
+    const { data: allowed, error: rlError } = await supabaseAdmin.rpc("check_rate_limit", {
       p_user_id: user.id,
       p_endpoint: "voice-capture",
       p_max_requests: 5,
       p_window_seconds: 60,
     });
 
-    if (!allowed) {
+    if (rlError) {
+      console.error("Rate limit check failed:", rlError);
+    } else if (allowed === false) {
       return jsonError("Rate limit exceeded. Please wait before submitting another recording.", 429, ch);
     }
 
