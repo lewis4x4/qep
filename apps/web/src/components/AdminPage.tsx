@@ -336,7 +336,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                     placeholder="Search docs…"
                     value={docSearch}
                     onChange={(e) => setDocSearch(e.target.value)}
-                    className="pl-8 pr-7 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring w-40"
+                    className="pl-8 pr-7 py-1.5 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-qep-orange/50 w-40"
                   />
                   {docSearch && (
                     <button

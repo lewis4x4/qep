@@ -206,7 +206,7 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
           ? Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-lg border bg-card p-6 animate-pulse space-y-4"
+                className="rounded-xl border bg-card p-6 animate-pulse space-y-4"
               >
                 <div className="h-3 bg-muted rounded w-1/2" />
                 <div className="h-8 bg-muted rounded w-1/3" />
@@ -235,7 +235,7 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
                   variant="default"
                   size="sm"
                   onClick={() => navigate(action.href)}
-                  className="w-full bg-[#E87722] hover:bg-[#d06618] text-white"
+                  className="w-full"
                 >
                   Go
                   <ArrowRight className="w-4 h-4 ml-2" />

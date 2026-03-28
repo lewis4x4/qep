@@ -105,6 +105,16 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [pushingToHubspot, setPushingToHubspot] = useState(false);
   const [recentCaptures, setRecentCaptures] = useState<RecentCapture[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Track viewport width for responsive tooltip positioning (QUA-75)
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -392,12 +402,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       <button
                         type="button"
                         aria-label="What is a HubSpot deal ID?"
-                        className="h-6 w-6 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        className="h-11 w-11 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2"
                       >
                         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-[200px]">
+                    <TooltipContent side={isMobile ? "bottom" : "right"} align={isMobile ? "start" : "center"} className="max-w-[200px]">
                       Paste the HubSpot deal ID to link this note directly. Don't know it? We'll match by customer name automatically.
                     </TooltipContent>
                   </Tooltip>
@@ -737,7 +747,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="absolute top-2 right-2 h-7 w-7 p-0"
+                        className="absolute top-2 right-2 h-11 w-11 p-0"
                         onClick={copyTranscript}
                         aria-label="Copy transcript"
                       >

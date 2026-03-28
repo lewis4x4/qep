@@ -514,7 +514,7 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 border-r border-white/10 transition-all duration-200",
+          "hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 border-r border-white/10 transition-all duration-250 ease-out",
           sidebarWidth
         )}
         aria-label="Sidebar navigation"
