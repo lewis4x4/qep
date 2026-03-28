@@ -178,12 +178,19 @@ export function IntegrationHub() {
 
   const loadIntegrations = useCallback(async () => {
     try {
-      const { data, error: queryError } = await supabase
+      const fetchPromise = supabase
         .from("integration_status")
         .select(
           "integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url"
         )
         .order("integration_key");
+
+      const { data, error: queryError } = await Promise.race([
+        fetchPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Request timed out. Please try again.")), 10_000)
+        ),
+      ]);
 
       if (queryError) throw queryError;
 

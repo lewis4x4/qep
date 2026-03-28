@@ -296,10 +296,10 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (fetchErr || !integration) {
-          return new Response(JSON.stringify({ error: "Integration not found" }), {
-            status: 404,
-            headers: { ...ch, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: { code: "INTEGRATION_NOT_FOUND", message: "Integration not configured" } }),
+            { status: 404, headers: { ...ch, "Content-Type": "application/json" } }
+          );
         }
 
         const hasCredentials = !!integration.credentials_encrypted;
@@ -360,6 +360,12 @@ Deno.serve(async (req: Request) => {
         const changedFields: string[] = [];
 
         if (body.credentials?.trim()) {
+          if (!Deno.env.get("INTEGRATION_ENCRYPTION_KEY")) {
+            return new Response(
+              JSON.stringify({ error: { code: "SERVICE_UNAVAILABLE", message: "Service unavailable. Contact your administrator." } }),
+              { status: 503, headers: { ...ch, "Content-Type": "application/json" } }
+            );
+          }
           updatePayload.credentials_encrypted = await encryptCredential(
             body.credentials,
             body.integration_key
