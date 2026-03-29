@@ -36,7 +36,7 @@ begin
       'authenticated',
       'authenticated',
       'qa-tenant-b@test.qep.local',
-      crypt('QepTestTenantB!2026', gen_salt('bf')),
+      extensions.crypt('QepTestTenantB!2026', extensions.gen_salt('bf')),
       now(),
       '{"provider": "email", "providers": ["email"]}'::jsonb,
       '{"full_name": "QA Tenant B"}'::jsonb,
