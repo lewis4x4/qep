@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
@@ -67,20 +67,15 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // If auth error looks like an expiry, surface the modal instead of a silent redirect
-  useEffect(() => {
-    if (!loading && !user && error) {
-      const msg = error.toLowerCase();
-      if (
-        msg.includes("expired") ||
-        msg.includes("invalid") ||
-        msg.includes("token") ||
-        msg.includes("sign in again")
-      ) {
-        setSessionExpired(true);
-      }
-    }
+  // Derive session-expiry modal visibility directly from auth state so the
+  // modal renders on the SAME paint as the login page — no second render
+  // cycle needed (the prior useEffect approach required an extra render,
+  // creating a window where Playwright sees login without the modal).
+  const authErrorIsExpiry = useMemo(() => {
+    if (loading || user || !error) return false;
+    return /expired|invalid|token|sign in again/i.test(error);
   }, [loading, user, error]);
+  const showSessionExpiredModal = sessionExpired || authErrorIsExpiry;
 
   if (loading) {
     return (
@@ -109,7 +104,7 @@ function App() {
         <OfflineBanner />
         <LoginPage authError={error} />
         <SessionExpiredModal
-          open={sessionExpired}
+          open={showSessionExpiredModal}
           onSignIn={() => setSessionExpired(false)}
         />
         <Toaster />
@@ -127,7 +122,7 @@ function App() {
       <AppErrorBoundary>
         <OfflineBanner />
         <SessionExpiredModal
-          open={sessionExpired}
+          open={showSessionExpiredModal}
           onSignIn={() => {
             setSessionExpired(false);
             void supabase.auth.signOut();
