@@ -111,37 +111,43 @@ export function useAuth(): AuthState {
         setState({ user: null, session: null, profile: null, loading: false, error: message });
       });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        if (session?.user) {
-          const { error: userError } = await supabase.auth.getUser();
-          if (userError) {
-            await supabase.auth.signOut();
-            setState({
-              user: null,
-              session: null,
-              profile: null,
-              loading: false,
-              error:
-                "Your session token is invalid or expired. Please sign in again.",
-            });
-            return;
+    // Listen for auth changes. Defer async work off the Supabase auth callback
+    // stack — awaiting getUser()/fetchProfile inside the synchronous listener can
+    // deadlock the client on hard refresh (INITIAL_SESSION + getSession race).
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setTimeout(() => {
+        void (async () => {
+          try {
+            if (session?.user) {
+              const { error: userError } = await supabase.auth.getUser();
+              if (userError) {
+                await supabase.auth.signOut();
+                setState({
+                  user: null,
+                  session: null,
+                  profile: null,
+                  loading: false,
+                  error:
+                    "Your session token is invalid or expired. Please sign in again.",
+                });
+                return;
+              }
+              const { profile, error } = await fetchProfile(session.user.id);
+              setState({ user: session.user, session, profile, loading: false, error });
+            } else {
+              // Preserve any existing error (e.g. corrupt-token detection) so
+              // App.tsx can still trigger SessionExpiredModal.
+              setState((prev) => ({
+                user: null, session: null, profile: null, loading: false,
+                error: prev.error,
+              }));
+            }
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "We had trouble updating your session. Refresh the page or sign in again.";
+            setState({ user: null, session: null, profile: null, loading: false, error: message });
           }
-          const { profile, error } = await fetchProfile(session.user.id);
-          setState({ user: session.user, session, profile, loading: false, error });
-        } else {
-          // Preserve any existing error (e.g. corrupt-token detection) so
-          // App.tsx can still trigger SessionExpiredModal.
-          setState((prev) => ({
-            user: null, session: null, profile: null, loading: false,
-            error: prev.error,
-          }));
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "We had trouble updating your session. Refresh the page or sign in again.";
-        setState({ user: null, session: null, profile: null, loading: false, error: message });
-      }
+        })();
+      }, 0);
     });
 
     return () => subscription.unsubscribe();

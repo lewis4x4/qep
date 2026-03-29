@@ -133,7 +133,34 @@ Deno.serve(async (req: Request) => {
 
     // ── INVITE USER ─────────────────────────────────────────────────────────
     if (req.method === "POST") {
-      const body = await req.json() as {
+      const raw = await req.text();
+      let parsed: unknown;
+      try {
+        parsed = raw.trim() === "" ? {} : JSON.parse(raw);
+      } catch {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "INVALID_JSON",
+              message: "Request body must be valid JSON.",
+            },
+          }),
+          { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "INVALID_JSON",
+              message: "Request body must be a JSON object.",
+            },
+          }),
+          { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+        );
+      }
+
+      const body = parsed as {
         action: string;
         email?: string;
         full_name?: string;
