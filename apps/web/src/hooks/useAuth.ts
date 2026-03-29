@@ -30,8 +30,22 @@ export function useAuth(): AuthState {
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+      .then(async ({ data: { session } }) => {
         if (session?.user) {
+          // Validate the token with the server — getSession() only reads
+          // localStorage and does NOT verify the JWT is still valid.
+          const { error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            // Token is stale/invalid — sign out to clear storage and
+            // surface an expiry error so App.tsx shows SessionExpiredModal.
+            await supabase.auth.signOut();
+            setState({
+              user: null, session: null, profile: null, loading: false,
+              error: "Your session token is invalid or expired. Please sign in again.",
+            });
+            return;
+          }
+
           return fetchProfile(session.user.id)
             .then(({ profile, error }) => {
               setState({ user: session.user, session, profile, loading: false, error });
@@ -41,14 +55,12 @@ export function useAuth(): AuthState {
               setState({ user: session.user, session, profile: null, loading: false, error: message });
             });
         } else {
-          // Detect stale/invalid token: if localStorage has a Supabase auth key
-          // but getSession() returned null, the stored token is corrupt or expired.
+          // No session at all — check if localStorage has a stale auth key
+          // that getSession() couldn't parse.
           const hasStoredToken = Object.keys(localStorage).some(
             (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
           );
           if (hasStoredToken) {
-            // Clear the stale token and surface an expiry error so
-            // App.tsx shows the SessionExpiredModal.
             Object.keys(localStorage)
               .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
               .forEach((k) => localStorage.removeItem(k));
