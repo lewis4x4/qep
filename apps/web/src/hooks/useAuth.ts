@@ -41,7 +41,24 @@ export function useAuth(): AuthState {
               setState({ user: session.user, session, profile: null, loading: false, error: message });
             });
         } else {
-          setState((s) => ({ ...s, loading: false }));
+          // Detect stale/invalid token: if localStorage has a Supabase auth key
+          // but getSession() returned null, the stored token is corrupt or expired.
+          const hasStoredToken = Object.keys(localStorage).some(
+            (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+          );
+          if (hasStoredToken) {
+            // Clear the stale token and surface an expiry error so
+            // App.tsx shows the SessionExpiredModal.
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+              .forEach((k) => localStorage.removeItem(k));
+            setState({
+              user: null, session: null, profile: null, loading: false,
+              error: "Your session token is invalid or expired. Please sign in again.",
+            });
+          } else {
+            setState((s) => ({ ...s, loading: false }));
+          }
         }
       })
       .catch((err: unknown) => {

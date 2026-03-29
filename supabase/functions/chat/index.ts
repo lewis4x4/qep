@@ -76,7 +76,9 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Service temporarily unavailable. Please try again shortly." }),
         { status: 503, headers: { ...ch, "Content-Type": "application/json", "Retry-After": "10" } }
       );
-    } else if (allowed === false) {
+    } else if (allowed !== true) {
+      // SEC-QEP-102: Fail closed — reject unless explicitly allowed.
+      // Catches both false (rate limited) and null/undefined (unexpected return).
       return new Response(
         JSON.stringify({ error: "Rate limit exceeded. Please wait before sending another message." }),
         {

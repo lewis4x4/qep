@@ -177,6 +177,8 @@ export function IntegrationHub() {
   const [panelOpen, setPanelOpen] = useState(false);
 
   const loadIntegrations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const fetchPromise = supabase
         .from("integration_status")
