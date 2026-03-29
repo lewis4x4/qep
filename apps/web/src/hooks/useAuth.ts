@@ -28,9 +28,28 @@ export function useAuth(): AuthState {
   });
 
   useEffect(() => {
+    // Snapshot token presence BEFORE getSession() — Supabase may internally
+    // clean up unparseable tokens, which would cause a post-getSession()
+    // check to miss the corruption.
+    const hadStoredToken = Object.keys(localStorage).some(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+    );
+
     // Get initial session
     supabase.auth.getSession()
-      .then(async ({ data: { session } }) => {
+      .then(async ({ data: { session }, error: sessionReadError }) => {
+        if (sessionReadError) {
+          await supabase.auth.signOut();
+          setState({
+            user: null,
+            session: null,
+            profile: null,
+            loading: false,
+            error:
+              "Your session token is invalid or expired. Please sign in again.",
+          });
+          return;
+        }
         if (session?.user) {
           // Validate the token with the server — getSession() only reads
           // localStorage and does NOT verify the JWT is still valid.
@@ -55,15 +74,18 @@ export function useAuth(): AuthState {
               setState({ user: session.user, session, profile: null, loading: false, error: message });
             });
         } else {
-          // No session at all — check if localStorage has a stale auth key
-          // that getSession() couldn't parse.
-          const hasStoredToken = Object.keys(localStorage).some(
+          // No session — use pre-getSession() snapshot to detect tokens
+          // that Supabase silently cleaned up during parsing.
+          const stillHasToken = Object.keys(localStorage).some(
             (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
           );
-          if (hasStoredToken) {
+          if (hadStoredToken || stillHasToken) {
+            // Clean up any remaining tokens and force signOut so
+            // App.tsx onAuthStateChange fires SIGNED_OUT.
             Object.keys(localStorage)
               .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
               .forEach((k) => localStorage.removeItem(k));
+            await supabase.auth.signOut();
             setState({
               user: null, session: null, profile: null, loading: false,
               error: "Your session token is invalid or expired. Please sign in again.",
@@ -74,7 +96,18 @@ export function useAuth(): AuthState {
         }
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "We can't reach the authentication service. Try refreshing the page.";
+        const raw = err instanceof Error ? err.message : String(err);
+        const lower = raw.toLowerCase();
+        const looksAuth =
+          lower.includes("auth") ||
+          lower.includes("jwt") ||
+          lower.includes("token") ||
+          lower.includes("session") ||
+          lower.includes("json");
+        void supabase.auth.signOut();
+        const message = looksAuth
+          ? "Your session token is invalid or expired. Please sign in again."
+          : "We can't reach the authentication service. Try refreshing the page.";
         setState({ user: null, session: null, profile: null, loading: false, error: message });
       });
 
@@ -82,10 +115,28 @@ export function useAuth(): AuthState {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         if (session?.user) {
+          const { error: userError } = await supabase.auth.getUser();
+          if (userError) {
+            await supabase.auth.signOut();
+            setState({
+              user: null,
+              session: null,
+              profile: null,
+              loading: false,
+              error:
+                "Your session token is invalid or expired. Please sign in again.",
+            });
+            return;
+          }
           const { profile, error } = await fetchProfile(session.user.id);
           setState({ user: session.user, session, profile, loading: false, error });
         } else {
-          setState({ user: null, session: null, profile: null, loading: false, error: null });
+          // Preserve any existing error (e.g. corrupt-token detection) so
+          // App.tsx can still trigger SessionExpiredModal.
+          setState((prev) => ({
+            user: null, session: null, profile: null, loading: false,
+            error: prev.error,
+          }));
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "We had trouble updating your session. Refresh the page or sign in again.";

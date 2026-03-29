@@ -5,6 +5,8 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { AlertTriangle, CheckCircle2, Clock, Wifi, Settings } from "lucide-react";
 import { IntegrationCard } from "./IntegrationCard";
 import { IntegrationPanel } from "./IntegrationPanel";
@@ -88,6 +90,18 @@ const INTEGRATION_DISPLAY: Record<
   },
 };
 
+/** JWT / session failures from PostgREST after localStorage corruption, etc. */
+function isSessionAuthError(err: PostgrestError | null): boolean {
+  if (!err) return false;
+  const msg = (err.message ?? "").toLowerCase();
+  const code = String(err.code ?? "");
+  if (code === "PGRST301") return true;
+  if (msg.includes("jwt")) return true;
+  if (msg.includes("invalid") && msg.includes("token")) return true;
+  if (msg.includes("not authorized")) return true;
+  return false;
+}
+
 function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
   const connected = cards.filter((c) => c.status === "connected").length;
   const demo = cards.filter((c) => c.status === "demo_mode").length;
@@ -146,9 +160,13 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
   );
 }
 
-function CardSkeleton() {
+function CardSkeleton({ index }: { index: number }) {
   return (
-    <div className="bg-white rounded-xl border border-[#E2E8F0] p-5 flex flex-col gap-4 animate-pulse">
+    <div
+      data-testid="integration-card-skeleton"
+      data-skeleton-index={index}
+      className="bg-white rounded-xl border border-[#E2E8F0] p-5 flex flex-col gap-4 animate-pulse"
+    >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-lg bg-[#F1F5F9] shrink-0" />
         <div className="flex-1 space-y-2">
@@ -170,6 +188,7 @@ function CardSkeleton() {
 }
 
 export function IntegrationHub() {
+  const location = useLocation();
   const [cards, setCards] = useState<IntegrationCardConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +199,12 @@ export function IntegrationHub() {
     setLoading(true);
     setError(null);
     try {
+      const { error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        await supabase.auth.signOut();
+        return;
+      }
+
       const fetchPromise = supabase
         .from("integration_status")
         .select(
@@ -194,7 +219,13 @@ export function IntegrationHub() {
         ),
       ]);
 
-      if (queryError) throw queryError;
+      if (queryError) {
+        if (isSessionAuthError(queryError)) {
+          await supabase.auth.signOut();
+          return;
+        }
+        throw queryError;
+      }
       if (data === null) throw new Error("Could not connect. Please check your network connection and try again.");
 
       const rows = data as Array<{
@@ -228,8 +259,11 @@ export function IntegrationHub() {
   }, []);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setCards([]);
     void loadIntegrations();
-  }, [loadIntegrations]);
+  }, [location.key, loadIntegrations]);
 
   function handleConfigure(key: string) {
     setSelectedKey(key);
@@ -294,9 +328,12 @@ export function IntegrationHub() {
         )}
         aria-label="Integration cards"
         aria-busy={loading}
+        data-loading={loading}
       >
         {loading
-          ? Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <CardSkeleton key={i} index={i} />
+            ))
           : cards.map((card) => (
               <IntegrationCard
                 key={card.key}

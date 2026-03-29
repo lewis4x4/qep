@@ -49,6 +49,21 @@ function App() {
         isIntentionalLogout.current = false;
       }
     });
+
+    // Belt-and-suspenders: if no valid session exists but a corrupt token
+    // is in localStorage, force sign-out now so the modal surfaces even
+    // if onAuthStateChange misses it.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        const hasCorruptToken = Object.keys(localStorage).some(
+          (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+        );
+        if (hasCorruptToken) {
+          void supabase.auth.signOut();
+        }
+      }
+    });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -56,7 +71,12 @@ function App() {
   useEffect(() => {
     if (!loading && !user && error) {
       const msg = error.toLowerCase();
-      if (msg.includes("expired") || msg.includes("invalid") || msg.includes("token")) {
+      if (
+        msg.includes("expired") ||
+        msg.includes("invalid") ||
+        msg.includes("token") ||
+        msg.includes("sign in again")
+      ) {
         setSessionExpired(true);
       }
     }
