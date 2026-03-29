@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
@@ -26,6 +26,13 @@ export function useAuth(): AuthState {
     loading: true,
     error: null,
   });
+
+  // Gate onAuthStateChange handler until getSession() resolves. The
+  // INITIAL_SESSION event fires before getSession() completes; without this
+  // gate the deferred setTimeout(0) handler would set loading=false (no error)
+  // before the getSession() handler can detect corrupt tokens and set the
+  // session-expired error for the modal.
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     // Snapshot token presence BEFORE getSession() — Supabase may internally
@@ -109,6 +116,9 @@ export function useAuth(): AuthState {
           ? "Your session token is invalid or expired. Please sign in again."
           : "We can't reach the authentication service. Try refreshing the page.";
         setState({ user: null, session: null, profile: null, loading: false, error: message });
+      })
+      .finally(() => {
+        initializedRef.current = true;
       });
 
     // Listen for auth changes. Defer async work off the Supabase auth callback
@@ -116,6 +126,9 @@ export function useAuth(): AuthState {
     // deadlock the client on hard refresh (INITIAL_SESSION + getSession race).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setTimeout(() => {
+        // Skip until getSession() initial handler completes — it handles
+        // corrupt-token detection and sets the session-expired error.
+        if (!initializedRef.current) return;
         void (async () => {
           try {
             if (session?.user) {
