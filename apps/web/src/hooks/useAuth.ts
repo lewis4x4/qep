@@ -34,13 +34,19 @@ export function useAuth(): AuthState {
   // session-expired error for the modal.
   const initializedRef = useRef(false);
 
-  useEffect(() => {
-    // Snapshot token presence BEFORE getSession() — Supabase may internally
-    // clean up unparseable tokens, which would cause a post-getSession()
-    // check to miss the corruption.
-    const hadStoredToken = Object.keys(localStorage).some(
+  // Snapshot token presence during RENDER — not in useEffect. Supabase's
+  // createClient() starts async _initialize() → _recoverSession() which
+  // reads "garbage" tokens and removes them from localStorage. By the time
+  // useEffect fires (post-paint), the cleanup is already done and the token
+  // is gone. Capturing here (first render) beats the async cleanup.
+  const hadStoredTokenRef = useRef(
+    Object.keys(localStorage).some(
       (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-    );
+    )
+  );
+
+  useEffect(() => {
+    const hadStoredToken = hadStoredTokenRef.current;
 
     // Get initial session
     supabase.auth.getSession()
