@@ -27,6 +27,7 @@ import {
   listCustomFieldDefinitions,
   listDuplicateCandidates,
   listEquipment,
+  patchCompanyParent,
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
@@ -79,6 +80,15 @@ function mapError(origin: string | null, error: unknown): Response {
       code: "HUBSPOT_ID_CONFLICT",
       message: "Contacts cannot be merged because both have different HubSpot IDs.",
       details: { reason_code: "hubspot_id_conflict" },
+    });
+  }
+
+  if (message === "HIERARCHY_CYCLE") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "HIERARCHY_CYCLE",
+      message: "Parent company selection creates a hierarchy cycle.",
     });
   }
 
@@ -163,6 +173,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
       }
       return crmOk(hierarchy, { origin });
+    }
+
+    if (
+      req.method === "PATCH" &&
+      segments[1] === "companies" &&
+      segments[2] &&
+      segments[3] === "parent"
+    ) {
+      requireCaller(ctx);
+      requireElevated(ctx);
+      const body = await readJsonBody<{ parentCompanyId?: string | null }>(req);
+      const company = await patchCompanyParent(
+        ctx,
+        segments[2],
+        safeText(body.parentCompanyId ?? null),
+      );
+      return crmOk({ company }, { origin });
     }
 
     if (segments[1] === "equipment") {

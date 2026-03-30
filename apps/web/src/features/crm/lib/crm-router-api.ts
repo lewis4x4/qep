@@ -77,6 +77,19 @@ export async function fetchCompanyHierarchy(companyId: string): Promise<CrmCompa
   }
 }
 
+export async function updateCompanyParent(
+  companyId: string,
+  parentCompanyId: string | null,
+): Promise<{ id: string; parentCompanyId: string | null; updatedAt: string }> {
+  const payload = await requestRouter<{
+    company: { id: string; parentCompanyId: string | null; updatedAt: string };
+  }>(`/crm/companies/${companyId}/parent`, {
+    method: "PATCH",
+    body: { parentCompanyId },
+  });
+  return payload.company;
+}
+
 export async function fetchCompanyEquipment(companyId: string): Promise<CrmEquipment[]> {
   const params = new URLSearchParams({ company_id: companyId });
   const payload = await requestRouter<{ items: CrmEquipment[] }>(`/crm/equipment?${params.toString()}`);

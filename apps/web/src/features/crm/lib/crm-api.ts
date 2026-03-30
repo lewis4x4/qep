@@ -38,6 +38,7 @@ function toCompanySummary(row: CrmCompanyRow): CrmCompanySummary {
     id: row.id,
     workspaceId: row.workspace_id,
     name: row.name,
+    parentCompanyId: row.parent_company_id,
     assignedRepId: row.assigned_rep_id,
     city: row.city,
     state: row.state,
@@ -132,7 +133,7 @@ export async function listCrmCompanies(search: string): Promise<CrmPageResult<Cr
   const term = search.trim();
   let query = crmSupabase
     .from("crm_companies")
-    .select("id, workspace_id, name, assigned_rep_id, city, state, country, created_at, updated_at")
+    .select("id, workspace_id, name, parent_company_id, assigned_rep_id, city, state, country, created_at, updated_at")
     .is("deleted_at", null)
     .order("name", { ascending: true })
     .limit(COMPANIES_PAGE_SIZE + 1);
@@ -157,7 +158,7 @@ export async function listCrmCompanies(search: string): Promise<CrmPageResult<Cr
 export async function getCrmCompany(companyId: string): Promise<CrmCompanySummary | null> {
   const { data, error } = await crmSupabase
     .from("crm_companies")
-    .select("id, workspace_id, name, assigned_rep_id, city, state, country, created_at, updated_at")
+    .select("id, workspace_id, name, parent_company_id, assigned_rep_id, city, state, country, created_at, updated_at")
     .eq("id", companyId)
     .is("deleted_at", null)
     .maybeSingle();

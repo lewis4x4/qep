@@ -192,6 +192,53 @@ export async function patchEquipment(
   };
 }
 
+export async function patchCompanyParent(
+  ctx: RouterCtx,
+  companyId: string,
+  parentCompanyId: string | null,
+): Promise<unknown> {
+  if (parentCompanyId === companyId) {
+    throw new Error("HIERARCHY_CYCLE");
+  }
+
+  if (parentCompanyId) {
+    const { data: parentRow, error: parentError } = await ctx.callerDb
+      .from("crm_companies")
+      .select("id")
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", parentCompanyId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (parentError) throw parentError;
+    if (!parentRow) throw new Error("NOT_FOUND");
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_companies")
+    .update({ parent_company_id: parentCompanyId })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .select("id, parent_company_id, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message ?? "").toLowerCase();
+    if (message.includes("company hierarchy cycle detected")) {
+      throw new Error("HIERARCHY_CYCLE");
+    }
+    throw error;
+  }
+  if (!data) throw new Error("NOT_FOUND");
+
+  return {
+    id: data.id,
+    parentCompanyId: data.parent_company_id,
+    updatedAt: data.updated_at,
+  };
+}
+
 export async function listCustomFieldDefinitions(
   ctx: RouterCtx,
   objectType: CustomRecordType | null,

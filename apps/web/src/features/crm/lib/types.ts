@@ -20,6 +20,7 @@ export interface CrmCompanySummary {
   id: string;
   workspaceId: string;
   name: string;
+  parentCompanyId: string | null;
   assignedRepId: string | null;
   city: string | null;
   state: string | null;
