@@ -106,7 +106,10 @@ create trigger crm_sync_deal_last_activity_from_activities
   for each row execute function public.crm_sync_deal_last_activity_from_activities();
 
 -- ── Deal read surfaces / weighted pipeline ──────────────────────────────────
-create or replace view public.crm_deals_rep_safe with (security_barrier = true) as
+-- Drop/recreate to avoid CREATE OR REPLACE column-shape constraints across
+-- environments that may have a prior view signature.
+drop view if exists public.crm_deals_rep_safe;
+create view public.crm_deals_rep_safe with (security_barrier = true) as
 select
   d.id,
   d.workspace_id,
@@ -131,7 +134,8 @@ where d.deleted_at is null
     or (public.get_my_role() = 'rep' and public.crm_rep_can_access_deal(d.id))
   );
 
-create or replace view public.crm_deals_elevated_full as
+drop view if exists public.crm_deals_elevated_full;
+create view public.crm_deals_elevated_full as
 select d.*
 from public.crm_deals d
 where d.deleted_at is null

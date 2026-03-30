@@ -4,8 +4,13 @@
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
-    "dev": "bun run --filter apps/web dev",
-    "build": "bun run --filter apps/web build",
+    "dev": "bun run --filter @qep/web dev",
+    "build": "bun run migrations:check && bun run --filter @qep/web build",
+    "build:web": "bun run --filter @qep/web build",
+    "migrations:check": "bun ./scripts/check-migration-order.mjs",
+    "design:review": "node ./.agents/qep-design-review-runner.js",
+    "stress:test": "bun ./.agents/stress-test/run.ts",
+    "segment:gates": "bun ./scripts/agent-gates/run-segment-gates.mjs",
     "supabase:start": "supabase start",
     "supabase:push": "supabase db push",
     "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts"

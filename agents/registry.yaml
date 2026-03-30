@@ -1,0 +1,161 @@
+version: 1
+updated_at: "2026-03-30"
+owner: "Engineering"
+north_star_mission: >
+  "Create a Moonshot Application That is built around an equipment and parts, sales and rental
+  For the employees, salesman, company corporate operations and management. Your sole function is to
+  identify, design, and pressure-test transformational AI application ideas that are not fully possible
+  today but will be unlocked by superintelligence."
+mission_gate_rules:
+  - "Every segment must include a mission_alignment verdict."
+  - "Any agent may issue a mission_misalignment block."
+  - "Waivers require owner, reason, expiry, and remediation issue."
+default_gate_order:
+  - engineer
+  - qa_agent
+  - cdo_agent
+  - chaos_agent
+  - security_agent
+  - performance_agent
+  - migration_agent
+  - release_gate_agent
+
+agents:
+  - id: engineer
+    title: Engineer of Record
+    purpose: >
+      Implements approved scope, ships the segment, and produces the structured
+      handoff for downstream gates.
+    mandatory_when: "always"
+    ownership:
+      write_scopes:
+        - "apps/**"
+        - "supabase/**"
+        - "scripts/**"
+      cannot_waive:
+        - "qa_agent"
+        - "cdo_agent"
+        - "chaos_agent"
+    required_outputs:
+      - "segment_handoff"
+      - "changed_surface_summary"
+      - "commands_executed"
+      - "known_risks"
+    playbook: "agents/playbooks/engineer-of-record.md"
+
+  - id: qa_agent
+    title: QA Agent
+    purpose: >
+      Validates builds against spec acceptance criteria, edge cases,
+      cross-device behavior, and regressions.
+    mandatory_when: "always"
+    trigger_rules:
+      - "every completed segment"
+    commands:
+      - "bun run migrations:check"
+      - "bun run build"
+    required_outputs:
+      - "acceptance_verdict"
+      - "regression_findings"
+      - "device_matrix_results"
+    pass_criteria:
+      - "all required acceptance criteria pass"
+      - "no open P0/P1 defects"
+    playbook: "agents/playbooks/qa-agent.md"
+
+  - id: cdo_agent
+    title: Chief Design Officer Agent
+    purpose: "Design critic, visual quality gatekeeper, and UX authority."
+    mandatory_when: "ui_changed == true"
+    trigger_rules:
+      - "any externally visible UI or copy change"
+    commands:
+      - "node ./.agents/qep-design-review-runner.js"
+    required_outputs:
+      - "design_verdict"
+      - "viewport_findings"
+      - "copy_quality_findings"
+    pass_criteria:
+      - "all viewports meet quality bar"
+      - "no unresolved accessibility blockers"
+      - "no unresolved copy-tone violations"
+    playbook: "agents/playbooks/chief-design-officer-agent.md"
+
+  - id: chaos_agent
+    title: Testing/Simulation Agent
+    purpose: "Chaos engineer and stress gate guardian."
+    mandatory_when: "logic_changed == true"
+    trigger_rules:
+      - "state machine changes"
+      - "integration or API behavior changes"
+      - "workflow orchestration changes"
+    commands:
+      - "bun ./.agents/stress-test/run.ts"
+    required_outputs:
+      - "stress_verdict"
+      - "chaos_failures"
+      - "resilience_advisories"
+    pass_criteria:
+      - "no stress FAIL results on required suites"
+    playbook: "agents/playbooks/testing-simulation-agent.md"
+
+  - id: security_agent
+    title: Security/RLS Agent
+    purpose: "Validates authorization, workspace isolation, secret handling, and auditability."
+    mandatory_when: "auth_or_rls_or_credentials_changed == true"
+    trigger_rules:
+      - "profiles, role checks, policies, credential handling, webhook auth"
+    required_outputs:
+      - "security_verdict"
+      - "authorization_findings"
+      - "workspace_isolation_findings"
+    pass_criteria:
+      - "no open critical authz or tenant-isolation defects"
+    playbook: "agents/playbooks/security-rls-agent.md"
+
+  - id: performance_agent
+    title: Performance Agent
+    purpose: "Protects bundle, render, and query performance budgets."
+    mandatory_when: "bundle_or_render_or_query_changed == true"
+    trigger_rules:
+      - "vite config changes"
+      - "heavy list/table/dashboard changes"
+      - "new data fetch paths"
+    required_outputs:
+      - "performance_verdict"
+      - "bundle_impact"
+      - "query_or_render_hotspots"
+    pass_criteria:
+      - "no severe regression without explicit waiver"
+    playbook: "agents/playbooks/performance-agent.md"
+
+  - id: migration_agent
+    title: Migration Integrity Agent
+    purpose: "Guards migration sequencing, rollback safety, and schema integrity."
+    mandatory_when: "migration_files_changed == true"
+    trigger_rules:
+      - "any supabase/migrations SQL change"
+    commands:
+      - "bun run migrations:check"
+    required_outputs:
+      - "migration_verdict"
+      - "sequence_validation"
+      - "rollback_notes_validation"
+    pass_criteria:
+      - "canonical contiguous sequence"
+      - "no numbering conflicts"
+    playbook: "agents/playbooks/migration-integrity-agent.md"
+
+  - id: release_gate_agent
+    title: Release Gate Agent
+    purpose: "Final integrated go/no-go arbiter for segment closure."
+    mandatory_when: "always"
+    trigger_rules:
+      - "after all required gate agents finish"
+    required_outputs:
+      - "release_decision"
+      - "blocking_findings"
+      - "waiver_log"
+    pass_criteria:
+      - "all required gates pass or have active approved waivers"
+    playbook: "agents/playbooks/release-gate-agent.md"

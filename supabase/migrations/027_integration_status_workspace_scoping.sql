@@ -50,6 +50,13 @@ alter table public.integration_status
 alter table public.integration_status
   alter column workspace_id set not null;
 
+-- Drop legacy audit FKs before replacing integration_status uniqueness.
+alter table public.integration_status_credential_audit_events
+  drop constraint if exists integration_status_credential_audit_events_integration_key_fkey;
+
+alter table public.integration_status_credential_audit_events
+  drop constraint if exists integration_status_credential_audit_events_workspace_key_fkey;
+
 -- Replace global uniqueness with workspace-scoped uniqueness.
 drop index if exists idx_integration_status_key;
 alter table public.integration_status
@@ -74,12 +81,6 @@ alter table public.integration_status_credential_audit_events
 
 alter table public.integration_status_credential_audit_events
   alter column workspace_id set not null;
-
-alter table public.integration_status_credential_audit_events
-  drop constraint if exists integration_status_credential_audit_events_integration_key_fkey;
-
-alter table public.integration_status_credential_audit_events
-  drop constraint if exists integration_status_credential_audit_events_workspace_key_fkey;
 
 alter table public.integration_status_credential_audit_events
   add constraint integration_status_credential_audit_events_workspace_key_fkey
