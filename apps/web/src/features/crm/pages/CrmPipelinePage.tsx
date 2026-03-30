@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -6,15 +6,40 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
+import { getDealSignalState } from "../lib/deal-signals";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import {
   listCrmDealStages,
   listCrmOpenDealsForBoard,
   listCrmWeightedOpenDeals,
 } from "../lib/crm-api";
+import type { CrmRepSafeDeal } from "../lib/types";
 
 interface CrmPipelinePageProps {
   userRole: UserRole;
+}
+
+type UrgencyFilter = "all" | "overdue_follow_up" | "no_follow_up" | "stalled" | "data_issues" | "attention";
+
+const OPEN_DEALS_PAGE_SIZE = 500;
+const HYDRATION_UPDATE_BATCH_PAGES = 10;
+const PIPELINE_CACHE_KEY = "qep-crm-open-deals-cache-v1";
+
+interface DealUrgencyState {
+  isOverdueFollowUp: boolean;
+  hasNoFollowUp: boolean;
+  isStalled: boolean;
+  hasDataIssue: boolean;
+  needsAttention: boolean;
+}
+
+interface CachedOpenDealsPayload {
+  items: CrmRepSafeDeal[];
+  nextCursor: string | null;
+}
+
+interface OpenDealsFirstPageResult extends CachedOpenDealsPayload {
+  fromCache: boolean;
 }
 
 function formatMoney(value: number | null): string {
@@ -34,16 +59,94 @@ function formatDate(value: string | null): string {
     return "Not set";
   }
 
-  return new Date(value).toLocaleDateString("en-US", {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "Invalid date";
+  }
+
+  return new Date(timestamp).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
+function getFollowUpSortTime(value: string | null): number {
+  if (!value) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
+}
+
+function readCachedOpenDeals(): CachedOpenDealsPayload | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PIPELINE_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedOpenDealsPayload>;
+    if (!Array.isArray(parsed.items)) {
+      return null;
+    }
+
+    return {
+      items: parsed.items as CrmRepSafeDeal[],
+      nextCursor: typeof parsed.nextCursor === "string" ? parsed.nextCursor : null,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeCachedOpenDeals(payload: CachedOpenDealsPayload): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(PIPELINE_CACHE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    // Ignore cache write failures; this is a best-effort resilience layer.
+  }
+}
+
+async function fetchOpenDealsFirstPage(): Promise<OpenDealsFirstPageResult> {
+  try {
+    const result = await listCrmOpenDealsForBoard({ limit: OPEN_DEALS_PAGE_SIZE });
+    writeCachedOpenDeals({ items: result.items, nextCursor: result.nextCursor });
+    return {
+      items: result.items,
+      nextCursor: result.nextCursor,
+      fromCache: false,
+    };
+  } catch (error) {
+    const cached = readCachedOpenDeals();
+    if (cached) {
+      return {
+        items: cached.items,
+        nextCursor: cached.nextCursor,
+        fromCache: true,
+      };
+    }
+    throw error;
+  }
+}
+
 export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
+  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
+  const [hydratedDeals, setHydratedDeals] = useState<CrmRepSafeDeal[] | null>(null);
+  const [isHydratingRemainingDeals, setIsHydratingRemainingDeals] = useState(false);
+  const [dealHydrationWarning, setDealHydrationWarning] = useState<string | null>(null);
+  const [hydrationAttempt, setHydrationAttempt] = useState(0);
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
   const stagesQuery = useQuery({
@@ -54,9 +157,87 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
   const dealsQuery = useQuery({
     queryKey: ["crm", "deals", "open-table"],
-    queryFn: () => listCrmOpenDealsForBoard({ limit: 500 }),
+    queryFn: fetchOpenDealsFirstPage,
     staleTime: 30_000,
   });
+
+  useEffect(() => {
+    const firstPage = dealsQuery.data;
+    if (!firstPage) {
+      setHydratedDeals(null);
+      setIsHydratingRemainingDeals(false);
+      setDealHydrationWarning(null);
+      return;
+    }
+
+    let cancelled = false;
+    const seenCursors = new Set<string>();
+    let mergedItems = [...firstPage.items];
+    setHydratedDeals(mergedItems);
+    setDealHydrationWarning(null);
+
+    if (firstPage.fromCache) {
+      setIsHydratingRemainingDeals(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!firstPage.nextCursor) {
+      setIsHydratingRemainingDeals(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsHydratingRemainingDeals(true);
+    void (async () => {
+      let cursor = firstPage.nextCursor;
+      let pagesSinceLastUpdate = 0;
+
+      while (cursor && !cancelled) {
+        if (seenCursors.has(cursor)) {
+          setDealHydrationWarning("Stopped loading additional deals due to a pagination loop. Showing partial results.");
+          break;
+        }
+        seenCursors.add(cursor);
+
+        try {
+          const pageResult = await listCrmOpenDealsForBoard({
+            limit: OPEN_DEALS_PAGE_SIZE,
+            cursor,
+          });
+          mergedItems = [...mergedItems, ...pageResult.items];
+          pagesSinceLastUpdate += 1;
+          if (!cancelled && (pagesSinceLastUpdate >= HYDRATION_UPDATE_BATCH_PAGES || !pageResult.nextCursor)) {
+            const snapshot = mergedItems;
+            startTransition(() => {
+              setHydratedDeals(snapshot);
+            });
+            pagesSinceLastUpdate = 0;
+          }
+          cursor = pageResult.nextCursor;
+        } catch {
+          if (!cancelled) {
+            setDealHydrationWarning("Could not load all deal pages. Showing partial results.");
+          }
+          break;
+        }
+      }
+
+      if (!cancelled) {
+        writeCachedOpenDeals({ items: mergedItems, nextCursor: null });
+        setIsHydratingRemainingDeals(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dealsQuery.dataUpdatedAt, hydrationAttempt]);
+
+  const openDeals = hydratedDeals ?? dealsQuery.data?.items ?? [];
+  const deferredOpenDeals = useDeferredValue(openDeals);
 
   const weightedDealsQuery = useQuery({
     queryKey: ["crm", "pipeline", "weighted-open-deals"],
@@ -75,19 +256,100 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       .map((stage) => ({ id: stage.id, name: stage.name }));
   }, [stagesQuery.data]);
 
-  const filteredDeals = useMemo(() => {
-    const deals = dealsQuery.data?.items ?? [];
+  const stageFilteredDeals = useMemo(() => {
     if (selectedStageId === "all") {
-      return deals;
+      return deferredOpenDeals;
     }
 
-    return deals.filter((deal) => deal.stageId === selectedStageId);
-  }, [dealsQuery.data?.items, selectedStageId]);
+    return deferredOpenDeals.filter((deal) => deal.stageId === selectedStageId);
+  }, [deferredOpenDeals, selectedStageId]);
+
+  const urgencyEvaluation = useMemo(() => {
+    const now = Date.now();
+    const byDealId = new Map<string, DealUrgencyState>();
+    const counts: Record<UrgencyFilter, number> = {
+      all: stageFilteredDeals.length,
+      overdue_follow_up: 0,
+      no_follow_up: 0,
+      stalled: 0,
+      data_issues: 0,
+      attention: 0,
+    };
+
+    for (const deal of stageFilteredDeals) {
+      const { isOverdueFollowUp, isStalled } = getDealSignalState(deal, now);
+      const hasNoFollowUp = !deal.nextFollowUpAt;
+      const hasDataIssue = (deal.nextFollowUpAt !== null && !Number.isFinite(Date.parse(deal.nextFollowUpAt))) ||
+        (deal.lastActivityAt !== null && !Number.isFinite(Date.parse(deal.lastActivityAt)));
+      const needsAttention = isOverdueFollowUp || hasNoFollowUp || isStalled || hasDataIssue;
+      const state: DealUrgencyState = {
+        isOverdueFollowUp,
+        hasNoFollowUp,
+        isStalled,
+        hasDataIssue,
+        needsAttention,
+      };
+
+      byDealId.set(deal.id, state);
+
+      if (state.isOverdueFollowUp) {
+        counts.overdue_follow_up += 1;
+      }
+      if (state.hasNoFollowUp) {
+        counts.no_follow_up += 1;
+      }
+      if (state.isStalled) {
+        counts.stalled += 1;
+      }
+      if (state.hasDataIssue) {
+        counts.data_issues += 1;
+      }
+      if (state.needsAttention) {
+        counts.attention += 1;
+      }
+    }
+
+    return {
+      counts,
+      byDealId,
+    };
+  }, [stageFilteredDeals]);
+
+  const filteredDeals = useMemo(() => {
+    if (urgencyFilter === "all") {
+      return stageFilteredDeals;
+    }
+
+    return stageFilteredDeals.filter((deal) => {
+      const state = urgencyEvaluation.byDealId.get(deal.id);
+      if (!state) {
+        return false;
+      }
+
+      if (urgencyFilter === "overdue_follow_up") {
+        return state.isOverdueFollowUp;
+      }
+
+      if (urgencyFilter === "no_follow_up") {
+        return state.hasNoFollowUp;
+      }
+
+      if (urgencyFilter === "stalled") {
+        return state.isStalled;
+      }
+
+      if (urgencyFilter === "data_issues") {
+        return state.hasDataIssue;
+      }
+
+      return state.needsAttention;
+    });
+  }, [stageFilteredDeals, urgencyFilter, urgencyEvaluation.byDealId]);
 
   const stageSummary = useMemo(() => {
     const byStage = new Map<string, { count: number; amount: number }>();
 
-    for (const deal of dealsQuery.data?.items ?? []) {
+    for (const deal of deferredOpenDeals) {
       const current = byStage.get(deal.stageId) ?? { count: 0, amount: 0 };
       current.count += 1;
       current.amount += deal.amount ?? 0;
@@ -100,7 +362,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       count: value.count,
       amount: value.amount,
     }));
-  }, [dealsQuery.data?.items, stageNameById]);
+  }, [deferredOpenDeals, stageNameById]);
 
   const stageColumns = useMemo(() => {
     const openStages = stageOptions.length > 0
@@ -114,8 +376,8 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       const deals = filteredDeals
         .filter((deal) => deal.stageId === stage.id)
         .sort((a, b) => {
-          const nextA = a.nextFollowUpAt ? new Date(a.nextFollowUpAt).getTime() : Number.POSITIVE_INFINITY;
-          const nextB = b.nextFollowUpAt ? new Date(b.nextFollowUpAt).getTime() : Number.POSITIVE_INFINITY;
+          const nextA = getFollowUpSortTime(a.nextFollowUpAt);
+          const nextB = getFollowUpSortTime(b.nextFollowUpAt);
           if (nextA !== nextB) return nextA - nextB;
           return (b.amount ?? 0) - (a.amount ?? 0);
         });
@@ -195,7 +457,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       )}
 
       <Card className="p-3 sm:p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
             <label htmlFor="crm-stage-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">
               Filter stage
@@ -204,7 +466,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
               id="crm-stage-filter"
               value={selectedStageId}
               onChange={(event) => setSelectedStageId(event.target.value)}
-              className="h-10 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A]"
+              className="h-11 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm transition focus:border-[#E87722] focus:outline-none focus:ring-2 focus:ring-[#E87722]/25"
             >
               <option value="all">All open stages</option>
               {stageOptions.map((stage) => (
@@ -213,6 +475,25 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label htmlFor="crm-urgency-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">
+              Follow-up queue
+            </label>
+            <select
+              id="crm-urgency-filter"
+              value={urgencyFilter}
+              onChange={(event) => setUrgencyFilter(event.target.value as UrgencyFilter)}
+              className="h-11 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm transition focus:border-[#E87722] focus:outline-none focus:ring-2 focus:ring-[#E87722]/25"
+            >
+              <option value="all">All deals in stage ({urgencyEvaluation.counts.all})</option>
+              <option value="attention">Needs attention ({urgencyEvaluation.counts.attention})</option>
+              <option value="overdue_follow_up">Overdue follow-up ({urgencyEvaluation.counts.overdue_follow_up})</option>
+              <option value="no_follow_up">No follow-up scheduled ({urgencyEvaluation.counts.no_follow_up})</option>
+              <option value="stalled">Stalled activity ({urgencyEvaluation.counts.stalled})</option>
+              <option value="data_issues">Data issues ({urgencyEvaluation.counts.data_issues})</option>
+            </select>
+            <p className="mt-1 text-xs text-[#64748B]">Counts reflect the currently selected stage.</p>
           </div>
           <div>
             <p className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">View</p>
@@ -251,6 +532,29 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       {hasError && !isLoading && (
         <Card className="p-6 text-center">
           <p className="text-sm text-[#334155]">Unable to load deals right now. Refresh and try again.</p>
+        </Card>
+      )}
+
+      {!isLoading && !hasError && isHydratingRemainingDeals && (
+        <Card className="border-blue-200 bg-blue-50 p-4">
+          <p className="text-sm text-blue-900">Loading additional open deals in the background.</p>
+        </Card>
+      )}
+
+      {!isLoading && !hasError && dealHydrationWarning && (
+        <Card className="border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-amber-900">{dealHydrationWarning}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setHydrationAttempt((value) => value + 1)}>
+              Retry full load
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!isLoading && !hasError && dealsQuery.data?.fromCache && (
+        <Card className="border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm text-amber-900">Showing a cached pipeline snapshot while live CRM data is unavailable.</p>
         </Card>
       )}
 
