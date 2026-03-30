@@ -364,7 +364,7 @@ function App() {
                 path="/admin/integrations"
                 element={
                   ["admin", "owner"].includes(profile.role) ? (
-                    <IntegrationHub />
+                    <IntegrationHub actorUserId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

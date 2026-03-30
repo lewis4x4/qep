@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { DataSourceBadge, type DataSourceState } from "./DataSourceBadge";
 import { cn } from "@/lib/utils";
-import type { IntegrationCardConfig } from "./IntegrationHub";
+import type { HubSpotImportRunSummary, IntegrationCardConfig } from "./IntegrationHub";
 import { supabase } from "@/lib/supabase";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import { useToast } from "@/hooks/use-toast";
@@ -80,6 +80,8 @@ interface IntegrationPanelProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  actorUserId: string;
+  hubSpotImportRuns: HubSpotImportRunSummary[];
 }
 
 interface TestResult {
@@ -117,7 +119,74 @@ function statusToDataSource(status: IntegrationCardConfig["status"]): DataSource
   }
 }
 
-export function IntegrationPanel({ integration, open, onClose, onSaved }: IntegrationPanelProps) {
+const HUBSPOT_RESUMABLE_STATUSES = new Set<
+  HubSpotImportRunSummary["status"]
+>(["failed", "cancelled"]);
+
+function hubspotRunStatusLabel(
+  status: HubSpotImportRunSummary["status"],
+): string {
+  switch (status) {
+    case "queued":
+      return "Queued";
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "completed_with_errors":
+      return "Completed with errors";
+    case "failed":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Unknown";
+  }
+}
+
+function hubspotRunStatusTone(
+  status: HubSpotImportRunSummary["status"],
+): string {
+  switch (status) {
+    case "completed":
+      return "text-[#166534]";
+    case "completed_with_errors":
+      return "text-[#9A3412]";
+    case "failed":
+      return "text-[#B91C1C]";
+    case "running":
+      return "text-[#1D4ED8]";
+    default:
+      return "text-[#374151]";
+  }
+}
+
+function formatHubSpotRunTimestamp(value: string | null): string {
+  if (!value) return "In progress";
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatHubSpotRunCount(run: HubSpotImportRunSummary): string {
+  const total = run.companiesProcessed +
+    run.contactsProcessed +
+    run.dealsProcessed +
+    run.activitiesProcessed;
+  return `${total.toLocaleString()} records`;
+}
+
+export function IntegrationPanel({
+  integration,
+  open,
+  onClose,
+  onSaved,
+  actorUserId,
+  hubSpotImportRuns,
+}: IntegrationPanelProps) {
   const { toast } = useToast();
   const scopes = SYNC_SCOPES[integration?.key ?? ""] ?? [];
   const defaultScopes = Object.fromEntries(scopes.map((s) => [s.key, true]));
@@ -137,6 +206,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
   const [isRunningHubSpotImport, setIsRunningHubSpotImport] = useState(false);
   const [hubSpotImportResult, setHubSpotImportResult] = useState<HubSpotImportResult | null>(null);
   const [hubSpotImportError, setHubSpotImportError] = useState<string | null>(null);
+  const [selectedResumeRunId, setSelectedResumeRunId] = useState<string | null>(null);
 
   // Reset all panel state when the selected integration changes
   useEffect(() => {
@@ -154,10 +224,30 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
     setIsRunningHubSpotImport(false);
     setHubSpotImportResult(null);
     setHubSpotImportError(null);
+    setSelectedResumeRunId(null);
   }, [integration?.key]);
 
+  const isHubSpot = integration?.key === "hubspot";
+  const resumableHubSpotRuns = hubSpotImportRuns.filter((run) =>
+    HUBSPOT_RESUMABLE_STATUSES.has(run.status) && run.initiatedBy === actorUserId
+  );
+
+  useEffect(() => {
+    if (!isHubSpot) {
+      setSelectedResumeRunId(null);
+      return;
+    }
+    const resumableRuns = hubSpotImportRuns.filter((run) =>
+      HUBSPOT_RESUMABLE_STATUSES.has(run.status) && run.initiatedBy === actorUserId
+    );
+    setSelectedResumeRunId((current) =>
+      current && resumableRuns.some((run) => run.id === current)
+        ? current
+        : (resumableRuns[0]?.id ?? null)
+    );
+  }, [isHubSpot, actorUserId, hubSpotImportRuns]);
+
   if (!integration) return null;
-  const isHubSpot = integration.key === "hubspot";
 
   async function handleSave() {
     if (!integration) return;
@@ -336,14 +426,14 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
     }
   }
 
-  async function runHubSpotImport(): Promise<void> {
+  async function runHubSpotImport(runId?: string): Promise<void> {
     setHubSpotImportError(null);
     setHubSpotImportResult(null);
     setIsRunningHubSpotImport(true);
     setHubSpotImportDialogOpen(false);
     try {
       const { data, error } = await supabase.functions.invoke("crm-hubspot-import", {
-        body: {},
+        body: runId ? { runId } : {},
       });
       if (error) {
         throw new Error(error.message || "HubSpot import failed to start.");
@@ -362,6 +452,13 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
             : "HubSpot import completed with errors. Review CRM import logs for failed rows."
         );
       }
+      toast({
+        title: runId ? "HubSpot import resumed" : "HubSpot import finished",
+        description:
+          result.status === "completed"
+            ? "Import completed successfully."
+            : "Import finished with warnings. Review run details below.",
+      });
       onSaved();
     } catch (err) {
       setHubSpotImportError(
@@ -467,9 +564,96 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                       Running import…
                     </>
                   ) : (
-                    "Run HubSpot bulk import"
+                    "Run new HubSpot import"
                   )}
                 </Button>
+
+                {resumableHubSpotRuns.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-[#FED7AA] bg-[#FFF7ED] p-3">
+                    <p className="text-xs font-medium text-[#9A3412]">
+                      Resume a failed/cancelled run from your account
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {resumableHubSpotRuns.slice(0, 3).map((run) => (
+                        <Button
+                          key={run.id}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "h-auto min-h-[44px] w-full justify-start px-3 py-2 text-left",
+                            selectedResumeRunId === run.id
+                              ? "border-qep-orange ring-1 ring-qep-orange"
+                              : "border-[#FED7AA] bg-white",
+                          )}
+                          onClick={() => setSelectedResumeRunId(run.id)}
+                        >
+                          <span className="block w-full">
+                            <span className="flex items-center justify-between gap-2">
+                              <span className={cn("text-xs font-semibold", hubspotRunStatusTone(run.status))}>
+                                {hubspotRunStatusLabel(run.status)}
+                              </span>
+                              <span className="text-[10px] text-[#64748B]">
+                                {formatHubSpotRunTimestamp(run.startedAt)}
+                              </span>
+                            </span>
+                            <span className="mt-1 block text-[11px] text-[#64748B]">
+                              {formatHubSpotRunCount(run)}
+                              {run.errorCount > 0
+                                ? ` • ${run.errorCount.toLocaleString()} errors`
+                                : ""}
+                            </span>
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full border-[#FED7AA] text-[#9A3412] hover:bg-[#FFEDD5] focus-visible:ring-qep-orange"
+                      onClick={() => void runHubSpotImport(selectedResumeRunId ?? undefined)}
+                      disabled={isRunningHubSpotImport || !selectedResumeRunId}
+                    >
+                      {isRunningHubSpotImport ? "Running import…" : "Resume selected import"}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-foreground">Recent import runs</p>
+                  {hubSpotImportRuns.length === 0 ? (
+                    <p className="mt-1 text-xs text-[#64748B]">
+                      No prior runs in this workspace.
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {hubSpotImportRuns.slice(0, 5).map((run) => (
+                        <div
+                          key={run.id}
+                          className="rounded border border-border bg-card px-2.5 py-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={cn("font-semibold", hubspotRunStatusTone(run.status))}>
+                              {hubspotRunStatusLabel(run.status)}
+                            </span>
+                            <span className="text-[#64748B]">
+                              {formatHubSpotRunTimestamp(run.completedAt ?? run.startedAt)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[#64748B]">
+                            {formatHubSpotRunCount(run)}
+                            {run.errorCount > 0
+                              ? ` • ${run.errorCount.toLocaleString()} errors`
+                              : ""}
+                          </p>
+                          {run.errorSummary && (
+                            <p className="mt-1 text-[#B91C1C] line-clamp-2">{run.errorSummary}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {hubSpotImportError && (
                   <p className="text-xs text-[#DC2626] mt-2">{hubSpotImportError}</p>
@@ -825,7 +1009,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
       <Dialog open={hubSpotImportDialogOpen} onOpenChange={setHubSpotImportDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Run HubSpot bulk import?</DialogTitle>
+            <DialogTitle>Run a new HubSpot import?</DialogTitle>
             <DialogDescription>
               This will import CRM records from HubSpot and may take a few minutes. We update existing records when they match and add new ones.
             </DialogDescription>

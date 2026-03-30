@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { hubspotAdminSupabase } from "@/lib/hubspot-admin-supabase";
 import { cn } from "@/lib/utils";
 import { trackIntegrationEvent } from "@/lib/track-event";
+import type { UserRole } from "@/lib/database.types";
 
 export interface IntegrationCardConfig {
   key: string;
@@ -25,6 +26,25 @@ export interface IntegrationCardConfig {
   lastSyncError: string | null;
   syncRecords: number | null;
   endpointUrl: string | null;
+}
+
+interface IntegrationHubProps {
+  actorUserId: string;
+  userRole: UserRole;
+}
+
+export interface HubSpotImportRunSummary {
+  id: string;
+  initiatedBy: string | null;
+  status: "queued" | "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
+  startedAt: string;
+  completedAt: string | null;
+  contactsProcessed: number;
+  companiesProcessed: number;
+  dealsProcessed: number;
+  activitiesProcessed: number;
+  errorCount: number;
+  errorSummary: string | null;
 }
 
 interface IntegrationStatusRow {
@@ -43,6 +63,8 @@ interface HubSpotPortalRow {
 }
 
 interface HubSpotImportRunRow {
+  id: string;
+  initiated_by: string | null;
   status: "queued" | "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
   started_at: string;
   completed_at: string | null;
@@ -298,13 +320,14 @@ function CardSkeleton({ index }: { index: number }) {
   );
 }
 
-export function IntegrationHub() {
+export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   const location = useLocation();
   const [cards, setCards] = useState<IntegrationCardConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [hubSpotImportRuns, setHubSpotImportRuns] = useState<HubSpotImportRunSummary[]>([]);
 
   const loadIntegrations = useCallback(async () => {
     setLoading(true);
@@ -356,11 +379,11 @@ export function IntegrationHub() {
         hubspotAdminSupabase
           .from("crm_hubspot_import_runs")
           .select(
-            "status, started_at, completed_at, contacts_processed, companies_processed, deals_processed, activities_processed, error_count, error_summary"
+            "id, initiated_by, status, started_at, completed_at, contacts_processed, companies_processed, deals_processed, activities_processed, error_count, error_summary"
           )
           .eq("workspace_id", workspaceId)
           .order("started_at", { ascending: false })
-          .limit(1),
+          .limit(8),
       ]);
 
       const [hubspotPortalResult, hubspotImportRunsResult] = await Promise.race([
@@ -374,7 +397,8 @@ export function IntegrationHub() {
       const rowByKey = new Map(integrationRows.map((row) => [row.integration_key, row]));
 
       const portalRows = (hubspotPortalResult.data ?? []) as HubSpotPortalRow[];
-      const latestImportRun = ((hubspotImportRunsResult.data ?? [])[0] as HubSpotImportRunRow | undefined) ?? null;
+      const hubspotImportRuns = (hubspotImportRunsResult.data ?? []) as HubSpotImportRunRow[];
+      const latestImportRun = hubspotImportRuns[0] ?? null;
 
       rowByKey.set(
         "hubspot",
@@ -403,6 +427,21 @@ export function IntegrationHub() {
       });
 
       setCards(mapped);
+      setHubSpotImportRuns(
+        hubspotImportRuns.map((row): HubSpotImportRunSummary => ({
+          id: row.id,
+          initiatedBy: row.initiated_by,
+          status: row.status,
+          startedAt: row.started_at,
+          completedAt: row.completed_at,
+          contactsProcessed: row.contacts_processed,
+          companiesProcessed: row.companies_processed,
+          dealsProcessed: row.deals_processed,
+          activitiesProcessed: row.activities_processed,
+          errorCount: row.error_count,
+          errorSummary: row.error_summary,
+        })),
+      );
       setError(null);
     } catch (err) {
       setError(
@@ -419,15 +458,16 @@ export function IntegrationHub() {
     setLoading(true);
     setError(null);
     setCards([]);
+    setHubSpotImportRuns([]);
     void loadIntegrations();
   }, [location.key, loadIntegrations]);
 
   useEffect(() => {
     void trackIntegrationEvent("admin_integrations_viewed", {
       route: "/admin/integrations",
-      role: "admin_or_owner",
+      role: userRole,
     });
-  }, []);
+  }, [userRole]);
 
   function handleConfigure(key: string) {
     setSelectedKey(key);
@@ -542,6 +582,8 @@ export function IntegrationHub() {
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
         onSaved={loadIntegrations}
+        actorUserId={actorUserId}
+        hubSpotImportRuns={hubSpotImportRuns}
       />
     </div>
   );
