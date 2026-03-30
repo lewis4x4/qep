@@ -128,6 +128,8 @@ export async function emitIntegrationConfigUpdated(
     integration: string;
     changedFields: string[];
     updatedByRole: UserRole;
+    statusAfter?: string | null;
+    authType?: string | null;
     syncFrequency?: string;
     userId?: string;
     requestId?: string;
@@ -145,8 +147,8 @@ export async function emitIntegrationConfigUpdated(
       integration_key: params.integration,
       changed_fields: params.changedFields,
       updated_by_role: params.updatedByRole,
-      status_after: null,
-      auth_type: null,
+      status_after: params.statusAfter ?? null,
+      auth_type: params.authType ?? null,
       sync_frequency: params.syncFrequency ?? null,
     },
   });

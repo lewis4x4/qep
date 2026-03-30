@@ -52,6 +52,8 @@ interface Profile {
 interface NavRailProps {
   profile: Profile;
   onLogout: () => void;
+  quoteBuilderEnabled: boolean;
+  quoteBuilderLoading: boolean;
 }
 
 interface NavItem {
@@ -62,9 +64,15 @@ interface NavItem {
   gated?: boolean;
 }
 
-const isIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
+interface NavItemDefinition {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: UserRole[];
+  requiresIntelliDealer?: boolean;
+}
 
-const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItemDefinition[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -88,7 +96,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/quote",
     icon: FileText,
     roles: ["rep", "manager", "owner"],
-    gated: !isIntelliDealerConnected,
+    requiresIntelliDealer: true,
   },
   {
     label: "CRM Deals",
@@ -128,6 +136,18 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+function resolveNavItems(
+  quoteBuilderEnabled: boolean,
+  quoteBuilderLoading: boolean
+): NavItem[] {
+  return NAV_ITEMS.map((item) => ({
+    ...item,
+    gated: Boolean(
+      item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
+    ),
+  }));
+}
+
 function getInitials(name: string | null, email: string | null): string {
   if (name) {
     return name
@@ -143,12 +163,17 @@ function getInitials(name: string | null, email: string | null): string {
   return "?";
 }
 
-export function NavRail({ profile, onLogout }: NavRailProps) {
+export function NavRail({
+  profile,
+  onLogout,
+  quoteBuilderEnabled,
+  quoteBuilderLoading,
+}: NavRailProps) {
   const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
-  const visibleItems = NAV_ITEMS.filter((item) =>
+  const visibleItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter((item) =>
     item.roles.includes(profile.role)
   );
 

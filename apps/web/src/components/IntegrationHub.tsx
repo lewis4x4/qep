@@ -130,8 +130,6 @@ const INTEGRATION_DISPLAY: Record<
   },
 };
 
-const WORKSPACE_ID = "default";
-
 function buildHubSpotIntegrationRow(
   existingRow: IntegrationStatusRow | null,
   portalRows: HubSpotPortalRow[],
@@ -172,6 +170,22 @@ function buildHubSpotIntegrationRow(
     last_sync_error: lastSyncError,
     endpoint_url: existingRow?.endpoint_url ?? (hasActivePortal ? "https://app.hubspot.com" : null),
   };
+}
+
+async function resolveWorkspaceId(): Promise<string> {
+  type RpcClient = {
+    rpc: (
+      fn: string,
+      args?: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+
+  const rpcClient = supabase as unknown as RpcClient;
+  const { data, error } = await rpcClient.rpc("get_my_workspace");
+  if (error || typeof data !== "string" || data.trim().length === 0) {
+    return "default";
+  }
+  return data.trim();
 }
 
 function isSessionAuthError(err: PostgrestError | null): boolean {
@@ -289,34 +303,26 @@ export function IntegrationHub() {
         return;
       }
 
-      const fetchPromise = Promise.all([
+      const baseFetchPromise = Promise.all([
+        resolveWorkspaceId(),
         supabase
           .from("integration_status")
           .select("integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url")
           .order("integration_key"),
-        hubspotAdminSupabase
-          .from("workspace_hubspot_portal")
-          .select("hub_id, is_active, updated_at")
-          .eq("workspace_id", WORKSPACE_ID)
-          .eq("is_active", true)
-          .limit(1),
-        hubspotAdminSupabase
-          .from("crm_hubspot_import_runs")
-          .select(
-            "status, started_at, completed_at, contacts_processed, companies_processed, deals_processed, activities_processed, error_count, error_summary"
-          )
-          .eq("workspace_id", WORKSPACE_ID)
-          .order("started_at", { ascending: false })
-          .limit(1),
       ]);
 
-      const [integrationStatusResult, hubspotPortalResult, hubspotImportRunsResult] =
+      const [workspaceResult, integrationStatusResult] =
         await Promise.race([
-          fetchPromise,
+          baseFetchPromise,
           new Promise<never>((_, reject) => {
             setTimeout(() => reject(new Error("Request timed out. Please try again.")), 5000);
           }),
         ]);
+
+      const workspaceId = workspaceResult;
+      if (!workspaceId) {
+        throw new Error("Workspace context was empty.");
+      }
 
       if (integrationStatusResult.error) {
         if (isSessionAuthError(integrationStatusResult.error)) {
@@ -325,6 +331,30 @@ export function IntegrationHub() {
         }
         throw integrationStatusResult.error;
       }
+
+      const hubspotFetchPromise = Promise.all([
+        hubspotAdminSupabase
+          .from("workspace_hubspot_portal")
+          .select("hub_id, is_active, updated_at")
+          .eq("workspace_id", workspaceId)
+          .eq("is_active", true)
+          .limit(1),
+        hubspotAdminSupabase
+          .from("crm_hubspot_import_runs")
+          .select(
+            "status, started_at, completed_at, contacts_processed, companies_processed, deals_processed, activities_processed, error_count, error_summary"
+          )
+          .eq("workspace_id", workspaceId)
+          .order("started_at", { ascending: false })
+          .limit(1),
+      ]);
+
+      const [hubspotPortalResult, hubspotImportRunsResult] = await Promise.race([
+        hubspotFetchPromise,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("HubSpot status request timed out. Please try again.")), 5000);
+        }),
+      ]);
 
       const integrationRows = (integrationStatusResult.data ?? []) as IntegrationStatusRow[];
       const rowByKey = new Map(integrationRows.map((row) => [row.integration_key, row]));

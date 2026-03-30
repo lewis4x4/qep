@@ -31,6 +31,8 @@ interface Profile {
 export interface AppLayoutProps {
   profile: Profile;
   onLogout: () => void;
+  quoteBuilderEnabled: boolean;
+  quoteBuilderLoading: boolean;
   children: React.ReactNode;
 }
 
@@ -42,9 +44,15 @@ interface NavItem {
   gated?: boolean;
 }
 
-const isIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
+interface NavItemDefinition {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: UserRole[];
+  requiresIntelliDealer?: boolean;
+}
 
-const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItemDefinition[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -68,7 +76,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/quote",
     icon: FileText,
     roles: ["rep", "manager", "owner"],
-    gated: !isIntelliDealerConnected,
+    requiresIntelliDealer: true,
   },
   {
     label: "CRM Deals",
@@ -108,23 +116,35 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-/** Bottom tab bar — 4 primary items, Admin goes in the drawer */
-const BOTTOM_TAB_ITEMS: NavItem[] = NAV_ITEMS.filter((item) =>
-  ["/dashboard", "/chat", "/voice", "/quote"].includes(item.href)
-);
+const BOTTOM_TAB_HREFS = ["/dashboard", "/chat", "/voice", "/quote"];
+
+function resolveNavItems(
+  quoteBuilderEnabled: boolean,
+  quoteBuilderLoading: boolean
+): NavItem[] {
+  return NAV_ITEMS.map((item) => ({
+    ...item,
+    gated: Boolean(
+      item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
+    ),
+  }));
+}
 
 function MobileBottomTabBar({
   profile,
   onMenuOpen,
+  quoteBuilderEnabled,
+  quoteBuilderLoading,
 }: {
   profile: Profile;
   onMenuOpen: () => void;
+  quoteBuilderEnabled: boolean;
+  quoteBuilderLoading: boolean;
 }) {
   const location = useLocation();
-
-  const visibleTabs = BOTTOM_TAB_ITEMS.filter((item) =>
-    item.roles.includes(profile.role)
-  );
+  const visibleTabs = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
+    .filter((item) => BOTTOM_TAB_HREFS.includes(item.href))
+    .filter((item) => item.roles.includes(profile.role));
 
   return (
     <nav
@@ -216,14 +236,18 @@ function MobileNavContent({
   profile,
   onLogout,
   onNavClick,
+  quoteBuilderEnabled,
+  quoteBuilderLoading,
 }: {
   profile: Profile;
   onLogout: () => void;
   onNavClick: () => void;
+  quoteBuilderEnabled: boolean;
+  quoteBuilderLoading: boolean;
 }) {
   const location = useLocation();
-  const visibleItems = NAV_ITEMS.filter((item) =>
-    item.roles.includes(profile.role)
+  const visibleItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter(
+    (item) => item.roles.includes(profile.role)
   );
 
   return (
@@ -295,7 +319,13 @@ function MobileNavContent({
   );
 }
 
-export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
+export function AppLayout({
+  profile,
+  onLogout,
+  quoteBuilderEnabled,
+  quoteBuilderLoading,
+  children,
+}: AppLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -304,7 +334,12 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
       <TopBar profile={profile} onLogout={onLogout} />
 
       {/* Desktop: hover-expand nav rail */}
-      <NavRail profile={profile} onLogout={onLogout} />
+      <NavRail
+        profile={profile}
+        onLogout={onLogout}
+        quoteBuilderEnabled={quoteBuilderEnabled}
+        quoteBuilderLoading={quoteBuilderLoading}
+      />
 
       {/* Mobile: top header */}
       <div
@@ -327,6 +362,8 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
             profile={profile}
             onLogout={onLogout}
             onNavClick={() => setMobileOpen(false)}
+            quoteBuilderEnabled={quoteBuilderEnabled}
+            quoteBuilderLoading={quoteBuilderLoading}
           />
         </SheetContent>
       </Sheet>
@@ -335,6 +372,8 @@ export function AppLayout({ profile, onLogout, children }: AppLayoutProps) {
       <MobileBottomTabBar
         profile={profile}
         onMenuOpen={() => setMobileOpen(true)}
+        quoteBuilderEnabled={quoteBuilderEnabled}
+        quoteBuilderLoading={quoteBuilderLoading}
       />
 
       {/* Main content */}

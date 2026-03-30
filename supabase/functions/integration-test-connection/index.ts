@@ -79,6 +79,16 @@ function createAdminClient() {
   });
 }
 
+async function resolveWorkspaceId(
+  userClient: ReturnType<typeof createUserClient>,
+): Promise<string> {
+  const { data, error } = await userClient.rpc("get_my_workspace");
+  if (error || typeof data !== "string" || data.trim().length === 0) {
+    throw new Error("WORKSPACE_RESOLUTION_FAILED");
+  }
+  return data.trim();
+}
+
 function parseCredentials(raw: string | null): Record<string, string> | undefined {
   if (!raw) return undefined;
 
@@ -221,6 +231,8 @@ Deno.serve(async (req): Promise<Response> => {
       });
     }
 
+    const workspaceId = await resolveWorkspaceId(userClient);
+
     const rate = checkRateLimit({
       key: `integration-test-connection:${userId}`,
       limit: 20,
@@ -250,8 +262,9 @@ Deno.serve(async (req): Promise<Response> => {
     const { data: statusRow, error: statusError } = await userClient
       .from("integration_status")
       .select("integration_key, workspace_id, status, credentials_encrypted, endpoint_url, config")
+      .eq("workspace_id", workspaceId)
       .eq("integration_key", integrationKey)
-      .single<IntegrationStatusRow>();
+      .maybeSingle<IntegrationStatusRow>();
 
     if (statusError || !statusRow) {
       return fail({
@@ -263,7 +276,7 @@ Deno.serve(async (req): Promise<Response> => {
     }
 
     const tracker = createEventTracker(adminClient, {
-      workspaceId: statusRow.workspace_id,
+      workspaceId,
     });
 
     const testedAt = new Date().toISOString();
@@ -278,7 +291,7 @@ Deno.serve(async (req): Promise<Response> => {
       const { data: portalRows, error: portalError } = await userClient
         .from("workspace_hubspot_portal")
         .select("id")
-        .eq("workspace_id", statusRow.workspace_id)
+        .eq("workspace_id", workspaceId)
         .eq("is_active", true)
         .limit(1);
 
@@ -347,7 +360,7 @@ Deno.serve(async (req): Promise<Response> => {
     const { error: updateError } = await userClient
       .from("integration_status")
       .update(updatePayload)
-      .eq("workspace_id", statusRow.workspace_id)
+      .eq("workspace_id", workspaceId)
       .eq("integration_key", integrationKey);
 
     if (updateError) {
@@ -451,6 +464,15 @@ Deno.serve(async (req): Promise<Response> => {
       { origin },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "WORKSPACE_RESOLUTION_FAILED") {
+      return fail({
+        origin,
+        status: 500,
+        code: "WORKSPACE_RESOLUTION_FAILED",
+        message: "Could not resolve workspace context for this request.",
+      });
+    }
+
     if (error instanceof SyntaxError) {
       return fail({
         origin,

@@ -59,6 +59,16 @@ function createCallerClient(jwt: string) {
   });
 }
 
+async function resolveCallerWorkspaceId(
+  callerDb: ReturnType<typeof createCallerClient>,
+): Promise<string> {
+  const { data, error } = await callerDb.rpc("get_my_workspace");
+  if (error || typeof data !== "string" || data.trim().length === 0) {
+    throw new Error("WORKSPACE_RESOLUTION_FAILED");
+  }
+  return data.trim();
+}
+
 async function getCallerProfile(jwt: string): Promise<CallerProfile | null> {
   const caller = createCallerClient(jwt);
 
@@ -258,6 +268,7 @@ Deno.serve(async (req: Request) => {
         // Integration actions
         integration_key?: string;
         credentials?: string;
+        clear_credentials?: boolean;
         endpoint_url?: string | null;
         sync_scopes?: Record<string, boolean>;
       };
@@ -487,24 +498,37 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        const workspaceId = await resolveCallerWorkspaceId(callerDb);
+        const hasCredentialInput = Boolean(body.credentials?.trim());
+        const clearCredentials = body.clear_credentials === true;
+
+        if (hasCredentialInput && clearCredentials) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Provide credentials or clear_credentials=true, not both.",
+              },
+            }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
+        }
+
         let { data: existingRow, error: existErr } = await callerDb
           .from("integration_status")
-          .select("integration_key, workspace_id")
+          .select("integration_key, workspace_id, auth_type")
+          .eq("workspace_id", workspaceId)
           .eq("integration_key", body.integration_key)
-          .single();
+          .maybeSingle();
 
         if ((existErr || !existingRow) && body.integration_key === "hubspot") {
-          const { data: workspaceRow } = await callerDb
-            .from("integration_status")
-            .select("workspace_id")
-            .limit(1)
-            .maybeSingle();
-          const fallbackWorkspaceId = workspaceRow?.workspace_id ?? "default";
-
           const { data: insertedHubSpotRow, error: insertHubSpotError } = await callerDb
             .from("integration_status")
             .insert({
-              workspace_id: fallbackWorkspaceId,
+              workspace_id: workspaceId,
               integration_key: "hubspot",
               display_name: "HubSpot CRM",
               status: "pending_credentials",
@@ -512,7 +536,7 @@ Deno.serve(async (req: Request) => {
               sync_frequency: "manual",
               config: {},
             })
-            .select("integration_key, workspace_id")
+            .select("integration_key, workspace_id, auth_type")
             .single();
 
           if (insertHubSpotError) {
@@ -542,7 +566,7 @@ Deno.serve(async (req: Request) => {
         };
         const changedFields: string[] = [];
 
-        if (body.credentials?.trim()) {
+        if (hasCredentialInput) {
           if (!Deno.env.get("INTEGRATION_ENCRYPTION_KEY")) {
             return new Response(
               JSON.stringify({
@@ -558,12 +582,24 @@ Deno.serve(async (req: Request) => {
             );
           }
           updatePayload.credentials_encrypted = await encryptCredential(
-            body.credentials,
+            body.credentials!,
             body.integration_key,
           );
-          updatePayload.status = body.integration_key === "hubspot"
-            ? "pending_credentials"
-            : "demo_mode";
+          updatePayload.status = "pending_credentials";
+          updatePayload.last_test_success = null;
+          updatePayload.last_test_error = null;
+          updatePayload.last_test_latency_ms = null;
+          updatePayload.last_test_at = null;
+          changedFields.push("credentials");
+        }
+
+        if (clearCredentials) {
+          updatePayload.credentials_encrypted = null;
+          updatePayload.status = "pending_credentials";
+          updatePayload.last_test_success = null;
+          updatePayload.last_test_error = null;
+          updatePayload.last_test_latency_ms = null;
+          updatePayload.last_test_at = null;
           changedFields.push("credentials");
         }
 
@@ -576,8 +612,9 @@ Deno.serve(async (req: Request) => {
           const { data: existing } = await callerDb
             .from("integration_status")
             .select("config")
+            .eq("workspace_id", workspaceId)
             .eq("integration_key", body.integration_key)
-            .single();
+            .maybeSingle();
           const existingConfig =
             (existing?.config as Record<string, unknown>) ?? {};
           updatePayload.config = {
@@ -594,20 +631,29 @@ Deno.serve(async (req: Request) => {
           });
         }
 
-        const { error: updateErr } = await callerDb
+        const { data: updatedRow, error: updateErr } = await callerDb
           .from("integration_status")
           .update(updatePayload)
-          .eq("integration_key", body.integration_key);
+          .eq("workspace_id", workspaceId)
+          .eq("integration_key", body.integration_key)
+          .select("workspace_id, integration_key")
+          .single();
 
         if (updateErr) throw updateErr;
+        if (!updatedRow || updatedRow.workspace_id !== workspaceId) {
+          throw new Error("INTEGRATION_UPDATE_WORKSPACE_MISMATCH");
+        }
 
         const tracker = createEventTracker(
           adminClient as Parameters<typeof createEventTracker>[0],
+          { workspaceId },
         );
         await emitIntegrationConfigUpdated(tracker, {
           integration: body.integration_key,
           changedFields,
           updatedByRole: caller.role as EventUserRole,
+          statusAfter: (updatePayload.status as string | undefined) ?? null,
+          authType: (existingRow.auth_type as string | undefined) ?? null,
           userId: caller.id,
           requestId: crypto.randomUUID(),
         });
@@ -632,6 +678,20 @@ Deno.serve(async (req: Request) => {
     const message = err instanceof Error
       ? err.message
       : "Internal server error";
+    if (message === "WORKSPACE_RESOLUTION_FAILED") {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "WORKSPACE_RESOLUTION_FAILED",
+            message: "Could not resolve workspace context for this request.",
+          },
+        }),
+        {
+          status: 500,
+          headers: { ...ch, "Content-Type": "application/json" },
+        },
+      );
+    }
     console.error("[admin-users] error:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

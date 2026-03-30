@@ -129,6 +129,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
   const [endpointUrl, setEndpointUrl] = useState(integration?.endpointUrl ?? "");
   const [syncScopes, setSyncScopes] = useState<Record<string, boolean>>(defaultScopes);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearingCredentials, setIsClearingCredentials] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -191,10 +192,13 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
         },
       });
       if (error) throw new Error(error.message);
+      const statusAfter = (isHubSpot || credentials.trim().length > 0)
+        ? "pending_credentials"
+        : "unchanged";
       void trackIntegrationEvent("integration_credentials_saved", {
         integration_key: integration.key,
         auth_type: isHubSpot ? "oauth_app" : credentials.trim() ? "token" : "existing",
-        status_after: isHubSpot ? "pending_credentials" : "demo_mode",
+        status_after: statusAfter,
       });
       toast({
         title: "Credentials saved",
@@ -220,6 +224,61 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
       });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleClearCredentials() {
+    if (!integration) return;
+
+    const confirmed = window.confirm(
+      `Clear stored credentials for ${integration.name}? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setIsClearingCredentials(true);
+    setSaveError(null);
+    try {
+      const { error } = await supabase.functions.invoke("admin-users", {
+        body: {
+          action: "update_integration",
+          integration_key: integration.key,
+          clear_credentials: true,
+        },
+      });
+      if (error) throw new Error(error.message);
+
+      void trackIntegrationEvent("integration_credentials_saved", {
+        integration_key: integration.key,
+        auth_type: "cleared",
+        status_after: "pending_credentials",
+      });
+
+      setCredentials("");
+      setHubspotClientId("");
+      setHubspotClientSecret("");
+      setHubspotAppId("");
+      setTestResult(null);
+
+      toast({
+        title: "Credentials cleared",
+        description: `${integration.name} is back in pending setup mode.`,
+      });
+      await onSaved();
+      onClose();
+    } catch (err) {
+      console.error("Clear credentials error:", err);
+      void trackIntegrationEvent("integration_credentials_save_failed", {
+        integration_key: integration.key,
+        error_code: "clear_failed",
+      });
+      setSaveError("Could not clear credentials. Try again.");
+      toast({
+        title: "Clear failed",
+        description: "Could not clear credentials. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearingCredentials(false);
     }
   }
 
@@ -724,14 +783,31 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
               size="sm"
               className="flex-1 border-border text-foreground focus-visible:ring-qep-orange"
               onClick={onClose}
+              disabled={isSaving || isClearingCredentials}
             >
               Cancel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2] focus-visible:ring-[#DC2626]"
+              onClick={() => void handleClearCredentials()}
+              disabled={isSaving || isClearingCredentials || isTesting}
+            >
+              {isClearingCredentials ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                  Clearing…
+                </>
+              ) : (
+                "Clear credentials"
+              )}
             </Button>
             <Button
               size="sm"
               className="flex-1 bg-qep-orange hover:bg-qep-orange-hover text-white focus-visible:ring-qep-orange"
               onClick={() => void handleSave()}
-              disabled={isSaving}
+              disabled={isSaving || isClearingCredentials}
             >
               {isSaving ? (
                 <>

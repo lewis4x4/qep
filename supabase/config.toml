@@ -85,3 +85,6 @@ verify_jwt = false
 
 [functions.integration-test-connection]
 verify_jwt = true
+
+[functions.integration-availability]
+verify_jwt = true

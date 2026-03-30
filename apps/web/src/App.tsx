@@ -25,7 +25,11 @@ import { CrmDuplicatesPage } from "./features/crm/pages/CrmDuplicatesPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
-const isIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
+const envIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
+
+interface IntegrationAvailabilityResponse {
+  connected?: boolean;
+}
 
 function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -38,6 +42,10 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { user, profile, loading, error } = useAuth();
+  const [quoteBuilderAccess, setQuoteBuilderAccess] = useState({
+    connected: envIntelliDealerConnected,
+    loading: true,
+  });
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -96,6 +104,58 @@ function App() {
   }, [loading, user, error]);
   const showSessionExpiredModal = sessionExpired || authErrorIsExpiry;
 
+  useEffect(() => {
+    if (!user || !profile) {
+      setQuoteBuilderAccess({
+        connected: envIntelliDealerConnected,
+        loading: true,
+      });
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadQuoteBuilderAccess(): Promise<void> {
+      try {
+        const { data, error: invokeError } =
+          await supabase.functions.invoke<IntegrationAvailabilityResponse>(
+            "integration-availability",
+            {
+              body: { integration_key: "intellidealer" },
+            }
+          );
+
+        if (cancelled) return;
+
+        if (invokeError || typeof data?.connected !== "boolean") {
+          setQuoteBuilderAccess({
+            connected: envIntelliDealerConnected,
+            loading: false,
+          });
+          return;
+        }
+
+        setQuoteBuilderAccess({
+          connected: data.connected,
+          loading: false,
+        });
+      } catch {
+        if (!cancelled) {
+          setQuoteBuilderAccess({
+            connected: envIntelliDealerConnected,
+            loading: false,
+          });
+        }
+      }
+    }
+
+    void loadQuoteBuilderAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, profile?.id]);
+
   if (loading) {
     return (
       <>
@@ -148,7 +208,12 @@ function App() {
               void supabase.auth.signOut();
             }}
           />
-          <AppLayout profile={profile} onLogout={handleLogout}>
+          <AppLayout
+            profile={profile}
+            onLogout={handleLogout}
+            quoteBuilderEnabled={quoteBuilderAccess.connected}
+            quoteBuilderLoading={quoteBuilderAccess.loading}
+          >
             <AnimatedRoutes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route
@@ -194,7 +259,23 @@ function App() {
                 path="/quote"
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
-                    isIntelliDealerConnected ? (
+                    quoteBuilderAccess.loading ? (
+                      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-6">
+                        <div
+                          className="text-center"
+                          role="status"
+                          aria-label="Checking Quote Builder availability"
+                        >
+                          <div
+                            className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                            aria-hidden="true"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Checking Quote Builder availability...
+                          </p>
+                        </div>
+                      </div>
+                    ) : quoteBuilderAccess.connected ? (
                       <QuoteBuilderPage
                         userRole={profile.role}
                         userEmail={profile.email}

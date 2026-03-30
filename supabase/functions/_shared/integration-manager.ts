@@ -71,11 +71,14 @@ const LIVE_ADAPTERS: Partial<
 export class IntegrationManager {
   private supabaseAdmin: SupabaseClient;
   private workspaceId: string;
+  private allowCompatFallback: boolean;
   private statusCache: Map<IntegrationKey, IntegrationStatusRow> = new Map();
 
   constructor(supabaseUrl: string, serviceRoleKey: string, workspaceId = "default") {
     this.supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
     this.workspaceId = workspaceId;
+    this.allowCompatFallback =
+      (Deno.env.get("INTEGRATION_STATUS_COMPAT_FALLBACK") ?? "").toLowerCase() === "true";
   }
 
   private hydrateStatusCache(rows: IntegrationStatusRow[]): void {
@@ -113,10 +116,18 @@ export class IntegrationManager {
 
     if (error && !isWorkspaceIdMissing(error)) {
       console.error("[IntegrationManager] Failed to load statuses:", error);
+      this.statusCache.clear();
       return this.statusCache;
     }
 
     if (error && isWorkspaceIdMissing(error)) {
+      if (!this.allowCompatFallback) {
+        console.error(
+          "[IntegrationManager] workspace_id is missing and compatibility fallback is disabled.",
+        );
+        this.statusCache.clear();
+        return this.statusCache;
+      }
       const unscopedRows = await this.loadUnscopedStatuses();
       if (unscopedRows) {
         this.hydrateStatusCache(unscopedRows);
@@ -130,6 +141,11 @@ export class IntegrationManager {
       return this.statusCache;
     }
 
+    if (!this.allowCompatFallback) {
+      this.statusCache.clear();
+      return this.statusCache;
+    }
+
     // Backward compatibility for legacy/default workspace rows.
     if (this.workspaceId !== "default") {
       const { data: defaultRows, error: defaultError } = await this.supabaseAdmin
@@ -138,6 +154,9 @@ export class IntegrationManager {
         .eq("workspace_id", "default");
 
       if (!defaultError && defaultRows && defaultRows.length > 0) {
+        console.warn(
+          `[IntegrationManager] Using compatibility fallback from default workspace for ${this.workspaceId}.`,
+        );
         this.hydrateStatusCache(defaultRows as IntegrationStatusRow[]);
         return this.statusCache;
       }
@@ -145,6 +164,7 @@ export class IntegrationManager {
 
     const unscopedRows = await this.loadUnscopedStatuses();
     if (unscopedRows) {
+      console.warn("[IntegrationManager] Using compatibility fallback from unscoped integration_status rows.");
       this.hydrateStatusCache(unscopedRows);
     }
 
