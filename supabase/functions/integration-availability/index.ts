@@ -43,7 +43,7 @@ async function resolveWorkspaceId(
 }
 
 function isSupportedIntegrationKey(key: string): boolean {
-  return key === "intellidealer";
+  return key === "intellidealer" || key === "sendgrid" || key === "twilio";
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -85,7 +85,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         origin,
         status: 400,
         code: "INVALID_REQUEST",
-        message: "integration_key must be 'intellidealer'.",
+        message: "integration_key must be one of: intellidealer, sendgrid, twilio.",
       });
     }
 

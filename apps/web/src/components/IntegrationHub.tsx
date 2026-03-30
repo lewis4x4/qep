@@ -72,6 +72,20 @@ const INTEGRATION_DISPLAY: Record<
       "Manage HubSpot connection health and run bulk CRM imports with explicit confirmation.",
     icon: "HS",
   },
+  sendgrid: {
+    name: "SendGrid Email",
+    category: "Communication Hub",
+    description:
+      "Outbound dealership email delivery for templates, follow-ups, and CRM timeline communication logs.",
+    icon: "SG",
+  },
+  twilio: {
+    name: "Twilio SMS",
+    category: "Communication Hub",
+    description:
+      "Outbound SMS messaging for field-friendly customer follow-ups and timeline-linked communication history.",
+    icon: "TW",
+  },
   intellidealer: {
     name: "IntelliDealer (VitalEdge)",
     category: "Inventory & CRM",

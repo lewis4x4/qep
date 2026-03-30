@@ -37,7 +37,8 @@ interface IntegrationStatusRow {
   config: Record<string, unknown> | null;
 }
 
-type SupportedIntegrationKey = IntegrationKey | "hubspot";
+type CommunicationIntegrationKey = "sendgrid" | "twilio";
+type SupportedIntegrationKey = IntegrationKey | "hubspot" | CommunicationIntegrationKey;
 
 type TestConnectionResult = {
   success: boolean;
@@ -132,6 +133,8 @@ function resolveIntegrationKey(raw: string | undefined): SupportedIntegrationKey
   if (!raw) return null;
   switch (raw) {
     case "hubspot":
+    case "sendgrid":
+    case "twilio":
     case "intellidealer":
     case "ironguides":
     case "rouse":
@@ -143,6 +146,115 @@ function resolveIntegrationKey(raw: string | undefined): SupportedIntegrationKey
       return raw;
     default:
       return null;
+  }
+}
+
+function pickCredential(
+  credentials: Record<string, string> | undefined,
+  keys: string[],
+): string | null {
+  if (!credentials) return null;
+  for (const key of keys) {
+    const value = credentials[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+async function testSendGridConnection(
+  credentials: Record<string, string> | undefined,
+  endpointUrl: string | null,
+): Promise<TestConnectionResult> {
+  const apiKey = pickCredential(credentials, ["api_key", "sendgrid_api_key", "token", "raw"]);
+  if (!apiKey) {
+    return {
+      success: false,
+      latencyMs: 0,
+      error: "SendGrid API key is required.",
+    };
+  }
+
+  const baseUrl = endpointUrl?.trim() || "https://api.sendgrid.com";
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${baseUrl}/v3/user/account`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        error: `SendGrid test failed (${response.status}).`,
+      };
+    }
+
+    return {
+      success: true,
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch {
+    return {
+      success: false,
+      latencyMs: Date.now() - startedAt,
+      error: "SendGrid test request failed.",
+    };
+  }
+}
+
+async function testTwilioConnection(
+  credentials: Record<string, string> | undefined,
+  endpointUrl: string | null,
+): Promise<TestConnectionResult> {
+  const accountSid = pickCredential(credentials, ["account_sid", "sid"]);
+  const authToken = pickCredential(credentials, ["auth_token", "token"]);
+  if (!accountSid || !authToken) {
+    return {
+      success: false,
+      latencyMs: 0,
+      error: "Twilio account SID and auth token are required.",
+    };
+  }
+
+  const baseUrl = endpointUrl?.trim() || "https://api.twilio.com";
+  const startedAt = Date.now();
+  try {
+    const basicAuth = btoa(`${accountSid}:${authToken}`);
+    const response = await fetch(
+      `${baseUrl}/2010-04-01/Accounts/${accountSid}.json`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+
+    if (!response.ok) {
+      return {
+        success: false,
+        latencyMs: Date.now() - startedAt,
+        error: `Twilio test failed (${response.status}).`,
+      };
+    }
+
+    return {
+      success: true,
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch {
+    return {
+      success: false,
+      latencyMs: Date.now() - startedAt,
+      error: "Twilio test request failed.",
+    };
   }
 }
 
@@ -313,6 +425,26 @@ Deno.serve(async (req): Promise<Response> => {
       }
 
       mode = result.success ? "live" : "mock";
+    } else if (integrationKey === "sendgrid" || integrationKey === "twilio") {
+      if (!statusRow.credentials_encrypted) {
+        result = {
+          success: false,
+          latencyMs: 0,
+          error: `No credentials configured for ${integrationKey}.`,
+        };
+      } else {
+        const decrypted = await decryptCredential(
+          statusRow.credentials_encrypted,
+          integrationKey,
+        );
+        const credentials = parseCredentials(decrypted);
+
+        result = integrationKey === "sendgrid"
+          ? await testSendGridConnection(credentials, statusRow.endpoint_url)
+          : await testTwilioConnection(credentials, statusRow.endpoint_url);
+      }
+
+      mode = "live";
     } else {
       if (!statusRow.credentials_encrypted) {
         result = {

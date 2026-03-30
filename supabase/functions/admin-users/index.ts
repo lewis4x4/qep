@@ -25,6 +25,70 @@ function corsHeaders(origin: string | null) {
 
 type UserRole = "rep" | "admin" | "manager" | "owner";
 
+interface IntegrationDefaultConfig {
+  displayName: string;
+  authType: string;
+  syncFrequency: "manual" | "daily";
+}
+
+const INTEGRATION_DEFAULTS: Record<string, IntegrationDefaultConfig> = {
+  hubspot: {
+    displayName: "HubSpot CRM",
+    authType: "oauth2",
+    syncFrequency: "manual",
+  },
+  sendgrid: {
+    displayName: "SendGrid Email",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  twilio: {
+    displayName: "Twilio SMS",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  intellidealer: {
+    displayName: "IntelliDealer (VitalEdge)",
+    authType: "oauth2",
+    syncFrequency: "manual",
+  },
+  ironguides: {
+    displayName: "Iron Solutions / IronGuides",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  rouse: {
+    displayName: "Rouse Analytics",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  aemp: {
+    displayName: "AEMP 2.0 Telematics",
+    authType: "oauth2",
+    syncFrequency: "manual",
+  },
+  financing: {
+    displayName: "Financing Partners",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  manufacturer_incentives: {
+    displayName: "Manufacturer Incentives API",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  auction_data: {
+    displayName: "Auction Data (Rouse/IronPlanet)",
+    authType: "api_key",
+    syncFrequency: "manual",
+  },
+  fred_usda: {
+    displayName: "FRED / USDA Economic Data",
+    authType: "api_key",
+    syncFrequency: "daily",
+  },
+};
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -501,6 +565,22 @@ Deno.serve(async (req: Request) => {
         const workspaceId = await resolveCallerWorkspaceId(callerDb);
         const hasCredentialInput = Boolean(body.credentials?.trim());
         const clearCredentials = body.clear_credentials === true;
+        const integrationDefaults = INTEGRATION_DEFAULTS[body.integration_key];
+
+        if (!integrationDefaults) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Unsupported integration key.",
+              },
+            }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
+        }
 
         if (hasCredentialInput && clearCredentials) {
           return new Response(
@@ -524,29 +604,32 @@ Deno.serve(async (req: Request) => {
           .eq("integration_key", body.integration_key)
           .maybeSingle();
 
-        if ((existErr || !existingRow) && body.integration_key === "hubspot") {
-          const { data: insertedHubSpotRow, error: insertHubSpotError } = await callerDb
+        if (existErr) {
+          throw existErr;
+        }
+
+        if (!existingRow) {
+          const { data: insertedRow, error: insertError } = await callerDb
             .from("integration_status")
             .insert({
               workspace_id: workspaceId,
-              integration_key: "hubspot",
-              display_name: "HubSpot CRM",
+              integration_key: body.integration_key,
+              display_name: integrationDefaults.displayName,
               status: "pending_credentials",
-              auth_type: "oauth2",
-              sync_frequency: "manual",
+              auth_type: integrationDefaults.authType,
+              sync_frequency: integrationDefaults.syncFrequency,
               config: {},
             })
             .select("integration_key, workspace_id, auth_type")
             .single();
 
-          if (insertHubSpotError) {
-            throw insertHubSpotError;
+          if (insertError) {
+            throw insertError;
           }
-          existingRow = insertedHubSpotRow;
-          existErr = null;
+          existingRow = insertedRow;
         }
 
-        if (existErr || !existingRow) {
+        if (!existingRow) {
           return new Response(
             JSON.stringify({
               error: {
