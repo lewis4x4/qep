@@ -18,6 +18,7 @@ interface CrmActivityComposerProps {
     activityType: CrmActivityType;
     body: string;
     occurredAt: string;
+    sendNow?: boolean;
   }) => Promise<void>;
   isPending: boolean;
   subjectLabel: string;
@@ -46,6 +47,7 @@ export function CrmActivityComposer({
 }: CrmActivityComposerProps) {
   const [activityType, setActivityType] = useState<CrmActivityType>("call");
   const [body, setBody] = useState("");
+  const [sendNow, setSendNow] = useState(true);
   const [deliveryAvailability, setDeliveryAvailability] = useState<{
     loading: boolean;
     connected: boolean;
@@ -64,6 +66,14 @@ export function CrmActivityComposer({
   const isCommunicationType = integrationKey !== null;
 
   const canSubmit = useMemo(() => body.trim().length > 0 && !isPending, [body, isPending]);
+
+  useEffect(() => {
+    if (!isCommunicationType) {
+      setSendNow(true);
+      return;
+    }
+    setSendNow(deliveryAvailability.connected);
+  }, [isCommunicationType, deliveryAvailability.connected, activityType]);
 
   useEffect(() => {
     if (!open || !integrationKey) {
@@ -132,10 +142,12 @@ export function CrmActivityComposer({
       activityType,
       body: body.trim(),
       occurredAt: new Date().toISOString(),
+      sendNow: isCommunicationType ? sendNow && deliveryAvailability.connected : undefined,
     });
 
     setBody("");
     setActivityType("call");
+    setSendNow(true);
   }
 
   return (
@@ -186,9 +198,20 @@ export function CrmActivityComposer({
                 {deliveryAvailability.loading
                   ? "Checking integration status for this communication type."
                   : deliveryAvailability.connected
-                  ? "Integration is connected. Save Activity records a delivery-ready communication event."
+                  ? "Integration is connected. Save Activity can send live or log only."
                   : `Integration is not connected. Save Activity records a manual ${activityType.toUpperCase()} log.`}
               </p>
+              {!deliveryAvailability.loading && deliveryAvailability.connected && (
+                <label className="mt-3 flex items-center gap-2 text-xs text-[#334155]">
+                  <input
+                    type="checkbox"
+                    checked={sendNow}
+                    onChange={(event) => setSendNow(event.target.checked)}
+                    className="h-4 w-4 rounded border-[#CBD5E1] text-[#E87722] focus:ring-[#E87722]"
+                  />
+                  Send now via {activityType === "email" ? "SendGrid" : "Twilio"}
+                </label>
+              )}
             </div>
           )}
 
@@ -215,7 +238,11 @@ export function CrmActivityComposer({
               Cancel
             </Button>
             <Button type="submit" size="sm" disabled={!canSubmit}>
-              {isPending ? "Saving..." : "Save Activity"}
+              {isPending
+                ? "Saving..."
+                : isCommunicationType && sendNow && deliveryAvailability.connected
+                ? "Save & Send"
+                : "Save Activity"}
             </Button>
           </div>
         </form>

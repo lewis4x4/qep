@@ -60,6 +60,10 @@ function toActivityItem(row: CrmActivityRow): CrmActivityItem {
     companyId: row.company_id,
     dealId: row.deal_id,
     createdBy: row.created_by,
+    metadata:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -189,7 +193,7 @@ export async function listContactActivities(contactId: string): Promise<CrmActiv
   const { data, error } = await crmSupabase
     .from("crm_activities")
     .select(
-      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at"
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at"
     )
     .eq("contact_id", contactId)
     .is("deleted_at", null)
@@ -238,7 +242,7 @@ export async function listCompanyActivities(companyId: string): Promise<CrmActiv
   const { data, error } = await crmSupabase
     .from("crm_activities")
     .select(
-      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at"
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at"
     )
     .eq("company_id", companyId)
     .is("deleted_at", null)
@@ -255,7 +259,7 @@ export async function listDealActivities(dealId: string): Promise<CrmActivityIte
   const { data, error } = await crmSupabase
     .from("crm_activities")
     .select(
-      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at"
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at"
     )
     .eq("deal_id", dealId)
     .is("deleted_at", null)

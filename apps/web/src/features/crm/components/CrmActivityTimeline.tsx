@@ -20,6 +20,43 @@ const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: st
   sms: { icon: MessageSquareText, badge: "bg-cyan-100 text-cyan-900", label: "SMS" },
 };
 
+interface CommunicationDeliveryMetadata {
+  status?: string;
+  mode?: string;
+  provider?: string;
+  reasonCode?: string;
+  message?: string;
+  destination?: string;
+}
+
+function readCommunicationDelivery(activity: CrmActivityItem): CommunicationDeliveryMetadata | null {
+  if (activity.activityType !== "email" && activity.activityType !== "sms") return null;
+  const metadata = activity.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const communication = (metadata as Record<string, unknown>).communication;
+  if (!communication || typeof communication !== "object") return null;
+  return communication as CommunicationDeliveryMetadata;
+}
+
+function deliveryTone(status: string | undefined): string {
+  if (status === "sent") return "text-[#166534]";
+  if (status === "failed") return "text-[#B91C1C]";
+  return "text-[#475569]";
+}
+
+function deliveryLabel(delivery: CommunicationDeliveryMetadata): string {
+  if (delivery.status === "sent") {
+    return `Sent via ${delivery.provider === "twilio" ? "Twilio" : "SendGrid"}`;
+  }
+  if (delivery.status === "failed") {
+    return `Delivery failed${delivery.message ? `: ${delivery.message}` : ""}`;
+  }
+  if (delivery.mode === "manual") {
+    return delivery.message || "Saved as manual log only.";
+  }
+  return "Delivery status unavailable.";
+}
+
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -56,6 +93,7 @@ export function CrmActivityTimeline({
       {activities.map((activity) => {
         const typeMeta = TYPE_STYLE[activity.activityType];
         const Icon = typeMeta.icon;
+        const delivery = readCommunicationDelivery(activity);
 
         return (
           <article
@@ -81,6 +119,12 @@ export function CrmActivityTimeline({
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
               {activity.body ?? "No details provided."}
             </p>
+            {delivery && (
+              <p className={cn("mt-2 text-xs", deliveryTone(delivery.status))}>
+                {deliveryLabel(delivery)}
+                {delivery.destination ? ` (${delivery.destination})` : ""}
+              </p>
+            )}
           </article>
         );
       })}

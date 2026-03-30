@@ -110,7 +110,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   });
 
   const createActivityMutation = useMutation({
-    mutationFn: async (input: { activityType: "note" | "call" | "email" | "meeting" | "task" | "sms"; body: string; occurredAt: string }) =>
+    mutationFn: async (input: { activityType: "note" | "call" | "email" | "meeting" | "task" | "sms"; body: string; occurredAt: string; sendNow?: boolean }) =>
       createCrmActivity({ ...input, dealId }, userId),
     onSuccess: async () => {
       setComposerOpen(false);

@@ -1,4 +1,5 @@
 import type { RouterCtx } from "./crm-router-service.ts";
+import { deliverCrmCommunication } from "./crm-communication-delivery.ts";
 
 export type CustomRecordType = "contact" | "company" | "equipment";
 
@@ -29,6 +30,7 @@ export interface ActivityPayload {
   contactId?: string | null;
   companyId?: string | null;
   dealId?: string | null;
+  sendNow?: boolean;
 }
 
 export interface DealPatchPayload {
@@ -114,7 +116,9 @@ export async function listEquipment(
 ): Promise<unknown[]> {
   let query = ctx.callerDb
     .from("crm_equipment")
-    .select("id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at")
+    .select(
+      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
+    )
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
@@ -151,7 +155,9 @@ export async function createActivity(
   const occurredAtIso = new Date(occurredAtMs).toISOString();
 
   const activityType = payload.activityType;
-  if (!["note", "call", "email", "meeting", "task", "sms"].includes(activityType)) {
+  if (
+    !["note", "call", "email", "meeting", "task", "sms"].includes(activityType)
+  ) {
     throw new Error("VALIDATION_INVALID_ACTIVITY_TYPE");
   }
 
@@ -172,6 +178,18 @@ export async function createActivity(
     await ensureDealVisible(ctx, dealId);
   }
 
+  const metadata: Record<string, unknown> = {};
+  if (activityType === "email" || activityType === "sms") {
+    metadata.communication = await deliverCrmCommunication(ctx, {
+      activityType,
+      sendNow: payload.sendNow === true,
+      body: cleanText(payload.body ?? null),
+      contactId,
+      companyId,
+      dealId,
+    });
+  }
+
   const { data, error } = await ctx.callerDb
     .from("crm_activities")
     .insert({
@@ -183,8 +201,11 @@ export async function createActivity(
       company_id: companyId,
       deal_id: dealId,
       created_by: ctx.caller.userId,
+      metadata,
     })
-    .select("id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at")
+    .select(
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
+    )
     .single();
 
   if (error) throw error;
@@ -199,6 +220,7 @@ export async function createActivity(
     companyId: data.company_id,
     dealId: data.deal_id,
     createdBy: data.created_by,
+    metadata: (data.metadata as Record<string, unknown> | null) ?? {},
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
@@ -207,11 +229,13 @@ export async function createActivity(
 async function resolveStage(
   ctx: RouterCtx,
   stageId: string,
-): Promise<{
-  id: string;
-  isClosedWon: boolean;
-  isClosedLost: boolean;
-} | null> {
+): Promise<
+  {
+    id: string;
+    isClosedWon: boolean;
+    isClosedLost: boolean;
+  } | null
+> {
   const { data, error } = await ctx.callerDb
     .from("crm_deal_stages")
     .select("id, is_closed_won, is_closed_lost")
@@ -379,7 +403,9 @@ export async function createEquipment(
   const { data, error } = await ctx.callerDb
     .from("crm_equipment")
     .insert(insertPayload)
-    .select("id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at")
+    .select(
+      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
+    )
     .single();
 
   if (error) throw error;
@@ -412,13 +438,17 @@ export async function patchEquipment(
     if (!cleaned) throw new Error("VALIDATION_NAME_REQUIRED");
     updates.name = cleaned;
   }
-  if (payload.assetTag !== undefined) updates.asset_tag = cleanText(payload.assetTag ?? null);
+  if (payload.assetTag !== undefined) {
+    updates.asset_tag = cleanText(payload.assetTag ?? null);
+  }
   if (payload.serialNumber !== undefined) {
     updates.serial_number = cleanText(payload.serialNumber ?? null);
   }
   if (payload.metadata !== undefined) updates.metadata = payload.metadata ?? {};
 
-  if (Object.keys(updates).length === 0) throw new Error("VALIDATION_EMPTY_PATCH");
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
 
   const { data, error } = await ctx.callerDb
     .from("crm_equipment")
@@ -426,7 +456,9 @@ export async function patchEquipment(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)
     .is("deleted_at", null)
-    .select("id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at")
+    .select(
+      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
+    )
     .maybeSingle();
 
   if (error) throw error;
@@ -498,7 +530,9 @@ export async function listCustomFieldDefinitions(
 ): Promise<unknown[]> {
   let query = ctx.callerDb
     .from("crm_custom_field_definitions")
-    .select("id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at")
+    .select(
+      "id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at",
+    )
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
@@ -547,7 +581,9 @@ export async function createCustomFieldDefinition(
       sort_order: payload.sortOrder ?? 0,
       constraints: payload.constraints ?? {},
     })
-    .select("id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at")
+    .select(
+      "id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at",
+    )
     .single();
 
   if (error) throw error;
@@ -577,13 +613,21 @@ export async function patchCustomFieldDefinition(
     if (!label) throw new Error("VALIDATION_INVALID_CUSTOM_FIELD");
     updates.label = label;
   }
-  if (payload.required !== undefined) updates.required = Boolean(payload.required);
-  if (payload.visibilityRoles !== undefined) updates.visibility_roles = payload.visibilityRoles;
+  if (payload.required !== undefined) {
+    updates.required = Boolean(payload.required);
+  }
+  if (payload.visibilityRoles !== undefined) {
+    updates.visibility_roles = payload.visibilityRoles;
+  }
   if (payload.sortOrder !== undefined) updates.sort_order = payload.sortOrder;
-  if (payload.constraints !== undefined) updates.constraints = payload.constraints ?? {};
+  if (payload.constraints !== undefined) {
+    updates.constraints = payload.constraints ?? {};
+  }
   if (payload.dataType !== undefined) updates.data_type = payload.dataType;
 
-  if (Object.keys(updates).length === 0) throw new Error("VALIDATION_EMPTY_PATCH");
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
 
   const { data, error } = await ctx.callerDb
     .from("crm_custom_field_definitions")
@@ -591,7 +635,9 @@ export async function patchCustomFieldDefinition(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", definitionId)
     .is("deleted_at", null)
-    .select("id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at")
+    .select(
+      "id, object_type, key, label, data_type, required, visibility_roles, sort_order, constraints, updated_at",
+    )
     .maybeSingle();
 
   if (error) throw error;
@@ -620,7 +666,9 @@ export async function getRecordCustomFields(
 
   const { data: definitions, error: definitionError } = await ctx.callerDb
     .from("crm_custom_field_definitions")
-    .select("id, key, label, data_type, required, visibility_roles, sort_order, constraints")
+    .select(
+      "id, key, label, data_type, required, visibility_roles, sort_order, constraints",
+    )
     .eq("workspace_id", ctx.workspaceId)
     .eq("object_type", recordType)
     .is("deleted_at", null)
@@ -640,7 +688,9 @@ export async function getRecordCustomFields(
     .in("definition_id", definitionIds);
   if (valuesError) throw valuesError;
 
-  const valueMap = new Map((values ?? []).map((row) => [row.definition_id, row.value]));
+  const valueMap = new Map(
+    (values ?? []).map((row) => [row.definition_id, row.value]),
+  );
 
   return (definitions ?? []).map((definition) => ({
     definitionId: definition.id,
@@ -671,7 +721,9 @@ export async function upsertRecordCustomFields(
     .is("deleted_at", null);
   if (definitionError) throw definitionError;
 
-  const byKey = new Map((definitions ?? []).map((definition) => [definition.key, definition]));
+  const byKey = new Map(
+    (definitions ?? []).map((definition) => [definition.key, definition]),
+  );
   const upserts: Array<Record<string, unknown>> = [];
 
   for (const [rawKey, rawValue] of Object.entries(valuesByKey)) {
@@ -706,7 +758,9 @@ export async function upsertRecordCustomFields(
     .eq("record_id", recordId);
   if (existingError) throw existingError;
 
-  const valueMap = new Map((existingValues ?? []).map((row) => [row.definition_id, row.value]));
+  const valueMap = new Map(
+    (existingValues ?? []).map((row) => [row.definition_id, row.value]),
+  );
   const missingRequired = (definitions ?? [])
     .filter((definition) => definition.required)
     .filter((definition) => {
@@ -718,7 +772,9 @@ export async function upsertRecordCustomFields(
     .map((definition) => definition.key);
 
   if (missingRequired.length > 0) {
-    throw new Error(`MISSING_REQUIRED_CUSTOM_FIELDS:${missingRequired.join(",")}`);
+    throw new Error(
+      `MISSING_REQUIRED_CUSTOM_FIELDS:${missingRequired.join(",")}`,
+    );
   }
 
   return getRecordCustomFields(ctx, recordType, recordId);
@@ -730,7 +786,9 @@ export async function listDuplicateCandidates(
 ): Promise<unknown[]> {
   const { data: rows, error } = await ctx.callerDb
     .from("crm_duplicate_candidates")
-    .select("id, rule_id, score, status, left_contact_id, right_contact_id, created_at, updated_at")
+    .select(
+      "id, rule_id, score, status, left_contact_id, right_contact_id, created_at, updated_at",
+    )
     .eq("workspace_id", ctx.workspaceId)
     .eq("status", status)
     .order("updated_at", { ascending: false })

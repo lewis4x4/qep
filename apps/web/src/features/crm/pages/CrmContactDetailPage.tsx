@@ -72,6 +72,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
       activityType: "note" | "call" | "email" | "meeting" | "task" | "sms";
       body: string;
       occurredAt: string;
+      sendNow?: boolean;
     }) => createCrmActivity({ ...input, contactId }, userId),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
@@ -86,6 +87,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         companyId: null,
         dealId: null,
         createdBy: userId,
+        metadata: {},
         createdAt: input.occurredAt,
         updatedAt: input.occurredAt,
         isOptimistic: true,

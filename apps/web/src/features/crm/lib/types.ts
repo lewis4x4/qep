@@ -39,6 +39,7 @@ export interface CrmActivityItem {
   companyId: string | null;
   dealId: string | null;
   createdBy: string | null;
+  metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   isOptimistic?: boolean;
@@ -159,6 +160,7 @@ export interface CrmActivityCreateInput {
   activityType: CrmActivityType;
   body: string;
   occurredAt: string;
+  sendNow?: boolean;
   contactId?: string;
   companyId?: string;
   dealId?: string;
