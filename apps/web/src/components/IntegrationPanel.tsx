@@ -27,7 +27,11 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { DataSourceBadge, type DataSourceState } from "./DataSourceBadge";
 import { cn } from "@/lib/utils";
-import type { HubSpotImportRunSummary, IntegrationCardConfig } from "./IntegrationHub";
+import type {
+  HubSpotImportErrorSummary,
+  HubSpotImportRunSummary,
+  IntegrationCardConfig,
+} from "./IntegrationHub";
 import { supabase } from "@/lib/supabase";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +86,7 @@ interface IntegrationPanelProps {
   onSaved: () => void;
   actorUserId: string;
   hubSpotImportRuns: HubSpotImportRunSummary[];
+  hubSpotImportErrors: HubSpotImportErrorSummary[];
 }
 
 interface TestResult {
@@ -186,6 +191,7 @@ export function IntegrationPanel({
   onSaved,
   actorUserId,
   hubSpotImportRuns,
+  hubSpotImportErrors,
 }: IntegrationPanelProps) {
   const { toast } = useToast();
   const scopes = SYNC_SCOPES[integration?.key ?? ""] ?? [];
@@ -248,6 +254,21 @@ export function IntegrationPanel({
   }, [isHubSpot, actorUserId, hubSpotImportRuns]);
 
   if (!integration) return null;
+  const activeReconciliationRunId = hubSpotImportResult?.runId ??
+    selectedResumeRunId ??
+    hubSpotImportRuns[0]?.id ??
+    null;
+  const activeRunErrors = activeReconciliationRunId
+    ? hubSpotImportErrors.filter((error) => error.runId === activeReconciliationRunId)
+    : [];
+
+  const errorCountByEntity = activeRunErrors.reduce<Record<string, number>>((acc, error) => {
+    acc[error.entityType] = (acc[error.entityType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const topEntityErrorRows = Object.entries(errorCountByEntity)
+    .map(([entityType, count]) => ({ entityType, count }))
+    .sort((a, b) => b.count - a.count);
 
   async function handleSave() {
     if (!integration) return;
@@ -650,6 +671,42 @@ export function IntegrationPanel({
                             <p className="mt-1 text-[#B91C1C] line-clamp-2">{run.errorSummary}</p>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 rounded-lg border border-border bg-card p-3">
+                  <p className="text-xs font-medium text-foreground">Reconciliation details</p>
+                  {!activeReconciliationRunId ? (
+                    <p className="mt-1 text-xs text-[#64748B]">
+                      Run an import to generate reconciliation data.
+                    </p>
+                  ) : activeRunErrors.length === 0 ? (
+                    <p className="mt-1 text-xs text-[#166534]">
+                      No error rows found for run {activeReconciliationRunId.slice(0, 8)}.
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-[11px] text-[#64748B]">
+                        Run {activeReconciliationRunId.slice(0, 8)} has{" "}
+                        {activeRunErrors.length.toLocaleString()} error rows.
+                      </p>
+                      <div className="space-y-1">
+                        {topEntityErrorRows.slice(0, 4).map((row) => (
+                          <div
+                            key={row.entityType}
+                            className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
+                          >
+                            <span className="font-medium text-foreground">{row.entityType}</span>
+                            <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {activeRunErrors.slice(0, 2).map((error) => (
+                        <p key={error.id} className="text-[11px] text-[#B91C1C] line-clamp-2">
+                          {error.reasonCode}: {error.message ?? "No message provided."}
+                        </p>
                       ))}
                     </div>
                   )}

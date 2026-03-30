@@ -47,6 +47,15 @@ export interface HubSpotImportRunSummary {
   errorSummary: string | null;
 }
 
+export interface HubSpotImportErrorSummary {
+  id: string;
+  runId: string;
+  entityType: string;
+  reasonCode: string;
+  message: string | null;
+  createdAt: string;
+}
+
 interface IntegrationStatusRow {
   integration_key: string;
   status: IntegrationCardConfig["status"];
@@ -74,6 +83,15 @@ interface HubSpotImportRunRow {
   activities_processed: number;
   error_count: number;
   error_summary: string | null;
+}
+
+interface HubSpotImportErrorRow {
+  id: string;
+  run_id: string;
+  entity_type: string;
+  reason_code: string;
+  message: string | null;
+  created_at: string;
 }
 
 interface TestConnectionResponse {
@@ -328,6 +346,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hubSpotImportRuns, setHubSpotImportRuns] = useState<HubSpotImportRunSummary[]>([]);
+  const [hubSpotImportErrors, setHubSpotImportErrors] = useState<HubSpotImportErrorSummary[]>([]);
 
   const loadIntegrations = useCallback(async () => {
     setLoading(true);
@@ -384,9 +403,15 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           .eq("workspace_id", workspaceId)
           .order("started_at", { ascending: false })
           .limit(8),
+        hubspotAdminSupabase
+          .from("crm_hubspot_import_errors")
+          .select("id, run_id, entity_type, reason_code, message, created_at")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false })
+          .limit(250),
       ]);
 
-      const [hubspotPortalResult, hubspotImportRunsResult] = await Promise.race([
+      const [hubspotPortalResult, hubspotImportRunsResult, hubspotImportErrorsResult] = await Promise.race([
         hubspotFetchPromise,
         new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error("HubSpot status request timed out. Please try again.")), 5000);
@@ -442,6 +467,16 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           errorSummary: row.error_summary,
         })),
       );
+      setHubSpotImportErrors(
+        ((hubspotImportErrorsResult.data ?? []) as HubSpotImportErrorRow[]).map((row) => ({
+          id: row.id,
+          runId: row.run_id,
+          entityType: row.entity_type,
+          reasonCode: row.reason_code,
+          message: row.message,
+          createdAt: row.created_at,
+        })),
+      );
       setError(null);
     } catch (err) {
       setError(
@@ -459,6 +494,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
     setError(null);
     setCards([]);
     setHubSpotImportRuns([]);
+    setHubSpotImportErrors([]);
     void loadIntegrations();
   }, [location.key, loadIntegrations]);
 
@@ -584,6 +620,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
         onSaved={loadIntegrations}
         actorUserId={actorUserId}
         hubSpotImportRuns={hubSpotImportRuns}
+        hubSpotImportErrors={hubSpotImportErrors}
       />
     </div>
   );

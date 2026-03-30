@@ -90,6 +90,42 @@ type HubSpotAdminTables = BaseTables & {
     };
     Relationships: [];
   };
+  crm_hubspot_import_errors: {
+    Row: {
+      id: string;
+      workspace_id: string;
+      run_id: string;
+      entity_type: string;
+      external_id: string | null;
+      payload_snippet: Json | null;
+      reason_code: string;
+      message: string | null;
+      created_at: string;
+    };
+    Insert: {
+      id?: string;
+      workspace_id?: string;
+      run_id: string;
+      entity_type: string;
+      external_id?: string | null;
+      payload_snippet?: Json | null;
+      reason_code: string;
+      message?: string | null;
+      created_at?: string;
+    };
+    Update: {
+      id?: string;
+      workspace_id?: string;
+      run_id?: string;
+      entity_type?: string;
+      external_id?: string | null;
+      payload_snippet?: Json | null;
+      reason_code?: string;
+      message?: string | null;
+      created_at?: string;
+    };
+    Relationships: [];
+  };
 };
 
 export type HubSpotAdminDatabase = Omit<BaseDatabase, "public"> & {
