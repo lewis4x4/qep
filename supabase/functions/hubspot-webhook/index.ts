@@ -1,253 +1,135 @@
-/**
- * HubSpot Webhook Listener
- * Receives deal stage change events, enrolls deals in follow-up sequences
- */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { createHmac } from "node:crypto";
-import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
+import { Buffer } from "node:buffer";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  emitCrmAccessDeniedAudit,
+  extractRequestIp,
+} from "../_shared/crm-auth-audit.ts";
+import { errorResponse } from "../_shared/crm-error.ts";
+import {
+  type HubSpotEvent,
+  processHubSpotWebhookEvent,
+} from "../_shared/hubspot-webhook-event-processor.ts";
+import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 
-Deno.serve(async (req) => {
-  // HubSpot sends webhook signature for verification
+const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+function signaturesMatch(expected: string, actual: string): boolean {
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const actualBuffer = Buffer.from(actual, "utf8");
+  if (expectedBuffer.length !== actualBuffer.length) return false;
+  return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+Deno.serve(async (req): Promise<Response> => {
+  const requestId = req.headers.get("x-request-id") ?? crypto.randomUUID();
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const runtimeConfig = await resolveHubSpotRuntimeConfig(supabase, "default");
+  if (!runtimeConfig) {
+    console.error("[hubspot-webhook] runtime OAuth config missing");
+    return errorResponse(
+      503,
+      "SERVICE_UNAVAILABLE",
+      "HubSpot webhook configuration is unavailable.",
+    );
+  }
+
   const signature = req.headers.get("X-HubSpot-Signature-v3");
   const requestTimestamp = req.headers.get("X-HubSpot-Request-Timestamp");
   const body = await req.text();
 
-  // Verify signature to prevent spoofing — headers are mandatory
   if (!signature || !requestTimestamp) {
-    console.warn("Missing HubSpot webhook signature headers");
-    return new Response("Unauthorized", { status: 401 });
+    await emitCrmAccessDeniedAudit(supabase, {
+      workspaceId: "default",
+      requestId,
+      resource: "/functions/v1/hubspot-webhook",
+      reasonCode: "missing_signature_headers",
+      ipInet: extractRequestIp(req.headers),
+      userAgent: req.headers.get("user-agent"),
+    });
+    return errorResponse(
+      401,
+      "UNAUTHORIZED",
+      "Missing HubSpot signature headers.",
+    );
   }
 
-  const clientSecret = Deno.env.get("HUBSPOT_CLIENT_SECRET")!;
+  const clientSecret = runtimeConfig.clientSecret;
   const sourceString = `${req.method}${req.url}${body}${requestTimestamp}`;
   const expectedSig = createHmac("sha256", clientSecret)
     .update(sourceString)
     .digest("base64");
 
-  if (signature !== expectedSig) {
-    console.warn("Invalid HubSpot webhook signature");
-    return new Response("Unauthorized", { status: 401 });
+  if (!signaturesMatch(expectedSig, signature)) {
+    await emitCrmAccessDeniedAudit(supabase, {
+      workspaceId: "default",
+      requestId,
+      resource: "/functions/v1/hubspot-webhook",
+      reasonCode: "invalid_signature",
+      ipInet: extractRequestIp(req.headers),
+      userAgent: req.headers.get("user-agent"),
+    });
+    return errorResponse(401, "UNAUTHORIZED", "Invalid HubSpot signature.");
   }
 
-  // SEC-QEP-007: Reject stale webhooks — replay protection (5-minute window)
-  const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
-  const tsMs = parseInt(requestTimestamp, 10);
-  if (isNaN(tsMs) || Date.now() - tsMs > WEBHOOK_MAX_AGE_MS) {
-    console.warn("Stale or invalid HubSpot webhook timestamp:", requestTimestamp);
-    return new Response("Unauthorized", { status: 401 });
+  const tsMs = Number.parseInt(requestTimestamp, 10);
+  const skewMs = Math.abs(Date.now() - tsMs);
+  if (Number.isNaN(tsMs) || skewMs > WEBHOOK_MAX_AGE_MS) {
+    await emitCrmAccessDeniedAudit(supabase, {
+      workspaceId: "default",
+      requestId,
+      resource: "/functions/v1/hubspot-webhook",
+      reasonCode: "timestamp_outside_skew_window",
+      ipInet: extractRequestIp(req.headers),
+      userAgent: req.headers.get("user-agent"),
+      metadata: { request_timestamp: requestTimestamp },
+    });
+    return errorResponse(
+      401,
+      "UNAUTHORIZED",
+      "Webhook timestamp outside allowed skew window.",
+    );
   }
 
   let events: HubSpotEvent[];
   try {
-    events = JSON.parse(body);
-    if (!Array.isArray(events)) events = [events];
+    const parsed = JSON.parse(body) as HubSpotEvent | HubSpotEvent[];
+    events = Array.isArray(parsed) ? parsed : [parsed];
   } catch {
-    return new Response("Bad Request", { status: 400 });
+    return errorResponse(
+      400,
+      "INVALID_JSON",
+      "Webhook payload must be valid JSON.",
+    );
   }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
+  let hasFatalError = false;
   for (const event of events) {
-    await processEvent(supabase, event);
+    try {
+      await processHubSpotWebhookEvent(supabase, event);
+    } catch (error) {
+      hasFatalError = true;
+      console.error("[hubspot-webhook] fatal processing error", {
+        portalId: event.portalId,
+        objectId: event.objectId,
+        subscriptionType: event.subscriptionType,
+        propertyName: event.propertyName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (hasFatalError) {
+    return errorResponse(
+      500,
+      "WEBHOOK_PROCESSING_FAILED",
+      "One or more events failed to process.",
+    );
   }
 
   return new Response("OK", { status: 200 });
 });
-
-interface HubSpotEvent {
-  eventType: string;
-  subscriptionType: string;
-  portalId: number;
-  objectId: number;           // deal ID
-  propertyName: string;
-  propertyValue: string;      // new stage value
-  changeSource: string;
-  occurredAt: number;
-}
-
-async function processEvent(
-  supabase: ReturnType<typeof createClient>,
-  event: HubSpotEvent
-) {
-  if (event.subscriptionType !== "deal.propertyChange") return;
-  if (event.propertyName !== "dealstage") return;
-
-  const hubId = String(event.portalId);
-  const dealId = String(event.objectId);
-  const newStage = event.propertyValue;
-
-  console.log(`Deal ${dealId} moved to stage: ${newStage}`);
-
-  // Log the stage change
-  await supabase.from("activity_log").insert({
-    deal_id: dealId,
-    hub_id: hubId,
-    activity_type: "deal_stage_change",
-    payload: { stage: newStage, occurred_at: event.occurredAt },
-  });
-
-  // Find sequences triggered by this stage
-  const { data: sequences } = await supabase
-    .from("follow_up_sequences")
-    .select("id, name")
-    .eq("trigger_stage", newStage)
-    .eq("is_active", true);
-
-  if (!sequences || sequences.length === 0) return;
-
-  // Get connection for this portal
-  const { data: connection } = await supabase
-    .from("hubspot_connections")
-    .select("access_token, token_expires_at, refresh_token")
-    .eq("hub_id", hubId)
-    .eq("is_active", true)
-    .limit(1)
-    .single();
-
-  if (!connection) {
-    console.warn(`No active HubSpot connection for portal ${hubId}`);
-    return;
-  }
-
-  // Refresh token if expired
-  const token = await getValidToken(supabase, hubId, connection);
-  if (!token) return;
-
-  // Fetch deal details from HubSpot
-  const dealRes = await fetch(
-    `https://api.hubapi.com/crm/v3/objects/deals/${dealId}?properties=dealname,hubspot_owner_id,hs_object_id&associations=contacts`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const deal = await dealRes.json();
-  const dealName = deal.properties?.dealname ?? `Deal ${dealId}`;
-  const ownerId = deal.properties?.hubspot_owner_id;
-
-  // Get contact info
-  let contactId: string | null = null;
-  let contactName: string | null = null;
-  const contactAssoc = deal.associations?.contacts?.results?.[0];
-  if (contactAssoc) {
-    contactId = String(contactAssoc.id);
-    const contactRes = await fetch(
-      `https://api.hubapi.com/crm/v3/objects/contacts/${contactId}?properties=firstname,lastname`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const contact = await contactRes.json();
-    contactName = [contact.properties?.firstname, contact.properties?.lastname]
-      .filter(Boolean).join(" ") || null;
-  }
-
-  // Enroll deal in each matching sequence
-  for (const sequence of sequences) {
-    // Get first step to calculate next_step_due_at
-    const { data: firstStep } = await supabase
-      .from("follow_up_steps")
-      .select("day_offset")
-      .eq("sequence_id", sequence.id)
-      .eq("step_number", 1)
-      .single();
-
-    const nextDue = firstStep
-      ? new Date(Date.now() + firstStep.day_offset * 86400000).toISOString()
-      : null;
-
-    const { data: enrollment, error } = await supabase
-      .from("sequence_enrollments")
-      .upsert({
-        sequence_id: sequence.id,
-        deal_id: dealId,
-        deal_name: dealName,
-        contact_id: contactId,
-        contact_name: contactName,
-        owner_id: ownerId,
-        hub_id: hubId,
-        current_step: 1,
-        next_step_due_at: nextDue,
-        status: "active",
-      }, { onConflict: "deal_id,sequence_id" })
-      .select()
-      .single();
-
-    if (error) {
-      console.error(`Failed to enroll deal ${dealId}:`, error.message);
-      continue;
-    }
-
-    await supabase.from("activity_log").insert({
-      enrollment_id: enrollment.id,
-      deal_id: dealId,
-      hub_id: hubId,
-      activity_type: "enrollment_created",
-      payload: { sequence_name: sequence.name, next_due: nextDue },
-    });
-
-    // Push custom properties to HubSpot deal
-    await fetch(`https://api.hubapi.com/crm/v3/objects/deals/${dealId}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        properties: {
-          blackrock_automation_enrolled: "true",
-          blackrock_followup_step: "1",
-          blackrock_last_followup_date: new Date().toISOString().split("T")[0],
-        },
-      }),
-    });
-  }
-}
-
-async function getValidToken(
-  supabase: ReturnType<typeof createClient>,
-  hubId: string,
-  connection: { access_token: string; token_expires_at: string; refresh_token: string }
-): Promise<string | null> {
-  // Decrypt stored tokens — SEC-QEP-008
-  const [plainAccessToken, plainRefreshToken] = await Promise.all([
-    decryptToken(connection.access_token),
-    decryptToken(connection.refresh_token),
-  ]);
-
-  const expiresAt = new Date(connection.token_expires_at).getTime();
-  if (Date.now() < expiresAt - 60000) return plainAccessToken;
-
-  // Refresh the token
-  const res = await fetch("https://api.hubapi.com/oauth/v1/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      client_id: Deno.env.get("HUBSPOT_CLIENT_ID")!,
-      client_secret: Deno.env.get("HUBSPOT_CLIENT_SECRET")!,
-      refresh_token: plainRefreshToken,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("Token refresh failed:", await res.text());
-    return null;
-  }
-
-  const tokens = await res.json();
-  const newRefresh = tokens.refresh_token ?? plainRefreshToken;
-  const [encAccess, encRefresh] = await Promise.all([
-    encryptToken(tokens.access_token),
-    encryptToken(newRefresh),
-  ]);
-
-  await supabase
-    .from("hubspot_connections")
-    .update({
-      access_token: encAccess,
-      refresh_token: encRefresh,
-      token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-    })
-    .eq("hub_id", hubId);
-
-  return tokens.access_token;
-}

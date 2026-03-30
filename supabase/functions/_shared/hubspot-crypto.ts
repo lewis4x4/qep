@@ -26,15 +26,15 @@ async function getKey(): Promise<CryptoKey> {
   if (!keyHex || keyHex.length !== 64) {
     throw new Error(
       "HUBSPOT_ENCRYPTION_KEY must be set as a 64-char hex string (32 bytes). " +
-        "Generate with: openssl rand -hex 32"
+        "Generate with: openssl rand -hex 32",
     );
   }
   return crypto.subtle.importKey(
     "raw",
-    hexToBytes(keyHex),
+    hexToBytes(keyHex) as BufferSource,
     "AES-GCM",
     false,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
@@ -46,7 +46,11 @@ export async function encryptToken(plaintext: string): Promise<string> {
   const key = await getKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(plaintext);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoded,
+  );
   return `${bytesToHex(iv)}:${bytesToHex(new Uint8Array(ciphertext))}`;
 }
 
@@ -57,15 +61,20 @@ export async function encryptToken(plaintext: string): Promise<string> {
 export async function decryptToken(encrypted: string): Promise<string> {
   const colonIdx = encrypted.indexOf(":");
   if (colonIdx === -1) {
-    throw new Error("Invalid encrypted token format — expected '<iv_hex>:<ciphertext_hex>'");
+    throw new Error(
+      "Invalid encrypted token format — expected '<iv_hex>:<ciphertext_hex>'",
+    );
   }
   const ivHex = encrypted.slice(0, colonIdx);
   const ciphertextHex = encrypted.slice(colonIdx + 1);
   const key = await getKey();
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: hexToBytes(ivHex) },
+    {
+      name: "AES-GCM",
+      iv: hexToBytes(ivHex) as BufferSource,
+    },
     key,
-    hexToBytes(ciphertextHex)
+    hexToBytes(ciphertextHex) as BufferSource,
   );
   return new TextDecoder().decode(plaintext);
 }

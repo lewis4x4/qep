@@ -6,6 +6,24 @@ dist/
 .supabase/
 *.log
 
+# OS / local tooling noise
+.DS_Store
+**/.DS_Store
+
+# Local agent / IDE artifacts (do not ship to remote)
+.agents/
+.sfdx/
+
+# Accidental nested workspace scaffold
+apps/web/apps/
+
+# Ephemeral local scratch + test output
+comment.json
+test-results/
+
+# Supabase CLI local branch metadata
+supabase/.branches/
+
 # Local Netlify folder
 .netlify
 

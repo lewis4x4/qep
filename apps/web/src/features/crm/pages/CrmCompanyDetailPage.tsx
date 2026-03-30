@@ -1,0 +1,231 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarDays, GitMerge, Plus } from "lucide-react";
+import { Link, Navigate, useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import type { UserRole } from "@/lib/database.types";
+import { CrmActivityComposer } from "../components/CrmActivityComposer";
+import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
+import { CrmCompanyEquipmentSection } from "../components/CrmCompanyEquipmentSection";
+import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
+import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
+import { CrmPageHeader } from "../components/CrmPageHeader";
+import {
+  createCrmActivity,
+  getCrmCompany,
+  getProfileDisplayName,
+  listCompanyActivities,
+} from "../lib/crm-api";
+import { fetchCompanyHierarchy } from "../lib/crm-router-api";
+import type { CrmActivityItem } from "../lib/types";
+
+interface CrmCompanyDetailPageProps {
+  userId: string;
+  userRole: UserRole;
+}
+
+export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageProps) {
+  const { companyId } = useParams<{ companyId: string }>();
+  const queryClient = useQueryClient();
+  const [composerOpen, setComposerOpen] = useState(false);
+
+  if (!companyId) {
+    return <Navigate to="/crm/companies" replace />;
+  }
+
+  const companyQuery = useQuery({
+    queryKey: ["crm", "company", companyId],
+    queryFn: () => getCrmCompany(companyId),
+  });
+
+  const hierarchyQuery = useQuery({
+    queryKey: ["crm", "company", companyId, "hierarchy"],
+    queryFn: () => fetchCompanyHierarchy(companyId),
+    enabled: Boolean(companyQuery.data),
+  });
+
+  const activitiesQuery = useQuery({
+    queryKey: ["crm", "company", companyId, "activities"],
+    queryFn: () => listCompanyActivities(companyId),
+    enabled: companyQuery.data !== null,
+  });
+
+  const assignedRepQuery = useQuery({
+    queryKey: ["crm", "profile", companyQuery.data?.assignedRepId],
+    queryFn: () => getProfileDisplayName(companyQuery.data?.assignedRepId ?? ""),
+    enabled: Boolean(companyQuery.data?.assignedRepId),
+    staleTime: 60_000,
+  });
+
+  const createActivityMutation = useMutation({
+    mutationFn: async (input: {
+      activityType: "note" | "call" | "email" | "meeting" | "task" | "sms";
+      body: string;
+      occurredAt: string;
+    }) => createCrmActivity({ ...input, companyId }, userId),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["crm", "company", companyId, "activities"] });
+      const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "company", companyId, "activities"]) ?? [];
+      const optimistic: CrmActivityItem = {
+        id: `optimistic-${Date.now()}`,
+        workspaceId: "default",
+        activityType: input.activityType,
+        body: input.body,
+        occurredAt: input.occurredAt,
+        contactId: null,
+        companyId,
+        dealId: null,
+        createdBy: userId,
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+        isOptimistic: true,
+      };
+
+      queryClient.setQueryData<CrmActivityItem[]>(["crm", "company", companyId, "activities"], [optimistic, ...previous]);
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["crm", "company", companyId, "activities"], context.previous);
+      }
+    },
+    onSuccess: () => setComposerOpen(false),
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["crm", "company", companyId, "activities"] });
+    },
+  });
+
+  const locationLabel = useMemo(() => {
+    if (!companyQuery.data) {
+      return "Company";
+    }
+    return [companyQuery.data.city, companyQuery.data.state, companyQuery.data.country].filter(Boolean).join(", ") ||
+      "Company";
+  }, [companyQuery.data]);
+
+  const companyName = companyQuery.data?.name ?? "company";
+  const canManageDefinitions = userRole === "admin" || userRole === "owner";
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to="/crm/companies"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to companies
+        </Link>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to="/crm/duplicates">
+              <GitMerge className="mr-2 h-4 w-4" />
+              Review Duplicates
+            </Link>
+          </Button>
+          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Log Activity
+          </Button>
+        </div>
+      </div>
+
+      {companyQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+
+      {companyQuery.isError && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-[#334155]">Unable to load this company. Refresh the page or go back to your companies list.</p>
+        </Card>
+      )}
+
+      {!companyQuery.isLoading && !companyQuery.isError && !companyQuery.data && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-[#334155]">This company isn&apos;t available. It may have been removed or you might not have access.</p>
+        </Card>
+      )}
+
+      {companyQuery.data && (
+        <>
+          <CrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
+
+          <Card className="p-4 sm:p-5">
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-[#475569]">Assigned rep</dt>
+                <dd className="font-medium text-[#0F172A]">
+                  {assignedRepQuery.data || (companyQuery.data.assignedRepId ? "Assigned representative" : "Unassigned")}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[#475569]">Last updated</dt>
+                <dd className="font-medium text-[#0F172A]">
+                  {new Date(companyQuery.data.updatedAt).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          {hierarchyQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+          {!hierarchyQuery.isLoading && hierarchyQuery.data && (
+            <CrmCompanyHierarchyCard hierarchy={hierarchyQuery.data} />
+          )}
+
+          <CrmCompanyEquipmentSection companyId={companyId} />
+          <CrmCustomFieldsCard
+            recordType="company"
+            recordId={companyId}
+            canManageDefinitions={canManageDefinitions}
+          />
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-[#334155]" />
+              <h2 className="text-base font-semibold text-[#0F172A]">Activity Timeline</h2>
+            </div>
+
+            {activitiesQuery.isLoading ? (
+              <div className="space-y-3" role="status" aria-label="Loading activities">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-24 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                ))}
+              </div>
+            ) : activitiesQuery.isError ? (
+              <Card className="p-4 text-sm text-[#334155]">Couldn&apos;t load activities. Try refreshing the page.</Card>
+            ) : (
+              <CrmActivityTimeline
+                activities={activitiesQuery.data ?? []}
+                onLogActivity={() => setComposerOpen(true)}
+                entityLabel={companyName}
+                showEntityLabel={false}
+              />
+            )}
+          </section>
+        </>
+      )}
+
+      <Button
+        className="fixed bottom-20 right-4 z-30 min-h-[44px] rounded-full px-5 shadow-lg sm:hidden"
+        onClick={() => setComposerOpen(true)}
+      >
+        <Plus className="mr-1 h-4 w-4" />
+        Log Activity
+      </Button>
+
+      <CrmActivityComposer
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        isPending={createActivityMutation.isPending}
+        subjectLabel={companyName}
+        onSubmit={async (input) => {
+          await createActivityMutation.mutateAsync(input);
+        }}
+      />
+    </div>
+  );
+}

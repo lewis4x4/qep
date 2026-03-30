@@ -2,33 +2,52 @@
  * Integration Manager — adapter factory, credential management, status tracking.
  *
  * Per blueprint §5.3: auto-selects live vs. mock adapter based on
- * integration_status.status for each integration. Zero-blocking keystone.
+ * integration_status.status and adapter readiness.
  */
 
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { decryptCredential } from "./integration-crypto.ts";
 import type {
-  IntegrationKey,
-  IntegrationStatusRow,
   AdapterConfig,
   AdapterResult,
   IntegrationAdapter,
+  IntegrationKey,
+  IntegrationStatusRow,
 } from "./integration-types.ts";
 
-// Lazy-import adapters to keep bundle splits clean
+import { AempMockAdapter } from "./adapters/aemp-mock.ts";
+import { AuctionDataMockAdapter } from "./adapters/auction-data-mock.ts";
+import { FinancingMockAdapter } from "./adapters/financing-mock.ts";
+import { FredUsdaLiveAdapter } from "./adapters/fred-usda-live.ts";
+import { FredUsdaMockAdapter } from "./adapters/fred-usda-mock.ts";
 import { IntelliDealerMockAdapter } from "./adapters/intellidealer-mock.ts";
 import { IronGuidesMockAdapter } from "./adapters/ironguides-mock.ts";
-import { RouseMockAdapter } from "./adapters/rouse-mock.ts";
-import { AempMockAdapter } from "./adapters/aemp-mock.ts";
-import { FinancingMockAdapter } from "./adapters/financing-mock.ts";
 import { ManufacturerIncentivesMockAdapter } from "./adapters/manufacturer-incentives-mock.ts";
-import { AuctionDataMockAdapter } from "./adapters/auction-data-mock.ts";
-import { FredUsdaMockAdapter } from "./adapters/fred-usda-mock.ts";
+import { RouseMockAdapter } from "./adapters/rouse-mock.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Adapter registry — maps integration key to mock adapter instance
-// Live adapters will be registered here as they are built in Sprint 2+
-// ─────────────────────────────────────────────────────────────────────────────
+interface PostgrestErrorLike {
+  code?: string | null;
+  message?: string | null;
+}
+
+function parseCredentials(
+  raw: string | null,
+): Record<string, string> | undefined {
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const output: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string") {
+        output[key] = value;
+      }
+    }
+    return Object.keys(output).length > 0 ? output : { raw };
+  } catch {
+    return { raw };
+  }
+}
 
 // deno-lint-ignore no-explicit-any
 const MOCK_ADAPTERS: Record<IntegrationKey, IntegrationAdapter<any, any>> = {
@@ -42,101 +61,174 @@ const MOCK_ADAPTERS: Record<IntegrationKey, IntegrationAdapter<any, any>> = {
   fred_usda: new FredUsdaMockAdapter(),
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// IntegrationManager
-// ─────────────────────────────────────────────────────────────────────────────
+// deno-lint-ignore no-explicit-any
+const LIVE_ADAPTERS: Partial<
+  Record<IntegrationKey, IntegrationAdapter<any, any>>
+> = {
+  fred_usda: new FredUsdaLiveAdapter(),
+};
 
 export class IntegrationManager {
   private supabaseAdmin: SupabaseClient;
+  private workspaceId: string;
   private statusCache: Map<IntegrationKey, IntegrationStatusRow> = new Map();
 
-  constructor(supabaseUrl: string, serviceRoleKey: string) {
+  constructor(supabaseUrl: string, serviceRoleKey: string, workspaceId = "default") {
     this.supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    this.workspaceId = workspaceId;
   }
 
-  /**
-   * Load all integration statuses from DB (cached per manager instance).
-   */
+  private hydrateStatusCache(rows: IntegrationStatusRow[]): void {
+    this.statusCache.clear();
+    for (const row of rows) {
+      this.statusCache.set(row.integration_key, row);
+    }
+  }
+
+  private async loadUnscopedStatuses(): Promise<IntegrationStatusRow[] | null> {
+    const { data, error } = await this.supabaseAdmin
+      .from("integration_status")
+      .select("*")
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      console.error(
+        "[IntegrationManager] Failed to load unscoped statuses:",
+        error,
+      );
+      return null;
+    }
+
+    return data as IntegrationStatusRow[];
+  }
+
   async loadStatuses(): Promise<Map<IntegrationKey, IntegrationStatusRow>> {
     const { data, error } = await this.supabaseAdmin
       .from("integration_status")
-      .select("*");
+      .select("*")
+      .eq("workspace_id", this.workspaceId);
 
-    if (error) {
+    const isWorkspaceIdMissing = (err: PostgrestErrorLike | null): boolean =>
+      err?.code === "42703" || (err?.message ?? "").includes("workspace_id");
+
+    if (error && !isWorkspaceIdMissing(error)) {
       console.error("[IntegrationManager] Failed to load statuses:", error);
       return this.statusCache;
     }
 
-    for (const row of data as IntegrationStatusRow[]) {
-      this.statusCache.set(row.integration_key, row);
+    if (error && isWorkspaceIdMissing(error)) {
+      const unscopedRows = await this.loadUnscopedStatuses();
+      if (unscopedRows) {
+        this.hydrateStatusCache(unscopedRows);
+      }
+      return this.statusCache;
     }
+
+    const scopedRows = data as IntegrationStatusRow[];
+    if (scopedRows.length > 0) {
+      this.hydrateStatusCache(scopedRows);
+      return this.statusCache;
+    }
+
+    // Backward compatibility for legacy/default workspace rows.
+    if (this.workspaceId !== "default") {
+      const { data: defaultRows, error: defaultError } = await this.supabaseAdmin
+        .from("integration_status")
+        .select("*")
+        .eq("workspace_id", "default");
+
+      if (!defaultError && defaultRows && defaultRows.length > 0) {
+        this.hydrateStatusCache(defaultRows as IntegrationStatusRow[]);
+        return this.statusCache;
+      }
+    }
+
+    const unscopedRows = await this.loadUnscopedStatuses();
+    if (unscopedRows) {
+      this.hydrateStatusCache(unscopedRows);
+    }
+
     return this.statusCache;
   }
 
-  /**
-   * Returns the appropriate adapter for the given integration key.
-   * Auto-selects mock if credentials are missing or status is not 'connected'.
-   * Sprint 1: always returns mock adapter. Sprint 2+ will register live adapters.
-   */
-  // deno-lint-ignore no-explicit-any
-  getAdapter<TReq, TRes>(key: IntegrationKey): IntegrationAdapter<TReq, TRes> {
-    const status = this.statusCache.get(key);
-    const isConnected = status?.status === "connected";
-
-    // Live adapters not yet registered — fall through to mock for all Sprint 1 integrations
-    if (isConnected) {
-      // TODO Sprint 2: return LIVE_ADAPTERS[key] when live adapters are implemented
-      console.warn(
-        `[IntegrationManager] Live adapter for ${key} not yet available, using mock`
-      );
-    }
-
-    return MOCK_ADAPTERS[key] as IntegrationAdapter<TReq, TRes>;
+  getStatus(key: IntegrationKey): IntegrationStatusRow | undefined {
+    return this.statusCache.get(key);
   }
 
-  /**
-   * Decrypts credentials for a specific integration key.
-   * Returns null if no credentials are stored.
-   */
+  getWorkspaceId(): string {
+    return this.workspaceId;
+  }
+
   async getDecryptedCredentials(key: IntegrationKey): Promise<string | null> {
     const status = this.statusCache.get(key);
     if (!status?.credentials_encrypted) return null;
+
     try {
       return await decryptCredential(status.credentials_encrypted, key);
-    } catch (err) {
-      console.error(`[IntegrationManager] Failed to decrypt credentials for ${key}:`, err);
+    } catch (error) {
+      console.error(
+        `[IntegrationManager] Failed to decrypt credentials for ${key}:`,
+        error,
+      );
       return null;
     }
   }
 
-  /**
-   * Builds an AdapterConfig for a given integration, decrypting credentials.
-   */
   async buildAdapterConfig(key: IntegrationKey): Promise<AdapterConfig> {
     const status = this.statusCache.get(key);
-    const decryptedCreds = await this.getDecryptedCredentials(key);
+    const decryptedCredentials = await this.getDecryptedCredentials(key);
+
     return {
-      credentials: decryptedCreds ? { raw: decryptedCreds } : undefined,
+      credentials: parseCredentials(decryptedCredentials),
       endpointUrl: status?.endpoint_url ?? undefined,
       config: status?.config ?? {},
     };
   }
 
-  /**
-   * Execute an adapter call and update sync status in DB.
-   */
+  private shouldUseLiveAdapter(
+    key: IntegrationKey,
+    config: AdapterConfig,
+  ): boolean {
+    const status = this.statusCache.get(key);
+    if (!status || status.status !== "connected") return false;
+
+    const liveAdapter = LIVE_ADAPTERS[key];
+    if (!liveAdapter) return false;
+
+    if (key === "fred_usda") {
+      const envKey = Deno.env.get("FRED_API_KEY");
+      if (envKey && envKey.trim().length > 0) return true;
+
+      const creds = config.credentials ?? {};
+      return Boolean(creds.api_key || creds.fred_api_key || creds.raw);
+    }
+
+    return true;
+  }
+
+  // deno-lint-ignore no-explicit-any
+  private resolveAdapter<TReq, TRes>(
+    key: IntegrationKey,
+    config: AdapterConfig,
+  ): IntegrationAdapter<TReq, TRes> {
+    if (this.shouldUseLiveAdapter(key, config)) {
+      return LIVE_ADAPTERS[key] as IntegrationAdapter<TReq, TRes>;
+    }
+
+    return MOCK_ADAPTERS[key] as IntegrationAdapter<TReq, TRes>;
+  }
+
   async execute<TReq, TRes>(
     key: IntegrationKey,
-    request: TReq
+    request: TReq,
   ): Promise<AdapterResult<TRes>> {
-    const adapter = this.getAdapter<TReq, TRes>(key);
     const config = await this.buildAdapterConfig(key);
-
+    const adapter = this.resolveAdapter<TReq, TRes>(key, config);
     const startedAt = new Date().toISOString();
+
     try {
       const result = await adapter.execute(request, config);
 
-      // Update sync status on success
       await this.supabaseAdmin
         .from("integration_status")
         .update({
@@ -146,35 +238,27 @@ export class IntegrationManager {
             : 1,
           last_sync_error: null,
         })
+        .eq("workspace_id", this.workspaceId)
         .eq("integration_key", key);
 
       return result;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-
-      // Update sync status on failure
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       await this.supabaseAdmin
         .from("integration_status")
-        .update({
-          last_sync_error: errorMsg,
-          status: "error",
-        })
+        .update({ last_sync_error: message })
+        .eq("workspace_id", this.workspaceId)
         .eq("integration_key", key);
-
-      throw err;
+      throw error;
     }
   }
 
-  /**
-   * Test connection for an integration and persist result.
-   */
   async testConnection(
-    key: IntegrationKey
+    key: IntegrationKey,
   ): Promise<{ success: boolean; latencyMs: number; error?: string }> {
-    const adapter = this.getAdapter(key);
     const config = await this.buildAdapterConfig(key);
+    const adapter = this.resolveAdapter(key, config);
     const testedAt = new Date().toISOString();
-
     const result = await adapter.testConnection(config);
 
     await this.supabaseAdmin
@@ -186,18 +270,22 @@ export class IntegrationManager {
         last_test_error: result.error ?? null,
         status: result.success ? "connected" : "error",
       })
+      .eq("workspace_id", this.workspaceId)
       .eq("integration_key", key);
 
     return result;
   }
 }
 
-/**
- * Factory — creates an IntegrationManager using standard Deno env vars.
- */
-export function createIntegrationManager(): IntegrationManager {
+export function createIntegrationManager(options?: {
+  workspaceId?: string;
+}): IntegrationManager {
+  const workspaceId = options?.workspaceId ??
+    Deno.env.get("DEFAULT_WORKSPACE_ID") ??
+    "default";
   return new IntegrationManager(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    workspaceId,
   );
 }

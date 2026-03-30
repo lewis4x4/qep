@@ -97,7 +97,7 @@ export function ChatMessage({
                 QEP Assistant is thinking…
               </span>
             ) : message.role === "assistant" ? (
-              <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-code:text-qep-orange prose-code:bg-qep-orange/10 prose-code:px-1 prose-code:rounded prose-pre:bg-muted prose-pre:text-foreground prose-blockquote:border-l-qep-orange prose-a:text-qep-orange">
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-code:text-qep-orange prose-code:bg-qep-orange/10 prose-code:px-1 prose-code:rounded prose-pre:bg-muted prose-pre:text-foreground prose-blockquote:border-l-qep-orange prose-a:text-qep-orange">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {message.content}
                 </ReactMarkdown>

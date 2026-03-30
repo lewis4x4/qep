@@ -14,7 +14,7 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type UserRole = "rep" | "admin" | "manager" | "owner" | "system";
-export type EventSource = "web" | "edge_function" | "cron" | "admin_hub";
+export type EventSource = "web" | "edge" | "edge_function" | "cron" | "admin_hub";
 export type EntityType =
   | "quote"
   | "deal"
@@ -87,7 +87,7 @@ export class EventTracker {
         received_at: new Date().toISOString(),
         workspace_id: this.workspaceId,
         project_id: this.projectId,
-        source: input.source ?? "edge_function",
+        source: input.source ?? "edge",
         role: input.role ?? "system",
         context: {
           app_version: input.context?.app_version ?? "1.0.0",
@@ -134,17 +134,19 @@ export async function emitIntegrationConfigUpdated(
   }
 ): Promise<void> {
   await tracker.trackEvent({
-    event_name: "integration_config_updated",
+    event_name: "integration_credentials_saved",
     user_id: params.userId ?? null,
     role: params.updatedByRole,
     request_id: params.requestId ?? null,
-    source: "admin_hub",
+    source: "edge",
     entity_type: "integration",
     entity_id: params.integration,
     properties: {
-      integration: params.integration,
+      integration_key: params.integration,
       changed_fields: params.changedFields,
       updated_by_role: params.updatedByRole,
+      status_after: null,
+      auth_type: null,
       sync_frequency: params.syncFrequency ?? null,
     },
   });
@@ -163,17 +165,18 @@ export async function emitIntegrationConnectionTested(
   }
 ): Promise<void> {
   await tracker.trackEvent({
-    event_name: "integration_connection_tested",
+    event_name: "integration_test_connection_result",
     user_id: params.userId ?? null,
     role: params.role ?? "owner",
     request_id: params.requestId ?? null,
-    source: "admin_hub",
+    source: "edge",
     entity_type: "integration",
     entity_id: params.integration,
     properties: {
-      integration: params.integration,
-      result: params.result,
+      integration_key: params.integration,
+      success: params.result === "success",
       latency_ms: params.latencyMs,
+      mode: "mock",
       error_code: params.errorCode ?? null,
     },
   });
@@ -223,11 +226,11 @@ export async function emitIntegrationFallbackActivated(
     user_id: null,
     role: "system",
     request_id: params.requestId ?? null,
-    source: "edge_function",
+    source: "edge",
     entity_type: "integration",
     entity_id: params.integration,
     properties: {
-      integration: params.integration,
+      integration_key: params.integration,
       reason: params.reason,
       staleness_hours: params.stalenessHours ?? null,
       fallback_mode: params.fallbackMode,

@@ -1,3 +1,5 @@
+import typography from "@tailwindcss/typography";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
@@ -49,20 +51,20 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
-        // QEP USA Brand Color Tokens
-        "qep-orange": "#E87722",
-        "qep-orange-hover": "#D06A1E",
-        "qep-orange-light": "#FFF3E8",
-        "qep-dark": "#1B2A3D",
-        "qep-dark-hover": "#253649",
-        "qep-charcoal": "#2D3748",
-        "qep-slate": "#4A5568",
-        "qep-gray": "#718096",
-        "qep-light-gray": "#E2E8F0",
-        "qep-bg": "#F7F8FA",
-        "qep-success": "#38A169",
-        "qep-error": "#E53E3E",
-        "qep-info": "#3182CE",
+        // QEP USA Brand Color Tokens (HSL from CSS variables — theme-aware)
+        "qep-orange": "hsl(var(--qep-orange) / <alpha-value>)",
+        "qep-orange-hover": "hsl(var(--qep-orange-hover) / <alpha-value>)",
+        "qep-orange-light": "hsl(var(--qep-orange-light) / <alpha-value>)",
+        "qep-dark": "hsl(var(--qep-dark) / <alpha-value>)",
+        "qep-dark-hover": "hsl(var(--qep-dark-hover) / <alpha-value>)",
+        "qep-charcoal": "hsl(var(--qep-charcoal) / <alpha-value>)",
+        "qep-slate": "hsl(var(--qep-slate) / <alpha-value>)",
+        "qep-gray": "hsl(var(--qep-gray) / <alpha-value>)",
+        "qep-light-gray": "hsl(var(--qep-light-gray) / <alpha-value>)",
+        "qep-bg": "hsl(var(--qep-bg) / <alpha-value>)",
+        "qep-success": "hsl(var(--success) / <alpha-value>)",
+        "qep-error": "hsl(var(--qep-error) / <alpha-value>)",
+        "qep-info": "hsl(var(--qep-info) / <alpha-value>)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -95,5 +97,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [typography],
 };

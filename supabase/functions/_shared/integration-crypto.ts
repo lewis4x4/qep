@@ -25,6 +25,12 @@ function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const output = new Uint8Array(bytes.byteLength);
+  output.set(bytes);
+  return output.buffer;
+}
+
 async function getMasterKey(): Promise<CryptoKey> {
   const keyHex = Deno.env.get("INTEGRATION_ENCRYPTION_KEY");
   if (!keyHex || keyHex.length !== 64) {
@@ -35,7 +41,7 @@ async function getMasterKey(): Promise<CryptoKey> {
   }
   return crypto.subtle.importKey(
     "raw",
-    hexToBytes(keyHex),
+    toArrayBuffer(hexToBytes(keyHex)),
     { name: "HKDF" },
     false,
     ["deriveKey"]
@@ -94,9 +100,9 @@ export async function decryptCredential(
   const ciphertextHex = encrypted.slice(colonIdx + 1);
   const key = await deriveIntegrationKey(integrationKey);
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: hexToBytes(ivHex) },
+    { name: "AES-GCM", iv: toArrayBuffer(hexToBytes(ivHex)) },
     key,
-    hexToBytes(ciphertextHex)
+    toArrayBuffer(hexToBytes(ciphertextHex))
   );
   return new TextDecoder().decode(plaintext);
 }

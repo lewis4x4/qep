@@ -191,7 +191,7 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
   const visibleActions = QUICK_ACTIONS.filter((a) => a.roles.includes(userRole));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto" style={{ background: "hsl(var(--qep-bg))" }}>
+    <div className="p-6 max-w-6xl mx-auto bg-qep-bg min-h-full">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">

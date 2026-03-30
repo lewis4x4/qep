@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import {
   ChevronLeft,
   Check,
@@ -7,6 +7,7 @@ import {
   Search,
   Tractor,
 } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { catalogAdapter } from "../lib/mock-catalog";
 import type { Machine, Attachment } from "../lib/intellidealer.types";
 import type { UserRole } from "../lib/database.types";
@@ -25,6 +26,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  CustomerInsightCard,
+  MarketValuationCard,
+  useCustomerProfile,
+  useMarketValuation,
+} from "@/features/dge";
+import { useToast } from "@/hooks/use-toast";
+import {
+  createCrmQuote,
+  getCrmCompany,
+  getCrmContact,
+  getCrmDeal,
+  updateCrmQuote,
+} from "@/features/crm/lib/crm-api";
+import type { CrmQuoteUpsertInput } from "@/features/crm/lib/types";
 
 interface QuoteBuilderPageProps {
   userRole: UserRole;
@@ -47,6 +63,13 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "machine", label: "Equipment" },
   { key: "review", label: "Proposal" },
 ];
+
+const STEP_QUERY = "step";
+
+function parseQuoteStep(raw: string | null): Step {
+  if (raw === "customer" || raw === "machine" || raw === "review") return raw;
+  return "customer";
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   excavator: "Excavator",
@@ -84,10 +107,96 @@ function stepIndex(step: Step): number {
   return STEPS.findIndex((s) => s.key === step);
 }
 
+function buildQuoteLineItems(
+  machine: Machine,
+  attachments: Attachment[]
+): Array<Record<string, unknown>> {
+  const machineLine: Record<string, unknown> = {
+    type: "machine",
+    stock_number: machine.stockNumber,
+    make: machine.make,
+    model: machine.model,
+    year: machine.year,
+    category: machine.category,
+    condition: machine.condition,
+    unit_price: machine.retailPrice,
+    quantity: 1,
+    subtotal: machine.retailPrice,
+  };
+
+  const attachmentLines = attachments.map((attachment) => ({
+    type: "attachment",
+    attachment_id: attachment.id,
+    name: attachment.name,
+    category: attachment.category,
+    unit_price: attachment.retailPrice,
+    quantity: 1,
+    subtotal: attachment.retailPrice,
+  }));
+
+  return [machineLine, ...attachmentLines];
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) {
-  const [step, setStep] = useState<Step>("customer");
+export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const seededContactId = searchParams.get("crm_contact_id");
+  const seededDealId = searchParams.get("crm_deal_id");
+
+  const stepParam = searchParams.get(STEP_QUERY);
+  const step = parseQuoteStep(stepParam);
+
+  const pushStep = useCallback(
+    (next: Step) => {
+      setSearchParams(
+        (p) => {
+          const n = new URLSearchParams(p);
+          n.set(STEP_QUERY, next);
+          return n;
+        },
+        { replace: false }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const replaceStep = useCallback(
+    (next: Step) => {
+      setSearchParams(
+        (p) => {
+          const n = new URLSearchParams(p);
+          n.set(STEP_QUERY, next);
+          return n;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const goBackStep = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  useLayoutEffect(() => {
+    if (
+      stepParam !== "customer" &&
+      stepParam !== "machine" &&
+      stepParam !== "review"
+    ) {
+      setSearchParams(
+        (p) => {
+          const n = new URLSearchParams(p);
+          n.set(STEP_QUERY, "customer");
+          return n;
+        },
+        { replace: true }
+      );
+    }
+  }, [stepParam, setSearchParams]);
   const [customer, setCustomer] = useState<CustomerForm>({
     name: "",
     company: "",
@@ -106,6 +215,12 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [conditionFilter, setConditionFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [crmContactId, setCrmContactId] = useState<string | null>(seededContactId);
+  const [crmDealId, setCrmDealId] = useState<string | null>(seededDealId);
+  const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null);
+  const [saveQuotePending, setSaveQuotePending] = useState(false);
+  const [saveQuoteError, setSaveQuoteError] = useState<string | null>(null);
+  const [crmContextSummary, setCrmContextSummary] = useState<string | null>(null);
 
   // Load machine catalog when entering step 2
   useEffect(() => {
@@ -117,6 +232,12 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
     });
   }, [step, machines.length]);
 
+  useEffect(() => {
+    if (step === "review" && !selectedMachine) {
+      replaceStep("machine");
+    }
+  }, [step, selectedMachine, replaceStep]);
+
   // Load attachments when a machine is selected
   useEffect(() => {
     if (!selectedMachine) return;
@@ -126,6 +247,77 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
       .getAttachments(cat)
       .then((list) => setAttachmentsMap((prev) => ({ ...prev, [cat]: list })));
   }, [selectedMachine, attachmentsMap]);
+
+  useEffect(() => {
+    if (!seededContactId && !seededDealId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateFromCrm(): Promise<void> {
+      try {
+        let resolvedContactId = seededContactId;
+        const summaryParts: string[] = [];
+
+        if (seededDealId) {
+          const deal = await getCrmDeal(seededDealId);
+          if (deal) {
+            setCrmDealId(deal.id);
+            if (!resolvedContactId && deal.primaryContactId) {
+              resolvedContactId = deal.primaryContactId;
+              setCrmContactId(deal.primaryContactId);
+            }
+            summaryParts.push(`Deal: ${deal.name}`);
+          }
+        }
+
+        if (resolvedContactId) {
+          const contact = await getCrmContact(resolvedContactId);
+          if (!contact) {
+            return;
+          }
+
+          setCrmContactId(contact.id);
+          let companyName = "";
+          if (contact.primaryCompanyId) {
+            const company = await getCrmCompany(contact.primaryCompanyId);
+            companyName = company?.name ?? "";
+          }
+
+          if (!cancelled) {
+            setCustomer((current) => ({
+              name: current.name || `${contact.firstName} ${contact.lastName}`.trim(),
+              company: current.company || companyName || "",
+              phone: current.phone || contact.phone || "",
+              email: current.email || contact.email || "",
+              address: current.address,
+            }));
+          }
+
+          summaryParts.push(`Contact: ${contact.firstName} ${contact.lastName}`);
+        }
+
+        if (!cancelled && summaryParts.length > 0) {
+          setCrmContextSummary(summaryParts.join(" · "));
+        }
+      } catch {
+        if (!cancelled) {
+          toast({
+            title: "CRM context unavailable",
+            description: "Quote Builder loaded, but CRM prefill could not be applied.",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+
+    void hydrateFromCrm();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seededContactId, seededDealId, toast]);
 
   const currentAttachments = selectedMachine
     ? (attachmentsMap[selectedMachine.category] ?? [])
@@ -166,7 +358,18 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
   }, []);
 
   function handleNewQuote() {
-    setStep("customer");
+    setSearchParams(
+      (p) => {
+        const n = new URLSearchParams();
+        const c = p.get("crm_contact_id");
+        const d = p.get("crm_deal_id");
+        if (c) n.set("crm_contact_id", c);
+        if (d) n.set("crm_deal_id", d);
+        n.set(STEP_QUERY, "customer");
+        return n;
+      },
+      { replace: true }
+    );
     setCustomer({ name: "", company: "", phone: "", email: "", address: "" });
     setCustomerErrors({});
     setSelectedMachine(null);
@@ -175,6 +378,8 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
     setCategoryFilter("all");
     setConditionFilter("all");
     setSearchQuery("");
+    setSavedQuoteId(null);
+    setSaveQuoteError(null);
   }
 
   const filteredMachines = machines.filter((m) => {
@@ -194,6 +399,105 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
 
   const uniqueCategories = Array.from(new Set(machines.map((m) => m.category)));
   const currentStepIndex = stepIndex(step);
+  const valuationRequest = useMemo(
+    () =>
+      selectedMachine
+        ? {
+            make: selectedMachine.make,
+            model: selectedMachine.model,
+            year: selectedMachine.year,
+            hours: selectedMachine.hoursOrMiles ?? 0,
+            condition: selectedMachine.condition,
+            location: customer.address || undefined,
+            stock_number: selectedMachine.stockNumber,
+          }
+        : null,
+    [selectedMachine, customer.address]
+  );
+  const customerLookup = useMemo(
+    () => ({
+      email: customer.email.trim() || undefined,
+      includeFleet: userRole !== "rep",
+    }),
+    [customer.email, userRole]
+  );
+  const reviewStepActive = step === "review";
+  const {
+    data: marketValuation,
+    loading: marketValuationLoading,
+    error: marketValuationError,
+    refresh: refreshMarketValuation,
+  } = useMarketValuation(valuationRequest, reviewStepActive && Boolean(valuationRequest));
+  const {
+    data: customerProfile,
+    loading: customerProfileLoading,
+    error: customerProfileError,
+    refresh: refreshCustomerProfile,
+  } = useCustomerProfile(customerLookup, reviewStepActive && Boolean(customerLookup.email));
+
+  async function handleSaveQuote(): Promise<void> {
+    if (!selectedMachine) {
+      replaceStep("machine");
+      return;
+    }
+
+    if (!validateCustomer()) {
+      replaceStep("customer");
+      return;
+    }
+
+    const hasCrmLink = Boolean(crmContactId || crmDealId);
+    const status: CrmQuoteUpsertInput["status"] = hasCrmLink ? "linked" : "draft";
+    const lineItems = buildQuoteLineItems(selectedMachine, selectedAttachmentObjects);
+    const customerSnapshot = {
+      name: customer.name.trim(),
+      company: customer.company.trim(),
+      phone: customer.phone.trim(),
+      email: customer.email.trim(),
+      address: customer.address.trim() || null,
+    };
+
+    const payload: CrmQuoteUpsertInput = {
+      crmContactId,
+      crmDealId,
+      status,
+      title: `${customer.company.trim() || customer.name.trim()} — ${selectedMachine.make} ${selectedMachine.model}`,
+      lineItems,
+      customerSnapshot,
+      metadata: {
+        notes: notes.trim() || null,
+        source: "quote_builder_ui",
+      },
+      linkedAt: status === "linked" ? new Date().toISOString() : null,
+    };
+
+    try {
+      setSaveQuotePending(true);
+      setSaveQuoteError(null);
+
+      const saved = savedQuoteId
+        ? await updateCrmQuote(savedQuoteId, payload)
+        : await createCrmQuote(payload);
+
+      setSavedQuoteId(saved.id);
+      toast({
+        title: savedQuoteId ? "Quote updated" : "Quote saved",
+        description: hasCrmLink
+          ? "Quote is durably linked to CRM."
+          : "Quote saved as draft. Link to a CRM contact or deal when available.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save quote.";
+      setSaveQuoteError(message);
+      toast({
+        title: "Quote save failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaveQuotePending(false);
+    }
+  }
 
   return (
     <>
@@ -227,7 +531,9 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
               return (
                 <div key={s.key} className="flex items-start flex-1 last:flex-none">
                   <button
-                    onClick={() => { if (isDone) setStep(s.key); }}
+                    onClick={() => {
+                      if (isDone) replaceStep(s.key);
+                    }}
                     disabled={!isDone}
                     className="flex flex-col items-center gap-1"
                   >
@@ -322,7 +628,9 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                   </div>
                   <Button
                     className="w-full"
-                    onClick={() => { if (validateCustomer()) setStep("machine"); }}
+                    onClick={() => {
+                      if (validateCustomer()) pushStep("machine");
+                    }}
                   >
                     Select Equipment
                   </Button>
@@ -371,7 +679,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setStep("customer")}
+                  onClick={goBackStep}
                   className="text-muted-foreground"
                 >
                   <ChevronLeft className="w-4 h-4 mr-1" />
@@ -538,11 +846,11 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                   </Card>
 
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setStep("customer")}>
+                    <Button variant="outline" onClick={goBackStep}>
                       <ChevronLeft className="w-4 h-4 mr-1" />
                       Back
                     </Button>
-                    <Button className="flex-1" onClick={() => setStep("review")}>
+                    <Button className="flex-1" onClick={() => pushStep("review")}>
                       Review Proposal
                     </Button>
                   </div>
@@ -594,7 +902,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setStep("machine")}
+                  onClick={goBackStep}
                   className="text-muted-foreground"
                 >
                   <ChevronLeft className="w-4 h-4 mr-1" />
@@ -641,7 +949,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                       variant="ghost"
                       size="sm"
                       className="h-auto py-0 text-xs text-primary"
-                      onClick={() => setStep("customer")}
+                      onClick={() => pushStep("customer")}
                     >
                       Edit
                     </Button>
@@ -657,6 +965,36 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 </CardContent>
               </Card>
 
+              <Card className="border-[#E2E8F0] bg-[#F8FAFC]">
+                <CardContent className="pt-4 pb-3 space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[#475569]">
+                    CRM Linkage
+                  </p>
+                  <p className="text-sm text-[#0F172A]">
+                    {crmContextSummary ?? "No CRM entity selected."}
+                  </p>
+                  {!crmContactId && !crmDealId && (
+                    <p className="text-xs text-[#64748B]">
+                      This quote will save as <strong>draft</strong> until it is started from a contact or deal.
+                    </p>
+                  )}
+                  {(crmDealId || crmContactId) && (
+                    <div className="flex flex-wrap gap-2">
+                      {crmDealId && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/crm/deals/${crmDealId}`}>Open Deal</Link>
+                        </Button>
+                      )}
+                      {crmContactId && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/crm/contacts/${crmContactId}`}>Open Contact</Link>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Line items table */}
               <Card>
                 <CardContent className="pt-4 pb-3">
@@ -668,7 +1006,7 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                       variant="ghost"
                       size="sm"
                       className="h-auto py-0 text-xs text-primary"
-                      onClick={() => setStep("machine")}
+                      onClick={() => pushStep("machine")}
                     >
                       Edit
                     </Button>
@@ -742,6 +1080,22 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
               </Card>
 
               {/* Notes */}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <MarketValuationCard
+                  data={marketValuation}
+                  loading={marketValuationLoading}
+                  error={marketValuationError}
+                  onRefresh={refreshMarketValuation}
+                />
+                <CustomerInsightCard
+                  data={customerProfile}
+                  loading={customerProfileLoading}
+                  error={customerProfileError}
+                  onRefresh={refreshCustomerProfile}
+                />
+              </div>
+
+              {/* Notes */}
               <div className="space-y-1.5">
                 <Label htmlFor="quote-notes" className="text-xs font-medium text-muted-foreground">
                   Notes{" "}
@@ -761,10 +1115,19 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
                 Pricing valid through {addDays(30)}
               </p>
 
+              {saveQuoteError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {saveQuoteError}
+                </p>
+              )}
+
               <div className="flex gap-2 pb-6">
-                <Button variant="outline" onClick={() => setStep("machine")}>
+                <Button variant="outline" onClick={goBackStep}>
                   <ChevronLeft className="w-4 h-4 mr-1" />
                   Back
+                </Button>
+                <Button className="flex-1" onClick={() => void handleSaveQuote()} disabled={saveQuotePending}>
+                  {saveQuotePending ? "Saving..." : savedQuoteId ? "Update Quote" : "Save Quote"}
                 </Button>
                 <Button className="flex-1" onClick={() => window.print()}>
                   <Printer className="w-4 h-4 mr-2" />
@@ -825,6 +1188,14 @@ export function QuoteBuilderPage({ userEmail, repName }: QuoteBuilderPageProps) 
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
+function formFieldDomId(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `qb-${slug || "field"}`;
+}
+
 function FormField({
   label,
   required,
@@ -842,14 +1213,16 @@ function FormField({
   type?: string;
   onChange: (v: string) => void;
 }) {
+  const inputId = formFieldDomId(label);
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={label}>
+      <Label htmlFor={inputId}>
         {label}
         {required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
       <Input
-        id={label}
+        id={inputId}
+        data-testid={inputId}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -964,6 +1337,15 @@ function ProposalPrint({
     day: "numeric",
     year: "numeric",
   });
+  const printTokens = {
+    text: "hsl(var(--qep-charcoal))",
+    heading: "hsl(var(--qep-dark))",
+    muted: "hsl(var(--qep-gray))",
+    border: "hsl(var(--qep-light-gray))",
+    panel: "hsl(var(--qep-bg))",
+    accent: "hsl(var(--qep-orange))",
+    accentStrong: "hsl(var(--qep-orange-accessible))",
+  };
 
   return (
     <>
@@ -978,20 +1360,23 @@ function ProposalPrint({
       <div
         id="qep-proposal"
         className="hidden print:block p-8 max-w-[8.5in] mx-auto font-sans"
-        style={{ color: '#334155' }}
+        style={{ color: printTokens.text }}
       >
         {/* Letterhead */}
-        <div className="flex items-start justify-between pb-4 mb-6" style={{ borderBottom: '2px solid #E87722' }}>
+        <div
+          className="flex items-start justify-between pb-4 mb-6"
+          style={{ borderBottom: `2px solid ${printTokens.accent}` }}
+        >
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: '#1e3a5f' }}>
+            <h1 className="text-2xl font-bold" style={{ color: printTokens.heading }}>
               Quality Equipment &amp; Parts, Inc.
             </h1>
-            <p className="text-sm leading-5 mt-0.5" style={{ color: '#334155' }}>
+            <p className="text-sm leading-5 mt-0.5" style={{ color: printTokens.text }}>
               Lake City, FL · qepusa.com
             </p>
           </div>
-          <div className="text-right text-sm" style={{ color: '#334155' }}>
-            <p className="font-semibold" style={{ color: '#1e3a5f' }}>{repName}</p>
+          <div className="text-right text-sm" style={{ color: printTokens.text }}>
+            <p className="font-semibold" style={{ color: printTokens.heading }}>{repName}</p>
             <p>{repEmail}</p>
             <p>{today}</p>
           </div>
@@ -999,8 +1384,10 @@ function ProposalPrint({
 
         {/* Customer */}
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-1" style={{ color: '#1e3a5f' }}>Equipment Quote</h2>
-          <div className="text-base space-y-0.5" style={{ color: '#334155' }}>
+          <h2 className="text-lg font-semibold mb-1" style={{ color: printTokens.heading }}>
+            Equipment Quote
+          </h2>
+          <div className="text-base space-y-0.5" style={{ color: printTokens.text }}>
             <p>
               <span className="font-medium">Customer:</span> {customer.name}
             </p>
@@ -1024,20 +1411,29 @@ function ProposalPrint({
         {/* Line items */}
         <table className="w-full text-sm border-collapse mb-6">
           <thead>
-            <tr style={{ backgroundColor: '#eef2f7' }}>
-              <th className="text-left px-3 py-2 font-semibold" style={{ color: '#1e3a5f', border: '1px solid #d7e0ea' }}>
+            <tr style={{ backgroundColor: printTokens.panel }}>
+              <th
+                className="text-left px-3 py-2 font-semibold"
+                style={{ color: printTokens.heading, border: `1px solid ${printTokens.border}` }}
+              >
                 Description
               </th>
-              <th className="text-right px-3 py-2 font-semibold whitespace-nowrap" style={{ color: '#1e3a5f', border: '1px solid #d7e0ea' }}>
+              <th
+                className="text-right px-3 py-2 font-semibold whitespace-nowrap"
+                style={{ color: printTokens.heading, border: `1px solid ${printTokens.border}` }}
+              >
                 Unit Price
               </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="px-3 py-2" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+              <td
+                className="px-3 py-2"
+                style={{ border: `1px solid ${printTokens.border}`, color: printTokens.text }}
+              >
                 <p className="font-medium">{selectedMachine.year} {selectedMachine.make} {selectedMachine.model}</p>
-                <p className="text-xs" style={{ color: '#64748b' }}>
+                <p className="text-xs" style={{ color: printTokens.muted }}>
                   {CATEGORY_LABELS[selectedMachine.category]} ·{" "}
                   {selectedMachine.condition === "new"
                     ? "New"
@@ -1047,26 +1443,43 @@ function ProposalPrint({
                     : ""}
                 </p>
               </td>
-              <td className="px-3 py-2 text-right font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+              <td
+                className="px-3 py-2 text-right font-medium"
+                style={{ border: `1px solid ${printTokens.border}`, color: printTokens.text }}
+              >
                 {formatCurrency(machinePrice)}
               </td>
             </tr>
             {selectedAttachments.map((a) => (
               <tr key={a.id}>
-                <td className="px-3 py-2" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+                <td
+                  className="px-3 py-2"
+                  style={{ border: `1px solid ${printTokens.border}`, color: printTokens.text }}
+                >
                   <p className="font-medium">{a.name}</p>
-                  <p className="text-xs capitalize" style={{ color: '#64748b' }}>
+                  <p className="text-xs capitalize" style={{ color: printTokens.muted }}>
                     {a.category.replace(/_/g, " ")}
                   </p>
                 </td>
-                <td className="px-3 py-2 text-right font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+                <td
+                  className="px-3 py-2 text-right font-medium"
+                  style={{ border: `1px solid ${printTokens.border}`, color: printTokens.text }}
+                >
                   {formatCurrency(a.retailPrice)}
                 </td>
               </tr>
             ))}
-            <tr style={{ backgroundColor: '#f8fafc' }}>
-              <td className="px-3 py-2 font-bold text-right" style={{ border: '1px solid #d7e0ea', color: '#1e3a5f' }}>Total</td>
-              <td className="px-3 py-2 text-right font-bold text-base" style={{ border: '1px solid #d7e0ea', color: '#E87722' }}>
+            <tr style={{ backgroundColor: printTokens.panel }}>
+              <td
+                className="px-3 py-2 font-bold text-right"
+                style={{ border: `1px solid ${printTokens.border}`, color: printTokens.heading }}
+              >
+                Total
+              </td>
+              <td
+                className="px-3 py-2 text-right font-bold text-base"
+                style={{ border: `1px solid ${printTokens.border}`, color: printTokens.accentStrong }}
+              >
                 {formatCurrency(grandTotal)}
               </td>
             </tr>
@@ -1076,15 +1489,23 @@ function ProposalPrint({
         {/* Key specs */}
         {selectedMachine.specs.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold mb-2" style={{ color: '#1e3a5f' }}>Key Specifications</h3>
+            <h3 className="text-sm font-semibold mb-2" style={{ color: printTokens.heading }}>
+              Key Specifications
+            </h3>
             <table className="w-full text-sm border-collapse">
               <tbody>
                 {selectedMachine.specs.map((s) => (
                   <tr key={s.label}>
-                    <td className="px-3 py-1.5 w-1/2" style={{ border: '1px solid #d7e0ea', color: '#64748b' }}>
+                    <td
+                      className="px-3 py-1.5 w-1/2"
+                      style={{ border: `1px solid ${printTokens.border}`, color: printTokens.muted }}
+                    >
                       {s.label}
                     </td>
-                    <td className="px-3 py-1.5 font-medium" style={{ border: '1px solid #d7e0ea', color: '#334155' }}>
+                    <td
+                      className="px-3 py-1.5 font-medium"
+                      style={{ border: `1px solid ${printTokens.border}`, color: printTokens.text }}
+                    >
                       {s.value}
                     </td>
                   </tr>
@@ -1097,15 +1518,23 @@ function ProposalPrint({
         {/* Notes */}
         {notes.trim() && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold mb-1" style={{ color: '#1e3a5f' }}>Notes</h3>
-            <p className="text-sm whitespace-pre-wrap rounded p-3" style={{ color: '#334155', border: '1px solid #d7e0ea' }}>
+            <h3 className="text-sm font-semibold mb-1" style={{ color: printTokens.heading }}>
+              Notes
+            </h3>
+            <p
+              className="text-sm whitespace-pre-wrap rounded p-3"
+              style={{ color: printTokens.text, border: `1px solid ${printTokens.border}` }}
+            >
               {notes}
             </p>
           </div>
         )}
 
         {/* Footer */}
-        <div className="pt-4 text-xs space-y-1" style={{ borderTop: '1px solid #d7e0ea', color: '#94a3b8' }}>
+        <div
+          className="pt-4 text-xs space-y-1"
+          style={{ borderTop: `1px solid ${printTokens.border}`, color: printTokens.muted }}
+        >
           <p>
             Pricing valid for 30 days from {today}. Quote subject to final inventory
             confirmation.

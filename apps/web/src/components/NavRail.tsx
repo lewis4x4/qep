@@ -9,6 +9,10 @@ import {
   LogOut,
   Lock,
   Plug,
+  UsersRound,
+  Building2,
+  LayoutGrid,
+  GitMerge,
 } from "lucide-react";
 import {
   Dialog,
@@ -23,8 +27,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeAppearanceSubmenu } from "@/components/ThemeAppearanceSubmenu";
 import {
   Tooltip,
   TooltipContent,
@@ -85,6 +91,30 @@ const NAV_ITEMS: NavItem[] = [
     gated: !isIntelliDealerConnected,
   },
   {
+    label: "CRM Deals",
+    href: "/crm/deals",
+    icon: LayoutGrid,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "CRM Contacts",
+    href: "/crm/contacts",
+    icon: UsersRound,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "CRM Companies",
+    href: "/crm/companies",
+    icon: Building2,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "CRM Duplicates",
+    href: "/crm/duplicates",
+    icon: GitMerge,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
     label: "Admin",
     href: "/admin",
     icon: Settings,
@@ -94,7 +124,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Integrations",
     href: "/admin/integrations",
     icon: Plug,
-    roles: ["owner"],
+    roles: ["admin", "owner"],
   },
 ];
 
@@ -285,6 +315,8 @@ export function NavRail({ profile, onLogout }: NavRailProps) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end" className="w-44">
+              <ThemeAppearanceSubmenu />
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
                 onClick={() => setShowSignOutDialog(true)}

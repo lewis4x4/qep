@@ -1,7 +1,6 @@
 /**
  * IntegrationHub — Admin Integration Hub page at /admin/integrations.
- * Card grid layout per CDO design direction §1.
- * Owner-only access (enforced at route and RLS layer).
+ * Card grid layout per CDO design direction.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -11,6 +10,7 @@ import { AlertTriangle, CheckCircle2, Clock, Wifi, Settings } from "lucide-react
 import { IntegrationCard } from "./IntegrationCard";
 import { IntegrationPanel } from "./IntegrationPanel";
 import { supabase } from "@/lib/supabase";
+import { hubspotAdminSupabase } from "@/lib/hubspot-admin-supabase";
 import { cn } from "@/lib/utils";
 import { trackIntegrationEvent } from "@/lib/track-event";
 
@@ -27,16 +27,56 @@ export interface IntegrationCardConfig {
   endpointUrl: string | null;
 }
 
-// Static display config per integration key
+interface IntegrationStatusRow {
+  integration_key: string;
+  status: IntegrationCardConfig["status"];
+  last_sync_at: string | null;
+  last_sync_records: number | null;
+  last_sync_error: string | null;
+  endpoint_url: string | null;
+}
+
+interface HubSpotPortalRow {
+  hub_id: string;
+  is_active: boolean;
+  updated_at: string;
+}
+
+interface HubSpotImportRunRow {
+  status: "queued" | "running" | "completed" | "completed_with_errors" | "failed" | "cancelled";
+  started_at: string;
+  completed_at: string | null;
+  contacts_processed: number;
+  companies_processed: number;
+  deals_processed: number;
+  activities_processed: number;
+  error_count: number;
+  error_summary: string | null;
+}
+
+interface TestConnectionResponse {
+  success: boolean;
+  latencyMs: number;
+  mode: "live" | "mock";
+  error?: { code: string; message: string };
+}
+
 const INTEGRATION_DISPLAY: Record<
   string,
   Pick<IntegrationCardConfig, "name" | "category" | "description" | "icon">
 > = {
+  hubspot: {
+    name: "HubSpot CRM",
+    category: "CRM Data Sync",
+    description:
+      "Manage HubSpot connection health and run bulk CRM imports with explicit confirmation.",
+    icon: "HS",
+  },
   intellidealer: {
     name: "IntelliDealer (VitalEdge)",
     category: "Inventory & CRM",
     description:
-      "Live inventory, customer master data, and deal history from your dealer management system.",
+      "Inventory, customer master data, and deal history from your dealer management system.",
     icon: "ID",
   },
   ironguides: {
@@ -64,7 +104,7 @@ const INTEGRATION_DISPLAY: Record<
     name: "Financing Partners",
     category: "Financing Rates",
     description:
-      "Live rate tables from AgDirect, CNH Capital, John Deere Financial, and AGCO Finance.",
+      "Rate tables from AgDirect, CNH Capital, John Deere Financial, and AGCO Finance.",
     icon: "FP",
   },
   manufacturer_incentives: {
@@ -90,7 +130,50 @@ const INTEGRATION_DISPLAY: Record<
   },
 };
 
-/** JWT / session failures from PostgREST after localStorage corruption, etc. */
+const WORKSPACE_ID = "default";
+
+function buildHubSpotIntegrationRow(
+  existingRow: IntegrationStatusRow | null,
+  portalRows: HubSpotPortalRow[],
+  latestRun: HubSpotImportRunRow | null
+): IntegrationStatusRow {
+  const hasActivePortal = portalRows.some((row) => row.is_active);
+
+  let status: IntegrationCardConfig["status"];
+  if (existingRow) {
+    status = existingRow.status;
+  } else if (hasActivePortal) {
+    status = "connected";
+  } else {
+    status = "pending_credentials";
+  }
+
+  if (latestRun?.status === "failed" || latestRun?.status === "completed_with_errors") {
+    status = "error";
+  }
+
+  const lastSyncError =
+    latestRun?.status === "failed" || latestRun?.status === "completed_with_errors"
+      ? latestRun.error_summary ?? "HubSpot import encountered an error."
+      : existingRow?.last_sync_error ?? null;
+
+  const syncRecords = latestRun
+    ? latestRun.contacts_processed +
+      latestRun.companies_processed +
+      latestRun.deals_processed +
+      latestRun.activities_processed
+    : existingRow?.last_sync_records ?? null;
+
+  return {
+    integration_key: "hubspot",
+    status,
+    last_sync_at: latestRun?.completed_at ?? latestRun?.started_at ?? existingRow?.last_sync_at ?? null,
+    last_sync_records: syncRecords,
+    last_sync_error: lastSyncError,
+    endpoint_url: existingRow?.endpoint_url ?? (hasActivePortal ? "https://app.hubspot.com" : null),
+  };
+}
+
 function isSessionAuthError(err: PostgrestError | null): boolean {
   if (!err) return false;
   const msg = (err.message ?? "").toLowerCase();
@@ -120,14 +203,14 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
         <span className="text-[#64748B]">Connected</span>
       </div>
       {demo > 0 && (
-        <div className="flex items-center gap-1.5 text-[#E87722]">
+        <div className="flex items-center gap-1.5 text-[#C2410C]">
           <Wifi className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{demo}</span>
           <span className="text-[#64748B]">Demo</span>
         </div>
       )}
       {pendingSetup > 0 && (
-        <div className="flex items-center gap-1.5 text-[#94A3B8]">
+        <div className="flex items-center gap-1.5 text-[#64748B]">
           <Settings className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{pendingSetup}</span>
           <span className="text-[#64748B]">Credentials needed</span>
@@ -141,7 +224,7 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
         </div>
       )}
       {lastSync && (
-        <div className="flex items-center gap-1.5 text-[#94A3B8]">
+        <div className="flex items-center gap-1.5 text-[#64748B]">
           <Clock className="w-4 h-4" aria-hidden="true" />
           <span className="text-[#64748B]">
             Last sync:{" "}
@@ -165,7 +248,7 @@ function CardSkeleton({ index }: { index: number }) {
     <div
       data-testid="integration-card-skeleton"
       data-skeleton-index={index}
-      className="bg-white rounded-xl border border-[#E2E8F0] p-5 flex flex-col gap-4 animate-pulse"
+      className="bg-card rounded-xl border border-border p-5 flex flex-col gap-4 animate-pulse"
     >
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 rounded-lg bg-[#F1F5F9] shrink-0" />
@@ -198,6 +281,7 @@ export function IntegrationHub() {
   const loadIntegrations = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const { error: userError } = await supabase.auth.getUser();
       if (userError) {
@@ -205,54 +289,83 @@ export function IntegrationHub() {
         return;
       }
 
-      const fetchPromise = supabase
-        .from("integration_status")
-        .select(
-          "integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url"
-        )
-        .order("integration_key");
-
-      const { data, error: queryError } = await Promise.race([
-        fetchPromise,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out. Please try again.")), 10_000)
-        ),
+      const fetchPromise = Promise.all([
+        supabase
+          .from("integration_status")
+          .select("integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url")
+          .order("integration_key"),
+        hubspotAdminSupabase
+          .from("workspace_hubspot_portal")
+          .select("hub_id, is_active, updated_at")
+          .eq("workspace_id", WORKSPACE_ID)
+          .eq("is_active", true)
+          .limit(1),
+        hubspotAdminSupabase
+          .from("crm_hubspot_import_runs")
+          .select(
+            "status, started_at, completed_at, contacts_processed, companies_processed, deals_processed, activities_processed, error_count, error_summary"
+          )
+          .eq("workspace_id", WORKSPACE_ID)
+          .order("started_at", { ascending: false })
+          .limit(1),
       ]);
 
-      if (queryError) {
-        if (isSessionAuthError(queryError)) {
+      const [integrationStatusResult, hubspotPortalResult, hubspotImportRunsResult] =
+        await Promise.race([
+          fetchPromise,
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("Request timed out. Please try again.")), 5000);
+          }),
+        ]);
+
+      if (integrationStatusResult.error) {
+        if (isSessionAuthError(integrationStatusResult.error)) {
           await supabase.auth.signOut();
           return;
         }
-        throw queryError;
+        throw integrationStatusResult.error;
       }
-      if (data === null) throw new Error("Could not connect. Please check your network connection and try again.");
 
-      const rows = data as Array<{
-        integration_key: string;
-        status: IntegrationCardConfig["status"];
-        last_sync_at: string | null;
-        last_sync_records: number | null;
-        last_sync_error: string | null;
-        endpoint_url: string | null;
-      }>;
+      const integrationRows = (integrationStatusResult.data ?? []) as IntegrationStatusRow[];
+      const rowByKey = new Map(integrationRows.map((row) => [row.integration_key, row]));
 
-      const mapped: IntegrationCardConfig[] = rows
-        .filter((r) => INTEGRATION_DISPLAY[r.integration_key])
-        .map((r) => ({
-          key: r.integration_key,
-          status: r.status,
-          lastSyncAt: r.last_sync_at,
-          syncRecords: r.last_sync_records,
-          lastSyncError: r.last_sync_error,
-          endpointUrl: r.endpoint_url,
-          ...INTEGRATION_DISPLAY[r.integration_key],
-        }));
+      const portalRows = (hubspotPortalResult.data ?? []) as HubSpotPortalRow[];
+      const latestImportRun = ((hubspotImportRunsResult.data ?? [])[0] as HubSpotImportRunRow | undefined) ?? null;
+
+      rowByKey.set(
+        "hubspot",
+        buildHubSpotIntegrationRow(rowByKey.get("hubspot") ?? null, portalRows, latestImportRun)
+      );
+
+      const mapped: IntegrationCardConfig[] = Object.keys(INTEGRATION_DISPLAY).map((key) => {
+        const row = rowByKey.get(key) ?? {
+          integration_key: key,
+          status: "pending_credentials" as const,
+          last_sync_at: null,
+          last_sync_records: null,
+          last_sync_error: null,
+          endpoint_url: null,
+        };
+
+        return {
+          key: row.integration_key,
+          status: row.status,
+          lastSyncAt: row.last_sync_at,
+          syncRecords: row.last_sync_records,
+          lastSyncError: row.last_sync_error,
+          endpointUrl: row.endpoint_url,
+          ...INTEGRATION_DISPLAY[key],
+        };
+      });
 
       setCards(mapped);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred. Refresh the page to try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred. Refresh the page to try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -265,23 +378,45 @@ export function IntegrationHub() {
     void loadIntegrations();
   }, [location.key, loadIntegrations]);
 
+  useEffect(() => {
+    void trackIntegrationEvent("admin_integrations_viewed", {
+      route: "/admin/integrations",
+      role: "admin_or_owner",
+    });
+  }, []);
+
   function handleConfigure(key: string) {
     setSelectedKey(key);
     setPanelOpen(true);
-    void trackIntegrationEvent("integration_panel_opened", { integration: key });
+    void trackIntegrationEvent("integration_panel_opened", {
+      integration_key: key,
+      source: "grid",
+    });
   }
 
   async function handleTestSync(key: string) {
-    void trackIntegrationEvent("integration_connection_tested", {
-      integration: key,
-      trigger: "card_test_sync",
+    void trackIntegrationEvent("integration_test_connection_clicked", {
+      integration_key: key,
+      trigger: "card_test_connection",
     });
-    const { data } = await supabase.functions.invoke("admin-users", {
-      body: { action: "test_integration", integration_key: key },
-    });
-    if (data) {
-      await loadIntegrations();
+
+    const { data, error: invokeError } = await supabase.functions.invoke<TestConnectionResponse>(
+      "integration-test-connection",
+      {
+        body: { integration_key: key },
+      }
+    );
+
+    if (invokeError) {
+      throw new Error(invokeError.message || "Connection test failed.");
     }
+
+    if (data && !data.success) {
+      setSelectedKey(key);
+      setPanelOpen(true);
+    }
+
+    await loadIntegrations();
   }
 
   const selectedCard = cards.find((c) => c.key === selectedKey) ?? null;
@@ -291,11 +426,14 @@ export function IntegrationHub() {
       <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex items-center justify-center py-24">
         <div className="text-center max-w-sm">
           <AlertTriangle className="w-10 h-10 text-[#DC2626] mx-auto mb-3" aria-hidden="true" />
-          <h3 className="text-base font-semibold text-[#1B2A3D] mb-1">Failed to load integrations</h3>
+          <h3 className="text-base font-semibold text-foreground mb-1">Failed to load integrations</h3>
           <p className="text-sm text-[#64748B]">{error}</p>
           <button
-            onClick={() => { setLoading(true); void loadIntegrations(); }}
-            className="mt-4 text-sm text-[#E87722] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] rounded"
+            onClick={() => {
+              setLoading(true);
+              void loadIntegrations();
+            }}
+            className="mt-4 text-sm text-[#C2410C] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] rounded"
           >
             Try again
           </button>
@@ -306,10 +444,9 @@ export function IntegrationHub() {
 
   return (
     <div className="max-w-[1440px] mx-auto w-full px-4 sm:px-6 lg:px-8 flex flex-col gap-6 overflow-x-hidden">
-      {/* Page header */}
       <div className="space-y-3">
         <div>
-          <h1 className="text-[28px] font-bold text-[#1B2A3D] leading-8">Integrations</h1>
+          <h1 className="text-[28px] font-bold text-foreground leading-8">Integrations</h1>
           <p className="text-sm text-[#64748B] mt-1">
             Connect external data sources to power the Deal Genome Engine.
           </p>
@@ -317,10 +454,9 @@ export function IntegrationHub() {
         {!loading && cards.length > 0 && <SummaryStrip cards={cards} />}
       </div>
 
-      {/* Integration grid */}
       <div
         className={cn(
-          "grid gap-4",
+          "grid gap-6",
           "grid-cols-1",
           "md:grid-cols-2",
           "lg:grid-cols-3",
@@ -331,7 +467,7 @@ export function IntegrationHub() {
         data-loading={loading}
       >
         {loading
-          ? Array.from({ length: 8 }).map((_, i) => (
+          ? Array.from({ length: Object.keys(INTEGRATION_DISPLAY).length }).map((_, i) => (
               <CardSkeleton key={i} index={i} />
             ))
           : cards.map((card) => (
@@ -344,20 +480,19 @@ export function IntegrationHub() {
             ))}
       </div>
 
-      {/* Empty state (no rows seeded yet) */}
       {!loading && cards.length === 0 && (
         <div className="flex items-center justify-center py-24">
           <div className="text-center max-w-sm">
-            <Wifi className="w-10 h-10 text-[#E2E8F0] mx-auto mb-3" aria-hidden="true" />
-            <h3 className="text-base font-semibold text-[#1B2A3D] mb-1">No integrations found</h3>
+            <Wifi className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" aria-hidden="true" />
+            <h3 className="text-base font-semibold text-foreground mb-1">No integrations found</h3>
             <p className="text-sm text-[#64748B]">
-              Your integrations aren't set up yet. Contact your administrator or QEP support to complete initial setup.
+              Your integrations aren't set up yet. Contact your administrator or QEP support to complete
+              initial setup.
             </p>
           </div>
         </div>
       )}
 
-      {/* Configuration panel */}
       <IntegrationPanel
         integration={selectedCard}
         open={panelOpen}

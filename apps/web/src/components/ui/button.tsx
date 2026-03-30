@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[8px] text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2 disabled:pointer-events-none disabled:bg-qep-light-gray disabled:text-[#A0AEC0] disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[8px] text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2 disabled:pointer-events-none disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -14,16 +14,16 @@ const buttonVariants = cva(
           "bg-qep-orange text-white hover:bg-qep-orange-hover",
         // Secondary — white bg, dark navy text, light gray border
         secondary:
-          "bg-white text-qep-dark border border-qep-light-gray hover:bg-qep-bg",
-        // Destructive — white bg, red text/border, red fill on hover
+          "bg-card text-card-foreground border border-border hover:bg-muted",
+        // Destructive — card bg, red text/border, red fill on hover
         destructive:
-          "bg-white text-qep-error border border-qep-error hover:bg-qep-error hover:text-white",
+          "bg-card text-destructive border border-destructive hover:bg-destructive hover:text-destructive-foreground",
         // Outline — alias for secondary
         outline:
-          "bg-white text-qep-dark border border-qep-light-gray hover:bg-qep-bg",
-        // Ghost — transparent bg, slate text
+          "bg-card text-card-foreground border border-border hover:bg-muted",
+        // Ghost — transparent bg, muted text
         ghost:
-          "bg-transparent text-qep-slate hover:bg-qep-bg",
+          "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
         // Link
         link: "text-qep-orange underline-offset-4 hover:underline",
       },

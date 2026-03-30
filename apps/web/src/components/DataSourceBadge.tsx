@@ -14,18 +14,23 @@ interface DataSourceBadgeProps {
 }
 
 const STATE_STYLES: Record<DataSourceState, string> = {
-  Live: "bg-[#EFF6FF] text-[#1B2A3D] border-[#BFDBFE]",
-  Demo: "bg-[#FFF7ED] text-[#B45309] border-[#FED7AA]",
-  Manual: "bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]",
-  Error: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
-  Stale: "bg-[#FFFBEB] text-[#A16207] border-[#FDE68A]",
+  Live:
+    "bg-blue-50 text-blue-950 border-blue-200 dark:bg-blue-950/45 dark:text-blue-100 dark:border-blue-800",
+  Demo:
+    "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-800",
+  Manual:
+    "bg-muted text-muted-foreground border-border dark:bg-muted/80",
+  Error:
+    "bg-red-50 text-red-900 border-red-200 dark:bg-red-950/40 dark:text-red-100 dark:border-red-900",
+  Stale:
+    "bg-yellow-50 text-yellow-900 border-yellow-200 dark:bg-yellow-950/35 dark:text-yellow-100 dark:border-yellow-800",
 };
 
 export function DataSourceBadge({ state, className }: DataSourceBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center h-6 px-2 rounded-full border text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center h-5 px-2 rounded-full border text-[11px] font-medium uppercase tracking-wide whitespace-nowrap",
         STATE_STYLES[state],
         className
       )}

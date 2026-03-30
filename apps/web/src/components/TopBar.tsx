@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
   HardHat,
@@ -6,13 +6,20 @@ import {
   Bell,
   LogOut,
   ChevronRight,
+  Moon,
+  Sun,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeAppearanceSubmenu } from "@/components/ThemeAppearanceSubmenu";
+import { ThemePreferenceRadioGroup } from "@/components/ThemePreferenceRadioGroup";
+import { useTheme } from "@/hooks/useTheme";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
+import { CrmGlobalSearchCommand } from "@/features/crm/components/CrmGlobalSearchCommand";
 
 interface Profile {
   id: string;
@@ -47,6 +55,10 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",
+  "/crm/deals": "CRM Deals",
+  "/crm/contacts": "CRM Contacts",
+  "/crm/companies": "CRM Companies",
+  "/crm/duplicates": "CRM Duplicates",
   "/admin": "Admin",
 };
 
@@ -55,6 +67,10 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote" },
+  "/crm/deals": { label: "Deals", route: "/crm/deals" },
+  "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },
+  "/crm/companies": { label: "Companies", route: "/crm/companies" },
+  "/crm/duplicates": { label: "Duplicates", route: "/crm/duplicates" },
   "/admin": null,
 };
 
@@ -120,22 +136,24 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
   const [searchValue, setSearchValue] = useState("");
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
   const [hasBadge, clearBadge] = useBadge();
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const { preference, resolvedDark } = useTheme();
+  const showCrmSearch = location.pathname.startsWith("/crm");
 
-  const breadcrumbLabel = BREADCRUMB_LABELS[location.pathname];
-  const quickAction = QUICK_ACTION_MAP[location.pathname] ?? null;
+  const themeAriaLabel =
+    preference === "system"
+      ? `Theme: following system (${resolvedDark ? "dark" : "light"})`
+      : `Theme: ${preference}`;
 
-  // Cmd+K / Ctrl+K to focus search
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const breadcrumbLabel =
+    BREADCRUMB_LABELS[location.pathname] ??
+    (location.pathname.startsWith("/crm/deals/") ? "Deal Detail" : undefined) ??
+    (location.pathname.startsWith("/crm/contacts/") ? "Contact Detail" : undefined) ??
+    (location.pathname.startsWith("/crm/companies/") ? "Company Detail" : undefined);
+  const quickAction =
+    QUICK_ACTION_MAP[location.pathname] ??
+    (location.pathname.startsWith("/crm/deals/") ? { label: "Deals", route: "/crm/deals" } : null) ??
+    (location.pathname.startsWith("/crm/contacts/") ? { label: "Contacts", route: "/crm/contacts" } : null) ??
+    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null);
 
   // Clear search on route change
   useEffect(() => {
@@ -185,32 +203,33 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
         </div>
 
         {/* Center: Global search */}
-        <form
-          onSubmit={handleSearchSubmit}
-          className="hidden lg:flex flex-1 justify-center"
-          role="search"
-        >
-          <div className="relative w-full max-w-[400px]">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A9BAE] pointer-events-none"
-              aria-hidden="true"
-            />
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Search knowledge base, quotes, team..."
-              aria-label="Global search"
-              className={cn(
-                "w-full pl-9 pr-4 py-1.5 text-sm rounded-full",
-                "bg-white/10 border border-white/20 text-white placeholder:text-[#8A9BAE]",
-                "focus:outline-none focus:ring-2 focus:ring-qep-orange focus:bg-white/15",
-                "transition-all duration-150"
-              )}
-            />
-          </div>
-        </form>
+        <div className="hidden lg:flex flex-1 justify-center" role="search">
+          {showCrmSearch ? (
+            <CrmGlobalSearchCommand />
+          ) : (
+            <form onSubmit={handleSearchSubmit} className="w-full max-w-[400px]">
+              <div className="relative">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A9BAE] pointer-events-none"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  placeholder="Search knowledge base, quotes, team..."
+                  aria-label="Global search"
+                  className={cn(
+                    "w-full pl-9 pr-4 py-1.5 text-sm rounded-full",
+                    "bg-white/10 border border-white/20 text-white placeholder:text-[#8A9BAE]",
+                    "focus:outline-none focus:ring-2 focus:ring-qep-orange focus:bg-white/15",
+                    "transition-all duration-150"
+                  )}
+                />
+              </div>
+            </form>
+          )}
+        </div>
 
         {/* Right: Quick action + Bell + Avatar */}
         <div className="flex items-center gap-2 ml-auto shrink-0">
@@ -224,6 +243,31 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
               {quickAction.label}
             </Button>
           )}
+
+          {/* Theme — visible in top bar (Light / Dark / System) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={themeAriaLabel}
+                aria-haspopup="menu"
+                className="inline-flex text-[#94A3B8] hover:text-white hover:bg-white/10"
+              >
+                {resolvedDark ? (
+                  <Moon className="w-5 h-5" aria-hidden />
+                ) : (
+                  <Sun className="w-5 h-5" aria-hidden />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Appearance
+              </DropdownMenuLabel>
+              <ThemePreferenceRadioGroup />
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Notification bell */}
           <Button
@@ -257,6 +301,8 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
+              <ThemeAppearanceSubmenu />
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
                 onClick={() => setShowSignOutDialog(true)}

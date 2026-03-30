@@ -52,6 +52,7 @@ export type FailureReason =
 
 export interface IntegrationStatusRow {
   id: string;
+  workspace_id: string;
   integration_key: IntegrationKey;
   display_name: string;
   status: IntegrationStatusEnum;

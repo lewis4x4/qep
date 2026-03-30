@@ -71,6 +71,57 @@
     --qep-error: 0 76% 57%;
     --qep-warning: 26 81% 52%;
   }
+
+  .dark {
+    color-scheme: dark;
+
+    --primary: 28 90% 55%;
+    --primary-foreground: 222 47% 8%;
+
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 38% 12%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 38% 12%;
+    --popover-foreground: 210 40% 96%;
+
+    --secondary: 217 28% 16%;
+    --secondary-foreground: 210 40% 92%;
+
+    --muted: 217 28% 16%;
+    --muted-foreground: 215 18% 62%;
+
+    --accent: 217 28% 20%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 28% 22%;
+    --input: 217 28% 22%;
+
+    --ring: 28 90% 55%;
+
+    --success: 152 45% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --qep-orange: 28 90% 55%;
+    --qep-orange-hover: 28 82% 48%;
+    --qep-orange-light: 28 42% 16%;
+    --qep-orange-accessible: 28 88% 58%;
+    --qep-dark: 222 48% 6%;
+    --qep-dark-hover: 222 38% 14%;
+    --qep-charcoal: 210 36% 92%;
+    --qep-slate: 215 18% 72%;
+    --qep-gray: 215 14% 58%;
+    --qep-light-gray: 217 26% 24%;
+    --qep-bg: 222 47% 8%;
+    --qep-info: 209 58% 56%;
+    --qep-error: 0 68% 56%;
+    --qep-warning: 28 90% 55%;
+  }
 }
 
 @layer base {

@@ -73,7 +73,10 @@ export function LoginPage({ authError }: LoginPageProps) {
         </div>
 
         {authError && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 mb-4 text-sm text-amber-800" role="alert">
+          <div
+            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 mb-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+            role="alert"
+          >
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
             <span>{authError}</span>
           </div>

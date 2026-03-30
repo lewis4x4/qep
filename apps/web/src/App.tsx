@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
 import { AppLayout } from "./components/AppLayout";
@@ -14,6 +15,13 @@ import { NotFoundPage } from "./components/NotFoundPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { CrmContactsPage } from "./features/crm/pages/CrmContactsPage";
+import { CrmContactDetailPage } from "./features/crm/pages/CrmContactDetailPage";
+import { CrmCompaniesPage } from "./features/crm/pages/CrmCompaniesPage";
+import { CrmCompanyDetailPage } from "./features/crm/pages/CrmCompanyDetailPage";
+import { CrmDealDetailPage } from "./features/crm/pages/CrmDealDetailPage";
+import { CrmPipelinePage } from "./features/crm/pages/CrmPipelinePage";
+import { CrmDuplicatesPage } from "./features/crm/pages/CrmDuplicatesPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
@@ -30,6 +38,17 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { user, profile, loading, error } = useAuth();
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            retry: 1,
+          },
+        },
+      })
+  );
   const [sessionExpired, setSessionExpired] = useState(false);
   // Track intentional logouts so SIGNED_OUT doesn't show the expired modal
   const isIntentionalLogout = useRef(false);
@@ -118,93 +137,166 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <AppErrorBoundary>
-        <OfflineBanner />
-        <SessionExpiredModal
-          open={showSessionExpiredModal}
-          onSignIn={() => {
-            setSessionExpired(false);
-            void supabase.auth.signOut();
-          }}
-        />
-        <AppLayout profile={profile} onLogout={handleLogout}>
-          <AnimatedRoutes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route
-              path="/dashboard"
-              element={
-                <DashboardPage
-                  userRole={profile.role}
-                  userEmail={profile.email}
-                  userName={profile.full_name}
-                />
-              }
-            />
-            <Route
-              path="/chat"
-              element={
-                <ChatPage userRole={profile.role} userEmail={profile.email} />
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                ["admin", "manager", "owner"].includes(profile.role) ? (
-                  <AdminPage userRole={profile.role} userId={profile.id} />
-                ) : (
-                  <Navigate to="/dashboard" replace />
-                )
-              }
-            />
-            <Route
-              path="/voice"
-              element={
-                ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                  <VoiceCapturePage
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AppErrorBoundary>
+          <OfflineBanner />
+          <SessionExpiredModal
+            open={showSessionExpiredModal}
+            onSignIn={() => {
+              setSessionExpired(false);
+              void supabase.auth.signOut();
+            }}
+          />
+          <AppLayout profile={profile} onLogout={handleLogout}>
+            <AnimatedRoutes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <DashboardPage
                     userRole={profile.role}
                     userEmail={profile.email}
+                    userName={profile.full_name}
                   />
-                ) : (
-                  <Navigate to="/dashboard" replace />
-                )
-              }
-            />
-            <Route
-              path="/quote"
-              element={
-                ["rep", "manager", "owner"].includes(profile.role) ? (
-                  isIntelliDealerConnected ? (
-                    <QuoteBuilderPage
+                }
+              />
+              <Route
+                path="/chat"
+                element={
+                  <ChatPage userRole={profile.role} userEmail={profile.email} />
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <AdminPage userRole={profile.role} userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/voice"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VoiceCapturePage
                       userRole={profile.role}
                       userEmail={profile.email}
-                      repName={profile.full_name}
                     />
                   ) : (
-                    <QuoteBuilderGate />
+                    <Navigate to="/dashboard" replace />
                   )
-                ) : (
-                  <Navigate to="/dashboard" replace />
-                )
-              }
-            />
-            <Route
-              path="/admin/integrations"
-              element={
-                profile.role === "owner" ? (
-                  <IntegrationHub />
-                ) : (
-                  <Navigate to="/dashboard" replace />
-                )
-              }
-            />
-            {/* Branded 404 for unknown routes */}
-            <Route path="*" element={<NotFoundPage />} />
-          </AnimatedRoutes>
-        </AppLayout>
-      </AppErrorBoundary>
-      <Toaster />
-    </BrowserRouter>
+                }
+              />
+              <Route
+                path="/quote"
+                element={
+                  ["rep", "manager", "owner"].includes(profile.role) ? (
+                    isIntelliDealerConnected ? (
+                      <QuoteBuilderPage
+                        userRole={profile.role}
+                        userEmail={profile.email}
+                        repName={profile.full_name}
+                      />
+                    ) : (
+                      <QuoteBuilderGate />
+                    )
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/deals"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmPipelinePage userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route path="/crm/pipeline" element={<Navigate to="/crm/deals" replace />} />
+              <Route
+                path="/crm/contacts"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmContactsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/contacts/:contactId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmContactDetailPage userId={profile.id} userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/deals/:dealId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmDealDetailPage userId={profile.id} userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/companies"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmCompaniesPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/companies/:companyId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/duplicates"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmDuplicatesPage userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/integrations"
+                element={
+                  ["admin", "owner"].includes(profile.role) ? (
+                    <IntegrationHub />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              {/* Branded 404 for unknown routes */}
+              <Route path="*" element={<NotFoundPage />} />
+            </AnimatedRoutes>
+          </AppLayout>
+        </AppErrorBoundary>
+        <Toaster />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

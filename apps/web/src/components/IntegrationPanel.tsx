@@ -14,6 +14,14 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -22,9 +30,16 @@ import { cn } from "@/lib/utils";
 import type { IntegrationCardConfig } from "./IntegrationHub";
 import { supabase } from "@/lib/supabase";
 import { trackIntegrationEvent } from "@/lib/track-event";
+import { useToast } from "@/hooks/use-toast";
 
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
+  hubspot: [
+    { key: "companies", label: "Companies", description: "Account records from HubSpot CRM" },
+    { key: "contacts", label: "Contacts", description: "People and role details linked to accounts" },
+    { key: "deals", label: "Deals", description: "Pipeline opportunities and stage transitions" },
+    { key: "activities", label: "Activities", description: "Calls, notes, and timeline events" },
+  ],
   intellidealer: [
     { key: "inventory", label: "Inventory", description: "Machine listings and stock levels" },
     { key: "customers", label: "Customers", description: "Customer master records and contacts" },
@@ -73,6 +88,25 @@ interface TestResult {
   error?: string;
 }
 
+interface TestConnectionResponse {
+  success: boolean;
+  latencyMs: number;
+  mode: "live" | "mock";
+  error?: { code: string; message: string };
+}
+
+interface HubSpotImportResult {
+  runId: string;
+  status: "completed" | "completed_with_errors" | "failed" | "running" | "queued" | "cancelled";
+  counts: {
+    companies: number;
+    contacts: number;
+    deals: number;
+    activities: number;
+    errors: number;
+  };
+}
+
 function statusToDataSource(status: IntegrationCardConfig["status"]): DataSourceState {
   switch (status) {
     case "connected": return "Live";
@@ -84,59 +118,106 @@ function statusToDataSource(status: IntegrationCardConfig["status"]): DataSource
 }
 
 export function IntegrationPanel({ integration, open, onClose, onSaved }: IntegrationPanelProps) {
+  const { toast } = useToast();
   const scopes = SYNC_SCOPES[integration?.key ?? ""] ?? [];
   const defaultScopes = Object.fromEntries(scopes.map((s) => [s.key, true]));
 
   const [credentials, setCredentials] = useState("");
+  const [hubspotClientId, setHubspotClientId] = useState("");
+  const [hubspotClientSecret, setHubspotClientSecret] = useState("");
+  const [hubspotAppId, setHubspotAppId] = useState("");
   const [endpointUrl, setEndpointUrl] = useState(integration?.endpointUrl ?? "");
   const [syncScopes, setSyncScopes] = useState<Record<string, boolean>>(defaultScopes);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hubSpotImportDialogOpen, setHubSpotImportDialogOpen] = useState(false);
+  const [isRunningHubSpotImport, setIsRunningHubSpotImport] = useState(false);
+  const [hubSpotImportResult, setHubSpotImportResult] = useState<HubSpotImportResult | null>(null);
+  const [hubSpotImportError, setHubSpotImportError] = useState<string | null>(null);
 
   // Reset all panel state when the selected integration changes
   useEffect(() => {
     if (!integration) return;
     const currentScopes = SYNC_SCOPES[integration.key] ?? [];
     setCredentials("");
+    setHubspotClientId("");
+    setHubspotClientSecret("");
+    setHubspotAppId("");
     setEndpointUrl(integration.endpointUrl ?? "");
     setSyncScopes(Object.fromEntries(currentScopes.map((s) => [s.key, true])));
     setTestResult(null);
     setSaveError(null);
+    setHubSpotImportDialogOpen(false);
+    setIsRunningHubSpotImport(false);
+    setHubSpotImportResult(null);
+    setHubSpotImportError(null);
   }, [integration?.key]);
 
   if (!integration) return null;
+  const isHubSpot = integration.key === "hubspot";
 
   async function handleSave() {
     if (!integration) return;
+
     setIsSaving(true);
     setSaveError(null);
     try {
+      let credentialsPayload = credentials;
+      if (isHubSpot) {
+        if (
+          !hubspotClientId.trim() || !hubspotClientSecret.trim() ||
+          !hubspotAppId.trim()
+        ) {
+          throw new Error(
+            "HubSpot client ID, client secret, and app ID are required.",
+          );
+        }
+        credentialsPayload = JSON.stringify({
+          client_id: hubspotClientId.trim(),
+          client_secret: hubspotClientSecret.trim(),
+          app_id: hubspotAppId.trim(),
+        });
+      }
+
       const { error } = await supabase.functions.invoke("admin-users", {
         body: {
           action: "update_integration",
           integration_key: integration.key,
-          credentials,
+          credentials: credentialsPayload,
           endpoint_url: endpointUrl || null,
           sync_scopes: syncScopes,
         },
       });
       if (error) throw new Error(error.message);
-      void trackIntegrationEvent("integration_config_updated", {
-        integration: integration.key,
-        changed_fields: [
-          ...(credentials.trim() ? ["credentials"] : []),
-          "endpoint_url",
-          "sync_scopes",
-        ],
+      void trackIntegrationEvent("integration_credentials_saved", {
+        integration_key: integration.key,
+        auth_type: isHubSpot ? "oauth_app" : credentials.trim() ? "token" : "existing",
+        status_after: isHubSpot ? "pending_credentials" : "demo_mode",
+      });
+      toast({
+        title: "Credentials saved",
+        description: `${integration.name} configuration updated.`,
       });
       setCredentials("");
+      setHubspotClientId("");
+      setHubspotClientSecret("");
+      setHubspotAppId("");
       onSaved();
       onClose();
     } catch (err) {
       console.error("Save credentials error:", err);
+      void trackIntegrationEvent("integration_credentials_save_failed", {
+        integration_key: integration.key,
+        error_code: "save_failed",
+      });
       setSaveError("Could not save your credentials. Check your connection and try again.");
+      toast({
+        title: "Save failed",
+        description: "Could not save credentials. Check values and try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -146,34 +227,91 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
     if (!integration) return;
     setIsTesting(true);
     setTestResult(null);
+
+    void trackIntegrationEvent("integration_test_connection_clicked", {
+      integration_key: integration.key,
+      trigger: "panel_test_connection",
+    });
+
     try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: {
-          action: "test_integration",
-          integration_key: integration.key,
-        },
-      });
+      const { data, error } = await supabase.functions.invoke<TestConnectionResponse>(
+        "integration-test-connection",
+        {
+          body: {
+            integration_key: integration.key,
+          },
+        }
+      );
+
       if (error) throw new Error(error.message);
-      const result = data as TestResult;
+
+      const result: TestResult = {
+        success: Boolean(data?.success),
+        latencyMs: data?.latencyMs ?? 0,
+        error: data?.error?.message,
+      };
       setTestResult(result);
-      void trackIntegrationEvent("integration_connection_tested", {
-        integration: integration.key,
-        result: result.success ? "success" : "failure",
-        latency_ms: result.latencyMs,
-        trigger: "panel_test_connection",
-      });
+      if (result.success) {
+        toast({
+          title: "Connection successful",
+          description: `${integration.name} responded in ${result.latencyMs}ms.`,
+        });
+      } else {
+        toast({
+          title: "Connection failed",
+          description: result.error ?? "Review credentials and endpoint settings.",
+          variant: "destructive",
+        });
+      }
+      await onSaved();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Test failed";
       setTestResult({ success: false, latencyMs: 0, error: errMsg });
-      void trackIntegrationEvent("integration_connection_tested", {
-        integration: integration.key,
-        result: "failure",
-        latency_ms: 0,
-        trigger: "panel_test_connection",
-        error: errMsg,
+      toast({
+        title: "Connection test failed",
+        description: errMsg,
+        variant: "destructive",
       });
     } finally {
       setIsTesting(false);
+    }
+  }
+
+  async function runHubSpotImport(): Promise<void> {
+    setHubSpotImportError(null);
+    setHubSpotImportResult(null);
+    setIsRunningHubSpotImport(true);
+    setHubSpotImportDialogOpen(false);
+    try {
+      const { data, error } = await supabase.functions.invoke("crm-hubspot-import", {
+        body: {},
+      });
+      if (error) {
+        throw new Error(error.message || "HubSpot import failed to start.");
+      }
+
+      const result = data as HubSpotImportResult;
+      if (!result || typeof result !== "object" || !result.runId || !result.counts) {
+        throw new Error("HubSpot import returned an invalid response.");
+      }
+
+      setHubSpotImportResult(result);
+      if (result.status === "completed_with_errors" || result.status === "failed") {
+        setHubSpotImportError(
+          result.status === "failed"
+            ? "HubSpot import failed. Review CRM import logs and retry."
+            : "HubSpot import completed with errors. Review CRM import logs for failed rows."
+        );
+      }
+      onSaved();
+    } catch (err) {
+      setHubSpotImportError(
+        err instanceof Error
+          ? err.message
+          : "HubSpot import failed. Check your connection and try again."
+      );
+    } finally {
+      setIsRunningHubSpotImport(false);
     }
   }
 
@@ -186,13 +324,13 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
         className="w-full lg:max-w-[460px] [@media(min-width:1440px)]:max-w-[520px] flex flex-col p-0 gap-0 overflow-hidden"
       >
         {/* Header */}
-        <SheetHeader className="px-6 py-5 border-b border-[#E2E8F0] shrink-0">
+        <SheetHeader className="px-6 py-5 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-lg font-bold text-[#1B2A3D] shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-muted border border-border flex items-center justify-center text-lg font-bold text-foreground shrink-0">
               {integration.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <SheetTitle className="text-[15px] font-semibold text-[#1B2A3D] leading-5">
+              <SheetTitle className="text-[15px] font-semibold text-foreground leading-5">
                 {integration.name}
               </SheetTitle>
               <SheetDescription className="text-xs text-[#64748B] mt-0.5">
@@ -208,7 +346,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 1: Connection status */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection status</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Connection status</h4>
             <div
               className={cn(
                 "rounded-lg border p-4 flex items-start gap-3",
@@ -216,7 +354,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                   ? "bg-[#F0FDF4] border-[#BBF7D0]"
                   : integration.status === "error"
                   ? "bg-[#FEF2F2] border-[#FECACA]"
-                  : "bg-[#F8FAFC] border-[#E2E8F0]"
+                  : "bg-muted border-border"
               )}
             >
               {integration.status === "connected" ? (
@@ -227,9 +365,9 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                 <AlertTriangle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" aria-hidden="true" />
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#1B2A3D]">
+                <p className="text-sm font-medium text-foreground">
                   {integration.status === "connected"
-                    ? "Connected and syncing"
+                    ? "Connected"
                     : integration.status === "error"
                     ? "Connection error"
                     : integration.status === "demo_mode"
@@ -248,38 +386,153 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
             </div>
           </section>
 
+          {isHubSpot && (
+            <>
+              <Separator className="bg-[#F1F5F9]" />
+
+              <section>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Bulk import</h4>
+                <p className="text-xs text-[#64748B] mb-3">
+                  Import HubSpot companies, contacts, deals, and activities into CRM.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
+                  onClick={() => setHubSpotImportDialogOpen(true)}
+                  disabled={isRunningHubSpotImport}
+                >
+                  {isRunningHubSpotImport ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                      Running import…
+                    </>
+                  ) : (
+                    "Run HubSpot bulk import"
+                  )}
+                </Button>
+
+                {hubSpotImportError && (
+                  <p className="text-xs text-[#DC2626] mt-2">{hubSpotImportError}</p>
+                )}
+
+                {hubSpotImportResult && (
+                  <div
+                    className={cn(
+                      "mt-3 rounded-lg border p-3 text-xs",
+                      hubSpotImportResult.status === "completed"
+                        ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]"
+                        : "bg-[#FFF7ED] border-[#FED7AA] text-[#9A3412]"
+                    )}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <p className="font-semibold">
+                      Import {hubSpotImportResult.status === "completed" ? "completed" : "finished"}
+                    </p>
+                    <p className="mt-1">
+                      {hubSpotImportResult.counts.companies.toLocaleString()} companies,{" "}
+                      {hubSpotImportResult.counts.contacts.toLocaleString()} contacts,{" "}
+                      {hubSpotImportResult.counts.deals.toLocaleString()} deals,{" "}
+                      {hubSpotImportResult.counts.activities.toLocaleString()} activities
+                    </p>
+                    {hubSpotImportResult.counts.errors > 0 && (
+                      <p className="mt-1">
+                        {hubSpotImportResult.counts.errors.toLocaleString()} records need attention.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           <Separator className="bg-[#F1F5F9]" />
 
           {/* Section 2: Credential form */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Credentials &amp; configuration</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Credentials &amp; configuration</h4>
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="credentials" className="text-xs font-medium text-[#374151]">
-                  API Key / Token
-                  <span className="text-[#94A3B8] ml-1">(encrypted at rest)</span>
-                </Label>
-                <Input
-                  id="credentials"
-                  type="password"
-                  placeholder={
-                    integration.status === "connected"
-                      ? "Leave blank to keep current credentials"
-                      : "Enter API key or bearer token"
-                  }
-                  value={credentials}
-                  onChange={(e) => setCredentials(e.target.value)}
-                  className="font-mono text-sm focus-visible:ring-[#E87722]"
-                  autoComplete="off"
-                />
-                <p className="text-xs text-[#94A3B8]">
-                  Stored with AES-256-GCM encryption. Never logged or exposed in plaintext.
-                </p>
-              </div>
+              {isHubSpot ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="hubspot-client-id" className="text-xs font-medium text-[#374151]">
+                      HubSpot Client ID
+                      <span className="text-[#64748B] ml-1">(required)</span>
+                    </Label>
+                    <Input
+                      id="hubspot-client-id"
+                      type="text"
+                      placeholder="Enter HubSpot client ID"
+                      value={hubspotClientId}
+                      onChange={(e) => setHubspotClientId(e.target.value)}
+                      className="font-mono text-sm focus-visible:ring-qep-orange"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="hubspot-client-secret" className="text-xs font-medium text-[#374151]">
+                      HubSpot Client Secret
+                      <span className="text-[#64748B] ml-1">(required)</span>
+                    </Label>
+                    <Input
+                      id="hubspot-client-secret"
+                      type="password"
+                      placeholder="Enter HubSpot client secret"
+                      value={hubspotClientSecret}
+                      onChange={(e) => setHubspotClientSecret(e.target.value)}
+                      className="font-mono text-sm focus-visible:ring-qep-orange"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="hubspot-app-id" className="text-xs font-medium text-[#374151]">
+                      HubSpot App ID
+                      <span className="text-[#64748B] ml-1">(required)</span>
+                    </Label>
+                    <Input
+                      id="hubspot-app-id"
+                      type="text"
+                      placeholder="Enter HubSpot app ID"
+                      value={hubspotAppId}
+                      onChange={(e) => setHubspotAppId(e.target.value)}
+                      className="font-mono text-sm focus-visible:ring-qep-orange"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <p className="text-xs text-[#64748B]">
+                    Stored with AES-256-GCM encryption. Values are only used server-side for OAuth,
+                    webhook verification, and token refresh.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="credentials" className="text-xs font-medium text-[#374151]">
+                    API Key / Token
+                    <span className="text-[#64748B] ml-1">(encrypted at rest)</span>
+                  </Label>
+                  <Input
+                    id="credentials"
+                    type="password"
+                    placeholder={
+                      integration.status === "connected"
+                        ? "Leave blank to keep current credentials"
+                        : "Enter API key or bearer token"
+                    }
+                    value={credentials}
+                    onChange={(e) => setCredentials(e.target.value)}
+                    className="font-mono text-sm focus-visible:ring-qep-orange"
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-[#64748B]">
+                    Stored with AES-256-GCM encryption. Never logged or exposed in plaintext.
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="endpoint-url" className="text-xs font-medium text-[#374151]">
                   Endpoint URL
-                  <span className="text-[#94A3B8] ml-1">(optional)</span>
+                  <span className="text-[#64748B] ml-1">(optional)</span>
                 </Label>
                 <Input
                   id="endpoint-url"
@@ -287,7 +540,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                   placeholder="https://api.vendor.com"
                   value={endpointUrl}
                   onChange={(e) => setEndpointUrl(e.target.value)}
-                  className="text-sm focus-visible:ring-[#E87722]"
+                  className="text-sm focus-visible:ring-qep-orange"
                 />
               </div>
             </div>
@@ -300,11 +553,11 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 3: Connection test */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Connection test</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Connection test</h4>
             <Button
               variant="outline"
               size="sm"
-              className="border-[#E2E8F0] text-[#1B2A3D] hover:bg-[#F8FAFC] focus-visible:ring-[#E87722] w-full"
+              className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
               onClick={() => void handleTest()}
               disabled={isTesting}
             >
@@ -337,7 +590,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                   <XCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
                 )}
                 <div>
-                  <p className="text-sm font-medium text-[#1B2A3D]">
+                  <p className="text-sm font-medium text-foreground">
                     {testResult.success
                       ? "Connection successful"
                       : "Connection failed — check your credentials and endpoint URL, then try again."}
@@ -357,7 +610,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
           {/* Section 4: Sync scope toggles */}
           {scopes.length > 0 && (
             <section>
-              <h4 className="text-sm font-semibold text-[#1B2A3D] mb-1">Sync scope</h4>
+              <h4 className="text-sm font-semibold text-foreground mb-1">Sync scope</h4>
               <p className="text-xs text-[#64748B] mb-3">
                 Choose which data types to sync from this integration.
               </p>
@@ -365,8 +618,8 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                 {scopes.map((scope) => (
                   <div key={scope.key} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#1B2A3D] leading-none">{scope.label}</p>
-                      <p className="text-xs text-[#94A3B8] mt-0.5">{scope.description}</p>
+                      <p className="text-sm font-medium text-foreground leading-none">{scope.label}</p>
+                      <p className="text-xs text-[#64748B] mt-0.5">{scope.description}</p>
                     </div>
                     <button
                       type="button"
@@ -378,13 +631,13 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                       }
                       className={cn(
                         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] focus-visible:ring-offset-1",
-                        (syncScopes[scope.key] ?? true) ? "bg-[#E87722]" : "bg-[#E2E8F0]"
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                        (syncScopes[scope.key] ?? true) ? "bg-qep-orange" : "bg-muted"
                       )}
                     >
                       <span
                         className={cn(
-                          "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 mt-0.5",
+                          "pointer-events-none block h-4 w-4 rounded-full bg-card shadow-sm transition-transform duration-200 mt-0.5",
                           (syncScopes[scope.key] ?? true) ? "translate-x-[18px]" : "translate-x-0.5"
                         )}
                       />
@@ -399,7 +652,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 5: Audit / activity log */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-3">Recent activity</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-3">Recent activity</h4>
             {integration.lastSyncAt ? (
               <div className="space-y-2">
                 <div
@@ -417,10 +670,10 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-medium text-[#1B2A3D]">
+                      <p className="text-xs font-medium text-foreground">
                         {integration.lastSyncError ? "Sync failed" : "Sync completed"}
                       </p>
-                      <span className="text-[10px] text-[#94A3B8] shrink-0">
+                      <span className="text-[10px] text-[#64748B] shrink-0">
                         {new Date(integration.lastSyncAt).toLocaleString("en-US", {
                           month: "short",
                           day: "numeric",
@@ -441,7 +694,7 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-[#94A3B8]">
+              <div className="flex items-center gap-2 text-[#64748B]">
                 <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <p className="text-xs">No sync history — first sync will run after connecting.</p>
               </div>
@@ -452,31 +705,31 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
 
           {/* Section 6: Fallback / demo mode explanation */}
           <section>
-            <h4 className="text-sm font-semibold text-[#1B2A3D] mb-2">Demo mode</h4>
+            <h4 className="text-sm font-semibold text-foreground mb-2">Demo mode</h4>
             <p className="text-sm text-[#64748B] leading-relaxed">
               While disconnected, we use realistic sample data that mirrors what{" "}
-              <strong className="text-[#1B2A3D]">{integration.name}</strong> would provide.
+              <strong className="text-foreground">{integration.name}</strong> would provide.
               All Deal Genome Engine features remain fully operational. Data source badges
-              will show <span className="font-medium text-[#E87722]">Demo</span> to distinguish
+              will show <span className="font-medium text-qep-orange">Demo</span> to distinguish
               live from sample data.
             </p>
           </section>
         </div>
 
         {/* Pinned footer action */}
-        <div className="shrink-0 px-6 py-4 border-t border-[#E2E8F0] bg-white">
+        <div className="shrink-0 px-6 py-4 border-t border-border bg-card">
           <div className="flex gap-3">
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 border-[#E2E8F0] text-[#1B2A3D] focus-visible:ring-[#E87722]"
+              className="flex-1 border-border text-foreground focus-visible:ring-qep-orange"
               onClick={onClose}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              className="flex-1 bg-[#E87722] hover:bg-[#D06A1B] text-white focus-visible:ring-[#E87722]"
+              className="flex-1 bg-qep-orange hover:bg-qep-orange-hover text-white focus-visible:ring-qep-orange"
               onClick={() => void handleSave()}
               disabled={isSaving}
             >
@@ -492,6 +745,35 @@ export function IntegrationPanel({ integration, open, onClose, onSaved }: Integr
           </div>
         </div>
       </SheetContent>
+
+      <Dialog open={hubSpotImportDialogOpen} onOpenChange={setHubSpotImportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run HubSpot bulk import?</DialogTitle>
+            <DialogDescription>
+              This will import CRM records from HubSpot and may take a few minutes. We update existing records when they match and add new ones.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHubSpotImportDialogOpen(false)}
+              disabled={isRunningHubSpotImport}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-qep-orange hover:bg-qep-orange-hover text-white focus-visible:ring-qep-orange"
+              onClick={() => void runHubSpotImport()}
+              disabled={isRunningHubSpotImport}
+            >
+              {isRunningHubSpotImport ? "Starting…" : "Confirm import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

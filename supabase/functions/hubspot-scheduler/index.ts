@@ -5,8 +5,205 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
+import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 
 const STALLED_THRESHOLD_DAYS = 7;
+
+type FollowUpStepType = "task" | "email" | "call_log" | "stalled_alert";
+
+interface SchedulerDatabase {
+  public: {
+    Tables: {
+      sequence_enrollments: {
+        Row: {
+          id: string;
+          deal_id: string;
+          deal_name: string | null;
+          contact_id: string | null;
+          contact_name: string | null;
+          owner_id: string | null;
+          hub_id: string;
+          current_step: number;
+          sequence_id: string;
+          status: string;
+          next_step_due_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          deal_id: string;
+          deal_name?: string | null;
+          contact_id?: string | null;
+          contact_name?: string | null;
+          owner_id?: string | null;
+          hub_id: string;
+          current_step?: number;
+          sequence_id: string;
+          status?: string;
+          next_step_due_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: {
+          status?: string;
+          completed_at?: string | null;
+          current_step?: number;
+          next_step_due_at?: string | null;
+        };
+        Relationships: [];
+      };
+      follow_up_steps: {
+        Row: {
+          id: string;
+          sequence_id: string;
+          step_number: number;
+          day_offset: number;
+          step_type: FollowUpStepType;
+          subject: string | null;
+          body_template: string | null;
+          task_priority: string | null;
+        };
+        Insert: {
+          id?: string;
+          sequence_id: string;
+          step_number: number;
+          day_offset: number;
+          step_type: FollowUpStepType;
+          subject?: string | null;
+          body_template?: string | null;
+          task_priority?: string | null;
+        };
+        Update: {
+          step_number?: number;
+          day_offset?: number;
+          step_type?: FollowUpStepType;
+          subject?: string | null;
+          body_template?: string | null;
+          task_priority?: string | null;
+        };
+        Relationships: [];
+      };
+      hubspot_connections: {
+        Row: {
+          id: string;
+          hub_id: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          token_expires_at: string;
+          is_active: boolean;
+        };
+        Insert: {
+          id?: string;
+          hub_id: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          token_expires_at: string;
+          is_active?: boolean;
+        };
+        Update: {
+          access_token?: string;
+          refresh_token?: string;
+          token_expires_at?: string;
+          is_active?: boolean;
+        };
+        Relationships: [];
+      };
+      workspace_hubspot_portal: {
+        Row: {
+          workspace_id: string;
+          hub_id: string;
+          is_active: boolean;
+        };
+        Insert: {
+          workspace_id: string;
+          hub_id: string;
+          is_active?: boolean;
+        };
+        Update: {
+          workspace_id?: string;
+          hub_id?: string;
+          is_active?: boolean;
+        };
+        Relationships: [];
+      };
+      activity_log: {
+        Row: {
+          id: string;
+          enrollment_id: string | null;
+          deal_id: string | null;
+          hub_id: string | null;
+          activity_type: string;
+          step_number: number | null;
+          hubspot_engagement_id: string | null;
+          payload: unknown;
+          success: boolean | null;
+        };
+        Insert: {
+          id?: string;
+          enrollment_id?: string | null;
+          deal_id?: string | null;
+          hub_id?: string | null;
+          activity_type: string;
+          step_number?: number | null;
+          hubspot_engagement_id?: string | null;
+          payload?: unknown;
+          success?: boolean | null;
+        };
+        Update: {
+          enrollment_id?: string | null;
+          deal_id?: string | null;
+          hub_id?: string | null;
+          activity_type?: string;
+          step_number?: number | null;
+          hubspot_engagement_id?: string | null;
+          payload?: unknown;
+          success?: boolean | null;
+        };
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+}
+
+interface DueEnrollment {
+  id: string;
+  deal_id: string;
+  deal_name: string | null;
+  contact_id: string | null;
+  contact_name: string | null;
+  owner_id: string | null;
+  hub_id: string;
+  current_step: number;
+  sequence_id: string;
+}
+
+interface HubSpotDealSearchResult {
+  id: string;
+  properties: {
+    dealname?: string;
+    hubspot_owner_id?: string;
+    hs_last_activity_date?: string;
+  };
+}
+
+interface HubSpotDealSearchResponse {
+  results?: HubSpotDealSearchResult[];
+}
+
+interface HubSpotObjectResponse {
+  id?: string;
+}
+
+interface HubSpotTokenRefreshResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+}
 
 Deno.serve(async (req) => {
   // Verify this is called from Supabase scheduler
@@ -17,7 +214,7 @@ Deno.serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const supabase = createClient(
+  const supabase = createClient<SchedulerDatabase>(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
@@ -25,7 +222,7 @@ Deno.serve(async (req) => {
   const results = { processed: 0, errors: 0, stalledAlerts: 0 };
 
   // --- Process due sequence steps ---
-  const { data: dueEnrollments } = await supabase
+  const { data: dueEnrollmentRows } = await supabase
     .from("sequence_enrollments")
     .select(`
       id, deal_id, deal_name, contact_id, contact_name, owner_id,
@@ -34,8 +231,9 @@ Deno.serve(async (req) => {
     .eq("status", "active")
     .lte("next_step_due_at", new Date().toISOString())
     .limit(50);
+  const dueEnrollments: DueEnrollment[] = (dueEnrollmentRows ?? []) as DueEnrollment[];
 
-  for (const enrollment of dueEnrollments ?? []) {
+  for (const enrollment of dueEnrollments) {
     try {
       await processEnrollmentStep(supabase, enrollment);
       results.processed++;
@@ -55,22 +253,10 @@ Deno.serve(async (req) => {
   });
 });
 
-interface Enrollment {
-  id: string;
-  deal_id: string;
-  deal_name: string | null;
-  contact_id: string | null;
-  contact_name: string | null;
-  owner_id: string | null;
-  hub_id: string;
-  current_step: number;
-  sequence_id: string;
-}
-
 async function processEnrollmentStep(
-  supabase: ReturnType<typeof createClient>,
-  enrollment: Enrollment
-) {
+  supabase: ReturnType<typeof createClient<SchedulerDatabase>>,
+  enrollment: DueEnrollment
+): Promise<void> {
   // Get the current step definition
   const { data: step } = await supabase
     .from("follow_up_steps")
@@ -128,7 +314,13 @@ async function processEnrollmentStep(
 
   switch (step.step_type) {
     case "task":
-      engagementId = await createHubSpotTask(token, enrollment, subject, body, step.task_priority);
+      engagementId = await createHubSpotTask(
+        token,
+        enrollment,
+        subject,
+        body,
+        step.task_priority ?? "MEDIUM",
+      );
       break;
 
     case "email":
@@ -206,7 +398,9 @@ async function processEnrollmentStep(
   }
 }
 
-async function detectStalledDeals(supabase: ReturnType<typeof createClient>): Promise<number> {
+async function detectStalledDeals(
+  supabase: ReturnType<typeof createClient<SchedulerDatabase>>,
+): Promise<number> {
   const { data: connections } = await supabase
     .from("hubspot_connections")
     .select("hub_id, access_token, refresh_token, token_expires_at")
@@ -241,7 +435,7 @@ async function detectStalledDeals(supabase: ReturnType<typeof createClient>): Pr
     );
 
     if (!res.ok) continue;
-    const data = await res.json();
+    const data = await res.json() as HubSpotDealSearchResponse;
 
     for (const deal of data.results ?? []) {
       const dealId = deal.id;
@@ -287,11 +481,11 @@ async function detectStalledDeals(supabase: ReturnType<typeof createClient>): Pr
 
 async function createHubSpotTask(
   token: string,
-  enrollment: Enrollment,
+  enrollment: DueEnrollment,
   subject: string | null,
   body: string | null,
   priority: string
-): Promise<string> {
+): Promise<string | null> {
   const res = await fetch("https://api.hubapi.com/crm/v3/objects/tasks", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -310,16 +504,16 @@ async function createHubSpotTask(
       }] : [],
     }),
   });
-  const data = await res.json();
+  const data = await res.json() as HubSpotObjectResponse;
   return data.id ?? null;
 }
 
 async function sendHubSpotEmail(
   token: string,
-  enrollment: Enrollment,
+  enrollment: DueEnrollment,
   subject: string | null,
   body: string | null
-): Promise<string> {
+): Promise<string | null> {
   const res = await fetch("https://api.hubapi.com/crm/v3/objects/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -343,16 +537,16 @@ async function sendHubSpotEmail(
       ],
     }),
   });
-  const data = await res.json();
+  const data = await res.json() as HubSpotObjectResponse;
   return data.id ?? null;
 }
 
 async function logHubSpotCall(
   token: string,
-  enrollment: Enrollment,
+  enrollment: DueEnrollment,
   subject: string | null,
   body: string | null
-): Promise<string> {
+): Promise<string | null> {
   const res = await fetch("https://api.hubapi.com/crm/v3/objects/calls", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -373,12 +567,12 @@ async function logHubSpotCall(
       ],
     }),
   });
-  const data = await res.json();
+  const data = await res.json() as HubSpotObjectResponse;
   return data.id ?? null;
 }
 
 async function getValidToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<SchedulerDatabase>>,
   hubId: string,
   connection: { access_token: string; token_expires_at: string; refresh_token: string }
 ): Promise<string | null> {
@@ -391,19 +585,35 @@ async function getValidToken(
   const expiresAt = new Date(connection.token_expires_at).getTime();
   if (Date.now() < expiresAt - 60000) return plainAccessToken;
 
+  const { data: portalBinding } = await supabase
+    .from("workspace_hubspot_portal")
+    .select("workspace_id")
+    .eq("hub_id", hubId)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  const runtimeConfig = await resolveHubSpotRuntimeConfig(
+    supabase,
+    portalBinding?.workspace_id ?? "default",
+  );
+  if (!runtimeConfig) {
+    console.error("[hubspot-scheduler] runtime OAuth config missing", { hubId });
+    return null;
+  }
+
   const res = await fetch("https://api.hubapi.com/oauth/v1/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: Deno.env.get("HUBSPOT_CLIENT_ID")!,
-      client_secret: Deno.env.get("HUBSPOT_CLIENT_SECRET")!,
+      client_id: runtimeConfig.clientId,
+      client_secret: runtimeConfig.clientSecret,
       refresh_token: plainRefreshToken,
     }),
   });
 
   if (!res.ok) return null;
-  const tokens = await res.json();
+  const tokens = await res.json() as HubSpotTokenRefreshResponse;
 
   const newRefresh = tokens.refresh_token ?? plainRefreshToken;
   const [encAccess, encRefresh] = await Promise.all([

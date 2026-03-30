@@ -11,9 +11,10 @@
  *   6. If HubSpot is connected: create note engagement + schedule follow-up task
  *   7. Return capture record + extracted data
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
+import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -494,7 +495,7 @@ function buildNoteBody(transcript: string, extracted: ExtractedDealData): string
 }
 
 async function getValidToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   hubId: string,
   connection: { access_token: string; token_expires_at: string; refresh_token: string }
 ): Promise<string | null> {
@@ -507,13 +508,29 @@ async function getValidToken(
   const expiresAt = new Date(connection.token_expires_at).getTime();
   if (Date.now() < expiresAt - 60000) return plainAccessToken;
 
+  const { data: portalBinding } = await supabase
+    .from("workspace_hubspot_portal")
+    .select("workspace_id")
+    .eq("hub_id", hubId)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  const runtimeConfig = await resolveHubSpotRuntimeConfig(
+    supabase,
+    portalBinding?.workspace_id ?? "default",
+  );
+  if (!runtimeConfig) {
+    console.error("[voice-capture] runtime OAuth config missing", { hubId });
+    return null;
+  }
+
   const res = await fetch("https://api.hubapi.com/oauth/v1/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: Deno.env.get("HUBSPOT_CLIENT_ID")!,
-      client_secret: Deno.env.get("HUBSPOT_CLIENT_SECRET")!,
+      client_id: runtimeConfig.clientId,
+      client_secret: runtimeConfig.clientSecret,
       refresh_token: plainRefreshToken,
     }),
   });

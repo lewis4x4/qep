@@ -2,10 +2,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptCredential } from "../_shared/integration-crypto.ts";
 import {
   createEventTracker,
-  emitIntegrationConnectionTested,
   emitIntegrationConfigUpdated,
   type UserRole as EventUserRole,
 } from "../_shared/event-tracker.ts";
+import { emitAuthzDenialAuditEvent } from "./authz-audit.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -14,8 +14,11 @@ const ALLOWED_ORIGINS = [
 ];
 function corsHeaders(origin: string | null) {
   return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : "",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
     "Vary": "Origin",
   };
 }
@@ -30,12 +33,34 @@ const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-async function getCallerProfile(jwt: string): Promise<{ id: string; role: UserRole } | null> {
+interface CallerProfile {
+  id: string;
+  role: UserRole | null;
+}
+
+interface DeniedResponseInput {
+  ch: Record<string, string>;
+  route: string;
+  action?: string | null;
+  callerUserId?: string | null;
+  reasonCode: string;
+  status: 401 | 403;
+  error: string;
+}
+
+function createCallerClient(jwt: string) {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const caller = createClient(SUPABASE_URL, anonKey ?? SERVICE_ROLE_KEY, {
+  if (!anonKey) {
+    throw new Error("SUPABASE_ANON_KEY is required for user-scoped admin-users access.");
+  }
+  return createClient(SUPABASE_URL, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
+}
+
+async function getCallerProfile(jwt: string): Promise<CallerProfile | null> {
+  const caller = createCallerClient(jwt);
 
   const { data: { user }, error } = await caller.auth.getUser();
   if (error || !user) return null;
@@ -46,43 +71,97 @@ async function getCallerProfile(jwt: string): Promise<{ id: string; role: UserRo
     .eq("id", user.id)
     .single();
 
-  return profile as { id: string; role: UserRole } | null;
+  const role = profile?.role;
+  const parsedRole: UserRole | null =
+    role === "rep" || role === "admin" || role === "manager" || role === "owner"
+      ? role
+      : null;
+  return { id: user.id, role: parsedRole };
 }
 
 function canManageUsers(role: UserRole): boolean {
   return ["admin", "manager", "owner"].includes(role);
 }
 
+function canManageIntegrations(role: UserRole): boolean {
+  return role === "admin" || role === "owner";
+}
+
 function isOwner(role: UserRole): boolean {
   return role === "owner";
 }
 
+function deniedResponse({
+  ch,
+  route,
+  action,
+  callerUserId,
+  reasonCode,
+  status,
+  error,
+}: DeniedResponseInput): Response {
+  emitAuthzDenialAuditEvent({
+    route,
+    action,
+    callerUserId: callerUserId ?? null,
+    reasonCode,
+    status,
+  });
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { ...ch, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   const ch = corsHeaders(req.headers.get("origin"));
+  const url = new URL(req.url);
+  const route = url.pathname;
+  const queryAction = req.method === "GET"
+    ? url.searchParams.get("action")
+    : null;
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: ch });
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Missing authorization" }), {
+    return deniedResponse({
+      ch,
+      route,
+      action: queryAction,
+      reasonCode: "missing_authorization_header",
       status: 401,
-      headers: { ...ch, "Content-Type": "application/json" },
+      error: "Missing authorization",
     });
   }
 
   const jwt = authHeader.replace("Bearer ", "");
-  const caller = await getCallerProfile(jwt);
+  const callerProfile = await getCallerProfile(jwt);
 
-  if (!caller || !canManageUsers(caller.role)) {
-    return new Response(JSON.stringify({ error: "Insufficient permissions" }), {
+  if (!callerProfile?.role || !canManageUsers(callerProfile.role)) {
+    const reasonCode = !callerProfile
+      ? "caller_identity_unresolved"
+      : callerProfile.role === null
+      ? "caller_profile_not_found"
+      : "insufficient_manage_users_role";
+    return deniedResponse({
+      ch,
+      route,
+      action: queryAction,
+      callerUserId: callerProfile?.id ?? null,
+      reasonCode,
       status: 403,
-      headers: { ...ch, "Content-Type": "application/json" },
+      error: "Insufficient permissions",
     });
   }
+  const caller: { id: string; role: UserRole } = {
+    id: callerProfile.id,
+    role: callerProfile.role,
+  };
+  const callerDb = createCallerClient(jwt);
 
   try {
-    const url = new URL(req.url);
     const action = req.method === "GET" ? url.searchParams.get("action") : null;
 
     // ── LIST USERS ──────────────────────────────────────────────────────────
@@ -96,10 +175,11 @@ Deno.serve(async (req: Request) => {
       if (profileErr) throw profileErr;
 
       // Fetch auth user records to get last_sign_in_at and email_confirmed_at
-      const { data: authData, error: authErr } = await adminClient.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
+      const { data: authData, error: authErr } = await adminClient.auth.admin
+        .listUsers({
+          page: 1,
+          perPage: 1000,
+        });
 
       if (authErr) throw authErr;
 
@@ -111,7 +191,7 @@ Deno.serve(async (req: Request) => {
             email_confirmed_at: u.email_confirmed_at ?? null,
             banned_until: (u as { banned_until?: string }).banned_until ?? null,
           },
-        ])
+        ]),
       );
 
       const users = (profiles ?? []).map((p) => ({
@@ -145,10 +225,15 @@ Deno.serve(async (req: Request) => {
               message: "Request body must be valid JSON.",
             },
           }),
-          { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+          {
+            status: 400,
+            headers: { ...ch, "Content-Type": "application/json" },
+          },
         );
       }
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      if (
+        typeof parsed !== "object" || parsed === null || Array.isArray(parsed)
+      ) {
         return new Response(
           JSON.stringify({
             error: {
@@ -156,7 +241,10 @@ Deno.serve(async (req: Request) => {
               message: "Request body must be a JSON object.",
             },
           }),
-          { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+          {
+            status: 400,
+            headers: { ...ch, "Content-Type": "application/json" },
+          },
         );
       }
 
@@ -176,10 +264,15 @@ Deno.serve(async (req: Request) => {
 
       if (body.action === "invite") {
         if (!body.email || !body.full_name || !body.role) {
-          return new Response(JSON.stringify({ error: "email, full_name, and role are required" }), {
-            status: 400,
-            headers: { ...ch, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              error: "email, full_name, and role are required",
+            }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
         }
 
         // Only owners can invite as owner or manager; admin/manager can only invite reps
@@ -188,26 +281,41 @@ Deno.serve(async (req: Request) => {
           : ["rep"];
 
         if (!allowedRoles.includes(body.role)) {
-          return new Response(
-            JSON.stringify({ error: "You can only invite users with role: " + allowedRoles.join(", ") }),
-            { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
-          );
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "invite_role_not_allowed",
+            status: 403,
+            error: "You can only invite users with role: " +
+              allowedRoles.join(", "),
+          });
         }
 
-        const { data: newUser, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
-          body.email,
-          {
-            data: { full_name: body.full_name },
-            redirectTo: `${Deno.env.get("APP_URL") ?? "https://qualityequipmentparts.netlify.app"}/`,
-          }
-        );
+        const { data: newUser, error: inviteErr } = await adminClient.auth.admin
+          .inviteUserByEmail(
+            body.email,
+            {
+              data: { full_name: body.full_name },
+              redirectTo: `${
+                Deno.env.get("APP_URL") ??
+                  "https://qualityequipmentparts.netlify.app"
+              }/`,
+            },
+          );
 
         if (inviteErr) {
           if (inviteErr.message.includes("already been registered")) {
-            return new Response(JSON.stringify({ error: "A user with that email already exists." }), {
-              status: 409,
-              headers: { ...ch, "Content-Type": "application/json" },
-            });
+            return new Response(
+              JSON.stringify({
+                error: "A user with that email already exists.",
+              }),
+              {
+                status: 409,
+                headers: { ...ch, "Content-Type": "application/json" },
+              },
+            );
           }
           throw inviteErr;
         }
@@ -220,33 +328,47 @@ Deno.serve(async (req: Request) => {
             .eq("id", newUser.user.id);
         }
 
-        return new Response(JSON.stringify({ success: true, userId: newUser?.user?.id }), {
-          status: 201,
-          headers: { ...ch, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ success: true, userId: newUser?.user?.id }),
+          {
+            status: 201,
+            headers: { ...ch, "Content-Type": "application/json" },
+          },
+        );
       }
 
       // ── UPDATE ROLE ─────────────────────────────────────────────────────
       if (body.action === "update-role") {
         if (!isOwner(caller.role)) {
-          return new Response(JSON.stringify({ error: "Only owners can change user roles" }), {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "owner_role_required_for_update_role",
             status: 403,
-            headers: { ...ch, "Content-Type": "application/json" },
+            error: "Only owners can change user roles",
           });
         }
 
         if (!body.userId || !body.role) {
-          return new Response(JSON.stringify({ error: "userId and role are required" }), {
-            status: 400,
-            headers: { ...ch, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "userId and role are required" }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
         }
 
         // Prevent owner from demoting themselves
         if (body.userId === caller.id && body.role !== "owner") {
           return new Response(
             JSON.stringify({ error: "You cannot change your own role" }),
-            { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
           );
         }
 
@@ -266,38 +388,55 @@ Deno.serve(async (req: Request) => {
       // ── DEACTIVATE / REACTIVATE ──────────────────────────────────────────
       if (body.action === "set-active") {
         if (!isOwner(caller.role)) {
-          return new Response(JSON.stringify({ error: "Only owners can deactivate users" }), {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "owner_role_required_for_set_active",
             status: 403,
-            headers: { ...ch, "Content-Type": "application/json" },
+            error: "Only owners can deactivate users",
           });
         }
 
         if (!body.userId || body.is_active === undefined) {
-          return new Response(JSON.stringify({ error: "userId and is_active are required" }), {
-            status: 400,
-            headers: { ...ch, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "userId and is_active are required" }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
         }
 
         if (body.userId === caller.id) {
           return new Response(
             JSON.stringify({ error: "You cannot deactivate your own account" }),
-            { status: 400, headers: { ...ch, "Content-Type": "application/json" } }
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
           );
         }
 
         // Update profile flag
         const { error: profileErr } = await adminClient
           .from("profiles")
-          .update({ is_active: body.is_active, updated_at: new Date().toISOString() })
+          .update({
+            is_active: body.is_active,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", body.userId);
 
         if (profileErr) throw profileErr;
 
         // Also ban/unban in Supabase Auth so the user can't log in while deactivated
-        const { error: banErr } = await adminClient.auth.admin.updateUserById(body.userId, {
-          ban_duration: body.is_active ? "none" : "876600h", // ~100 years = effectively permanent
-        });
+        const { error: banErr } = await adminClient.auth.admin.updateUserById(
+          body.userId,
+          {
+            ban_duration: body.is_active ? "none" : "876600h", // ~100 years = effectively permanent
+          },
+        );
 
         if (banErr) throw banErr;
 
@@ -309,88 +448,92 @@ Deno.serve(async (req: Request) => {
 
       // ── TEST INTEGRATION ─────────────────────────────────────────────────
       if (body.action === "test_integration") {
-        if (!body.integration_key) {
-          return new Response(JSON.stringify({ error: "integration_key is required" }), {
-            status: 400,
-            headers: { ...ch, "Content-Type": "application/json" },
-          });
-        }
-
-        const { data: integration, error: fetchErr } = await adminClient
-          .from("integration_status")
-          .select("credentials_encrypted, status")
-          .eq("integration_key", body.integration_key)
-          .single();
-
-        if (fetchErr || !integration) {
-          return new Response(
-            JSON.stringify({ error: { code: "INTEGRATION_NOT_FOUND", message: "Integration not configured" } }),
-            { status: 404, headers: { ...ch, "Content-Type": "application/json" } }
-          );
-        }
-
-        const hasCredentials = !!integration.credentials_encrypted;
-        const latencyMs = hasCredentials ? Math.floor(50 + Math.random() * 150) : 0;
-        const success = hasCredentials;
-        const testError = hasCredentials
-          ? null
-          : "No credentials configured. Add API credentials before testing.";
-
-        await adminClient
-          .from("integration_status")
-          .update({
-            last_test_at: new Date().toISOString(),
-            last_test_success: success,
-            last_test_latency_ms: success ? latencyMs : null,
-            last_test_error: testError,
-            ...(success ? { status: "connected" } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("integration_key", body.integration_key);
-
-        const tracker = createEventTracker(adminClient as Parameters<typeof createEventTracker>[0]);
-        await emitIntegrationConnectionTested(tracker, {
-          integration: body.integration_key,
-          result: success ? "success" : "failure",
-          latencyMs,
-          errorCode: testError ? "no_credentials" : undefined,
-          userId: caller.id,
-          requestId: crypto.randomUUID(),
-          role: caller.role as EventUserRole,
-        });
-
         return new Response(
-          JSON.stringify({ success, latency_ms: latencyMs, error: testError }),
-          { status: 200, headers: { ...ch, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: {
+              code: "DEPRECATED_ACTION",
+              message:
+                "test_integration has moved to the dedicated integration-test-connection function.",
+            },
+          }),
+          {
+            status: 410,
+            headers: { ...ch, "Content-Type": "application/json" },
+          },
         );
       }
 
       // ── UPDATE INTEGRATION ────────────────────────────────────────────────
       if (body.action === "update_integration") {
-        if (!isOwner(caller.role)) {
-          return new Response(
-            JSON.stringify({ error: "Only owners can update integration configuration" }),
-            { status: 403, headers: { ...ch, "Content-Type": "application/json" } }
-          );
-        }
-
-        if (!body.integration_key) {
-          return new Response(JSON.stringify({ error: "integration_key is required" }), {
-            status: 400,
-            headers: { ...ch, "Content-Type": "application/json" },
+        if (!canManageIntegrations(caller.role)) {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "admin_or_owner_required_for_update_integration",
+            status: 403,
+            error: "Only admins or owners can update integration configuration",
           });
         }
 
-        const { data: existingRow, error: existErr } = await adminClient
+        if (!body.integration_key) {
+          return new Response(
+            JSON.stringify({ error: "integration_key is required" }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        let { data: existingRow, error: existErr } = await callerDb
           .from("integration_status")
-          .select("integration_key")
+          .select("integration_key, workspace_id")
           .eq("integration_key", body.integration_key)
           .single();
 
+        if ((existErr || !existingRow) && body.integration_key === "hubspot") {
+          const { data: workspaceRow } = await callerDb
+            .from("integration_status")
+            .select("workspace_id")
+            .limit(1)
+            .maybeSingle();
+          const fallbackWorkspaceId = workspaceRow?.workspace_id ?? "default";
+
+          const { data: insertedHubSpotRow, error: insertHubSpotError } = await callerDb
+            .from("integration_status")
+            .insert({
+              workspace_id: fallbackWorkspaceId,
+              integration_key: "hubspot",
+              display_name: "HubSpot CRM",
+              status: "pending_credentials",
+              auth_type: "oauth2",
+              sync_frequency: "manual",
+              config: {},
+            })
+            .select("integration_key, workspace_id")
+            .single();
+
+          if (insertHubSpotError) {
+            throw insertHubSpotError;
+          }
+          existingRow = insertedHubSpotRow;
+          existErr = null;
+        }
+
         if (existErr || !existingRow) {
           return new Response(
-            JSON.stringify({ error: { code: "INTEGRATION_NOT_FOUND", message: "Integration not configured" } }),
-            { status: 404, headers: { ...ch, "Content-Type": "application/json" } }
+            JSON.stringify({
+              error: {
+                code: "INTEGRATION_NOT_FOUND",
+                message: "Integration not configured",
+              },
+            }),
+            {
+              status: 404,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
           );
         }
 
@@ -402,15 +545,25 @@ Deno.serve(async (req: Request) => {
         if (body.credentials?.trim()) {
           if (!Deno.env.get("INTEGRATION_ENCRYPTION_KEY")) {
             return new Response(
-              JSON.stringify({ error: { code: "SERVICE_UNAVAILABLE", message: "Service unavailable. Contact your administrator." } }),
-              { status: 503, headers: { ...ch, "Content-Type": "application/json" } }
+              JSON.stringify({
+                error: {
+                  code: "SERVICE_UNAVAILABLE",
+                  message: "Service unavailable. Contact your administrator.",
+                },
+              }),
+              {
+                status: 503,
+                headers: { ...ch, "Content-Type": "application/json" },
+              },
             );
           }
           updatePayload.credentials_encrypted = await encryptCredential(
             body.credentials,
-            body.integration_key
+            body.integration_key,
           );
-          updatePayload.status = "demo_mode";
+          updatePayload.status = body.integration_key === "hubspot"
+            ? "pending_credentials"
+            : "demo_mode";
           changedFields.push("credentials");
         }
 
@@ -420,13 +573,17 @@ Deno.serve(async (req: Request) => {
         }
 
         if (body.sync_scopes !== undefined) {
-          const { data: existing } = await adminClient
+          const { data: existing } = await callerDb
             .from("integration_status")
             .select("config")
             .eq("integration_key", body.integration_key)
             .single();
-          const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
-          updatePayload.config = { ...existingConfig, sync_scopes: body.sync_scopes };
+          const existingConfig =
+            (existing?.config as Record<string, unknown>) ?? {};
+          updatePayload.config = {
+            ...existingConfig,
+            sync_scopes: body.sync_scopes,
+          };
           changedFields.push("sync_scopes");
         }
 
@@ -437,14 +594,16 @@ Deno.serve(async (req: Request) => {
           });
         }
 
-        const { error: updateErr } = await adminClient
+        const { error: updateErr } = await callerDb
           .from("integration_status")
           .update(updatePayload)
           .eq("integration_key", body.integration_key);
 
         if (updateErr) throw updateErr;
 
-        const tracker = createEventTracker(adminClient as Parameters<typeof createEventTracker>[0]);
+        const tracker = createEventTracker(
+          adminClient as Parameters<typeof createEventTracker>[0],
+        );
         await emitIntegrationConfigUpdated(tracker, {
           integration: body.integration_key,
           changedFields,
@@ -470,7 +629,9 @@ Deno.serve(async (req: Request) => {
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
+    const message = err instanceof Error
+      ? err.message
+      : "Internal server error";
     console.error("[admin-users] error:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,

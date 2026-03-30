@@ -43,6 +43,9 @@ verify_jwt = false
 [functions.voice-capture]
 verify_jwt = false
 
+[functions.voice-capture-sync]
+verify_jwt = false
+
 [functions.ingest]
 verify_jwt = false
 
@@ -57,3 +60,28 @@ verify_jwt = false
 
 [functions.hubspot-scheduler]
 verify_jwt = false
+
+[functions.crm-hubspot-import]
+verify_jwt = false
+
+[functions.crm-router]
+verify_jwt = false
+
+# DGE routes validate JWT + roles in _shared/dge-auth.ts (resolveCallerContext).
+# Gateway verify_jwt is off so local/CLI tests can reach the function when the Edge
+# gateway JWT check disagrees with supabase-js session tokens (401 Invalid JWT).
+# QA curl: always send apikey: <SUPABASE_ANON_KEY> with Authorization: Bearer <access_token>.
+[functions.market-valuation]
+verify_jwt = false
+
+[functions.economic-sync]
+verify_jwt = false
+
+[functions.customer-dna-update]
+verify_jwt = false
+
+[functions.customer-profile]
+verify_jwt = false
+
+[functions.integration-test-connection]
+verify_jwt = true

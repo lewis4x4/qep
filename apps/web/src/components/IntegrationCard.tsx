@@ -56,43 +56,32 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
     }
   }
 
-  function handleCardClick() {
-    void trackIntegrationEvent("integration_card_clicked", { integration: config.key });
+  function handleConfigure() {
+    void trackIntegrationEvent("integration_card_opened", {
+      integration_key: config.key,
+      status: config.status,
+    });
     onConfigure(config.key);
-  }
-
-  function handleCardKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      handleCardClick();
-    }
   }
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Configure ${config.name}`}
-      onClick={handleCardClick}
-      onKeyDown={handleCardKeyDown}
       className={cn(
-        "group bg-white rounded-xl border border-[#E2E8F0] p-5 flex flex-col gap-4",
-        "transition-all duration-150 cursor-pointer",
-        "hover:-translate-y-px hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] focus-visible:ring-offset-2"
+        "group bg-card rounded-xl border border-border p-5 flex flex-col gap-4",
+        "transition-all duration-150"
       )}
     >
       {/* Header row: icon + name + status */}
       <div className="flex items-start gap-3">
         <div
-          className="w-10 h-10 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center shrink-0 text-[#1B2A3D] text-lg font-bold select-none"
+          className="w-10 h-10 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0 text-foreground text-lg font-bold select-none"
           aria-hidden="true"
         >
           {config.icon}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-[15px] font-semibold text-[#1B2A3D] leading-5 truncate">
+            <h3 className="text-[15px] font-semibold text-foreground leading-5 truncate">
               {config.name}
             </h3>
             <DataSourceBadge state={isStale ? "Stale" : dataSourceState} />
@@ -102,7 +91,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
       </div>
 
       {/* Sync info */}
-      <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+      <div className="flex items-center justify-between text-xs text-[#64748B]">
         <span>
           Last sync:{" "}
           <span className={cn(isStale ? "text-amber-600" : "text-[#64748B]", "font-medium")}>
@@ -122,7 +111,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
       {/* Footer: environment state + actions — stacked to prevent overflow at narrow card widths */}
       <div className="flex flex-col gap-2 pt-1 border-t border-[#F1F5F9]">
         {/* Environment pill */}
-        <div className="flex items-center gap-1.5 text-xs text-[#94A3B8]">
+        <div className="flex items-center gap-1.5 text-xs text-[#64748B]">
           <Plug className="w-3 h-3" aria-hidden="true" />
           <span>
             {config.status === "connected"
@@ -140,22 +129,22 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
           <Button
             variant="ghost"
             size="sm"
-            className="h-11 px-3 text-xs text-[#64748B] hover:text-[#1B2A3D] focus-visible:ring-[#E87722]"
-            onClick={(e) => { e.stopPropagation(); void handleTestSync(); }}
+            className="h-11 px-3 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-qep-orange"
+            onClick={() => { void handleTestSync(); }}
             disabled={isTesting}
-            aria-label={`Test sync for ${config.name}`}
+            aria-label={`Test connection for ${config.name}`}
           >
             <RefreshCw
               className={cn("w-3 h-3 mr-1", isTesting && "animate-spin")}
               aria-hidden="true"
             />
-            {isTesting ? "Testing…" : "Test sync"}
+            {isTesting ? "Testing…" : "Test connection"}
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-11 px-3 text-xs border-[#E2E8F0] text-[#1B2A3D] hover:bg-[#F8FAFC] focus-visible:ring-[#E87722]"
-            onClick={(e) => { e.stopPropagation(); onConfigure(config.key); }}
+            className="h-11 px-3 text-xs border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange"
+            onClick={handleConfigure}
             aria-label={`Configure ${config.name}`}
           >
             <Settings className="w-3 h-3 mr-1" aria-hidden="true" />
