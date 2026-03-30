@@ -28,6 +28,7 @@ import {
   listCustomFieldDefinitions,
   listDuplicateCandidates,
   listEquipment,
+  patchDeal,
   patchCompanyParent,
   patchCustomFieldDefinition,
   patchEquipment,
@@ -35,6 +36,7 @@ import {
   type ActivityPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
+  type DealPatchPayload,
   type EquipmentPayload,
 } from "../_shared/crm-router-data.ts";
 
@@ -182,6 +184,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = await readJsonBody<ActivityPayload>(req);
       const activity = await createActivity(ctx, body);
       return crmOk({ activity }, { origin, status: 201 });
+    }
+
+    if (
+      segments[1] === "deals" &&
+      req.method === "PATCH" &&
+      segments.length === 3
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<DealPatchPayload>(req);
+      const deal = await patchDeal(ctx, segments[2], body);
+      return crmOk({ deal }, { origin });
     }
 
     if (

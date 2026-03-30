@@ -1,4 +1,5 @@
 import { crmSupabase, type CrmDatabase } from "./crm-supabase";
+import { patchCrmDealViaRouter } from "./crm-router-api";
 import type {
   CrmDealBoardListInput,
   CrmDealLossFields,
@@ -201,55 +202,17 @@ export async function listCrmWeightedOpenDeals(): Promise<CrmWeightedDeal[]> {
 }
 
 export async function patchCrmDeal(dealId: string, input: CrmDealPatchInput): Promise<CrmRepSafeDeal> {
-  const updatePayload: CrmDatabase["public"]["Tables"]["crm_deals"]["Update"] = {};
-  if (input.stageId !== undefined) {
-    updatePayload.stage_id = input.stageId;
-  }
-  if (input.expectedCloseOn !== undefined) {
-    updatePayload.expected_close_on = input.expectedCloseOn;
-  }
-  if (input.nextFollowUpAt !== undefined) {
-    updatePayload.next_follow_up_at = input.nextFollowUpAt;
-  }
-  if (input.closedAt !== undefined) {
-    updatePayload.closed_at = input.closedAt;
-  }
-  if (input.lossReason !== undefined) {
-    updatePayload.loss_reason = input.lossReason;
-  }
-  if (input.competitor !== undefined) {
-    updatePayload.competitor = input.competitor;
-  }
+  const payload: CrmDealPatchInput = {};
+  if (input.stageId !== undefined) payload.stageId = input.stageId;
+  if (input.expectedCloseOn !== undefined) payload.expectedCloseOn = input.expectedCloseOn;
+  if (input.nextFollowUpAt !== undefined) payload.nextFollowUpAt = input.nextFollowUpAt;
+  if (input.closedAt !== undefined) payload.closedAt = input.closedAt;
+  if (input.lossReason !== undefined) payload.lossReason = input.lossReason;
+  if (input.competitor !== undefined) payload.competitor = input.competitor;
 
-  if (Object.keys(updatePayload).length === 0) {
+  if (Object.keys(payload).length === 0) {
     throw new Error("No deal fields were provided for update.");
   }
 
-  if (updatePayload.stage_id && updatePayload.closed_at === undefined) {
-    const { data: stage, error: stageError } = await crmSupabase
-      .from("crm_deal_stages")
-      .select("id, is_closed_won, is_closed_lost")
-      .eq("id", updatePayload.stage_id)
-      .maybeSingle();
-
-    if (stageError) {
-      throw new Error(stageError.message);
-    }
-
-    if (stage) {
-      updatePayload.closed_at = stage.is_closed_won || stage.is_closed_lost ? new Date().toISOString() : null;
-    }
-  }
-
-  const { error } = await crmSupabase.from("crm_deals").update(updatePayload).eq("id", dealId);
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const deal = await getCrmDeal(dealId);
-  if (!deal) {
-    throw new Error("Deal update succeeded, but refreshed deal could not be loaded.");
-  }
-
-  return deal;
+  return patchCrmDealViaRouter(dealId, payload);
 }

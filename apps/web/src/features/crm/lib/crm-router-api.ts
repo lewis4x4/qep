@@ -4,6 +4,8 @@ import type {
   CrmActivityItem,
   CrmCompanyHierarchy,
   CrmCustomField,
+  CrmDealPatchInput,
+  CrmRepSafeDeal,
   CrmDuplicateCandidate,
   CrmEquipment,
   CrmRecordType,
@@ -76,6 +78,17 @@ export async function createCrmActivityViaRouter(
     body: input,
   });
   return payload.activity;
+}
+
+export async function patchCrmDealViaRouter(
+  dealId: string,
+  input: CrmDealPatchInput,
+): Promise<CrmRepSafeDeal> {
+  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>(`/crm/deals/${dealId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.deal;
 }
 
 export async function fetchCompanyHierarchy(companyId: string): Promise<CrmCompanyHierarchy | null> {

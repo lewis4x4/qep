@@ -40,6 +40,10 @@ export function CrmDealUpdateCard({
   stagesLoading,
   onSave,
 }: CrmDealUpdateCardProps) {
+  const visibleStages = isElevatedRole
+    ? stages
+    : stages.filter((stage) => !stage.isClosedLost || stage.id === stageId);
+
   return (
     <Card className="space-y-4 p-4 sm:p-5">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -53,7 +57,7 @@ export function CrmDealUpdateCard({
             onChange={(event) => setStageId(event.target.value)}
             className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
           >
-            {stages.map((stage) => (
+            {visibleStages.map((stage) => (
               <option key={stage.id} value={stage.id}>
                 {stage.name}
               </option>

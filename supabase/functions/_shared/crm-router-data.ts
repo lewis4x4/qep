@@ -31,6 +31,15 @@ export interface ActivityPayload {
   dealId?: string | null;
 }
 
+export interface DealPatchPayload {
+  stageId?: string;
+  expectedCloseOn?: string | null;
+  nextFollowUpAt?: string | null;
+  closedAt?: string | null;
+  lossReason?: string | null;
+  competitor?: string | null;
+}
+
 function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -193,6 +202,161 @@ export async function createActivity(
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
+}
+
+async function resolveStage(
+  ctx: RouterCtx,
+  stageId: string,
+): Promise<{
+  id: string;
+  isClosedWon: boolean;
+  isClosedLost: boolean;
+} | null> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_deal_stages")
+    .select("id, is_closed_won, is_closed_lost")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", stageId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    isClosedWon: Boolean(data.is_closed_won),
+    isClosedLost: Boolean(data.is_closed_lost),
+  };
+}
+
+async function fetchRepSafeDeal(
+  ctx: RouterCtx,
+  dealId: string,
+): Promise<unknown> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at",
+    )
+    .eq("id", dealId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    name: data.name,
+    stageId: data.stage_id,
+    primaryContactId: data.primary_contact_id,
+    companyId: data.company_id,
+    assignedRepId: data.assigned_rep_id,
+    amount: data.amount,
+    expectedCloseOn: data.expected_close_on,
+    nextFollowUpAt: data.next_follow_up_at,
+    lastActivityAt: data.last_activity_at,
+    closedAt: data.closed_at,
+    hubspotDealId: data.hubspot_deal_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function patchDeal(
+  ctx: RouterCtx,
+  dealId: string,
+  payload: DealPatchPayload,
+): Promise<unknown> {
+  const updates: Record<string, unknown> = {};
+
+  if (payload.stageId !== undefined) {
+    const stageId = cleanText(payload.stageId);
+    if (!stageId) {
+      throw new Error("VALIDATION_STAGE_REQUIRED");
+    }
+
+    const stage = await resolveStage(ctx, stageId);
+    if (!stage) {
+      throw new Error("VALIDATION_STAGE_NOT_FOUND");
+    }
+
+    updates.stage_id = stage.id;
+    updates.closed_at = stage.isClosedWon || stage.isClosedLost
+      ? new Date().toISOString()
+      : null;
+
+    if (stage.isClosedLost) {
+      const lossReason = cleanText(payload.lossReason ?? null);
+      if (!lossReason) {
+        throw new Error("VALIDATION_CLOSED_LOST_REASON_REQUIRED");
+      }
+      updates.loss_reason = lossReason;
+      updates.competitor = cleanText(payload.competitor ?? null);
+    }
+  }
+
+  if (payload.expectedCloseOn !== undefined) {
+    const expectedCloseOn = cleanText(payload.expectedCloseOn ?? null);
+    if (expectedCloseOn && Number.isNaN(Date.parse(expectedCloseOn))) {
+      throw new Error("VALIDATION_INVALID_EXPECTED_CLOSE");
+    }
+    updates.expected_close_on = expectedCloseOn;
+  }
+
+  if (payload.nextFollowUpAt !== undefined) {
+    const nextFollowUpAt = cleanText(payload.nextFollowUpAt ?? null);
+    if (nextFollowUpAt && Number.isNaN(Date.parse(nextFollowUpAt))) {
+      throw new Error("VALIDATION_INVALID_FOLLOW_UP");
+    }
+    updates.next_follow_up_at = nextFollowUpAt;
+  }
+
+  if (payload.closedAt !== undefined) {
+    const closedAt = cleanText(payload.closedAt ?? null);
+    if (closedAt && Number.isNaN(Date.parse(closedAt))) {
+      throw new Error("VALIDATION_INVALID_CLOSED_AT");
+    }
+    updates.closed_at = closedAt;
+  }
+
+  const hasLossReason = payload.lossReason !== undefined;
+  const hasCompetitor = payload.competitor !== undefined;
+  if (hasLossReason || hasCompetitor) {
+    const isElevated = ctx.caller.isServiceRole ||
+      ctx.caller.role === "admin" ||
+      ctx.caller.role === "manager" ||
+      ctx.caller.role === "owner";
+    if (!isElevated) {
+      throw new Error("FORBIDDEN");
+    }
+
+    if (hasLossReason) {
+      updates.loss_reason = cleanText(payload.lossReason ?? null);
+    }
+    if (hasCompetitor) {
+      updates.competitor = cleanText(payload.competitor ?? null);
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_deals")
+    .update(updates)
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", dealId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+
+  return fetchRepSafeDeal(ctx, dealId);
 }
 
 export async function createEquipment(
