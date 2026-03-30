@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type {
+  CrmActivityCreateInput,
+  CrmActivityItem,
   CrmCompanyHierarchy,
   CrmCustomField,
   CrmDuplicateCandidate,
@@ -64,6 +66,16 @@ export async function searchCrm(query: string): Promise<CrmSearchItem[]> {
   const params = new URLSearchParams({ q: query.trim(), types: "contact,company" });
   const payload = await requestRouter<{ results: CrmSearchItem[] }>(`/crm/search?${params.toString()}`);
   return payload.results;
+}
+
+export async function createCrmActivityViaRouter(
+  input: CrmActivityCreateInput,
+): Promise<CrmActivityItem> {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>("/crm/activities", {
+    method: "POST",
+    body: input,
+  });
+  return payload.activity;
 }
 
 export async function fetchCompanyHierarchy(companyId: string): Promise<CrmCompanyHierarchy | null> {

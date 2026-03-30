@@ -1,4 +1,5 @@
 import { crmSupabase, type CrmDatabase } from "./crm-supabase";
+import { createCrmActivityViaRouter } from "./crm-router-api";
 import type {
   CrmActivityCreateInput,
   CrmActivityItem,
@@ -269,27 +270,7 @@ export async function listDealActivities(dealId: string): Promise<CrmActivityIte
 
 export async function createCrmActivity(
   input: CrmActivityCreateInput,
-  actorUserId: string
+  _actorUserId: string
 ): Promise<CrmActivityItem> {
-  const { data, error } = await crmSupabase
-    .from("crm_activities")
-    .insert({
-      activity_type: input.activityType,
-      body: input.body,
-      occurred_at: input.occurredAt,
-      contact_id: input.contactId ?? null,
-      company_id: input.companyId ?? null,
-      deal_id: input.dealId ?? null,
-      created_by: actorUserId,
-    })
-    .select(
-      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at"
-    )
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return toActivityItem(data as CrmActivityRow);
+  return createCrmActivityViaRouter(input);
 }

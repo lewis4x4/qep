@@ -22,6 +22,15 @@ export interface CustomFieldDefinitionPayload {
   constraints?: Record<string, unknown>;
 }
 
+export interface ActivityPayload {
+  activityType: "note" | "call" | "email" | "meeting" | "task" | "sms";
+  body?: string | null;
+  occurredAt: string;
+  contactId?: string | null;
+  companyId?: string | null;
+  dealId?: string | null;
+}
+
 function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -74,6 +83,22 @@ async function ensureRecordVisible(
   if (!data) throw new Error("NOT_FOUND");
 }
 
+async function ensureDealVisible(
+  ctx: RouterCtx,
+  dealId: string,
+): Promise<void> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_deals")
+    .select("id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", dealId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+}
+
 export async function listEquipment(
   ctx: RouterCtx,
   companyId: string | null,
@@ -104,6 +129,70 @@ export async function listEquipment(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+export async function createActivity(
+  ctx: RouterCtx,
+  payload: ActivityPayload,
+): Promise<unknown> {
+  const occurredAtMs = Date.parse(payload.occurredAt);
+  if (Number.isNaN(occurredAtMs)) {
+    throw new Error("VALIDATION_INVALID_OCCURRED_AT");
+  }
+  const occurredAtIso = new Date(occurredAtMs).toISOString();
+
+  const activityType = payload.activityType;
+  if (!["note", "call", "email", "meeting", "task", "sms"].includes(activityType)) {
+    throw new Error("VALIDATION_INVALID_ACTIVITY_TYPE");
+  }
+
+  const contactId = cleanText(payload.contactId ?? null);
+  const companyId = cleanText(payload.companyId ?? null);
+  const dealId = cleanText(payload.dealId ?? null);
+  if (!contactId && !companyId && !dealId) {
+    throw new Error("VALIDATION_ACTIVITY_TARGET_REQUIRED");
+  }
+
+  if (contactId) {
+    await ensureRecordVisible(ctx, "contact", contactId);
+  }
+  if (companyId) {
+    await ensureRecordVisible(ctx, "company", companyId);
+  }
+  if (dealId) {
+    await ensureDealVisible(ctx, dealId);
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_activities")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      activity_type: activityType,
+      body: cleanText(payload.body ?? null),
+      occurred_at: occurredAtIso,
+      contact_id: contactId,
+      company_id: companyId,
+      deal_id: dealId,
+      created_by: ctx.caller.userId,
+    })
+    .select("id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, created_at, updated_at")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    activityType: data.activity_type,
+    body: data.body,
+    occurredAt: data.occurred_at,
+    contactId: data.contact_id,
+    companyId: data.company_id,
+    dealId: data.deal_id,
+    createdBy: data.created_by,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
 }
 
 export async function createEquipment(

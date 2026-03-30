@@ -20,6 +20,7 @@ import {
   requireElevated,
 } from "../_shared/crm-router-service.ts";
 import {
+  createActivity,
   createCustomFieldDefinition,
   createEquipment,
   dismissDuplicateCandidate,
@@ -31,6 +32,7 @@ import {
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
+  type ActivityPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
   type EquipmentPayload,
@@ -173,6 +175,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
       }
       return crmOk(hierarchy, { origin });
+    }
+
+    if (segments[1] === "activities" && req.method === "POST" && segments.length === 2) {
+      requireCaller(ctx);
+      const body = await readJsonBody<ActivityPayload>(req);
+      const activity = await createActivity(ctx, body);
+      return crmOk({ activity }, { origin, status: 201 });
     }
 
     if (
