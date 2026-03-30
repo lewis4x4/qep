@@ -335,6 +335,7 @@ Deno.serve(async (req: Request) => {
         clear_credentials?: boolean;
         endpoint_url?: string | null;
         sync_scopes?: Record<string, boolean>;
+        config_patch?: Record<string, unknown>;
       };
 
       if (body.action === "invite") {
@@ -691,7 +692,10 @@ Deno.serve(async (req: Request) => {
           changedFields.push("endpoint_url");
         }
 
-        if (body.sync_scopes !== undefined) {
+        if (
+          body.sync_scopes !== undefined ||
+          body.config_patch !== undefined
+        ) {
           const { data: existing } = await callerDb
             .from("integration_status")
             .select("config")
@@ -700,11 +704,21 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
           const existingConfig =
             (existing?.config as Record<string, unknown>) ?? {};
-          updatePayload.config = {
-            ...existingConfig,
-            sync_scopes: body.sync_scopes,
-          };
-          changedFields.push("sync_scopes");
+          const nextConfig = { ...existingConfig };
+
+          if (body.sync_scopes !== undefined) {
+            nextConfig.sync_scopes = body.sync_scopes;
+            changedFields.push("sync_scopes");
+          }
+
+          if (body.config_patch !== undefined) {
+            for (const [key, value] of Object.entries(body.config_patch)) {
+              nextConfig[key] = value;
+            }
+            changedFields.push("config_patch");
+          }
+
+          updatePayload.config = nextConfig;
         }
 
         if (changedFields.length === 0) {

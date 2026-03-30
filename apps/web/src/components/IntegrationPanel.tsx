@@ -114,6 +114,13 @@ interface HubSpotImportResult {
   };
 }
 
+interface HubSpotCutoverConfig {
+  parallel_run_enabled?: boolean;
+  cutover_ready?: boolean;
+  validated_at?: string | null;
+  note?: string | null;
+}
+
 function statusToDataSource(status: IntegrationCardConfig["status"]): DataSourceState {
   switch (status) {
     case "connected": return "Live";
@@ -184,6 +191,17 @@ function formatHubSpotRunCount(run: HubSpotImportRunSummary): string {
   return `${total.toLocaleString()} records`;
 }
 
+function readHubSpotCutoverConfig(config: Record<string, unknown> | undefined): HubSpotCutoverConfig {
+  if (!config || typeof config !== "object") {
+    return {};
+  }
+  const raw = (config as Record<string, unknown>).hubspot_cutover;
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  return raw as HubSpotCutoverConfig;
+}
+
 export function IntegrationPanel({
   integration,
   open,
@@ -213,11 +231,16 @@ export function IntegrationPanel({
   const [hubSpotImportResult, setHubSpotImportResult] = useState<HubSpotImportResult | null>(null);
   const [hubSpotImportError, setHubSpotImportError] = useState<string | null>(null);
   const [selectedResumeRunId, setSelectedResumeRunId] = useState<string | null>(null);
+  const [hubspotParallelRunEnabled, setHubspotParallelRunEnabled] = useState(true);
+  const [hubspotCutoverReady, setHubspotCutoverReady] = useState(false);
+  const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
+  const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
 
   // Reset all panel state when the selected integration changes
   useEffect(() => {
     if (!integration) return;
     const currentScopes = SYNC_SCOPES[integration.key] ?? [];
+    const cutover = readHubSpotCutoverConfig(integration.config);
     setCredentials("");
     setHubspotClientId("");
     setHubspotClientSecret("");
@@ -231,7 +254,17 @@ export function IntegrationPanel({
     setHubSpotImportResult(null);
     setHubSpotImportError(null);
     setSelectedResumeRunId(null);
-  }, [integration?.key]);
+    setHubspotParallelRunEnabled(cutover.parallel_run_enabled ?? true);
+    setHubspotCutoverReady(cutover.cutover_ready ?? false);
+    setHubspotValidatedAt(
+      typeof cutover.validated_at === "string" && cutover.validated_at.length >= 10
+        ? cutover.validated_at.slice(0, 10)
+        : "",
+    );
+    setHubspotCutoverNote(
+      typeof cutover.note === "string" ? cutover.note : "",
+    );
+  }, [integration?.key, integration?.config]);
 
   const isHubSpot = integration?.key === "hubspot";
   const resumableHubSpotRuns = hubSpotImportRuns.filter((run) =>
@@ -276,43 +309,62 @@ export function IntegrationPanel({
     setIsSaving(true);
     setSaveError(null);
     try {
-      let credentialsPayload = credentials;
+      const updateBody: Record<string, unknown> = {
+        action: "update_integration",
+        integration_key: integration.key,
+        endpoint_url: endpointUrl || null,
+        sync_scopes: syncScopes,
+      };
+
+      let authType: "oauth_app" | "token" | "existing" = "existing";
+      let statusAfter: "pending_credentials" | "unchanged" = "unchanged";
+
       if (isHubSpot) {
-        if (
-          !hubspotClientId.trim() || !hubspotClientSecret.trim() ||
-          !hubspotAppId.trim()
-        ) {
-          throw new Error(
-            "HubSpot client ID, client secret, and app ID are required.",
-          );
+        const hasHubspotCredentialInput = Boolean(
+          hubspotClientId.trim() || hubspotClientSecret.trim() || hubspotAppId.trim(),
+        );
+        if (hasHubspotCredentialInput) {
+          if (
+            !hubspotClientId.trim() || !hubspotClientSecret.trim() ||
+            !hubspotAppId.trim()
+          ) {
+            throw new Error(
+              "HubSpot client ID, client secret, and app ID are required.",
+            );
+          }
+          updateBody.credentials = JSON.stringify({
+            client_id: hubspotClientId.trim(),
+            client_secret: hubspotClientSecret.trim(),
+            app_id: hubspotAppId.trim(),
+          });
+          authType = "oauth_app";
+          statusAfter = "pending_credentials";
         }
-        credentialsPayload = JSON.stringify({
-          client_id: hubspotClientId.trim(),
-          client_secret: hubspotClientSecret.trim(),
-          app_id: hubspotAppId.trim(),
-        });
+        updateBody.config_patch = {
+          hubspot_cutover: {
+            parallel_run_enabled: hubspotParallelRunEnabled,
+            cutover_ready: hubspotCutoverReady,
+            validated_at: hubspotValidatedAt.trim() || null,
+            note: hubspotCutoverNote.trim() || null,
+          },
+        };
+      } else if (credentials.trim().length > 0) {
+        updateBody.credentials = credentials.trim();
+        authType = "token";
+        statusAfter = "pending_credentials";
       }
 
       const { error } = await supabase.functions.invoke("admin-users", {
-        body: {
-          action: "update_integration",
-          integration_key: integration.key,
-          credentials: credentialsPayload,
-          endpoint_url: endpointUrl || null,
-          sync_scopes: syncScopes,
-        },
+        body: updateBody,
       });
       if (error) throw new Error(error.message);
-      const statusAfter = (isHubSpot || credentials.trim().length > 0)
-        ? "pending_credentials"
-        : "unchanged";
       void trackIntegrationEvent("integration_credentials_saved", {
         integration_key: integration.key,
-        auth_type: isHubSpot ? "oauth_app" : credentials.trim() ? "token" : "existing",
+        auth_type: authType,
         status_after: statusAfter,
       });
       toast({
-        title: "Credentials saved",
+        title: "Configuration saved",
         description: `${integration.name} configuration updated.`,
       });
       setCredentials("");
@@ -743,6 +795,87 @@ export function IntegrationPanel({
                     )}
                   </div>
                 )}
+
+                <div className="mt-3 rounded-lg border border-border bg-card p-3">
+                  <p className="text-xs font-medium text-foreground">Parallel-run controls</p>
+                  <p className="mt-1 text-xs text-[#64748B]">
+                    Track validation state before HubSpot cutover.
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
+                      <span className="text-xs text-[#334155]">Parallel run active</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hubspotParallelRunEnabled}
+                        aria-label="Toggle HubSpot parallel run mode"
+                        onClick={() => setHubspotParallelRunEnabled((value) => !value)}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          hubspotParallelRunEnabled ? "bg-qep-orange" : "bg-muted",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none block h-4 w-4 rounded-full bg-card shadow-sm transition-transform duration-200 mt-0.5",
+                            hubspotParallelRunEnabled ? "translate-x-[18px]" : "translate-x-0.5",
+                          )}
+                        />
+                      </button>
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
+                      <span className="text-xs text-[#334155]">Cutover ready</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hubspotCutoverReady}
+                        aria-label="Toggle HubSpot cutover readiness"
+                        onClick={() => setHubspotCutoverReady((value) => !value)}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          hubspotCutoverReady ? "bg-qep-orange" : "bg-muted",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none block h-4 w-4 rounded-full bg-card shadow-sm transition-transform duration-200 mt-0.5",
+                            hubspotCutoverReady ? "translate-x-[18px]" : "translate-x-0.5",
+                          )}
+                        />
+                      </button>
+                    </label>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="hubspot-validated-at" className="text-xs font-medium text-[#374151]">
+                        Validation Date
+                      </Label>
+                      <Input
+                        id="hubspot-validated-at"
+                        type="date"
+                        value={hubspotValidatedAt}
+                        onChange={(event) => setHubspotValidatedAt(event.target.value)}
+                        className="text-sm focus-visible:ring-qep-orange"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="hubspot-cutover-note" className="text-xs font-medium text-[#374151]">
+                        Validation Notes
+                      </Label>
+                      <Input
+                        id="hubspot-cutover-note"
+                        type="text"
+                        placeholder="Parallel-run summary for board/deploy gate"
+                        value={hubspotCutoverNote}
+                        onChange={(event) => setHubspotCutoverNote(event.target.value)}
+                        className="text-sm focus-visible:ring-qep-orange"
+                      />
+                    </div>
+                  </div>
+                </div>
               </section>
             </>
           )}
@@ -758,7 +891,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-client-id" className="text-xs font-medium text-[#374151]">
                       HubSpot Client ID
-                      <span className="text-[#64748B] ml-1">(required)</span>
+                      <span className="text-[#64748B] ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-client-id"
@@ -773,7 +906,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-client-secret" className="text-xs font-medium text-[#374151]">
                       HubSpot Client Secret
-                      <span className="text-[#64748B] ml-1">(required)</span>
+                      <span className="text-[#64748B] ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-client-secret"
@@ -788,7 +921,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-app-id" className="text-xs font-medium text-[#374151]">
                       HubSpot App ID
-                      <span className="text-[#64748B] ml-1">(required)</span>
+                      <span className="text-[#64748B] ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-app-id"
@@ -802,7 +935,7 @@ export function IntegrationPanel({
                   </div>
                   <p className="text-xs text-[#64748B]">
                     Stored with AES-256-GCM encryption. Values are only used server-side for OAuth,
-                    webhook verification, and token refresh.
+                    webhook verification, and token refresh. Leave blank to keep existing credentials.
                   </p>
                 </>
               ) : (

@@ -26,6 +26,7 @@ export interface IntegrationCardConfig {
   lastSyncError: string | null;
   syncRecords: number | null;
   endpointUrl: string | null;
+  config: Record<string, unknown>;
 }
 
 interface IntegrationHubProps {
@@ -63,6 +64,7 @@ interface IntegrationStatusRow {
   last_sync_records: number | null;
   last_sync_error: string | null;
   endpoint_url: string | null;
+  config: Record<string, unknown> | null;
 }
 
 interface HubSpotPortalRow {
@@ -223,6 +225,7 @@ function buildHubSpotIntegrationRow(
     last_sync_records: syncRecords,
     last_sync_error: lastSyncError,
     endpoint_url: existingRow?.endpoint_url ?? (hasActivePortal ? "https://app.hubspot.com" : null),
+    config: existingRow?.config ?? {},
   };
 }
 
@@ -363,7 +366,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
         resolveWorkspaceId(),
         supabase
           .from("integration_status")
-          .select("integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url")
+          .select("integration_key, status, last_sync_at, last_sync_records, last_sync_error, endpoint_url, config")
           .order("integration_key"),
       ]);
 
@@ -438,6 +441,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           last_sync_records: null,
           last_sync_error: null,
           endpoint_url: null,
+          config: {},
         };
 
         return {
@@ -447,6 +451,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           syncRecords: row.last_sync_records,
           lastSyncError: row.last_sync_error,
           endpointUrl: row.endpoint_url,
+          config: row.config ?? {},
           ...INTEGRATION_DISPLAY[key],
         };
       });
