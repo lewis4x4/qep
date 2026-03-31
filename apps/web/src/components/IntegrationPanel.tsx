@@ -1330,6 +1330,19 @@ export function IntegrationPanel({
                     Add your credentials below to connect. It'll run in demo mode until you do.
                   </p>
                 )}
+                {isHubSpot && (
+                  <div className="mt-3">
+                    <Button
+                      asChild
+                      size="sm"
+                      className="bg-qep-orange text-white hover:bg-qep-orange-hover focus-visible:ring-qep-orange"
+                    >
+                      <a href="/auth/hubspot/connect">
+                        {integration.status === "connected" ? "Reconnect HubSpot" : "Connect HubSpot"}
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </section>

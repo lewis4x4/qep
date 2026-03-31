@@ -40,7 +40,7 @@ export function redirectWithOAuthError(
   const safeMessage = OAUTH_ERROR_MESSAGES[code];
   const appUrl = Deno.env.get("APP_URL") ?? "https://qep.blackrockai.co";
   return redirectWithCorsHeaders(
-    `${appUrl}/admin?hubspot=error&code=${code}&message=${
+    `${appUrl}/admin/integrations?hubspot=error&code=${code}&message=${
       encodeURIComponent(safeMessage)
     }`,
     ch,

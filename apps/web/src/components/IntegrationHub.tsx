@@ -343,6 +343,7 @@ function CardSkeleton({ index }: { index: number }) {
 
 export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
   const [cards, setCards] = useState<IntegrationCardConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -350,6 +351,8 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [hubSpotImportRuns, setHubSpotImportRuns] = useState<HubSpotImportRunSummary[]>([]);
   const [hubSpotImportErrors, setHubSpotImportErrors] = useState<HubSpotImportErrorSummary[]>([]);
+  const hubspotStatus = searchParams.get("hubspot");
+  const hubspotMessage = searchParams.get("message");
 
   const loadIntegrations = useCallback(async () => {
     setLoading(true);
@@ -576,6 +579,20 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
             Connect external data sources to power the Deal Genome Engine.
           </p>
         </div>
+        {hubspotStatus && (
+          <div
+            className={cn(
+              "rounded-xl border px-4 py-3 text-sm",
+              hubspotStatus === "connected"
+                ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]"
+                : "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]",
+            )}
+          >
+            {hubspotStatus === "connected"
+              ? "HubSpot connected successfully. Refresh the panel if the portal status lags behind the OAuth handoff."
+              : hubspotMessage ?? "HubSpot connection did not complete."}
+          </div>
+        )}
         {!loading && cards.length > 0 && <SummaryStrip cards={cards} />}
       </div>
 

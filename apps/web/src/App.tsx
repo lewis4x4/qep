@@ -12,6 +12,7 @@ import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
 import { QuoteBuilderGate } from "./components/QuoteBuilderGate";
 import { IntegrationHub } from "./components/IntegrationHub";
 import { IntegrationCallbackPage } from "./components/IntegrationCallbackPage";
+import { HubSpotConnectPage } from "./components/HubSpotConnectPage";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
@@ -251,6 +252,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <IntegrationCallbackPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/auth/hubspot/connect"
+                element={
+                  ["admin", "owner"].includes(profile.role) ? (
+                    <HubSpotConnectPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

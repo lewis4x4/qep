@@ -83,17 +83,17 @@ async function initiateOAuthFlow(
       clearStateCookie: true,
     });
   }
-  if (!authHeader?.startsWith("Bearer ")) {
+  const sessionToken = await extractSessionToken(req, authHeader);
+  if (!sessionToken) {
     return redirectWithOAuthError("not_authenticated", ch, {
       clearStateCookie: true,
     });
   }
 
-  const jwt = authHeader.replace("Bearer ", "");
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
+    { global: { headers: { Authorization: `Bearer ${sessionToken}` } } },
   );
 
   try {
@@ -115,7 +115,7 @@ async function initiateOAuthFlow(
       });
     }
 
-    const sessionBinding = await hashSessionToken(jwt);
+    const sessionBinding = await hashSessionToken(sessionToken);
     const stateRecord = createOAuthStateRecord(user.id, sessionBinding);
     const signedState = await createSignedOAuthStateCookie(
       stateRecord,
@@ -293,7 +293,7 @@ async function completeOAuthCallback(
     await registerWebhookSubscription(tokens.access_token, runtimeConfig.appId);
 
     const appUrl = Deno.env.get("APP_URL") ?? "https://qep.blackrockai.co";
-    return redirectWithCorsHeaders(`${appUrl}/admin?hubspot=connected`, ch, {
+    return redirectWithCorsHeaders(`${appUrl}/admin/integrations?hubspot=connected`, ch, {
       setCookie: clearOAuthStateCookieHeader(),
     });
   } catch (err) {
@@ -302,4 +302,32 @@ async function completeOAuthCallback(
       clearStateCookie: true,
     });
   }
+}
+
+async function extractSessionToken(
+  req: Request,
+  authHeader: string | null,
+): Promise<string | null> {
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.replace("Bearer ", "");
+  }
+
+  const contentType = req.headers.get("content-type") ?? "";
+  if (req.method === "POST" && contentType.includes("application/x-www-form-urlencoded")) {
+    const form = await req.formData();
+    const token = form.get("session_token");
+    if (typeof token === "string" && token.trim().length > 0) {
+      return token.trim();
+    }
+  }
+
+  if (req.method === "POST" && contentType.includes("multipart/form-data")) {
+    const form = await req.formData();
+    const token = form.get("session_token");
+    if (typeof token === "string" && token.trim().length > 0) {
+      return token.trim();
+    }
+  }
+
+  return null;
 }
