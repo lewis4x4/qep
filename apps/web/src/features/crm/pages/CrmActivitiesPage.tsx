@@ -22,9 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { mergeActivityTemplates } from "../lib/activity-templates";
 import { CrmPageHeader } from "../components/CrmPageHeader";
-import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, patchCrmActivity, patchCrmActivityTask } from "../lib/crm-api";
-import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
+import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, listCrmActivityTemplates, patchCrmActivity, patchCrmActivityTask } from "../lib/crm-api";
+import type { CrmActivityFeedItem, CrmActivityTemplate, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
 
@@ -143,6 +144,10 @@ function canArchiveFromInbox(activity: CrmActivityFeedItem): boolean {
   return status !== "sent" && delivery?.deliveryInProgress !== true;
 }
 
+function canApproveCommunication(activity: CrmActivityFeedItem): boolean {
+  return canSendFromInbox(activity) && (activity.body ?? "").trim().length > 0;
+}
+
 function activityTargetHref(activity: CrmActivityFeedItem): string | null {
   if (activity.dealId) return `/crm/deals/${activity.dealId}`;
   if (activity.contactId) return `/crm/contacts/${activity.contactId}`;
@@ -169,6 +174,8 @@ export function CrmActivitiesPage() {
   const [taskDueDraft, setTaskDueDraft] = useState("");
   const [taskDueError, setTaskDueError] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [approvedActivityIds, setApprovedActivityIds] = useState<string[]>([]);
+  const [selectedTemplateByType, setSelectedTemplateByType] = useState<Partial<Record<"email" | "sms", string>>>({});
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
   const queryKey = ["crm", "activities", "feed"] as const;
 
@@ -177,8 +184,14 @@ export function CrmActivitiesPage() {
     queryFn: listCrmActivityFeed,
     staleTime: 30_000,
   });
+  const templatesQuery = useQuery({
+    queryKey: ["crm", "activity-templates"],
+    queryFn: listCrmActivityTemplates,
+    staleTime: 60_000,
+  });
 
   const activities = activitiesQuery.data ?? [];
+  const workspaceTemplates = templatesQuery.data ?? [];
   const selectedActivities = useMemo(
     () => activities.filter((activity) => selectedActivityIds.includes(activity.id)),
     [activities, selectedActivityIds],
@@ -201,6 +214,50 @@ export function CrmActivitiesPage() {
       selectedTaskActivities.filter((activity) => readTaskMetadata(activity)?.status === "completed"),
     [selectedTaskActivities],
   );
+  const approvedSelectedCommunications = useMemo(
+    () => selectedCommunications.filter((activity) => approvedActivityIds.includes(activity.id)),
+    [approvedActivityIds, selectedCommunications],
+  );
+  const approvableSelectedCommunications = useMemo(
+    () =>
+      selectedCommunications.filter((activity) =>
+        canApproveCommunication({
+          ...activity,
+          body: readDraftBody(activity),
+        })
+      ),
+    [draftBodies, selectedCommunications],
+  );
+  const nonApprovableSelectedCommunications = useMemo(
+    () => selectedCommunications.filter((activity) => !approvableSelectedCommunications.some((item) => item.id === activity.id)),
+    [approvableSelectedCommunications, selectedCommunications],
+  );
+  const allSelectedCommunicationsApproved = useMemo(
+    () =>
+      approvableSelectedCommunications.length > 0 &&
+      approvableSelectedCommunications.every((activity) => approvedActivityIds.includes(activity.id)),
+    [approvedActivityIds, approvableSelectedCommunications],
+  );
+  const reviewTemplateGroups = useMemo(() => {
+    return (["email", "sms"] as const)
+      .map((activityType) => {
+        const activitiesForType = selectedCommunications.filter((activity) => activity.activityType === activityType);
+        if (activitiesForType.length === 0) {
+          return null;
+        }
+
+        return {
+          activityType,
+          count: activitiesForType.length,
+          templates: mergeActivityTemplates(activityType, workspaceTemplates),
+        };
+      })
+      .filter((group): group is {
+        activityType: "email" | "sms";
+        count: number;
+        templates: CrmActivityTemplate[];
+      } => Boolean(group));
+  }, [selectedCommunications, workspaceTemplates]);
 
   const deliveryMutation = useMutation({
     mutationFn: async (input: { activityId: string; updatedAt: string }) =>
@@ -392,6 +449,38 @@ export function CrmActivitiesPage() {
     );
   }
 
+  function clearApproval(activityId: string): void {
+    setApprovedActivityIds((current) => current.filter((id) => id !== activityId));
+  }
+
+  function toggleApproved(activity: CrmActivityFeedItem): void {
+    if (!canApproveCommunication({
+      ...activity,
+      body: readDraftBody(activity),
+    })) {
+      return;
+    }
+
+    setApprovedActivityIds((current) =>
+      current.includes(activity.id)
+        ? current.filter((id) => id !== activity.id)
+        : [...current, activity.id],
+    );
+  }
+
+  function approveAllSelectedCommunications(): void {
+    const approvableIds = approvableSelectedCommunications
+      .map((activity) => activity.id);
+
+    setApprovedActivityIds((current) => Array.from(new Set([...current, ...approvableIds])));
+  }
+
+  function clearApprovedCommunications(): void {
+    setApprovedActivityIds((current) =>
+      current.filter((id) => !selectedCommunications.some((activity) => activity.id === id)),
+    );
+  }
+
   function selectFilteredEligible(): void {
     if (filteredSendableActivityIds.length === 0) {
       return;
@@ -544,6 +633,14 @@ export function CrmActivitiesPage() {
       setReviewOpen(false);
       return;
     }
+    if (!sendableActivities.every((activity) => approvedActivityIds.includes(activity.id))) {
+      toast({
+        title: "Approval required",
+        description: "Approve each selected email or SMS before sending the batch.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const results = await Promise.allSettled(
       sendableActivities.map(async (activity) => {
@@ -563,6 +660,7 @@ export function CrmActivitiesPage() {
 
     if (succeeded.length > 0) {
       setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+      setApprovedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
     }
 
     if (failed.length === 0) {
@@ -578,6 +676,37 @@ export function CrmActivitiesPage() {
       title: "Bulk send completed with issues",
       description: `${succeeded.length} sent, ${failed.length} still need review.`,
       variant: "destructive",
+    });
+  }
+
+  function applyTemplateToSelected(activityType: "email" | "sms"): void {
+    const templateId = selectedTemplateByType[activityType];
+    if (!templateId) {
+      return;
+    }
+
+    const template = mergeActivityTemplates(activityType, workspaceTemplates).find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setDraftBodies((current) => {
+      const next = { ...current };
+      for (const activity of selectedCommunications) {
+        if (activity.activityType === activityType) {
+          next[activity.id] = template.body;
+        }
+      }
+      return next;
+    });
+    setApprovedActivityIds((current) =>
+      current.filter((id) =>
+        !selectedCommunications.some((activity) => activity.id === id && activity.activityType === activityType),
+      ),
+    );
+    toast({
+      title: `${activityType === "sms" ? "SMS" : "Email"} template applied`,
+      description: `Applied "${template.label}" to the selected ${activityType.toUpperCase()} queue. Review and approve before sending.`,
     });
   }
 
@@ -864,7 +993,10 @@ export function CrmActivitiesPage() {
                 {selectedCommunications.length > 0 && (
                   <>
                     {selectedCommunications.length} communication{selectedCommunications.length === 1 ? "" : "s"} ready for review
-                    {selectedTaskActivities.length > 0 ? " and " : "."}
+                    {approvedSelectedCommunications.length > 0
+                      ? `, ${approvedSelectedCommunications.length} approved to send`
+                      : ""}
+                    {selectedTaskActivities.length > 0 ? ", and " : "."}
                   </>
                 )}
                 {selectedTaskActivities.length > 0 && (
@@ -1168,11 +1300,114 @@ export function CrmActivitiesPage() {
               </Card>
             )}
 
+            {selectedCommunications.length > 0 && (
+              <Card className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[#0F172A]">Send governance</p>
+                      <p className="mt-1 text-xs text-[#475569]">
+                        Apply the right language, save edits, then explicitly approve each message before bulk send.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={allSelectedCommunicationsApproved ? clearApprovedCommunications : approveAllSelectedCommunications}
+                        disabled={approvableSelectedCommunications.length === 0}
+                      >
+                        {allSelectedCommunicationsApproved
+                          ? "Clear approvals"
+                          : `Approve ready (${approvableSelectedCommunications.length})`}
+                      </Button>
+                    </div>
+                  </div>
+                  {nonApprovableSelectedCommunications.length > 0 && (
+                    <p className="text-xs text-[#B45309]">
+                      {nonApprovableSelectedCommunications.length} selected communication{nonApprovableSelectedCommunications.length === 1 ? "" : "s"} still need message copy before approval.
+                    </p>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Selected</p>
+                      <p className="mt-2 text-2xl font-bold text-[#0F172A]">{selectedCommunications.length}</p>
+                    </Card>
+                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Approved</p>
+                      <p className="mt-2 text-2xl font-bold text-emerald-700">{approvedSelectedCommunications.length}</p>
+                    </Card>
+                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Still reviewing</p>
+                      <p className="mt-2 text-2xl font-bold text-[#B45309]">
+                        {Math.max(selectedCommunications.length - approvedSelectedCommunications.length, 0)}
+                      </p>
+                    </Card>
+                  </div>
+
+                  {reviewTemplateGroups.length > 0 && (
+                    <div className="grid gap-3">
+                      {reviewTemplateGroups.map((group) => (
+                        <div
+                          key={group.activityType}
+                          className="flex flex-col gap-2 rounded-xl border border-[#E2E8F0] bg-white p-3 sm:flex-row sm:items-center"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-[#0F172A]">
+                              {group.activityType === "sms" ? "SMS" : "Email"} batch
+                            </p>
+                            <p className="mt-1 text-xs text-[#64748B]">
+                              Apply one saved template across {group.count} selected {group.activityType === "sms" ? "texts" : "emails"} before approval.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={selectedTemplateByType[group.activityType] ?? ""}
+                              onChange={(event) =>
+                                setSelectedTemplateByType((current) => ({
+                                  ...current,
+                                  [group.activityType]: event.target.value,
+                                }))}
+                              className="h-10 min-w-[220px] rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                              aria-label={`Apply ${group.activityType} template`}
+                            >
+                              <option value="">Choose a template</option>
+                              {group.templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.label}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => applyTemplateToSelected(group.activityType)}
+                              disabled={!selectedTemplateByType[group.activityType]}
+                            >
+                              Apply
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {selectedCommunications.map((activity) => {
               const delivery = readDeliveryMetadata(activity);
               const isEditable = canSendFromInbox(activity);
               const isArchivable = canArchiveFromInbox(activity);
               const dirty = draftBodyDirty(activity);
+              const approved = approvedActivityIds.includes(activity.id);
+              const approvable = canApproveCommunication({
+                ...activity,
+                body: readDraftBody(activity),
+              });
               return (
                 <Card key={activity.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
@@ -1187,16 +1422,29 @@ export function CrmActivitiesPage() {
                             Unsaved edits
                           </span>
                         )}
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                            approved
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-700"
+                          )}
+                        >
+                          {approved ? "Approved to send" : "Needs approval"}
+                        </span>
                       </div>
                       {isEditable ? (
                         <div className="mt-3 space-y-3">
                           <textarea
                             value={readDraftBody(activity)}
                             onChange={(event) =>
-                              setDraftBodies((current) => ({
-                                ...current,
-                                [activity.id]: event.target.value,
-                              }))
+                              {
+                                clearApproval(activity.id);
+                                setDraftBodies((current) => ({
+                                  ...current,
+                                  [activity.id]: event.target.value,
+                                }));
+                              }
                             }
                             rows={6}
                             className="min-h-[144px] w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
@@ -1208,10 +1456,13 @@ export function CrmActivitiesPage() {
                               variant="outline"
                               size="sm"
                               onClick={() =>
-                                setDraftBodies((current) => ({
-                                  ...current,
-                                  [activity.id]: activity.body ?? "",
-                                }))
+                                {
+                                  clearApproval(activity.id);
+                                  setDraftBodies((current) => ({
+                                    ...current,
+                                    [activity.id]: activity.body ?? "",
+                                  }));
+                                }
                               }
                               disabled={!dirty || bodyMutation.isPending}
                             >
@@ -1247,6 +1498,27 @@ export function CrmActivitiesPage() {
                       Remove
                     </Button>
                   </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={approved ? "outline" : "default"}
+                      size="sm"
+                      onClick={() => toggleApproved(activity)}
+                      disabled={!approvable}
+                      className={cn(
+                        approved
+                          ? "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                          : "bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                      )}
+                    >
+                      {approved ? "Clear approval" : "Approve to send"}
+                    </Button>
+                    {!approvable && (
+                      <p className="text-xs text-[#B45309]">
+                        Add message copy before approval.
+                      </p>
+                    )}
+                  </div>
                   {isArchivable && (
                     <div className="mt-3 flex justify-end">
                       <Button
@@ -1276,6 +1548,7 @@ export function CrmActivitiesPage() {
               onClick={() => void sendSelectedActivities()}
               disabled={
                 selectedCommunications.length === 0 ||
+                !allSelectedCommunicationsApproved ||
                 deliveryMutation.isPending ||
                 bodyMutation.isPending ||
                 archiveMutation.isPending
