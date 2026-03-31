@@ -293,27 +293,18 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground mb-1">
-                        OneDrive Integration
+                        Integration Hub
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Automatically sync company documents from your Microsoft 365 account.
+                        Manage OneDrive, HubSpot, communication providers, and other external systems from one place.
                       </p>
                     </div>
-                    {import.meta.env.VITE_MSGRAPH_CLIENT_ID ? (
-                      <Button size="sm" asChild>
-                        <a
-                          href={`https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`}
-                        >
-                          <Cloud className="w-4 h-4 mr-2" />
-                          Connect OneDrive
-                        </a>
-                      </Button>
-                    ) : (
-                      <Button size="sm" disabled>
+                    <Button size="sm" asChild>
+                      <a href="/admin/integrations">
                         <Cloud className="w-4 h-4 mr-2" />
-                        Connect OneDrive
-                      </Button>
-                    )}
+                        Open Integration Hub
+                      </a>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
