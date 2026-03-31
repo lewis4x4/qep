@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Clock, Database } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw, Clock, Database, Copy } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -284,6 +284,7 @@ export function IntegrationPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hubSpotImportDialogOpen, setHubSpotImportDialogOpen] = useState(false);
   const [isRunningHubSpotImport, setIsRunningHubSpotImport] = useState(false);
+  const [isCopyingCutoverPacket, setIsCopyingCutoverPacket] = useState(false);
   const [hubSpotImportResult, setHubSpotImportResult] = useState<HubSpotImportResult | null>(null);
   const [hubSpotImportError, setHubSpotImportError] = useState<string | null>(null);
   const [selectedResumeRunId, setSelectedResumeRunId] = useState<string | null>(null);
@@ -429,6 +430,49 @@ export function IntegrationPanel({
     : hubspotParallelRunEnabled
     ? "Validation looks close. Finish the parallel-run review, then disable it before cutover."
     : "Validation is partially complete. Finish the remaining handoff items before cutover.";
+
+  async function handleCopyCutoverPacket(): Promise<void> {
+    if (!integration || !isHubSpot) {
+      return;
+    }
+
+    const packet = [
+      `${integration.name} cutover packet`,
+      `Recommendation: ${cutoverRecommendation}`,
+      `Packet status: ${cutoverSummaryReady ? "ready" : "not ready"}`,
+      `Parallel run: ${hubspotParallelRunEnabled ? "active" : "disabled"}`,
+      `Cutover ready flag: ${hubspotCutoverReady ? "yes" : "no"}`,
+      `Validation date: ${hubspotValidatedAt.trim() || "not set"}`,
+      `Review run: ${activeReconciliationRunId ?? "none"}`,
+      `Open reconciliation rows: ${cutoverBlockingCount}`,
+      `Latest finished run: ${
+        latestFinishedRun
+          ? `${hubspotRunStatusLabel(latestFinishedRun.status)} (${formatHubSpotRunCount(latestFinishedRun)} · ${formatHubSpotRunTimestamp(latestFinishedRun.completedAt ?? latestFinishedRun.startedAt)})`
+          : "none"
+      }`,
+      `Validation note: ${hubspotCutoverNote.trim() || "not set"}`,
+      cutoverMissingItems.length > 0
+        ? `Remaining handoff items:\n- ${cutoverMissingItems.join("\n- ")}`
+        : "Remaining handoff items:\n- None",
+    ].join("\n");
+
+    setIsCopyingCutoverPacket(true);
+    try {
+      await navigator.clipboard.writeText(packet);
+      toast({
+        title: "Cutover packet copied",
+        description: "The current HubSpot cutover handoff summary is ready to paste into the board or deploy gate.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not copy cutover packet",
+        description: error instanceof Error ? error.message : "Clipboard access failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCopyingCutoverPacket(false);
+    }
+  }
 
   async function handleSave() {
     if (!integration) return;
@@ -1014,9 +1058,24 @@ export function IntegrationPanel({
                   </div>
 
                   <div className="mt-3 rounded border border-white/70 bg-white px-3 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
-                      Recommendation
-                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                          Recommendation
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleCopyCutoverPacket()}
+                        disabled={isCopyingCutoverPacket}
+                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                        {isCopyingCutoverPacket ? "Copying..." : "Copy packet"}
+                      </Button>
+                    </div>
                     <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverRecommendation}</p>
                     {cutoverMissingItems.length > 0 ? (
                       <div className="mt-3 space-y-1.5">
