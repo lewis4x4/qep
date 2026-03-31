@@ -18,6 +18,7 @@ export interface CallerContext {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const DGE_INTERNAL_SERVICE_SECRET = Deno.env.get("DGE_INTERNAL_SERVICE_SECRET");
 
 export function createAdminClient(): SupabaseClient {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -41,9 +42,11 @@ function normalizeRole(role: string | null | undefined): UserRole | null {
   return null;
 }
 
-function isServiceRoleRequest(authHeader: string | null): boolean {
-  if (!authHeader) return false;
-  return authHeader === `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`;
+function isServiceRoleRequest(req: Request): boolean {
+  if (!DGE_INTERNAL_SERVICE_SECRET) return false;
+  const internalSecret = req.headers.get("x-internal-service-secret");
+  if (!internalSecret) return false;
+  return internalSecret === DGE_INTERNAL_SERVICE_SECRET;
 }
 
 export async function resolveCallerContext(
@@ -51,7 +54,7 @@ export async function resolveCallerContext(
   adminClient: SupabaseClient,
 ): Promise<CallerContext> {
   const authHeader = req.headers.get("Authorization");
-  const serviceRole = isServiceRoleRequest(authHeader);
+  const serviceRole = isServiceRoleRequest(req);
   if (!authHeader) {
     return {
       authHeader: null,
