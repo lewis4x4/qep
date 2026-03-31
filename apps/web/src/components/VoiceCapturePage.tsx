@@ -75,6 +75,12 @@ interface DealLookupOption {
   companyName: string | null;
 }
 
+interface RecordingFormat {
+  mimeType: string;
+  fileName: string;
+  previewTypes: string[];
+}
+
 type RecentCapture = Pick<
   Database["public"]["Tables"]["voice_captures"]["Row"],
   "id" | "created_at" | "duration_seconds" | "sync_status" | "hubspot_deal_id" | "transcript"
@@ -97,6 +103,24 @@ const PROCESSING_STEPS = [
   { label: "Done", icon: Sparkles },
 ];
 
+const RECORDING_FORMATS: RecordingFormat[] = [
+  {
+    mimeType: "audio/mp4",
+    fileName: "recording.m4a",
+    previewTypes: ["audio/mp4", "audio/aac"],
+  },
+  {
+    mimeType: "audio/webm;codecs=opus",
+    fileName: "recording.webm",
+    previewTypes: ["audio/webm; codecs=opus", "audio/webm"],
+  },
+  {
+    mimeType: "audio/webm",
+    fileName: "recording.webm",
+    previewTypes: ["audio/webm"],
+  },
+];
+
 function looksLikeCrmRecordId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value.trim(),
@@ -114,6 +138,30 @@ function formatVoiceCaptureSyncStatus(status: RecentCapture["sync_status"]): str
     default:
       return "Queued";
   }
+}
+
+function canPreviewAudioMimeType(mimeType: string): boolean {
+  if (typeof document === "undefined") return true;
+  const audio = document.createElement("audio");
+  return audio.canPlayType(mimeType).replace(/no/i, "").trim().length > 0;
+}
+
+function chooseRecordingFormat(): RecordingFormat | null {
+  const playableFormats = RECORDING_FORMATS.filter(
+    (format) =>
+      MediaRecorder.isTypeSupported(format.mimeType) &&
+      format.previewTypes.some((previewType) => canPreviewAudioMimeType(previewType)),
+  );
+
+  if (playableFormats.length > 0) {
+    return playableFormats[0];
+  }
+
+  const supportedFormat = RECORDING_FORMATS.find((format) =>
+    MediaRecorder.isTypeSupported(format.mimeType),
+  );
+
+  return supportedFormat ?? null;
 }
 
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
@@ -153,6 +201,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingFormatRef = useRef<RecordingFormat | null>(null);
 
   // Load recent captures on mount
   useEffect(() => {
@@ -337,13 +386,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       return;
     }
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
-      : "audio/webm";
+    const recordingFormat = chooseRecordingFormat();
+    if (!recordingFormat) {
+      setErrorMessage("This browser does not support an audio recording format we can save safely.");
+      stream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      return;
+    }
 
-    const recorder = new MediaRecorder(stream, { mimeType });
+    recordingFormatRef.current = recordingFormat;
+
+    const recorder = new MediaRecorder(stream, { mimeType: recordingFormat.mimeType });
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
 
@@ -352,7 +405,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const blob = new Blob(chunksRef.current, { type: recordingFormat.mimeType });
       const url = URL.createObjectURL(blob);
       setAudioBlob(blob);
       setAudioBlobUrl(url);
@@ -450,7 +503,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       if (!session) throw new Error("Not authenticated");
 
       const form = new FormData();
-      form.append("audio", audioBlob, "recording");
+      const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
+      form.append("audio", audioBlob, recordingFileName);
       if (hubspotDealId.trim()) {
         form.append("crm_deal_id", hubspotDealId.trim());
       }
