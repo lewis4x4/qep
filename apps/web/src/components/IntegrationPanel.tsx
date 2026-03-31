@@ -131,7 +131,13 @@ interface HubSpotReasonSummary {
 
 interface IntegrationCredentialAuditEventRow {
   id: string;
-  event_type: "credentials_set" | "credentials_rotated" | "credentials_cleared";
+  event_type:
+    | "credentials_set"
+    | "credentials_rotated"
+    | "credentials_cleared"
+    | "deploy_gate_approved"
+    | "source_only_enabled"
+    | "parallel_run_reopened";
   actor_role: string | null;
   metadata: Record<string, unknown> | null;
   occurred_at: string;
@@ -292,8 +298,33 @@ function integrationCredentialAuditLabel(
       return "Credentials rotated";
     case "credentials_cleared":
       return "Credentials cleared";
+    case "deploy_gate_approved":
+      return "Deploy gate approved";
+    case "source_only_enabled":
+      return "HubSpot moved to source-only";
+    case "parallel_run_reopened":
+      return "Parallel run reopened";
     default:
       return "Credential update";
+  }
+}
+
+function integrationHistorySortPriority(eventType: IntegrationCredentialAuditEventRow["event_type"]): number {
+  switch (eventType) {
+    case "source_only_enabled":
+      return 60;
+    case "deploy_gate_approved":
+      return 50;
+    case "parallel_run_reopened":
+      return 40;
+    case "credentials_cleared":
+      return 30;
+    case "credentials_rotated":
+      return 20;
+    case "credentials_set":
+      return 10;
+    default:
+      return 0;
   }
 }
 
@@ -600,11 +631,18 @@ export function IntegrationPanel({
     : "Validation is partially complete. Finish the remaining handoff items before cutover.";
   const hubspotHistoryItems = isHubSpot
     ? [
-        ...hubSpotImportRuns.slice(0, 3).map((run) => ({
+        ...[...hubSpotImportRuns]
+          .sort((left, right) =>
+            sortablePanelTimestamp(right.completedAt ?? right.startedAt) -
+            sortablePanelTimestamp(left.completedAt ?? left.startedAt)
+          )
+          .slice(0, 3)
+          .map((run) => ({
           id: `hubspot-run-${run.id}`,
           title: `Import ${hubspotRunStatusLabel(run.status)}`,
           detail: `${formatHubSpotRunCount(run)}${run.errorCount > 0 ? ` • ${run.errorCount.toLocaleString()} errors` : ""}`,
           occurredAt: run.completedAt ?? run.startedAt,
+          sortPriority: 5,
           tone: run.status === "failed"
             ? ("danger" as const)
             : run.status === "completed_with_errors"
@@ -616,16 +654,39 @@ export function IntegrationPanel({
         ...recentCredentialAuditEvents.map((event) => ({
           id: event.id,
           title: integrationCredentialAuditLabel(event.event_type),
-          detail: event.actor_role
-            ? `Changed by ${event.actor_role}.`
-            : "Credential lifecycle event recorded.",
+          detail:
+            event.event_type === "deploy_gate_approved"
+              ? `Approved by ${event.actor_role ?? "system"}${typeof event.metadata?.validated_at === "string" && event.metadata.validated_at ? ` after validation dated ${formatHubSpotValidationDate(event.metadata.validated_at)}` : ""}.`
+              : event.event_type === "source_only_enabled"
+              ? `Marked by ${event.actor_role ?? "system"}${typeof event.metadata?.source_only_activated_at === "string" && event.metadata.source_only_activated_at ? ` on ${formatPanelTimestamp(event.metadata.source_only_activated_at)}` : ""}.`
+              : event.event_type === "parallel_run_reopened"
+              ? `Rolled back by ${event.actor_role ?? "system"} so validation can continue.`
+              : event.actor_role
+              ? `Changed by ${event.actor_role}.`
+              : "Credential lifecycle event recorded.",
           occurredAt: event.occurred_at,
-          tone: event.event_type === "credentials_cleared"
+          sortPriority: integrationHistorySortPriority(event.event_type),
+          tone:
+            event.event_type === "source_only_enabled"
+              ? ("success" as const)
+              : event.event_type === "deploy_gate_approved"
+              ? ("neutral" as const)
+              : event.event_type === "parallel_run_reopened" || event.event_type === "credentials_cleared"
             ? ("warning" as const)
             : ("neutral" as const),
         })),
       ]
-        .sort((left, right) => sortablePanelTimestamp(right.occurredAt) - sortablePanelTimestamp(left.occurredAt))
+        .sort((left, right) => {
+          const timestampDiff = sortablePanelTimestamp(right.occurredAt) - sortablePanelTimestamp(left.occurredAt);
+          if (timestampDiff !== 0) {
+            return timestampDiff;
+          }
+          const priorityDiff = (right.sortPriority ?? 0) - (left.sortPriority ?? 0);
+          if (priorityDiff !== 0) {
+            return priorityDiff;
+          }
+          return right.id.localeCompare(left.id);
+        })
         .slice(0, 6)
     : [];
 
