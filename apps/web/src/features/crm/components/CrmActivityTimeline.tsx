@@ -1,7 +1,8 @@
 import { CalendarClock, Mail, MessageSquareText, Phone, StickyNote, ClipboardList } from "lucide-react";
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import type { CrmActivityItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 interface CrmActivityTimelineProps {
@@ -115,6 +116,50 @@ export function CrmActivityTimeline({
   onToggleTaskStatus,
   pendingTaskId = null,
 }: CrmActivityTimelineProps) {
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [dueAtInput, setDueAtInput] = useState("");
+  const [dueAtError, setDueAtError] = useState<string | null>(null);
+
+  function startTaskEditor(activity: CrmActivityItem, task: CrmTaskMetadata): void {
+    setEditingTaskId(activity.id);
+    setDueAtInput(toDateTimeLocalValue(task.dueAt ?? null));
+    setDueAtError(null);
+  }
+
+  function closeTaskEditor(): void {
+    setEditingTaskId(null);
+    setDueAtInput("");
+    setDueAtError(null);
+  }
+
+  async function saveTaskDueAt(activity: CrmActivityItem, task: CrmTaskMetadata): Promise<void> {
+    if (!onPatchTask) return;
+
+    const nextDueAt = dueAtInput.trim() ? toIsoOrNull(dueAtInput) : null;
+    if (dueAtInput.trim() && !nextDueAt) {
+      setDueAtError("Enter a valid due date.");
+      return;
+    }
+
+    try {
+      await onPatchTask(activity, { ...task, dueAt: nextDueAt });
+      closeTaskEditor();
+    } catch (error) {
+      setDueAtError(error instanceof Error ? error.message : "Could not update the task due date.");
+    }
+  }
+
+  async function clearTaskDueAt(activity: CrmActivityItem, task: CrmTaskMetadata): Promise<void> {
+    if (!onPatchTask) return;
+
+    try {
+      await onPatchTask(activity, { ...task, dueAt: null });
+      closeTaskEditor();
+    } catch (error) {
+      setDueAtError(error instanceof Error ? error.message : "Could not clear the task due date.");
+    }
+  }
+
   if (activities.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-6 text-center">
@@ -139,6 +184,8 @@ export function CrmActivityTimeline({
         const delivery = readCommunicationDelivery(activity);
         const task = readTaskMetadata(activity);
         const canPatchTask = Boolean(onPatchTask || onToggleTaskStatus);
+        const isEditingTask = editingTaskId === activity.id;
+        const isPendingTask = pendingTaskId === activity.id;
 
         return (
           <article
@@ -178,7 +225,7 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="outline"
                     className="h-8 px-2 text-xs"
-                    disabled={pendingTaskId === activity.id}
+                    disabled={isPendingTask}
                     onClick={() => {
                       const nextStatus = task.status === "completed" ? "open" : "completed";
                       if (onPatchTask) {
@@ -190,13 +237,74 @@ export function CrmActivityTimeline({
                       }
                     }}
                   >
-                    {pendingTaskId === activity.id
+                    {isPendingTask
                       ? "Saving..."
                       : task.status === "completed"
                       ? "Reopen"
                       : "Mark complete"}
                   </Button>
                 )}
+                {onPatchTask && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs text-[#475569]"
+                    disabled={isPendingTask}
+                    onClick={() => {
+                      if (isEditingTask) {
+                        closeTaskEditor();
+                        return;
+                      }
+                      startTaskEditor(activity, task);
+                    }}
+                  >
+                    {isEditingTask ? "Cancel" : "Reschedule"}
+                  </Button>
+                )}
+              </div>
+            )}
+            {task && onPatchTask && isEditingTask && (
+              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <label
+                  htmlFor={`crm-task-due-at-${activity.id}`}
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                >
+                  Task due date
+                </label>
+                <input
+                  id={`crm-task-due-at-${activity.id}`}
+                  type="datetime-local"
+                  value={dueAtInput}
+                  onChange={(event) => {
+                    setDueAtInput(event.target.value);
+                    setDueAtError(null);
+                  }}
+                  disabled={isPendingTask}
+                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                {dueAtError && <p className="mt-2 text-xs text-[#B91C1C]">{dueAtError}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingTask}
+                    onClick={() => void saveTaskDueAt(activity, task)}
+                  >
+                    {isPendingTask ? "Saving..." : "Save due date"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingTask}
+                    onClick={() => void clearTaskDueAt(activity, task)}
+                  >
+                    Clear due date
+                  </Button>
+                </div>
               </div>
             )}
             {delivery && (
