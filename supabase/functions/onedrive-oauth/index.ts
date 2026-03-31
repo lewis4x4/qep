@@ -4,6 +4,7 @@
  * and stores them in onedrive_sync_state for the authenticated user.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { encryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,8 +100,10 @@ Deno.serve(async (req) => {
     const payload = {
       user_id: user.id,
       drive_id: drive.id ?? null,
-      access_token_encrypted: tokens.access_token,
-      refresh_token_encrypted: tokens.refresh_token ?? null,
+      access_token: await encryptOneDriveToken(tokens.access_token),
+      refresh_token: tokens.refresh_token
+        ? await encryptOneDriveToken(tokens.refresh_token)
+        : null,
       token_expires_at: tokenExpiresAt,
       updated_at: new Date().toISOString(),
     };
@@ -137,7 +140,7 @@ function respondSuccess(payload: Record<string, unknown>, mode: string | null): 
   }
 
   const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
-  return Response.redirect(`${appUrl}/admin?tab=integrations&onedrive=connected`, 302);
+  return Response.redirect(`${appUrl}/admin/integrations?onedrive=connected`, 302);
 }
 
 function respondError(message: string, mode: string | null, status = 400): Response {
@@ -150,7 +153,7 @@ function respondError(message: string, mode: string | null, status = 400): Respo
 
   const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
   return Response.redirect(
-    `${appUrl}/admin?tab=integrations&onedrive=error&message=${encodeURIComponent(message)}`,
+    `${appUrl}/admin/integrations?onedrive=error&message=${encodeURIComponent(message)}`,
     302,
   );
 }

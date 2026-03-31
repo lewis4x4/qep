@@ -96,6 +96,14 @@ interface HubSpotImportErrorRow {
   created_at: string;
 }
 
+interface OneDriveSyncStateRow {
+  id: string;
+  drive_id: string | null;
+  access_token: string | null;
+  token_expires_at: string | null;
+  last_synced_at: string | null;
+}
+
 interface TestConnectionResponse {
   success: boolean;
   latencyMs: number;
@@ -127,6 +135,13 @@ const INTEGRATION_DISPLAY: Record<
     description:
       "Outbound SMS messaging for field-friendly customer follow-ups and timeline-linked communication history.",
     icon: "TW",
+  },
+  onedrive: {
+    name: "Microsoft OneDrive",
+    category: "Knowledge Base Sync",
+    description:
+      "Connect Microsoft 365 document libraries and sync dealership files into the knowledge base search index.",
+    icon: "OD",
   },
   intellidealer: {
     name: "IntelliDealer (VitalEdge)",
@@ -353,6 +368,8 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   const [hubSpotImportErrors, setHubSpotImportErrors] = useState<HubSpotImportErrorSummary[]>([]);
   const hubspotStatus = searchParams.get("hubspot");
   const hubspotMessage = searchParams.get("message");
+  const onedriveStatus = searchParams.get("onedrive");
+  const onedriveMessage = searchParams.get("message");
 
   const loadIntegrations = useCallback(async () => {
     setLoading(true);
@@ -415,9 +432,25 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           .eq("workspace_id", workspaceId)
           .order("created_at", { ascending: false })
           .limit(250),
+        supabase
+          .from("onedrive_sync_state")
+          .select("id, drive_id, access_token, token_expires_at, last_synced_at")
+          .eq("user_id", actorUserId)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("documents")
+          .select("id", { count: "exact", head: true })
+          .eq("source", "onedrive"),
       ]);
 
-      const [hubspotPortalResult, hubspotImportRunsResult, hubspotImportErrorsResult] = await Promise.race([
+      const [
+        hubspotPortalResult,
+        hubspotImportRunsResult,
+        hubspotImportErrorsResult,
+        oneDriveSyncStateResult,
+        oneDriveDocumentsResult,
+      ] = await Promise.race([
         hubspotFetchPromise,
         new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error("HubSpot status request timed out. Please try again.")), 5000);
@@ -435,6 +468,32 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
         "hubspot",
         buildHubSpotIntegrationRow(rowByKey.get("hubspot") ?? null, portalRows, latestImportRun)
       );
+
+      const oneDriveState = (oneDriveSyncStateResult.data ?? null) as OneDriveSyncStateRow | null;
+      const oneDriveDocumentCount = oneDriveDocumentsResult.count ?? 0;
+      const oneDriveExpired =
+        typeof oneDriveState?.token_expires_at === "string" &&
+        Date.parse(oneDriveState.token_expires_at) < Date.now();
+
+      rowByKey.set("onedrive", {
+        integration_key: "onedrive",
+        status: !oneDriveState || !oneDriveState.access_token
+          ? "pending_credentials"
+          : oneDriveExpired
+          ? "error"
+          : "connected",
+        last_sync_at: oneDriveState?.last_synced_at ?? null,
+        last_sync_records: oneDriveDocumentCount,
+        last_sync_error: oneDriveExpired
+          ? "OneDrive authorization expired. Reconnect Microsoft 365 before the next sync."
+          : null,
+        endpoint_url: "https://graph.microsoft.com/v1.0",
+        config: {
+          sync_state_id: oneDriveState?.id ?? null,
+          drive_id: oneDriveState?.drive_id ?? null,
+          token_expires_at: oneDriveState?.token_expires_at ?? null,
+        },
+      });
 
       const mapped: IntegrationCardConfig[] = Object.keys(INTEGRATION_DISPLAY).map((key) => {
         const row = rowByKey.get(key) ?? {
@@ -579,18 +638,22 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
             Connect external data sources to power the Deal Genome Engine.
           </p>
         </div>
-        {hubspotStatus && (
+        {(hubspotStatus || onedriveStatus) && (
           <div
             className={cn(
               "rounded-xl border px-4 py-3 text-sm",
-              hubspotStatus === "connected"
+              (hubspotStatus === "connected" || onedriveStatus === "connected")
                 ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]"
                 : "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]",
             )}
           >
-            {hubspotStatus === "connected"
-              ? "HubSpot connected successfully. Refresh the panel if the portal status lags behind the OAuth handoff."
-              : hubspotMessage ?? "HubSpot connection did not complete."}
+            {hubspotStatus
+              ? hubspotStatus === "connected"
+                ? "HubSpot connected successfully. Refresh the panel if the portal status lags behind the OAuth handoff."
+                : hubspotMessage ?? "HubSpot connection did not complete."
+              : onedriveStatus === "connected"
+              ? "OneDrive connected successfully. Run a sync to refresh dealership documents in the knowledge base."
+              : onedriveMessage ?? "OneDrive connection did not complete."}
           </div>
         )}
         {!loading && cards.length > 0 && <SummaryStrip cards={cards} />}

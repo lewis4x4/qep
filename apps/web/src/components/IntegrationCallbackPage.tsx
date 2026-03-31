@@ -71,7 +71,7 @@ export function IntegrationCallbackPage() {
         });
 
         window.setTimeout(() => {
-          navigate("/admin/integrations", { replace: true });
+          navigate("/admin/integrations?onedrive=connected", { replace: true });
         }, 1200);
       } catch (callbackError) {
         if (cancelled) return;

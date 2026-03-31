@@ -11,7 +11,7 @@ import { RouseMockAdapter } from "../_shared/adapters/rouse-mock.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 import { fail, ok, optionsResponse, readJsonObject } from "../_shared/dge-http.ts";
 import { createEventTracker } from "../_shared/event-tracker.ts";
-import { decryptCredential } from "../_shared/integration-crypto.ts";
+import { decryptCredential, decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 import type {
   AdapterConfig,
   IntegrationAdapter,
@@ -38,7 +38,7 @@ interface IntegrationStatusRow {
 }
 
 type CommunicationIntegrationKey = "sendgrid" | "twilio";
-type SupportedIntegrationKey = IntegrationKey | "hubspot" | CommunicationIntegrationKey;
+type SupportedIntegrationKey = IntegrationKey | "hubspot" | "onedrive" | CommunicationIntegrationKey;
 
 type TestConnectionResult = {
   success: boolean;
@@ -135,6 +135,7 @@ function resolveIntegrationKey(raw: string | undefined): SupportedIntegrationKey
     case "hubspot":
     case "sendgrid":
     case "twilio":
+    case "onedrive":
     case "intellidealer":
     case "ironguides":
     case "rouse":
@@ -369,6 +370,111 @@ Deno.serve(async (req): Promise<Response> => {
         code: "INVALID_REQUEST",
         message: "integration_key is required and must be supported.",
       });
+    }
+
+    if (integrationKey === "onedrive") {
+      const startedAt = Date.now();
+      const { data: syncState, error: syncStateError } = await userClient
+        .from("onedrive_sync_state")
+        .select("access_token, token_expires_at")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle<{ access_token: string | null; token_expires_at: string | null }>();
+
+      if (syncStateError) {
+        return fail({
+          origin,
+          status: 500,
+          code: "ONEDRIVE_STATE_LOAD_FAILED",
+          message: "Could not load OneDrive connection state.",
+        });
+      }
+
+      if (!syncState?.access_token) {
+        return ok(
+          {
+            success: false,
+            latencyMs: 0,
+            mode: "live",
+            error: {
+              code: "ONEDRIVE_NOT_CONNECTED",
+              message: "OneDrive is not connected for this account.",
+            },
+          },
+          { origin },
+        );
+      }
+
+      let accessToken: string;
+      try {
+        accessToken = await decryptOneDriveToken(syncState.access_token);
+      } catch {
+        return ok(
+          {
+            success: false,
+            latencyMs: 0,
+            mode: "live",
+            error: {
+              code: "ONEDRIVE_REAUTH_REQUIRED",
+              message: "OneDrive authorization must be renewed before testing or sync.",
+            },
+          },
+          { origin },
+        );
+      }
+
+      try {
+        const response = await fetch(
+          "https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType",
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            signal: AbortSignal.timeout(10_000),
+          },
+        );
+
+        if (!response.ok) {
+          return ok(
+            {
+              success: false,
+              latencyMs: Date.now() - startedAt,
+              mode: "live",
+              error: {
+                code: response.status === 401
+                  ? "ONEDRIVE_REAUTH_REQUIRED"
+                  : "ONEDRIVE_UPSTREAM_ERROR",
+                message: response.status === 401
+                  ? "Microsoft rejected the stored token. Reconnect OneDrive."
+                  : `Microsoft Graph test failed (${response.status}).`,
+              },
+            },
+            { origin },
+          );
+        }
+
+        return ok(
+          {
+            success: true,
+            latencyMs: Date.now() - startedAt,
+            mode: "live",
+          },
+          { origin },
+        );
+      } catch {
+        return ok(
+          {
+            success: false,
+            latencyMs: Date.now() - startedAt,
+            mode: "live",
+            error: {
+              code: "ONEDRIVE_REQUEST_FAILED",
+              message: "OneDrive test request failed.",
+            },
+          },
+          { origin },
+        );
+      }
     }
 
     const { data: statusRow, error: statusError } = await userClient

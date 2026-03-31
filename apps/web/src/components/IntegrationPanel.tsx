@@ -474,6 +474,7 @@ export function IntegrationPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [isClearingCredentials, setIsClearingCredentials] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isRunningOneDriveSync, setIsRunningOneDriveSync] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hubSpotImportDialogOpen, setHubSpotImportDialogOpen] = useState(false);
@@ -582,9 +583,15 @@ export function IntegrationPanel({
   }, [integration?.key, integration?.config]);
 
   const isHubSpot = integration?.key === "hubspot";
+  const isOneDrive = integration?.key === "onedrive";
   const resumableHubSpotRuns = hubSpotImportRuns.filter((run) =>
     HUBSPOT_RESUMABLE_STATUSES.has(run.status) && run.initiatedBy === actorUserId
   );
+  const oneDriveSyncStateId =
+    typeof integration?.config?.sync_state_id === "string" ? integration.config.sync_state_id : null;
+  const oneDriveConnectUrl = import.meta.env.VITE_MSGRAPH_CLIENT_ID
+    ? `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${import.meta.env.VITE_MSGRAPH_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin + "/auth/onedrive/callback")}&scope=files.read.all+offline_access&response_mode=query`
+    : null;
 
   useEffect(() => {
     if (!isHubSpot) {
@@ -1174,6 +1181,40 @@ export function IntegrationPanel({
     });
 
     try {
+      if (isOneDrive) {
+        const { data, error } = await supabase.functions.invoke<TestConnectionResponse>(
+          "integration-test-connection",
+          {
+            body: {
+              integration_key: "onedrive",
+            },
+          }
+        );
+
+        if (error) throw new Error(error.message);
+
+        const result: TestResult = {
+          success: Boolean(data?.success),
+          latencyMs: data?.latencyMs ?? 0,
+          error: data?.error?.message,
+        };
+        setTestResult(result);
+        if (result.success) {
+          toast({
+            title: "OneDrive is reachable",
+            description: `Microsoft Graph responded in ${result.latencyMs}ms.`,
+          });
+        } else {
+          toast({
+            title: "OneDrive test failed",
+            description: result.error ?? "Reconnect OneDrive and try again.",
+            variant: "destructive",
+          });
+        }
+        await onSaved();
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke<TestConnectionResponse>(
         "integration-test-connection",
         {
@@ -1214,6 +1255,48 @@ export function IntegrationPanel({
       });
     } finally {
       setIsTesting(false);
+    }
+  }
+
+  async function handleRunOneDriveSync(): Promise<void> {
+    if (!oneDriveSyncStateId) {
+      toast({
+        title: "Connect OneDrive first",
+        description: "This workspace needs an active OneDrive authorization before sync can run.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsRunningOneDriveSync(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ success: boolean; processed: string[] }>(
+        "ingest",
+        {
+          body: {
+            action: "onedrive_sync",
+            syncStateId: oneDriveSyncStateId,
+          },
+        },
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "OneDrive sync finished",
+        description: `${data?.processed?.length ?? 0} document${(data?.processed?.length ?? 0) === 1 ? "" : "s"} processed.`,
+      });
+      await onSaved();
+    } catch (error) {
+      toast({
+        title: "OneDrive sync failed",
+        description: error instanceof Error ? error.message : "Could not run OneDrive sync.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRunningOneDriveSync(false);
     }
   }
 
@@ -1340,6 +1423,47 @@ export function IntegrationPanel({
                       <a href="/auth/hubspot/connect">
                         {integration.status === "connected" ? "Reconnect HubSpot" : "Connect HubSpot"}
                       </a>
+                    </Button>
+                  </div>
+                )}
+                {isOneDrive && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {oneDriveConnectUrl ? (
+                      <Button
+                        asChild
+                        size="sm"
+                        className="bg-qep-orange text-white hover:bg-qep-orange-hover focus-visible:ring-qep-orange"
+                      >
+                        <a href={oneDriveConnectUrl}>
+                          {integration.status === "connected" ? "Reconnect OneDrive" : "Connect OneDrive"}
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled
+                        className="bg-qep-orange text-white"
+                      >
+                        Connect OneDrive
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange"
+                      onClick={() => void handleRunOneDriveSync()}
+                      disabled={isRunningOneDriveSync || !oneDriveSyncStateId}
+                    >
+                      {isRunningOneDriveSync ? (
+                        <>
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                          Running sync…
+                        </>
+                      ) : (
+                        "Run sync now"
+                      )}
                     </Button>
                   </div>
                 )}
@@ -2078,7 +2202,19 @@ export function IntegrationPanel({
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-3">Credentials &amp; configuration</h4>
             <div className="space-y-4">
-              {isHubSpot ? (
+              {isOneDrive ? (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium text-foreground">Microsoft 365 OAuth connection</p>
+                  <p className="mt-1 text-xs text-[#64748B]">
+                    OneDrive is authorized through Microsoft OAuth. Use the connect button above to rotate access, then run a sync when you want to refresh indexed documents.
+                  </p>
+                  {typeof integration.config?.drive_id === "string" && integration.config.drive_id ? (
+                    <p className="mt-2 text-xs text-[#475569]">
+                      Drive ID: <span className="font-mono">{integration.config.drive_id}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : isHubSpot ? (
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-client-id" className="text-xs font-medium text-[#374151]">
@@ -2154,20 +2290,22 @@ export function IntegrationPanel({
                   </p>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label htmlFor="endpoint-url" className="text-xs font-medium text-[#374151]">
-                  Endpoint URL
-                  <span className="text-[#64748B] ml-1">(optional)</span>
-                </Label>
-                <Input
-                  id="endpoint-url"
-                  type="url"
-                  placeholder="https://api.vendor.com"
-                  value={endpointUrl}
-                  onChange={(e) => setEndpointUrl(e.target.value)}
-                  className="text-sm focus-visible:ring-qep-orange"
-                />
-              </div>
+              {!isOneDrive && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="endpoint-url" className="text-xs font-medium text-[#374151]">
+                    Endpoint URL
+                    <span className="text-[#64748B] ml-1">(optional)</span>
+                  </Label>
+                  <Input
+                    id="endpoint-url"
+                    type="url"
+                    placeholder="https://api.vendor.com"
+                    value={endpointUrl}
+                    onChange={(e) => setEndpointUrl(e.target.value)}
+                    className="text-sm focus-visible:ring-qep-orange"
+                  />
+                </div>
+              )}
             </div>
             {saveError && (
               <p className="text-xs text-[#DC2626] mt-2">{saveError}</p>
@@ -2179,25 +2317,48 @@ export function IntegrationPanel({
           {/* Section 3: Connection test */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-3">Connection test</h4>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
-              onClick={() => void handleTest()}
-              disabled={isTesting}
-            >
-              {isTesting ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
-                  Testing connection…
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
-                  Test connection
-                </>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
+                onClick={() => void handleTest()}
+                disabled={isTesting}
+              >
+                {isTesting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                    Testing connection…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
+                    {isOneDrive ? "Test Microsoft access" : "Test connection"}
+                  </>
+                )}
+              </Button>
+              {isOneDrive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
+                  onClick={() => void handleRunOneDriveSync()}
+                  disabled={isRunningOneDriveSync || !oneDriveSyncStateId}
+                >
+                  {isRunningOneDriveSync ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                      Running sync…
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
+                      Run sync now
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
             {testResult !== null && (
               <div
                 className={cn(
@@ -2407,47 +2568,51 @@ export function IntegrationPanel({
 
         {/* Pinned footer action */}
         <div className="shrink-0 px-6 py-4 border-t border-border bg-card">
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-border text-foreground focus-visible:ring-qep-orange"
-              onClick={onClose}
-              disabled={isSaving || isClearingCredentials}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2] focus-visible:ring-[#DC2626]"
-              onClick={() => void handleClearCredentials()}
-              disabled={isSaving || isClearingCredentials || isTesting}
-            >
-              {isClearingCredentials ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
-                  Clearing…
-                </>
-              ) : (
-                "Clear credentials"
-              )}
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1 bg-qep-orange hover:bg-qep-orange-hover text-white focus-visible:ring-qep-orange"
-              onClick={() => void handleSave()}
-              disabled={isSaving || isClearingCredentials}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
-                  Saving…
-                </>
-              ) : (
-                "Save configuration"
-              )}
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-border text-foreground focus-visible:ring-qep-orange"
+                onClick={onClose}
+                disabled={isSaving || isClearingCredentials}
+              >
+                Cancel
+              </Button>
+            {!isOneDrive && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2] focus-visible:ring-[#DC2626]"
+                  onClick={() => void handleClearCredentials()}
+                  disabled={isSaving || isClearingCredentials || isTesting}
+                >
+                  {isClearingCredentials ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                      Clearing…
+                    </>
+                  ) : (
+                    "Clear credentials"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-qep-orange hover:bg-qep-orange-hover text-white focus-visible:ring-qep-orange"
+                  onClick={() => void handleSave()}
+                  disabled={isSaving || isClearingCredentials}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save configuration"
+                  )}
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </SheetContent>
