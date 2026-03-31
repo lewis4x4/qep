@@ -129,6 +129,14 @@ interface HubSpotReasonSummary {
   count: number;
 }
 
+interface IntegrationCredentialAuditEventRow {
+  id: string;
+  event_type: "credentials_set" | "credentials_rotated" | "credentials_cleared";
+  actor_role: string | null;
+  metadata: Record<string, unknown> | null;
+  occurred_at: string;
+}
+
 function statusToDataSource(status: IntegrationCardConfig["status"]): DataSourceState {
   switch (status) {
     case "connected": return "Live";
@@ -250,6 +258,45 @@ function formatHubSpotValidationDate(value: string): string {
   }).format(new Date(timestamp));
 }
 
+function formatPanelTimestamp(value: string): string {
+  if (!value) return "Time unavailable";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return formatHubSpotValidationDate(value);
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "Unknown time";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function sortablePanelTimestamp(value: string): number {
+  if (!value) return 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Date.parse(`${value}T12:00:00Z`);
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function integrationCredentialAuditLabel(
+  eventType: IntegrationCredentialAuditEventRow["event_type"],
+): string {
+  switch (eventType) {
+    case "credentials_set":
+      return "Credentials added";
+    case "credentials_rotated":
+      return "Credentials rotated";
+    case "credentials_cleared":
+      return "Credentials cleared";
+    default:
+      return "Credential update";
+  }
+}
+
 function readHubSpotCutoverConfig(config: Record<string, unknown> | undefined): HubSpotCutoverConfig {
   if (!config || typeof config !== "object") {
     return {};
@@ -299,6 +346,9 @@ export function IntegrationPanel({
   const [hubspotSourceOnlyActivatedAt, setHubspotSourceOnlyActivatedAt] = useState("");
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
   const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
+  const [recentCredentialAuditEvents, setRecentCredentialAuditEvents] = useState<IntegrationCredentialAuditEventRow[]>([]);
+  const [isLoadingCredentialAudit, setIsLoadingCredentialAudit] = useState(false);
+  const [credentialAuditError, setCredentialAuditError] = useState<string | null>(null);
 
   // Reset all panel state when the selected integration changes
   useEffect(() => {
@@ -381,6 +431,62 @@ export function IntegrationPanel({
         : (hubSpotImportRuns[0]?.id ?? null)
     );
   }, [isHubSpot, hubSpotImportRuns]);
+
+  useEffect(() => {
+    if (!open || !integration) {
+      setRecentCredentialAuditEvents([]);
+      setIsLoadingCredentialAudit(false);
+      setCredentialAuditError(null);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLoadingCredentialAudit(true);
+    setCredentialAuditError(null);
+
+    void (async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            eq: (column: string, value: string) => {
+              order: (
+                column: string,
+                options: { ascending: boolean },
+              ) => {
+                limit: (count: number) => Promise<{
+                  data: IntegrationCredentialAuditEventRow[] | null;
+                  error: { message?: string } | null;
+                }>;
+              };
+            };
+          };
+        };
+      })
+        .from("integration_status_credential_audit_events")
+        .select("id, event_type, actor_role, metadata, occurred_at")
+        .eq("integration_key", integration.key)
+        .order("occurred_at", { ascending: false })
+        .limit(5);
+
+      if (isCancelled) {
+        return;
+      }
+
+      if (error) {
+        console.error("Failed to load integration credential audit events", error);
+        setRecentCredentialAuditEvents([]);
+        setCredentialAuditError(error.message ?? "Could not load execution history.");
+      } else {
+        setRecentCredentialAuditEvents(data ?? []);
+        setCredentialAuditError(null);
+      }
+      setIsLoadingCredentialAudit(false);
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [open, integration?.key]);
 
   if (!integration) return null;
   const activeReconciliationRunId = selectedReviewRunId ??
@@ -492,6 +598,36 @@ export function IntegrationPanel({
     : hubspotParallelRunEnabled
     ? "Validation looks close. Finish the parallel-run review, then disable it before cutover."
     : "Validation is partially complete. Finish the remaining handoff items before cutover.";
+  const hubspotHistoryItems = isHubSpot
+    ? [
+        ...hubSpotImportRuns.slice(0, 3).map((run) => ({
+          id: `hubspot-run-${run.id}`,
+          title: `Import ${hubspotRunStatusLabel(run.status)}`,
+          detail: `${formatHubSpotRunCount(run)}${run.errorCount > 0 ? ` • ${run.errorCount.toLocaleString()} errors` : ""}`,
+          occurredAt: run.completedAt ?? run.startedAt,
+          tone: run.status === "failed"
+            ? ("danger" as const)
+            : run.status === "completed_with_errors"
+            ? ("warning" as const)
+            : run.status === "completed"
+            ? ("success" as const)
+            : ("neutral" as const),
+        })),
+        ...recentCredentialAuditEvents.map((event) => ({
+          id: event.id,
+          title: integrationCredentialAuditLabel(event.event_type),
+          detail: event.actor_role
+            ? `Changed by ${event.actor_role}.`
+            : "Credential lifecycle event recorded.",
+          occurredAt: event.occurred_at,
+          tone: event.event_type === "credentials_cleared"
+            ? ("warning" as const)
+            : ("neutral" as const),
+        })),
+      ]
+        .sort((left, right) => sortablePanelTimestamp(right.occurredAt) - sortablePanelTimestamp(left.occurredAt))
+        .slice(0, 6)
+    : [];
 
   async function handleCopyCutoverPacket(): Promise<void> {
     if (!integration || !isHubSpot) {
@@ -1706,8 +1842,72 @@ export function IntegrationPanel({
 
           {/* Section 5: Audit / activity log */}
           <section>
-            <h4 className="text-sm font-semibold text-foreground mb-3">Recent activity</h4>
-            {integration.lastSyncAt ? (
+            <h4 className="text-sm font-semibold text-foreground mb-3">
+              {isHubSpot ? "Execution history" : "Recent activity"}
+            </h4>
+            {isHubSpot ? (
+              <>
+                <p className="mb-3 text-xs text-[#64748B]">
+                  Real import runs and credential audit events only. Current handoff state stays in the cutover summary above.
+                </p>
+                {hubspotHistoryItems.length > 0 ? (
+                <div className="space-y-2">
+                  {hubspotHistoryItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-lg border p-3 flex items-start gap-2.5",
+                        item.tone === "danger"
+                          ? "bg-[#FEF2F2] border-[#FECACA]"
+                          : item.tone === "warning"
+                          ? "bg-[#FFF7ED] border-[#FED7AA]"
+                          : item.tone === "success"
+                          ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                          : "bg-muted border-border",
+                      )}
+                    >
+                      {item.tone === "danger" ? (
+                        <XCircle className="w-3.5 h-3.5 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
+                      ) : item.tone === "warning" ? (
+                        <AlertTriangle className="w-3.5 h-3.5 text-[#D97706] shrink-0 mt-0.5" aria-hidden="true" />
+                      ) : item.tone === "success" ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5 text-[#475569] shrink-0 mt-0.5" aria-hidden="true" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-foreground">{item.title}</p>
+                          <span className="text-[10px] text-[#64748B] shrink-0">
+                            {formatPanelTimestamp(item.occurredAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#64748B] mt-0.5 break-words">{item.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isLoadingCredentialAudit && (
+                    <p className="text-[11px] text-[#64748B]">Loading credential audit events…</p>
+                  )}
+                </div>
+              ) : isLoadingCredentialAudit ? (
+                <div className="flex items-center gap-2 text-[#64748B]">
+                  <Loader2 className="w-4 h-4 shrink-0 animate-spin" aria-hidden="true" />
+                  <p className="text-xs">Loading execution history…</p>
+                </div>
+              ) : credentialAuditError ? (
+                <div className="flex items-center gap-2 text-[#DC2626]">
+                  <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <p className="text-xs">Execution history could not load. {credentialAuditError}</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-[#64748B]">
+                  <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <p className="text-xs">No execution history yet — imports and credential events will appear here.</p>
+                </div>
+              )}
+              </>
+            ) : integration.lastSyncAt ? (
               <div className="space-y-2">
                 <div
                   className={cn(
