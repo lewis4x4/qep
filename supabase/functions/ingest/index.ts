@@ -1,10 +1,11 @@
 /**
  * Document ingestion Edge Function
- * Handles: PDF upload (multipart) + OneDrive delta sync trigger
+ * Handles: browser document upload (multipart) + OneDrive delta sync trigger
  * Chunks text, generates embeddings, upserts to pgvector
  */
 import { Buffer } from "node:buffer";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import mammoth from "npm:mammoth@1.8.0";
 import pdfParse from "npm:pdf-parse@1.1.1";
 import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
@@ -23,6 +24,41 @@ function corsHeaders(origin: string | null) {
 
 const CHUNK_SIZE = 512;      // target tokens per chunk
 const CHUNK_OVERLAP = 50;    // overlap tokens between chunks
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+type UploadKind = "pdf" | "docx" | "text";
+type UserRole = "rep" | "admin" | "manager" | "owner";
+type DocumentAudience =
+  | "company_wide"
+  | "finance"
+  | "leadership"
+  | "admin_owner"
+  | "owner_only";
+type DocumentStatus =
+  | "draft"
+  | "pending_review"
+  | "published"
+  | "archived"
+  | "ingest_failed";
+
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv"]);
+const DOCUMENT_AUDIENCES = new Set<DocumentAudience>([
+  "company_wide",
+  "finance",
+  "leadership",
+  "admin_owner",
+  "owner_only",
+]);
+const DIRECT_UPLOAD_STATUSES = new Set<DocumentStatus>(["draft", "published"]);
+const MIME_TO_UPLOAD_KIND: Record<string, UploadKind> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "text/plain": "text",
+  "text/markdown": "text",
+  "text/csv": "text",
+  "application/csv": "text",
+  "application/vnd.ms-excel": "text",
+};
 
 // Naive tokenization estimate: 1 token ≈ 4 chars
 function estimateTokens(text: string): number {
@@ -62,6 +98,111 @@ function chunkText(text: string): string[] {
 async function extractPdfText(fileBuffer: ArrayBuffer): Promise<string> {
   const parsed = await pdfParse(Buffer.from(fileBuffer));
   return parsed.text ?? "";
+}
+
+async function extractDocxText(fileBuffer: ArrayBuffer): Promise<string> {
+  const result = await mammoth.extractRawText({ buffer: Buffer.from(fileBuffer) });
+  return result.value ?? "";
+}
+
+function getFileExtension(filename: string): string {
+  const match = filename.toLowerCase().match(/\.[^.]+$/);
+  return match?.[0] ?? "";
+}
+
+function inferUploadKind(
+  mimeType: string | null | undefined,
+  filename: string
+): UploadKind | null {
+  if (mimeType && mimeType in MIME_TO_UPLOAD_KIND) {
+    return MIME_TO_UPLOAD_KIND[mimeType];
+  }
+
+  const extension = getFileExtension(filename);
+  if (extension === ".pdf") return "pdf";
+  if (extension === ".docx") return "docx";
+  if (SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) return "text";
+  return null;
+}
+
+function normalizeMimeType(
+  mimeType: string | null | undefined,
+  filename: string
+): string {
+  if (mimeType && mimeType.length > 0) return mimeType;
+
+  const extension = getFileExtension(filename);
+  switch (extension) {
+    case ".pdf":
+      return "application/pdf";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".md":
+      return "text/markdown";
+    case ".csv":
+      return "text/csv";
+    case ".txt":
+    default:
+      return "text/plain";
+  }
+}
+
+function getDocumentSourceForUploadKind(kind: UploadKind): "pdf_upload" | "manual" {
+  return kind === "pdf" ? "pdf_upload" : "manual";
+}
+
+function parseDocumentAudience(value: FormDataEntryValue | null): DocumentAudience | null {
+  if (typeof value !== "string") return null;
+  return DOCUMENT_AUDIENCES.has(value as DocumentAudience) ? (value as DocumentAudience) : null;
+}
+
+function parseDocumentStatus(value: FormDataEntryValue | null): DocumentStatus | null {
+  if (typeof value !== "string") return null;
+  return DIRECT_UPLOAD_STATUSES.has(value as DocumentStatus) ? (value as DocumentStatus) : null;
+}
+
+function resolveUploadGovernance(
+  role: UserRole,
+  requestedAudience: DocumentAudience | null,
+  requestedStatus: DocumentStatus | null,
+): { audience: DocumentAudience; status: DocumentStatus } {
+  if (role === "manager") {
+    return {
+      audience: "company_wide",
+      status: "pending_review",
+    };
+  }
+
+  return {
+    audience: requestedAudience ?? "company_wide",
+    status: requestedStatus ?? "published",
+  };
+}
+
+async function logDocumentAuditEvent(
+  supabase: ReturnType<typeof createClient<any>>,
+  input: {
+    actorUserId: string | null;
+    documentId: string | null;
+    documentTitleSnapshot: string;
+    eventType:
+      | "uploaded"
+      | "reindexed"
+      | "approved"
+      | "published"
+      | "reclassified"
+      | "status_changed"
+      | "ingest_failed";
+    metadata?: Record<string, unknown>;
+  },
+) {
+  await supabase.from("document_audit_events").insert({
+    actor_user_id: input.actorUserId,
+    document_id: input.documentId,
+    document_title_snapshot: input.documentTitleSnapshot,
+    event_type: input.eventType,
+    metadata: input.metadata ?? {},
+  });
 }
 
 async function generateEmbedding(text: string): Promise<number[]> {
@@ -114,10 +255,10 @@ async function ingestDocument(
     if (error) throw new Error(`Chunk insert error: ${error.message}`);
   }
 
-  // Mark document as active
+  // Re-ingest refreshes timestamps but leaves publication state unchanged.
   await supabase
     .from("documents")
-    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .update({ updated_at: new Date().toISOString() })
     .eq("id", documentId);
 
   return textChunks.length;
@@ -146,11 +287,16 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const authHeader = req.headers.get("Authorization")?.trim();
+    if (!authHeader) {
+      return jsonResponse({ error: "Unauthorized" }, 401, ch);
+    }
+
     // Auth check — only admin/manager/owner roles
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -170,27 +316,35 @@ Deno.serve(async (req) => {
 
     const contentType = req.headers.get("content-type") || "";
 
-    // --- PDF UPLOAD ---
+    // --- BROWSER DOCUMENT UPLOAD ---
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const file = formData.get("file") as File;
       const title = formData.get("title") as string || file?.name || "Untitled";
+      const requestedAudience = parseDocumentAudience(formData.get("audience"));
+      const requestedStatus = parseDocumentStatus(formData.get("status"));
 
       if (!file) {
         return jsonResponse({ error: "No file provided" }, 400, ch);
       }
 
-      // SEC-QEP-008: Server-side file type + size validation
-      const ALLOWED_MIME_TYPES = new Set([
-        "application/pdf",
-        "text/plain",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ]);
-      const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+      if ((formData.get("audience") || formData.get("status")) && profile.role === "manager") {
+        // Managers can upload, but governance is always forced to company-wide pending review.
+        console.info("[ingest] Manager upload governance overridden to company_wide/pending_review");
+      }
 
-      if (!file.type || !ALLOWED_MIME_TYPES.has(file.type)) {
+      const governance = resolveUploadGovernance(
+        profile.role as UserRole,
+        requestedAudience,
+        requestedStatus,
+      );
+
+      const normalizedMimeType = normalizeMimeType(file.type, file.name);
+      const uploadKind = inferUploadKind(file.type, file.name);
+
+      if (!uploadKind) {
         return jsonResponse(
-          { error: `File type not allowed: ${file.type || "unknown"}` },
+          { error: "Unsupported file type. Allowed: PDF, DOCX, TXT, MD, CSV." },
           415,
           ch
         );
@@ -207,17 +361,14 @@ Deno.serve(async (req) => {
       const isZip = headerBuffer[0] === 0x50 && headerBuffer[1] === 0x4B &&
                     headerBuffer[2] === 0x03 && headerBuffer[3] === 0x04; // PK\x03\x04 (DOCX/ZIP)
 
-      if (file.type === "application/pdf" && !isPdf) {
+      if (uploadKind === "pdf" && !isPdf) {
         return jsonResponse(
           { error: "File content does not match declared type (expected PDF)" },
           415,
           ch
         );
       }
-      if (
-        file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
-        !isZip
-      ) {
+      if (uploadKind === "docx" && !isZip) {
         return jsonResponse(
           { error: "File content does not match declared type (expected DOCX)" },
           415,
@@ -225,11 +376,11 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Extract text based on file type
+      const fileBuffer = await file.arrayBuffer();
       let rawText: string;
-      if (file.type === "application/pdf") {
+      if (uploadKind === "pdf") {
         try {
-          rawText = await extractPdfText(await file.arrayBuffer());
+          rawText = await extractPdfText(fileBuffer);
           if (!rawText.trim()) {
             return jsonResponse(
               {
@@ -251,31 +402,61 @@ Deno.serve(async (req) => {
             ch
           );
         }
-      } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        return jsonResponse(
-          {
-            error:
-              "DOCX upload is not yet supported. Please convert to PDF or plain text before uploading.",
-          },
-          415,
-          ch
-        );
+      } else if (uploadKind === "docx") {
+        try {
+          rawText = await extractDocxText(fileBuffer);
+          if (!rawText.trim()) {
+            return jsonResponse(
+              {
+                error:
+                  "DOCX contained no extractable text. Ensure the document is not empty or image-only.",
+              },
+              422,
+              ch
+            );
+          }
+        } catch (docxErr) {
+          console.error("DOCX parse error:", docxErr);
+          return jsonResponse(
+            {
+              error:
+                "Failed to extract text from DOCX. Ensure the document is a standard .docx file.",
+            },
+            422,
+            ch
+          );
+        }
       } else {
         rawText = await file.text();
       }
+
+      if (!rawText.trim()) {
+        return jsonResponse(
+          { error: "Document contained no extractable text." },
+          422,
+          ch
+        );
+      }
+
+      const nowIso = new Date().toISOString();
 
       // Create document record
       const { data: doc, error: docError } = await supabaseAdmin
         .from("documents")
         .insert({
           title,
-          source: "pdf_upload",
+          source: getDocumentSourceForUploadKind(uploadKind),
           source_id: file.name,
-          mime_type: file.type,
+          mime_type: normalizedMimeType,
           raw_text: rawText,
           word_count: rawText.split(/\s+/).length,
           uploaded_by: user.id,
-          is_active: false, // will be set true after embedding
+          audience: governance.audience,
+          status: governance.status,
+          approved_by: governance.status === "published" ? user.id : null,
+          approved_at: governance.status === "published" ? nowIso : null,
+          classification_updated_by: user.id,
+          classification_updated_at: nowIso,
         })
         .select()
         .single();
@@ -284,10 +465,57 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: docError?.message }, 500, ch);
       }
 
-      const chunkCount = await ingestDocument(supabaseAdmin, doc.id, rawText, title);
+      await logDocumentAuditEvent(supabaseAdmin, {
+        actorUserId: user.id,
+        documentId: doc.id,
+        documentTitleSnapshot: title,
+        eventType: "uploaded",
+        metadata: {
+          audience: governance.audience,
+          status: governance.status,
+          source: doc.source,
+          mime_type: normalizedMimeType,
+        },
+      });
+
+      let chunkCount = 0;
+      try {
+        chunkCount = await ingestDocument(supabaseAdmin, doc.id, rawText, title);
+      } catch (ingestErr) {
+        console.error("Document ingest error:", ingestErr);
+        await supabaseAdmin
+          .from("documents")
+          .update({
+            status: "ingest_failed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", doc.id);
+
+        await logDocumentAuditEvent(supabaseAdmin, {
+          actorUserId: user.id,
+          documentId: doc.id,
+          documentTitleSnapshot: title,
+          eventType: "ingest_failed",
+          metadata: {
+            reason: ingestErr instanceof Error ? ingestErr.message : "unknown",
+          },
+        });
+
+        return jsonResponse(
+          { error: "Document uploaded but indexing failed. Please re-index after reviewing the file." },
+          500,
+          ch,
+        );
+      }
 
       return jsonResponse(
-        { success: true, documentId: doc.id, chunks: chunkCount },
+        {
+          success: true,
+          documentId: doc.id,
+          chunks: chunkCount,
+          audience: governance.audience,
+          status: governance.status,
+        },
         200,
         ch
       );
@@ -319,6 +547,14 @@ Deno.serve(async (req) => {
         document.raw_text,
         document.title
       );
+
+      await logDocumentAuditEvent(supabaseAdmin, {
+        actorUserId: user.id,
+        documentId: document.id,
+        documentTitleSnapshot: document.title,
+        eventType: "reindexed",
+        metadata: { chunks: chunkCount },
+      });
 
       return jsonResponse(
         { success: true, documentId: document.id, chunks: chunkCount },
@@ -384,8 +620,8 @@ Deno.serve(async (req) => {
       const processed = [];
       for (const item of (delta.value || [])) {
         if (item.deleted || item.folder) continue;
-        if (!["application/pdf", "text/plain"]
-          .includes(item.file?.mimeType)) continue;
+        const uploadKind = inferUploadKind(item.file?.mimeType, item.name ?? "");
+        if (!uploadKind) continue;
 
         // Download file content
         const contentRes = await fetch(
@@ -398,11 +634,18 @@ Deno.serve(async (req) => {
         }
 
         let rawText: string;
-        if (item.file?.mimeType === "application/pdf") {
+        if (uploadKind === "pdf") {
           try {
             rawText = await extractPdfText(await contentRes.arrayBuffer());
           } catch (pdfErr) {
             console.error(`[ingest] Failed to parse OneDrive PDF ${item.id}:`, pdfErr);
+            continue;
+          }
+        } else if (uploadKind === "docx") {
+          try {
+            rawText = await extractDocxText(await contentRes.arrayBuffer());
+          } catch (docxErr) {
+            console.error(`[ingest] Failed to parse OneDrive DOCX ${item.id}:`, docxErr);
             continue;
           }
         } else {
@@ -421,11 +664,12 @@ Deno.serve(async (req) => {
             source: "onedrive",
             source_id: item.id,
             source_url: item.webUrl,
-            mime_type: item.file?.mimeType,
+            mime_type: normalizeMimeType(item.file?.mimeType, item.name),
             raw_text: rawText,
             word_count: rawText.split(/\s+/).length,
-            is_active: false,
             uploaded_by: syncState.user_id,
+            audience: "company_wide",
+            status: "published",
           }, { onConflict: "source_id" })
           .select()
           .single();

@@ -33,6 +33,29 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 type Document = Database["public"]["Tables"]["documents"]["Row"];
+type DocumentAudience = "company_wide" | "finance" | "leadership" | "admin_owner" | "owner_only";
+type DocumentStatus = "draft" | "pending_review" | "published" | "archived" | "ingest_failed";
+
+const SUPPORTED_UPLOAD_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".csv"] as const;
+const SUPPORTED_UPLOAD_EXTENSION_SET = new Set<string>(SUPPORTED_UPLOAD_EXTENSIONS);
+const SUPPORTED_UPLOAD_ACCEPT = SUPPORTED_UPLOAD_EXTENSIONS.join(",");
+const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_SIZE_LABEL = "50 MB";
+const DOCUMENT_AUDIENCE_OPTIONS: Array<{ value: DocumentAudience; label: string }> = [
+  { value: "company_wide", label: "Company-wide" },
+  { value: "finance", label: "Finance" },
+  { value: "leadership", label: "Leadership" },
+  { value: "admin_owner", label: "Admin + Owner" },
+  { value: "owner_only", label: "Owner only" },
+];
+const DOCUMENT_STATUS_OPTIONS: Array<{ value: DocumentStatus; label: string }> = [
+  { value: "published", label: "Published" },
+  { value: "draft", label: "Draft" },
+  { value: "pending_review", label: "Pending review" },
+  { value: "archived", label: "Archived" },
+  { value: "ingest_failed", label: "Ingest failed" },
+];
+const DOCUMENT_FILTERS = ["all", "published", "pending_review", "draft", "archived", "ingest_failed"] as const;
 
 export interface AdminPageProps {
   userRole: UserRole;
@@ -46,6 +69,32 @@ const ROLE_SUBTITLES: Record<UserRole, string> = {
   rep: "",
 };
 
+function getFileExtension(filename: string): string {
+  const match = filename.toLowerCase().match(/\.[^.]+$/);
+  return match?.[0] ?? "";
+}
+
+function validateKnowledgeBaseFile(file: File): string | null {
+  const extension = getFileExtension(file.name);
+  if (!SUPPORTED_UPLOAD_EXTENSION_SET.has(extension)) {
+    return `Unsupported file type. Allowed: ${SUPPORTED_UPLOAD_EXTENSIONS.join(", ")}.`;
+  }
+
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    return `File exceeds ${MAX_UPLOAD_SIZE_LABEL} limit.`;
+  }
+
+  return null;
+}
+
+function formatAudienceLabel(audience: DocumentAudience | null | undefined): string {
+  return DOCUMENT_AUDIENCE_OPTIONS.find((option) => option.value === audience)?.label ?? "Unknown";
+}
+
+function formatStatusLabel(status: DocumentStatus | null | undefined): string {
+  return DOCUMENT_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? "Unknown";
+}
+
 export function AdminPage({ userRole, userId }: AdminPageProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,25 +104,63 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [editTarget, setEditTarget] = useState<Document | null>(null);
+  const [editAudience, setEditAudience] = useState<DocumentAudience>("company_wide");
+  const [editStatus, setEditStatus] = useState<DocumentStatus>("draft");
+  const [editReviewDueAt, setEditReviewDueAt] = useState("");
   const [reindexingId, setReindexingId] = useState<string | null>(null);
   const [docSearch, setDocSearch] = useState("");
-  const [docFilter, setDocFilter] = useState<"all" | "active" | "inactive">("all");
+  const [docFilter, setDocFilter] = useState<(typeof DOCUMENT_FILTERS)[number]>("all");
+  const [uploadAudience, setUploadAudience] = useState<DocumentAudience>("company_wide");
+  const [uploadStatus, setUploadStatus] = useState<Extract<DocumentStatus, "draft" | "published">>("published");
 
   const canManageDocs = ["admin", "manager", "owner"].includes(userRole);
+  const canReviewDocs = userRole === "admin" || userRole === "owner";
 
   useEffect(() => {
     loadDocuments();
   }, []);
 
   async function loadDocuments(): Promise<void> {
-    // This page requires admin/manager/owner role (canManageDocs gate above).
-    // RLS policy "documents_all_elevated" scopes results to authenticated elevated users only.
+    // Elevated roles: RLS allows full document rows (see migrations on documents_select_elevated_all).
     const { data, error } = await supabase
       .from("documents")
-      .select("id, title, source, source_url, mime_type, word_count, is_active, uploaded_by, created_at, updated_at, metadata")
+      .select("id, title, source, source_url, mime_type, word_count, is_active, uploaded_by, created_at, updated_at, metadata, audience, status, approved_by, approved_at, classification_updated_by, classification_updated_at, review_owner_user_id, review_due_at")
       .order("created_at", { ascending: false });
-    if (!error && data) setDocuments(data as Document[]);
+    if (error) {
+      toast({
+        title: "Could not load documents",
+        description: error.message,
+        variant: "destructive",
+      });
+      setDocuments([]);
+    } else if (data) {
+      setDocuments(data as Document[]);
+    }
     setLoading(false);
+  }
+
+  async function callDocumentAdmin(body: Record<string, unknown>): Promise<Document | null> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not authenticated");
+
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/document-admin`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const payload = (await response.json()) as { error?: string; document?: Document };
+    if (!response.ok) {
+      throw new Error(payload.error ?? "Document update failed");
+    }
+    return payload.document ?? null;
   }
 
   async function reindexDocument(doc: Document): Promise<void> {
@@ -117,6 +204,16 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   }
 
   async function uploadFile(file: File): Promise<void> {
+    const validationError = validateKnowledgeBaseFile(file);
+    if (validationError) {
+      toast({
+        title: "Upload blocked",
+        description: validationError,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
     const progressInterval = setInterval(() => {
@@ -131,6 +228,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("title", file.name.replace(/\.[^.]+$/, ""));
+      if (userRole === "admin" || userRole === "owner") {
+        formData.append("audience", uploadAudience);
+        formData.append("status", uploadStatus);
+      }
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
@@ -151,7 +252,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       setUploadProgress(100);
       toast({
         title: "Document uploaded",
-        description: `Indexed ${result.chunks} chunks from "${file.name}"`,
+        description:
+          userRole === "manager"
+            ? `"${file.name}" uploaded for admin review.`
+            : `Indexed ${result.chunks} chunks from "${file.name}"`,
       });
       await loadDocuments();
     } catch (err) {
@@ -170,22 +274,74 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
     }
   }
 
-  async function toggleDocument(doc: Document): Promise<void> {
-    await supabase
-      .from("documents")
-      .update({ is_active: !doc.is_active })
-      .eq("id", doc.id);
-    setDocuments((prev) =>
-      prev.map((d) => (d.id === doc.id ? { ...d, is_active: !doc.is_active } : d))
-    );
+  async function updateDocumentGovernance(
+    doc: Document,
+    updates: {
+      audience?: DocumentAudience;
+      status?: DocumentStatus;
+      reviewDueAt?: string | null;
+    }
+  ): Promise<boolean> {
+    try {
+      const updated = await callDocumentAdmin({
+        action: "update",
+        documentId: doc.id,
+        audience: updates.audience,
+        status: updates.status,
+        reviewDueAt: updates.reviewDueAt,
+      });
+      if (updated) {
+        setDocuments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      } else {
+        await loadDocuments();
+      }
+      return true;
+    } catch (err) {
+      toast({
+        title: "Update failed",
+        description: err instanceof Error ? err.message : "Document update failed",
+        variant: "destructive",
+      });
+      return false;
+    }
   }
 
   async function confirmDelete(): Promise<void> {
     if (!deleteTarget) return;
-    await supabase.from("documents").delete().eq("id", deleteTarget.id);
-    setDocuments((prev) => prev.filter((d) => d.id !== deleteTarget.id));
-    toast({ title: "Document deleted" });
-    setDeleteTarget(null);
+    const id = deleteTarget.id;
+    try {
+      await callDocumentAdmin({ action: "delete", documentId: id });
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+      toast({ title: "Document deleted" });
+      setDeleteTarget(null);
+    } catch (err) {
+      toast({
+        title: "Delete failed",
+        description: err instanceof Error ? err.message : "Could not delete document",
+        variant: "destructive",
+      });
+    }
+  }
+
+  function openGovernanceEditor(doc: Document): void {
+    setEditTarget(doc);
+    setEditAudience((doc.audience as DocumentAudience | null) ?? "company_wide");
+    setEditStatus((doc.status as DocumentStatus | null) ?? "draft");
+    setEditReviewDueAt(doc.review_due_at ? doc.review_due_at.slice(0, 10) : "");
+  }
+
+  async function saveGovernanceEditor(): Promise<void> {
+    if (!editTarget) return;
+    const target = editTarget;
+    const ok = await updateDocumentGovernance(target, {
+      audience: editAudience,
+      status: editStatus,
+      reviewDueAt: editReviewDueAt || null,
+    });
+    if (ok) {
+      toast({ title: "Document access updated" });
+      setEditTarget(null);
+    }
   }
 
   return (
@@ -226,7 +382,16 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                     onDrop={(e) => {
                       e.preventDefault();
                       setDragOver(false);
-                      const file = e.dataTransfer.files[0];
+                      const { files } = e.dataTransfer;
+                      if (files.length > 1) {
+                        toast({
+                          title: "Upload blocked",
+                          description: "Upload one document at a time.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      const file = files[0];
                       if (file) void uploadFile(file);
                     }}
                     className={cn(
@@ -249,8 +414,51 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                       {uploading ? "Processing document…" : "Drag & drop or click to upload"}
                     </p>
                     <p className="text-xs text-muted-foreground mb-3">
-                      Company handbooks, SOPs, and policy documents
+                      Upload one text-based document at a time up to {MAX_UPLOAD_SIZE_LABEL}
                     </p>
+                    {!uploading && (
+                      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                        {(userRole === "admin" || userRole === "owner") ? (
+                          <>
+                            <label className="text-left">
+                              <span className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+                                Audience
+                              </span>
+                              <select
+                                value={uploadAudience}
+                                onChange={(e) => setUploadAudience(e.target.value as DocumentAudience)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                              >
+                                {DOCUMENT_AUDIENCE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="text-left">
+                              <span className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+                                Initial Status
+                              </span>
+                              <select
+                                value={uploadStatus}
+                                onChange={(e) => setUploadStatus(e.target.value as "draft" | "published")}
+                                onClick={(e) => e.stopPropagation()}
+                                className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                              >
+                                <option value="published">Published</option>
+                                <option value="draft">Draft</option>
+                              </select>
+                            </label>
+                          </>
+                        ) : (
+                          <div className="rounded-md border border-border bg-background px-3 py-2 text-left text-xs text-muted-foreground">
+                            Manager uploads are always company-wide and go to pending review until an admin or owner publishes them.
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {uploading ? (
                       <div className="w-full max-w-xs mx-auto">
                         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -265,7 +473,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                       </div>
                     ) : (
                       <div className="flex justify-center gap-2 flex-wrap">
-                        {[".pdf", ".docx", ".txt", ".md", ".csv"].map((ext) => (
+                        {SUPPORTED_UPLOAD_EXTENSIONS.map((ext) => (
                           <Badge key={ext} variant="secondary" className="text-xs">
                             {ext}
                           </Badge>
@@ -276,7 +484,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.docx,.txt,.md,.csv"
+                    accept={SUPPORTED_UPLOAD_ACCEPT}
                     disabled={uploading}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -316,7 +524,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
               <div className="flex items-center gap-2 flex-1">
                 <h2 className="text-base font-semibold text-foreground">Knowledge Base</h2>
                 <Badge variant="secondary" className="text-xs">
-                  {documents.filter((d) => d.is_active).length} active
+                  {documents.filter((d) => d.status === "published").length} published
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {documents.filter((d) => d.status === "pending_review").length} pending review
                 </Badge>
               </div>
               <div className="flex items-center gap-2">
@@ -339,7 +550,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   )}
                 </div>
                 <div className="flex gap-1">
-                  {(["all", "active", "inactive"] as const).map((f) => (
+                  {DOCUMENT_FILTERS.map((f) => (
                     <button
                       key={f}
                       onClick={() => setDocFilter(f)}
@@ -361,8 +572,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
               const filtered = documents.filter((d) => {
                 const matchesFilter =
                   docFilter === "all" ||
-                  (docFilter === "active" && d.is_active) ||
-                  (docFilter === "inactive" && !d.is_active);
+                  d.status === docFilter;
                 const matchesSearch =
                   !docSearch ||
                   d.title.toLowerCase().includes(docSearch.toLowerCase());
@@ -406,6 +616,26 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
 
               return (
                 <>
+                  {documents.some((doc) => doc.status === "pending_review") && (
+                    <Card className="mb-4">
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">Review Queue</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {documents.filter((doc) => doc.status === "pending_review").length} document(s) waiting for publish review.
+                            </p>
+                          </div>
+                          {canReviewDocs && (
+                            <Button size="sm" variant="outline" onClick={() => setDocFilter("pending_review")}>
+                              Show pending review
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Mobile stacked cards — shown below md */}
                   <div className="md:hidden space-y-2">
                     {filtered.map((doc) => (
@@ -418,11 +648,16 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                 {doc.source.replace("_", " ")}
                                 {doc.word_count ? ` · ${doc.word_count.toLocaleString()} words` : ""}
                               </p>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <Badge variant="outline" className="text-[10px]">
+                                  {formatAudienceLabel(doc.audience as DocumentAudience)}
+                                </Badge>
+                                <Badge variant={doc.status === "published" ? "default" : "secondary"}>
+                                  {formatStatusLabel(doc.status as DocumentStatus)}
+                                </Badge>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <Badge variant={doc.is_active ? "default" : "secondary"}>
-                                {doc.is_active ? "Active" : "Inactive"}
-                              </Badge>
                               {canManageDocs && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -431,13 +666,6 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => void toggleDocument(doc)}>
-                                      {doc.is_active ? (
-                                        <><ToggleRight className="w-4 h-4 mr-2 text-primary" />Disable</>
-                                      ) : (
-                                        <><ToggleLeft className="w-4 h-4 mr-2" />Enable</>
-                                      )}
-                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={reindexingId === doc.id}
                                       onClick={() => void reindexDocument(doc)}
@@ -445,13 +673,32 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                       <RefreshCw className={cn("w-4 h-4 mr-2", reindexingId === doc.id && "animate-spin")} />
                                       Re-index
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => setDeleteTarget(doc)}
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Delete
-                                    </DropdownMenuItem>
+                                    {canReviewDocs && (
+                                      <>
+                                        {doc.status !== "published" && (
+                                          <DropdownMenuItem onClick={() => void updateDocumentGovernance(doc, { status: "published" })}>
+                                            <ToggleRight className="w-4 h-4 mr-2 text-primary" />
+                                            Publish
+                                          </DropdownMenuItem>
+                                        )}
+                                        {doc.status !== "archived" && (
+                                          <DropdownMenuItem onClick={() => void updateDocumentGovernance(doc, { status: "archived" })}>
+                                            <ToggleLeft className="w-4 h-4 mr-2" />
+                                            Archive
+                                          </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={() => openGovernanceEditor(doc)}>
+                                          Edit Access
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() => setDeleteTarget(doc)}
+                                        >
+                                          <Trash2 className="w-4 h-4 mr-2" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               )}
@@ -469,6 +716,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                         <TableRow>
                           <TableHead>Title</TableHead>
                           <TableHead>Source</TableHead>
+                          <TableHead>Audience</TableHead>
                           <TableHead className="hidden lg:table-cell">Words</TableHead>
                           <TableHead>Status</TableHead>
                           {canManageDocs && (
@@ -485,12 +733,17 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                             <TableCell className="text-muted-foreground capitalize">
                               {doc.source.replace("_", " ")}
                             </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {formatAudienceLabel(doc.audience as DocumentAudience)}
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-muted-foreground hidden lg:table-cell">
                               {doc.word_count?.toLocaleString() ?? "—"}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={doc.is_active ? "default" : "secondary"}>
-                                {doc.is_active ? "Active" : "Inactive"}
+                              <Badge variant={doc.status === "published" ? "default" : "secondary"}>
+                                {formatStatusLabel(doc.status as DocumentStatus)}
                               </Badge>
                             </TableCell>
                             {canManageDocs && (
@@ -502,13 +755,6 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => void toggleDocument(doc)}>
-                                      {doc.is_active ? (
-                                        <><ToggleRight className="w-4 h-4 mr-2 text-primary" />Disable</>
-                                      ) : (
-                                        <><ToggleLeft className="w-4 h-4 mr-2" />Enable</>
-                                      )}
-                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={reindexingId === doc.id}
                                       onClick={() => void reindexDocument(doc)}
@@ -516,13 +762,32 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                       <RefreshCw className={cn("w-4 h-4 mr-2", reindexingId === doc.id && "animate-spin")} />
                                       Re-index
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={() => setDeleteTarget(doc)}
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" />
-                                      Delete
-                                    </DropdownMenuItem>
+                                    {canReviewDocs && (
+                                      <>
+                                        {doc.status !== "published" && (
+                                          <DropdownMenuItem onClick={() => void updateDocumentGovernance(doc, { status: "published" })}>
+                                            <ToggleRight className="w-4 h-4 mr-2 text-primary" />
+                                            Publish
+                                          </DropdownMenuItem>
+                                        )}
+                                        {doc.status !== "archived" && (
+                                          <DropdownMenuItem onClick={() => void updateDocumentGovernance(doc, { status: "archived" })}>
+                                            <ToggleLeft className="w-4 h-4 mr-2" />
+                                            Archive
+                                          </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={() => openGovernanceEditor(doc)}>
+                                          Edit Access
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() => setDeleteTarget(doc)}
+                                        >
+                                          <Trash2 className="w-4 h-4 mr-2" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </TableCell>

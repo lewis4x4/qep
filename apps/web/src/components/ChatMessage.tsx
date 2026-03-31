@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  Database,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HardHat } from "lucide-react";
@@ -79,7 +80,11 @@ export function ChatMessage({
             )}
           >
             {isThinking ? (
-              <span className="flex items-center gap-2 text-muted-foreground text-xs">
+              <span
+                className="flex items-center gap-2 text-muted-foreground text-xs"
+                aria-busy="true"
+                aria-live="polite"
+              >
                 <span className="flex gap-1">
                   <span
                     className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-pulse"
@@ -149,9 +154,16 @@ export function ChatMessage({
                   {message.sources.map((src, i) => (
                     <div key={i} className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
-                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        {src.kind === "crm" ? (
+                          <Database className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        )}
                         <span className="text-xs truncate text-foreground">
                           {src.title}
+                        </span>
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {src.kind === "crm" ? "CRM" : "Document"}
                         </span>
                       </div>
                       <span className="text-xs text-qep-gray whitespace-nowrap shrink-0">

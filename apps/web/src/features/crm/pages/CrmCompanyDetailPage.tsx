@@ -236,6 +236,11 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
             Edit Company
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={`/chat?company_id=${companyId}`}>
+              Ask Knowledge
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to="/crm/duplicates">
               <GitMerge className="mr-2 h-4 w-4" />
               Review Duplicates

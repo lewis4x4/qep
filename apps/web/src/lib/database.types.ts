@@ -260,45 +260,69 @@ export type Database = {
       }
       documents: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
+          audience: Database["public"]["Enums"]["document_audience"]
+          classification_updated_at: string | null
+          classification_updated_by: string | null
           created_at: string
           id: string
           is_active: boolean
           metadata: Json | null
           mime_type: string | null
           raw_text: string | null
+          review_due_at: string | null
+          review_owner_user_id: string | null
           source: Database["public"]["Enums"]["document_source"]
           source_id: string | null
           source_url: string | null
+          status: Database["public"]["Enums"]["document_status"]
           title: string
           updated_at: string
           uploaded_by: string | null
           word_count: number | null
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: Database["public"]["Enums"]["document_audience"]
+          classification_updated_at?: string | null
+          classification_updated_by?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
           metadata?: Json | null
           mime_type?: string | null
           raw_text?: string | null
+          review_due_at?: string | null
+          review_owner_user_id?: string | null
           source: Database["public"]["Enums"]["document_source"]
           source_id?: string | null
           source_url?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
           title: string
           updated_at?: string
           uploaded_by?: string | null
           word_count?: number | null
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience?: Database["public"]["Enums"]["document_audience"]
+          classification_updated_at?: string | null
+          classification_updated_by?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
           metadata?: Json | null
           mime_type?: string | null
           raw_text?: string | null
+          review_due_at?: string | null
+          review_owner_user_id?: string | null
           source?: Database["public"]["Enums"]["document_source"]
           source_id?: string | null
           source_url?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
           title?: string
           updated_at?: string
           uploaded_by?: string | null
@@ -724,6 +748,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      retrieve_document_evidence: {
+        Args: {
+          keyword_query: string
+          match_count?: number
+          query_embedding: string | null
+          semantic_match_threshold?: number
+          user_role: string
+        }
+        Returns: {
+          access_class: string | null
+          confidence: number
+          excerpt: string
+          source_id: string
+          source_title: string
+          source_type: string
+        }[]
+      }
       search_chunks: {
         Args: {
           match_count?: number
@@ -754,7 +795,19 @@ export type Database = {
         | "integration_connection_tested"
         | "integration_card_clicked"
         | "integration_panel_opened"
+      document_audience:
+        | "company_wide"
+        | "finance"
+        | "leadership"
+        | "admin_owner"
+        | "owner_only"
       document_source: "onedrive" | "pdf_upload" | "manual"
+      document_status:
+        | "draft"
+        | "pending_review"
+        | "published"
+        | "archived"
+        | "ingest_failed"
       enrollment_status: "active" | "completed" | "paused" | "cancelled"
       followup_step_type: "task" | "email" | "call_log" | "stalled_alert"
       user_role: "rep" | "admin" | "manager" | "owner"

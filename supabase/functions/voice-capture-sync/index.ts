@@ -119,10 +119,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization")?.trim();
+    if (!authHeader) {
+      return jsonError("Unauthorized", 401, headers);
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
+      { global: { headers: { Authorization: authHeader } } }
     );
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,

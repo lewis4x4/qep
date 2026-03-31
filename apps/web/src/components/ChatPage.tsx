@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Send, History, Plus, ChevronDown } from "lucide-react";
+import { AlertTriangle, Send, History, Plus, ChevronDown, Shield } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,8 +9,10 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { ChatMessage } from "./ChatMessage";
 
 export interface Source {
+  id: string;
   title: string;
   confidence: number;
+  kind: "document" | "crm";
 }
 
 export interface Message {
@@ -105,10 +107,53 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   const [streaming, setStreaming] = useState(false);
   const [history, setHistory] = useState<ConversationSession[]>(() => loadHistory());
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** Last successful stream diagnostics from the chat edge function (trace + retrieval). */
+  const [chatDiagnostics, setChatDiagnostics] = useState<{
+    traceId: string;
+    embeddingDegraded: boolean;
+    documentEvidenceCount: number;
+    crmEvidenceCount: number;
+    emptyEvidence: boolean;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyPanelRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>(messages);
+  const chatMountedRef = useRef(true);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const initialQueryFiredRef = useRef(false);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    chatMountedRef.current = true;
+    return () => {
+      chatMountedRef.current = false;
+      chatAbortRef.current?.abort();
+    };
+  }, []);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const chatContext = useMemo(
+    () => ({
+      customerProfileId: searchParams.get("customer_profile_id") || undefined,
+      contactId: searchParams.get("contact_id") || undefined,
+      companyId: searchParams.get("company_id") || undefined,
+      dealId: searchParams.get("deal_id") || undefined,
+    }),
+    [searchParams]
+  );
+  const hasChatContext = Boolean(
+    chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
+  );
+  const contextLabel = useMemo(() => {
+    if (chatContext.dealId) return "Customer context active: answers can use this deal's CRM and sales history.";
+    if (chatContext.contactId) return "Customer context active: answers can use this contact's CRM and sales history.";
+    if (chatContext.companyId) return "Customer context active: answers can use this company's CRM and sales history.";
+    if (chatContext.customerProfileId) return "Customer context active: answers can use linked customer profile history.";
+    return null;
+  }, [chatContext]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -167,6 +212,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   }, [historyOpen]);
 
   function startNewChat() {
+    chatAbortRef.current?.abort();
     if (messages.length > 0) {
       const session: ConversationSession = {
         id: crypto.randomUUID(),
@@ -183,6 +229,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   }
 
   function loadSession(session: ConversationSession) {
+    chatAbortRef.current?.abort();
     // Save current conversation if it has messages
     if (messages.length > 0) {
       const current: ConversationSession = {
@@ -213,6 +260,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setChatDiagnostics(null);
     setStreaming(true);
 
     const assistantId = crypto.randomUUID();
@@ -221,31 +269,73 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
     ]);
 
+    chatAbortRef.current?.abort();
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    const { signal } = abortController;
+
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const msgHistory = messages
+      const msgHistory = messagesRef.current
         .slice(-8)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({ message: content, history: msgHistory }),
-        }
-      );
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          message: content,
+          history: msgHistory,
+          context: hasChatContext ? chatContext : undefined,
+        }),
+        signal,
+      });
 
-      if (!response.ok || !response.body) {
-        throw new Error("Chat request failed");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string; code?: string; trace_id?: string } }
+          | null;
+        const code = payload?.error?.code;
+        const traceId = payload?.error?.trace_id;
+        let message = payload?.error?.message ?? "Chat request failed.";
+
+        if (code === "AUTH_REQUIRED") {
+          message = "Your session expired. Sign in again and retry.";
+        } else if (code === "RATE_LIMITED") {
+          message = "You are sending messages too quickly. Please wait a minute and try again.";
+        } else if (code === "RATE_LIMIT_CHECK_FAILED") {
+          message = "Chat is temporarily unavailable. Please try again shortly.";
+        } else if (code === "EMBEDDING_FAILED") {
+          message = "The embedding service is temporarily unavailable.";
+        } else if (code === "DOCUMENT_RETRIEVAL_FAILED") {
+          message = "Knowledge search is temporarily unavailable.";
+        } else if (code === "CRM_CONTEXT_RETRIEVAL_FAILED") {
+          message = "Customer context could not be loaded for this chat.";
+        } else if (code === "MODEL_UNAVAILABLE") {
+          message = "The chat model is temporarily unavailable.";
+        } else if (code === "INVALID_REQUEST" || code === "INVALID_MESSAGE") {
+          message = payload?.error?.message ?? "The request could not be processed.";
+        } else if (code === "CHAT_INTERNAL_ERROR") {
+          message = "Chat encountered an unexpected error.";
+        }
+
+        if (traceId) {
+          message = `${message} Reference: ${traceId}`;
+        }
+
+        throw new Error(message);
+      }
+
+      if (!response.body) {
+        throw new Error("Chat stream was unavailable.");
       }
 
       const reader = response.body.getReader();
@@ -253,6 +343,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       let buffer = "";
 
       while (true) {
+        if (signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -261,12 +352,39 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         buffer = lines.pop() || "";
 
         for (const line of lines) {
+          if (signal.aborted) break;
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6);
           if (data === "[DONE]") break;
           try {
-            const parsed = JSON.parse(data) as { text?: string; sources?: Source[] };
-            if (parsed.text) {
+            const parsed = JSON.parse(data) as {
+              text?: string;
+              sources?: Source[];
+              meta?: {
+                trace_id?: string;
+                retrieval?: {
+                  embedding_degraded?: boolean;
+                  document_evidence_count?: number;
+                  crm_evidence_count?: number;
+                  empty_evidence?: boolean;
+                };
+              };
+            };
+            if (parsed.meta?.trace_id) {
+              const r = parsed.meta.retrieval;
+              if (chatMountedRef.current) {
+                setChatDiagnostics({
+                  traceId: parsed.meta.trace_id,
+                  embeddingDegraded: Boolean(r?.embedding_degraded),
+                  documentEvidenceCount: typeof r?.document_evidence_count === "number"
+                    ? r.document_evidence_count
+                    : 0,
+                  crmEvidenceCount: typeof r?.crm_evidence_count === "number" ? r.crm_evidence_count : 0,
+                  emptyEvidence: Boolean(r?.empty_evidence),
+                });
+              }
+            }
+            if (parsed.text && chatMountedRef.current) {
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
@@ -275,7 +393,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
                 )
               );
             }
-            if (parsed.sources) {
+            if (parsed.sources && chatMountedRef.current) {
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId ? { ...m, sources: parsed.sources } : m
@@ -287,16 +405,36 @@ export function ChatPage({ userEmail }: ChatPageProps) {
           }
         }
       }
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? { ...m, content: "Couldn't get a response. Check your connection and try again." }
-            : m
-        )
-      );
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        if (chatMountedRef.current) {
+          setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+        }
+        return;
+      }
+      if (chatMountedRef.current) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  content:
+                    error instanceof Error
+                      ? error.message
+                      : "Couldn't get a response. Check your connection and try again.",
+                }
+              : m
+          )
+        );
+      }
     } finally {
-      setStreaming(false);
+      if (chatAbortRef.current !== abortController) {
+        return;
+      }
+      chatAbortRef.current = null;
+      if (chatMountedRef.current) {
+        setStreaming(false);
+      }
     }
   }
 
@@ -327,7 +465,9 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         <div>
           <h1 className="text-lg font-semibold text-foreground">Knowledge Chat</h1>
           <p className="text-sm text-muted-foreground">
-            Ask questions about QEP equipment and processes
+            {hasChatContext
+              ? "Ask questions grounded in your accessible documents and this customer context"
+              : "Ask questions about QEP equipment and processes"}
           </p>
         </div>
 
@@ -396,6 +536,26 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         </div>
       </div>
 
+      {(contextLabel || chatDiagnostics?.embeddingDegraded) && (
+        <div className="px-6 py-3 border-b bg-card/60 space-y-2">
+          {contextLabel && (
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground">
+              <Shield className="w-3.5 h-3.5 text-qep-orange" />
+              {contextLabel}
+            </div>
+          )}
+          {chatDiagnostics?.embeddingDegraded && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden />
+              <span>
+                Semantic search is unavailable; answers used keyword and text matching only. If quality is poor, retry later.
+                {chatDiagnostics.traceId ? ` Reference: ${chatDiagnostics.traceId}` : ""}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
@@ -450,6 +610,11 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         </div>
         <p className="text-center text-xs text-muted-foreground mt-2">
           Press Enter to send · Shift+Enter for new line
+          {chatDiagnostics?.traceId && !chatDiagnostics.embeddingDegraded && (
+            <span className="block mt-1 font-mono text-[10px] opacity-80">
+              Trace: {chatDiagnostics.traceId}
+            </span>
+          )}
         </p>
       </div>
     </div>

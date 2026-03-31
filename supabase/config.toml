@@ -52,6 +52,9 @@ verify_jwt = false
 [functions.admin-users]
 verify_jwt = false
 
+[functions.document-admin]
+verify_jwt = false
+
 [functions.hubspot-webhook]
 verify_jwt = false
 

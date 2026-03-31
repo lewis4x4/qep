@@ -1,11 +1,111 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.39";
+import {
+  createAdminClient,
+  createCallerClient,
+  resolveCallerContext,
+  type UserRole,
+} from "../_shared/dge-auth.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
   "http://localhost:5173",
 ];
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ChatContextPayload {
+  customerProfileId?: string;
+  contactId?: string;
+  companyId?: string;
+  dealId?: string;
+}
+
+interface EvidenceItem {
+  sourceType: "document" | "crm";
+  sourceId: string;
+  sourceTitle: string;
+  excerpt: string;
+  confidence: number;
+  accessClass: string | null;
+}
+
+interface SourcePayload {
+  id: string;
+  title: string;
+  confidence: number;
+  kind: "document" | "crm";
+}
+
+type CustomerProfileRow = {
+  id: string;
+  hubspot_contact_id: string | null;
+  customer_name: string;
+  company_name: string | null;
+  pricing_persona: string | null;
+  total_deals: number | null;
+  lifetime_value: number | null;
+  avg_deal_size: number | null;
+  last_interaction_at: string | null;
+};
+
+type ContactRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  primary_company_id: string | null;
+  dge_customer_profile_id: string | null;
+  hubspot_contact_id: string | null;
+};
+
+type CompanyRow = {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+};
+
+type DealRow = {
+  id: string;
+  name: string;
+  amount: number | null;
+  expected_close_on: string | null;
+  next_follow_up_at: string | null;
+  primary_contact_id: string | null;
+  company_id: string | null;
+};
+
+type ActivityRow = {
+  id: string;
+  activity_type: string;
+  body: string | null;
+  occurred_at: string;
+};
+
+type QuoteRow = {
+  id: string;
+  title: string | null;
+  status: string;
+  updated_at: string;
+};
+
+type DealHistoryRow = {
+  id: string;
+  deal_date: string;
+  outcome: string;
+  equipment_make: string | null;
+  equipment_model: string | null;
+  sold_price: number | null;
+  competitor: string | null;
+};
+
 function corsHeaders(origin: string | null) {
   return {
     "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
@@ -14,98 +114,554 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
+function jsonError(
+  traceId: string,
+  status: number,
+  code: string,
+  message: string,
+  headers: Record<string, string>,
+  details?: Record<string, unknown>,
+) {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code,
+        message,
+        trace_id: traceId,
+        details: details ?? null,
+      },
+    }),
+    {
+      status,
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        "X-Trace-Id": traceId,
+      },
+    },
+  );
 }
 
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
-Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get("origin"));
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: ch });
+function truncateText(text: string, maxLength: number): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function formatCurrency(value: number | null): string {
+  if (typeof value !== "number") return "unknown";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function parseChatContext(raw: unknown): ChatContextPayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const context = raw as Record<string, unknown>;
+  const parsed: ChatContextPayload = {
+    customerProfileId: cleanString(context.customerProfileId) ?? undefined,
+    contactId: cleanString(context.contactId) ?? undefined,
+    companyId: cleanString(context.companyId) ?? undefined,
+    dealId: cleanString(context.dealId) ?? undefined,
+  };
+
+  if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId) {
+    return null;
+  }
+  return parsed;
+}
+
+function formatEvidenceBlock(evidence: EvidenceItem[]): string {
+  const grouped = {
+    document: evidence.filter((item) => item.sourceType === "document"),
+    crm: evidence.filter((item) => item.sourceType === "crm"),
+  };
+
+  const sections: string[] = [];
+  if (grouped.document.length > 0) {
+    sections.push(
+      `Document evidence:\n${grouped.document.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
+    );
+  }
+  if (grouped.crm.length > 0) {
+    sections.push(
+      `CRM evidence:\n${grouped.crm.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
+    );
+  }
+  return sections.join("\n\n====\n\n");
+}
+
+function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
+  const byKey = new Map<string, SourcePayload>();
+  for (const item of evidence) {
+    const key = `${item.sourceType}:${item.sourceId}`;
+    const existing = byKey.get(key);
+    const next: SourcePayload = {
+      id: item.sourceId,
+      title: item.sourceTitle,
+      confidence: Math.max(1, Math.round(item.confidence * 100)),
+      kind: item.sourceType,
+    };
+    if (!existing || next.confidence > existing.confidence) {
+      byKey.set(key, next);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.confidence - a.confidence);
+}
+
+type EmbedQueryResult = { ok: true; vector: number[] } | { ok: false; reason: string };
+
+async function embedQuery(message: string, traceId: string): Promise<EmbedQueryResult> {
+  try {
+    const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: message,
+      }),
+    });
+    const embeddingData = await embeddingResponse.json() as {
+      data?: Array<{ embedding?: number[] }>;
+      error?: { message?: string };
+    };
+    if (!embeddingResponse.ok) {
+      console.error(`[chat:${traceId}] embedding_failed status=${embeddingResponse.status}`, embeddingData);
+      return {
+        ok: false,
+        reason: embeddingData?.error?.message ?? `embedding_http_${embeddingResponse.status}`,
+      };
+    }
+    const vector = embeddingData.data?.[0]?.embedding;
+    if (!vector?.length) {
+      console.error(`[chat:${traceId}] embedding_failed empty_vector`, embeddingData);
+      return { ok: false, reason: "empty_embedding" };
+    }
+    return { ok: true, vector };
+  } catch (error) {
+    console.error(`[chat:${traceId}] embedding_failed exception`, error);
+    return { ok: false, reason: "embedding_exception" };
+  }
+}
+
+async function retrieveDocumentEvidence(
+  adminClient: ReturnType<typeof createAdminClient>,
+  input: {
+    traceId: string;
+    role: UserRole;
+    message: string;
+    embedding: number[] | null;
+  },
+): Promise<EvidenceItem[]> {
+  const { data, error } = await adminClient.rpc("retrieve_document_evidence", {
+    query_embedding: input.embedding ? `[${input.embedding.join(",")}]` : null,
+    keyword_query: input.message,
+    user_role: input.role,
+    match_count: 6,
+    semantic_match_threshold: 0.58,
+  });
+
+  if (error) {
+    console.error(`[chat:${input.traceId}] document retrieval failed`, error);
+    throw new Error("DOCUMENT_RETRIEVAL_FAILED");
   }
 
+  return ((data ?? []) as Array<{
+    source_type: string;
+    source_id: string;
+    source_title: string;
+    excerpt: string;
+    confidence: number;
+    access_class: string | null;
+  }>).map((item) => ({
+    sourceType: "document",
+    sourceId: item.source_id,
+    sourceTitle: item.source_title,
+    excerpt: truncateText(item.excerpt ?? "", 500),
+    confidence: Math.max(0, Math.min(1, item.confidence ?? 0)),
+    accessClass: item.access_class,
+  }));
+}
+
+async function buildCustomerContextEvidence(
+  adminClient: ReturnType<typeof createAdminClient>,
+  callerClient: ReturnType<typeof createCallerClient>,
+  input: {
+    traceId: string;
+    role: UserRole;
+    context: ChatContextPayload | null;
+  },
+): Promise<EvidenceItem[]> {
+  if (!input.context) return [];
+
+  const evidence: EvidenceItem[] = [];
+  const { context, traceId, role } = input;
+
+  let contact: ContactRow | null = null;
+  let company: CompanyRow | null = null;
+  let deal: DealRow | null = null;
+  let resolvedProfileId = context.customerProfileId ?? null;
+
+  if (context.contactId) {
+    const { data } = await callerClient
+      .from("crm_contacts")
+      .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
+      .eq("id", context.contactId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    contact = (data as ContactRow | null) ?? null;
+    if (contact?.dge_customer_profile_id) resolvedProfileId = contact.dge_customer_profile_id;
+  }
+
+  if (!contact && resolvedProfileId) {
+    const { data } = await callerClient
+      .from("crm_contacts")
+      .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
+      .eq("dge_customer_profile_id", resolvedProfileId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+    contact = (data as ContactRow | null) ?? null;
+  }
+
+  if (context.companyId) {
+    const { data } = await callerClient
+      .from("crm_companies")
+      .select("id, name, city, state, country")
+      .eq("id", context.companyId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    company = (data as CompanyRow | null) ?? null;
+  }
+
+  if (!company && contact?.primary_company_id) {
+    const { data } = await callerClient
+      .from("crm_companies")
+      .select("id, name, city, state, country")
+      .eq("id", contact.primary_company_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    company = (data as CompanyRow | null) ?? null;
+  }
+
+  if (context.dealId) {
+    const { data } = await callerClient
+      .from("crm_deals_rep_safe")
+      .select("id, name, amount, expected_close_on, next_follow_up_at, primary_contact_id, company_id")
+      .eq("id", context.dealId)
+      .maybeSingle();
+    deal = (data as DealRow | null) ?? null;
+    if (!contact && deal?.primary_contact_id) {
+      const { data: dealContact } = await callerClient
+        .from("crm_contacts")
+        .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
+        .eq("id", deal.primary_contact_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      contact = (dealContact as ContactRow | null) ?? null;
+      if (contact?.dge_customer_profile_id) resolvedProfileId = contact.dge_customer_profile_id;
+    }
+    if (!company && deal?.company_id) {
+      const { data: dealCompany } = await callerClient
+        .from("crm_companies")
+        .select("id, name, city, state, country")
+        .eq("id", deal.company_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      company = (dealCompany as CompanyRow | null) ?? null;
+    }
+  }
+
+  if (contact) {
+    evidence.push({
+      sourceType: "crm",
+      sourceId: `crm-contact:${contact.id}`,
+      sourceTitle: `CRM Contact: ${[contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact"}`,
+      excerpt: truncateText(
+        [
+          `Contact: ${[contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown"}`,
+          contact.title ? `Title: ${contact.title}` : null,
+          contact.email ? `Email: ${contact.email}` : null,
+          contact.phone ? `Phone: ${contact.phone}` : null,
+        ].filter(Boolean).join("\n"),
+        420,
+      ),
+      confidence: 0.98,
+      accessClass: "crm_context",
+    });
+  }
+
+  if (company) {
+    evidence.push({
+      sourceType: "crm",
+      sourceId: `crm-company:${company.id}`,
+      sourceTitle: `CRM Company: ${company.name}`,
+      excerpt: truncateText(
+        [
+          `Company: ${company.name}`,
+          [company.city, company.state, company.country].filter(Boolean).join(", ") || null,
+        ].filter(Boolean).join("\n"),
+        420,
+      ),
+      confidence: 0.97,
+      accessClass: "crm_context",
+    });
+  }
+
+  if (deal) {
+    evidence.push({
+      sourceType: "crm",
+      sourceId: `crm-deal:${deal.id}`,
+      sourceTitle: `CRM Deal: ${deal.name}`,
+      excerpt: truncateText(
+        [
+          `Deal: ${deal.name}`,
+          `Amount: ${formatCurrency(deal.amount)}`,
+          deal.expected_close_on ? `Expected close: ${deal.expected_close_on}` : null,
+          deal.next_follow_up_at ? `Next follow-up: ${deal.next_follow_up_at}` : null,
+        ].filter(Boolean).join("\n"),
+        420,
+      ),
+      confidence: 0.99,
+      accessClass: "crm_context",
+    });
+  }
+
+  if (resolvedProfileId) {
+    const { data: profile } = await adminClient
+      .from("customer_profiles_extended")
+      .select("id, hubspot_contact_id, customer_name, company_name, pricing_persona, total_deals, lifetime_value, avg_deal_size, last_interaction_at")
+      .eq("id", resolvedProfileId)
+      .maybeSingle();
+
+    const profileRow = profile as CustomerProfileRow | null;
+    let repCanAccessProfile = role !== "rep";
+    if (role === "rep" && profileRow?.hubspot_contact_id) {
+      const { data: repContactRow } = await callerClient
+        .from("crm_contacts")
+        .select("id")
+        .eq("hubspot_contact_id", profileRow.hubspot_contact_id)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+      repCanAccessProfile = Boolean(repContactRow);
+    }
+
+    if (profileRow && repCanAccessProfile) {
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `customer-profile:${profileRow.id}`,
+        sourceTitle: `Customer Profile: ${profileRow.customer_name}`,
+        excerpt: truncateText(
+          [
+            `Customer: ${profileRow.customer_name}`,
+            profileRow.company_name ? `Company: ${profileRow.company_name}` : null,
+            profileRow.pricing_persona ? `Pricing persona: ${profileRow.pricing_persona}` : null,
+            typeof profileRow.total_deals === "number" ? `Total deals: ${profileRow.total_deals}` : null,
+            typeof profileRow.lifetime_value === "number" ? `Lifetime value: ${formatCurrency(profileRow.lifetime_value)}` : null,
+            typeof profileRow.avg_deal_size === "number" ? `Average deal size: ${formatCurrency(profileRow.avg_deal_size)}` : null,
+            profileRow.last_interaction_at ? `Last interaction: ${profileRow.last_interaction_at}` : null,
+          ].filter(Boolean).join("\n"),
+          480,
+        ),
+        confidence: 0.99,
+        accessClass: "crm_context",
+      });
+
+      const { data: dealHistoryRows } = await callerClient
+        .from("customer_deal_history")
+        .select("id, deal_date, outcome, equipment_make, equipment_model, sold_price, competitor")
+        .eq("customer_profile_id", profileRow.id)
+        .order("deal_date", { ascending: false })
+        .limit(3);
+
+      const history = (dealHistoryRows ?? []) as DealHistoryRow[];
+      if (history.length > 0) {
+        evidence.push({
+          sourceType: "crm",
+          sourceId: `customer-deal-history:${profileRow.id}`,
+          sourceTitle: `Sales History: ${profileRow.customer_name}`,
+          excerpt: truncateText(
+            history.map((row) =>
+              `${row.deal_date}: ${row.outcome} ${[row.equipment_make, row.equipment_model].filter(Boolean).join(" ")}${row.sold_price ? ` at ${formatCurrency(row.sold_price)}` : ""}${row.competitor ? ` against ${row.competitor}` : ""}`
+            ).join("\n"),
+            500,
+          ),
+          confidence: 0.96,
+          accessClass: "crm_context",
+        });
+      }
+    } else if (role === "rep" && !repCanAccessProfile) {
+      console.info(`[chat:${traceId}] rep denied contextual profile ${resolvedProfileId}`);
+    }
+  }
+
+  const quoteFilters: string[] = [];
+  if (context.dealId) quoteFilters.push(`crm_deal_id.eq.${context.dealId}`);
+  if (context.contactId) quoteFilters.push(`crm_contact_id.eq.${context.contactId}`);
+  if (quoteFilters.length > 0) {
+    const { data: quoteRows } = await callerClient
+      .from("quotes")
+      .select("id, title, status, updated_at")
+      .or(quoteFilters.join(","))
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(3);
+
+    const quotes = (quoteRows ?? []) as QuoteRow[];
+    if (quotes.length > 0) {
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `quotes:${quotes.map((quote) => quote.id).join(",")}`,
+        sourceTitle: "CRM Quotes",
+        excerpt: truncateText(
+          quotes.map((quote) => `${quote.title || quote.id}: ${quote.status} (updated ${quote.updated_at})`).join("\n"),
+          420,
+        ),
+        confidence: 0.94,
+        accessClass: "crm_context",
+      });
+    }
+  }
+
+  const activityQueries: Array<Promise<{ data: ActivityRow[] | null }>> = [];
+  if (context.contactId) {
+    activityQueries.push(
+      callerClient
+        .from("crm_activities")
+        .select("id, activity_type, body, occurred_at")
+        .eq("contact_id", context.contactId)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+    );
+  }
+  if (context.dealId) {
+    activityQueries.push(
+      callerClient
+        .from("crm_activities")
+        .select("id, activity_type, body, occurred_at")
+        .eq("deal_id", context.dealId)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+    );
+  }
+  if (context.companyId) {
+    activityQueries.push(
+      callerClient
+        .from("crm_activities")
+        .select("id, activity_type, body, occurred_at")
+        .eq("company_id", context.companyId)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+    );
+  }
+
+  if (activityQueries.length > 0) {
+    const activityResults = await Promise.all(activityQueries);
+    const deduped = new Map<string, ActivityRow>();
+    for (const result of activityResults) {
+      for (const row of result.data ?? []) {
+        deduped.set(row.id, row);
+      }
+    }
+    const activities = [...deduped.values()]
+      .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+      .slice(0, 5);
+
+    if (activities.length > 0) {
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `crm-activities:${activities.map((activity) => activity.id).join(",")}`,
+        sourceTitle: "Recent CRM Activity",
+        excerpt: truncateText(
+          activities.map((row) => `${row.occurred_at}: ${row.activity_type}${row.body ? ` — ${truncateText(row.body, 120)}` : ""}`).join("\n"),
+          500,
+        ),
+        confidence: 0.93,
+        accessClass: "crm_context",
+      });
+    }
+  }
+
+  return evidence;
+}
+
+Deno.serve(async (req) => {
+  const traceId = crypto.randomUUID();
+  const ch = corsHeaders(req.headers.get("origin"));
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: { ...ch, "X-Trace-Id": traceId } });
+  }
+
+  const adminClient = createAdminClient();
+
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
-    );
-
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...ch, "Content-Type": "application/json" },
-      });
+    const caller = await resolveCallerContext(req, adminClient);
+    if (!caller.userId || !caller.role || !caller.authHeader) {
+      return jsonError(traceId, 401, "AUTH_REQUIRED", "Missing or invalid authentication.", ch);
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const callerClient = createCallerClient(caller.authHeader);
 
-    // SEC-QEP-005: Verify user has a valid profile (server-side RBAC)
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...ch, "Content-Type": "application/json" },
-      });
-    }
-
-    // SEC-QEP-006: Per-user rate limiting — 10 requests per minute
-    const { data: allowed, error: rlError } = await supabaseAdmin.rpc("check_rate_limit", {
-      p_user_id: user.id,
+    const { data: allowed, error: rlError } = await adminClient.rpc("check_rate_limit", {
+      p_user_id: caller.userId,
       p_endpoint: "chat",
       p_max_requests: 10,
       p_window_seconds: 60,
     });
 
     if (rlError) {
-      // SEC-QEP-102: Fail closed — return 503 when rate limit check errors
-      console.error("Rate limit check failed:", rlError);
-      return new Response(
-        JSON.stringify({ error: "Service temporarily unavailable. Please try again shortly." }),
-        { status: 503, headers: { ...ch, "Content-Type": "application/json", "Retry-After": "10" } }
-      );
-    } else if (allowed !== true) {
-      // SEC-QEP-102: Fail closed — reject unless explicitly allowed.
-      // Catches both false (rate limited) and null/undefined (unexpected return).
-      return new Response(
-        JSON.stringify({ error: "Rate limit exceeded. Please wait before sending another message." }),
-        {
-          status: 429,
-          headers: { ...ch, "Content-Type": "application/json", "Retry-After": "60" },
-        }
+      console.error(`[chat:${traceId}] rate limit check failed`, rlError);
+      return jsonError(
+        traceId,
+        503,
+        "RATE_LIMIT_CHECK_FAILED",
+        "Chat is temporarily unavailable. Please try again shortly.",
+        { ...ch, "Retry-After": "10" },
       );
     }
 
-    const body = await req.json();
+    if (allowed !== true) {
+      return jsonError(
+        traceId,
+        429,
+        "RATE_LIMITED",
+        "Rate limit exceeded. Please wait before sending another message.",
+        { ...ch, "Retry-After": "60" },
+      );
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonError(traceId, 400, "INVALID_REQUEST", "Request body must be valid JSON.", ch);
+    }
+
     const rawMessage = body?.message;
     const rawHistory = body?.history;
+    const rawContext = body?.context;
 
-    // SEC-QEP-004: Server-side input validation — prevent history injection
     const MAX_MESSAGE_LENGTH = 8000;
     const MAX_HISTORY_ITEMS = 20;
-
-    if (typeof rawMessage !== "string" || rawMessage.length > MAX_MESSAGE_LENGTH) {
-      return new Response(JSON.stringify({ error: "Invalid message" }), {
-        status: 400,
-        headers: { ...ch, "Content-Type": "application/json" },
-      });
+    if (typeof rawMessage !== "string" || rawMessage.length > MAX_MESSAGE_LENGTH || !rawMessage.trim()) {
+      return jsonError(traceId, 400, "INVALID_MESSAGE", "Message is required.", ch);
     }
 
-    const message = rawMessage;
-
-    // Whitelist role field — only "user" and "assistant" are valid
     const validatedHistory: ChatMessage[] = [];
     if (Array.isArray(rawHistory)) {
       for (const item of rawHistory.slice(-MAX_HISTORY_ITEMS)) {
@@ -121,108 +677,141 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!message.trim()) {
-      return new Response(JSON.stringify({ error: "Message is required" }), {
-        status: 400,
-        headers: { ...ch, "Content-Type": "application/json" },
+    const context = parseChatContext(rawContext);
+    const embedResult = await embedQuery(rawMessage, traceId);
+    const failClosedOnEmbedding = Deno.env.get("CHAT_FAIL_CLOSED_ON_EMBEDDING") === "true";
+    if (!embedResult.ok && failClosedOnEmbedding) {
+      return jsonError(
+        traceId,
+        503,
+        "EMBEDDING_FAILED",
+        "The embedding service is temporarily unavailable. Please try again shortly.",
+        ch,
+      );
+    }
+    const embeddingOk = embedResult.ok;
+    const queryEmbedding = embedResult.ok ? embedResult.vector : null;
+    if (!embeddingOk) {
+      console.warn(
+        `[chat:${traceId}] embedding_degraded reason=${embedResult.reason} — using keyword/full-text retrieval only`,
+      );
+    }
+
+    let documentEvidence: EvidenceItem[] = [];
+    try {
+      documentEvidence = await retrieveDocumentEvidence(adminClient, {
+        traceId,
+        role: caller.role,
+        message: rawMessage,
+        embedding: queryEmbedding,
       });
+    } catch (err) {
+      console.error(`[chat:${traceId}] document_retrieval_failed`, err);
+      return jsonError(
+        traceId,
+        503,
+        "DOCUMENT_RETRIEVAL_FAILED",
+        "The knowledge search service is temporarily unavailable.",
+        ch,
+      );
     }
 
-    // Generate embedding for the user's question
+    let crmEvidence: EvidenceItem[] = [];
+    try {
+      crmEvidence = await buildCustomerContextEvidence(adminClient, callerClient, {
+        traceId,
+        role: caller.role,
+        context,
+      });
+    } catch (error) {
+      console.error(`[chat:${traceId}] customer context retrieval failed`, error);
+      return jsonError(
+        traceId,
+        503,
+        "CRM_CONTEXT_RETRIEVAL_FAILED",
+        "Customer context could not be loaded for this chat.",
+        ch,
+      );
+    }
+
+    const evidence = [...crmEvidence, ...documentEvidence];
+    const contextBlock = evidence.length > 0 ? formatEvidenceBlock(evidence) : null;
+
+    console.info(
+      `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
+    );
+
     const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+    const systemPrompt = contextBlock
+      ? `You are the QEP USA internal knowledge assistant. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
-    // Use OpenAI embeddings (1536 dims) for pgvector compatibility
-    const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "text-embedding-3-small",
-        input: message,
-      }),
-    });
-    const embeddingData = await embeddingResponse.json();
-    const queryEmbedding = embeddingData.data[0].embedding;
+${contextBlock}
 
-    // Semantic search for relevant chunks
-    const { data: chunks, error: searchError } = await supabaseAdmin.rpc("search_chunks", {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.65,
-      match_count: 5,
-    });
+Rules:
+- Be concise and direct.
+- Cite the source title naturally in the answer when it materially supports the claim.
+- Use CRM evidence for customer-specific facts and document evidence for policy/process facts.
+- If CRM and document evidence conflict, say which source you relied on.
+- If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
+      : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
 
-    if (searchError) {
-      console.error("Search error:", searchError);
+    let stream: ReturnType<Anthropic["messages"]["stream"]>;
+    try {
+      stream = anthropic.messages.stream({
+        model: "claude-sonnet-4-5-20250514",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [
+          ...validatedHistory,
+          { role: "user", content: rawMessage },
+        ],
+      });
+    } catch (error) {
+      console.error(`[chat:${traceId}] model stream init failed`, error);
+      return jsonError(
+        traceId,
+        503,
+        "MODEL_UNAVAILABLE",
+        "The chat model is temporarily unavailable. Please try again shortly.",
+        ch,
+      );
     }
 
-    // Build context from retrieved chunks
-    const context = chunks && chunks.length > 0
-      ? chunks.map((c: { document_title: string; content: string }) =>
-          `[Source: ${c.document_title}]\n${c.content}`
-        ).join("\n\n---\n\n")
-      : null;
-
-    const systemPrompt = context
-      ? `You are the QEP USA internal knowledge assistant. Answer questions based strictly on the provided company documents. If the answer isn't in the documents, say so clearly — do not make up information.
-
-Here are the relevant excerpts from QEP's internal documents:
-
-${context}
-
-Guidelines:
-- Be concise and direct
-- Cite the source document when relevant
-- If information is not in the provided context, say "I don't have that information in QEP's documents"
-- Never reveal confidential details outside what's shown in context`
-      : `You are the QEP USA internal knowledge assistant. The knowledge base is currently empty or no relevant documents were found for this question. Let the user know you'll be able to answer once QEP's documents (handbook, SOPs, etc.) are loaded into the system.`;
-
-    // Stream response using Claude
-    const stream = await anthropic.messages.stream({
-      model: "claude-sonnet-4-5-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [
-        ...validatedHistory,
-        { role: "user", content: message },
-      ],
-    });
-
-    // Build deduplicated source list for citation UI
-    type ChunkRow = { document_title: string; similarity: number };
-    const sources: { title: string; confidence: number }[] = [];
-    if (chunks && chunks.length > 0) {
-      const seen = new Set<string>();
-      for (const c of chunks as ChunkRow[]) {
-        if (!seen.has(c.document_title)) {
-          seen.add(c.document_title);
-          sources.push({
-            title: c.document_title,
-            confidence: Math.round(c.similarity * 100),
-          });
-        }
-      }
-    }
-
-    // Return SSE stream
+    const sources = buildSourcePayload(evidence);
     const encoder = new TextEncoder();
+    const streamMeta = {
+      trace_id: traceId,
+      retrieval: {
+        embedding_ok: embeddingOk,
+        embedding_degraded: !embeddingOk,
+        document_evidence_count: documentEvidence.length,
+        crm_evidence_count: crmEvidence.length,
+        empty_evidence: evidence.length === 0,
+      },
+    };
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ meta: streamMeta })}\n\n`),
+          );
           for await (const event of stream) {
             if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-              const data = `data: ${JSON.stringify({ text: event.delta.text })}\n\n`;
-              controller.enqueue(encoder.encode(data));
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`),
+              );
             }
           }
-          // Emit sources before closing so UI can render citations
           if (sources.length > 0) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
           }
         } catch (streamError) {
-          console.error("Stream error:", streamError);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: "Sorry, I encountered an error generating a response. Please try again." })}\n\n`));
+          console.error(`[chat:${traceId}] stream error`, streamError);
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}.` })}\n\n`,
+            ),
+          );
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
@@ -235,13 +824,17 @@ Guidelines:
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
+        "X-Trace-Id": traceId,
       },
     });
   } catch (error) {
-    console.error("Chat function error:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...ch, "Content-Type": "application/json" },
-    });
+    console.error(`[chat:${traceId}] fatal error`, error);
+    return jsonError(
+      traceId,
+      500,
+      "CHAT_INTERNAL_ERROR",
+      "Chat encountered an unexpected error.",
+      ch,
+    );
   }
 });

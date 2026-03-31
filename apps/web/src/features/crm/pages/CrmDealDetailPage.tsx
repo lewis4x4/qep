@@ -203,6 +203,15 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
+              to={`/chat?deal_id=${dealId}${
+                dealQuery.data?.primaryContactId ? `&contact_id=${dealQuery.data.primaryContactId}` : ""
+              }${dealQuery.data?.companyId ? `&company_id=${dealQuery.data.companyId}` : ""}`}
+            >
+              Ask Knowledge
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link
               to={`/quote?crm_deal_id=${dealId}${
                 dealQuery.data?.primaryContactId ? `&crm_contact_id=${dealQuery.data.primaryContactId}` : ""
               }`}

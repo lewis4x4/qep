@@ -215,7 +215,9 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 <Link2 className="h-4 w-4 text-[#B45309]" />
                 <Link
                   className="font-medium text-[#0F172A] underline-offset-2 hover:underline"
-                  to={`/chat?customer_profile_id=${contactQuery.data.dgeCustomerProfileId}`}
+                  to={`/chat?customer_profile_id=${contactQuery.data.dgeCustomerProfileId}&contact_id=${contactId}${
+                    contactQuery.data.primaryCompanyId ? `&company_id=${contactQuery.data.primaryCompanyId}` : ""
+                  }`}
                 >
                   DGE profile linked
                 </Link>
