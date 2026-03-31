@@ -352,6 +352,8 @@ export interface CrmEquipment {
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  /** Present when loaded via subtree equipment API (which company row the asset belongs to). */
+  companyName?: string | null;
 }
 
 export interface CrmCustomField {

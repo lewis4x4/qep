@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, GitMerge, Loader2, Plus } from "lucide-react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
@@ -10,6 +10,7 @@ import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmCompanyEditorSheet } from "../components/CrmCompanyEditorSheet";
 import { CrmCompanyEquipmentSection } from "../components/CrmCompanyEquipmentSection";
 import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
+import { CrmCompanySubtreeEquipmentSection } from "../components/CrmCompanySubtreeEquipmentSection";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
@@ -33,6 +34,7 @@ interface CrmCompanyDetailPageProps {
 
 export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageProps) {
   const { companyId } = useParams<{ companyId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
@@ -159,6 +161,17 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
     }, 250);
     return () => window.clearTimeout(timer);
   }, [parentSearchInput]);
+
+  useEffect(() => {
+    if (location.hash !== "#company-subtree-equipment") return;
+    if (!companyQuery.data) return;
+    const el = document.getElementById("company-subtree-equipment");
+    if (!el) return;
+    const timer = window.setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname, companyQuery.data]);
 
   useEffect(() => {
     if (!hierarchyEditorOpen || !companyQuery.data) return;
@@ -303,7 +316,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
           )}
           {!hierarchyQuery.isLoading && hierarchyQuery.data && (
             <div className="space-y-3">
-              <CrmCompanyHierarchyCard hierarchy={hierarchyQuery.data} />
+              <CrmCompanyHierarchyCard hierarchy={hierarchyQuery.data} companyId={companyId} />
 
               {canManageHierarchy && (
                 <Card className="space-y-3 border-border bg-card p-4 sm:p-5">
@@ -430,6 +443,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
             </div>
           )}
 
+          <CrmCompanySubtreeEquipmentSection companyId={companyId} />
           <CrmCompanyEquipmentSection companyId={companyId} />
           <CrmCustomFieldsCard
             recordType="company"

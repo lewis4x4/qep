@@ -34,6 +34,7 @@ import {
   listCustomFieldDefinitions,
   listDuplicateCandidates,
   listEquipment,
+  listEquipmentForCompanySubtree,
   patchContact,
   patchDeal,
   patchCompanyParent,
@@ -466,6 +467,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
       requireCaller(ctx);
 
       if (req.method === "GET" && segments.length === 2) {
+        const subtreeRoot = safeText(url.searchParams.get("subtree_root"));
+        if (subtreeRoot) {
+          try {
+            const items = await listEquipmentForCompanySubtree(ctx, subtreeRoot);
+            return crmOk({ items }, { origin });
+          } catch (error) {
+            if (error instanceof Error && error.message === "NOT_FOUND") {
+              return crmFail({
+                origin,
+                status: 404,
+                code: "NOT_FOUND",
+                message: "Company not found or inaccessible.",
+              });
+            }
+            throw error;
+          }
+        }
         const companyId = safeText(url.searchParams.get("company_id"));
         const items = await listEquipment(ctx, companyId);
         return crmOk({ items }, { origin });

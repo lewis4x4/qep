@@ -3562,6 +3562,31 @@ export type Database = {
           workspace_id: string
         }[]
       }
+      list_crm_contacts_for_company_subtree_page: {
+        Args: {
+          p_after_first_name?: string
+          p_after_id?: string
+          p_after_last_name?: string
+          p_limit?: number
+          p_company_id: string
+          p_search?: string
+        }
+        Returns: {
+          assigned_rep_id: string
+          created_at: string
+          dge_customer_profile_id: string
+          email: string
+          first_name: string
+          id: string
+          last_name: string
+          merged_into_contact_id: string
+          phone: string
+          primary_company_id: string
+          title: string
+          updated_at: string
+          workspace_id: string
+        }[]
+      }
       log_crm_auth_event: {
         Args: {
           p_actor_user_id?: string

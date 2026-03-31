@@ -203,6 +203,53 @@ export async function crmSearch(
     .slice(0, 25);
 }
 
+/** All company ids in the subtree rooted at `rootId` (includes the root). */
+export function collectCompanySubtreeIds(
+  rows: Array<{ id: unknown; parent_company_id: unknown }>,
+  rootId: string,
+): Set<string> {
+  const stack = [rootId];
+  const subtree = new Set<string>();
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (subtree.has(id)) continue;
+    subtree.add(id);
+    for (const row of rows) {
+      if (String(row.parent_company_id ?? "") === id) {
+        stack.push(String(row.id));
+      }
+    }
+  }
+  return subtree;
+}
+
+/** Returns null when the company is missing or not visible to the caller. */
+export async function fetchCompanySubtreeIdSet(
+  ctx: RouterCtx,
+  companyId: string,
+): Promise<Set<string> | null> {
+  const { data: root, error: rootError } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (rootError) throw rootError;
+  if (!root) return null;
+
+  const { data: companies, error: listError } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id, parent_company_id")
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .limit(5000);
+  if (listError) throw listError;
+
+  return collectCompanySubtreeIds(companies ?? [], companyId);
+}
+
 export async function getCompanyHierarchy(ctx: RouterCtx, companyId: string): Promise<unknown> {
   const { data: company, error: companyError } = await ctx.callerDb
     .from("crm_companies")
@@ -239,18 +286,7 @@ export async function getCompanyHierarchy(ctx: RouterCtx, companyId: string): Pr
     .filter((row) => String(row.parent_company_id ?? "") === companyId)
     .map((row) => ({ id: String(row.id), name: String(row.name) }));
 
-  const stack = [companyId];
-  const subtree = new Set<string>();
-  while (stack.length > 0) {
-    const id = stack.pop()!;
-    if (subtree.has(id)) continue;
-    subtree.add(id);
-    for (const row of companies ?? []) {
-      if (String(row.parent_company_id ?? "") === id) {
-        stack.push(String(row.id));
-      }
-    }
-  }
+  const subtree = collectCompanySubtreeIds(companies ?? [], companyId);
 
   const { data: rollups, error: rollupError } = await ctx.callerDb.rpc(
     "crm_company_subtree_rollups",

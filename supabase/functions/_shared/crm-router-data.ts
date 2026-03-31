@@ -1,4 +1,4 @@
-import type { RouterCtx } from "./crm-router-service.ts";
+import { fetchCompanySubtreeIdSet, type RouterCtx } from "./crm-router-service.ts";
 import { deliverCrmCommunication } from "./crm-communication-delivery.ts";
 
 export type CustomRecordType = "contact" | "company" | "equipment";
@@ -236,6 +236,60 @@ export async function listEquipment(
     metadata: row.metadata ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }));
+}
+
+export async function listEquipmentForCompanySubtree(
+  ctx: RouterCtx,
+  rootCompanyId: string,
+): Promise<unknown[]> {
+  const subtree = await fetchCompanySubtreeIdSet(ctx, rootCompanyId);
+  if (!subtree) {
+    throw new Error("NOT_FOUND");
+  }
+
+  const ids = Array.from(subtree);
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_equipment")
+    .select(
+      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .in("company_id", ids)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const companyIds = [...new Set(rows.map((row) => String(row.company_id)))];
+  let nameMap = new Map<string, string>();
+  if (companyIds.length > 0) {
+    const { data: compRows, error: compError } = await ctx.callerDb
+      .from("crm_companies")
+      .select("id, name")
+      .eq("workspace_id", ctx.workspaceId)
+      .in("id", companyIds);
+    if (compError) throw compError;
+    nameMap = new Map((compRows ?? []).map((r) => [String(r.id), String(r.name)]));
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    companyId: row.company_id,
+    primaryContactId: row.primary_contact_id,
+    name: row.name,
+    assetTag: row.asset_tag,
+    serialNumber: row.serial_number,
+    metadata: row.metadata ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    companyName: nameMap.get(String(row.company_id)) ?? null,
   }));
 }
 

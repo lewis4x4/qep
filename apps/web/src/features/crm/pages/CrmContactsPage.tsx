@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
-import { Plus, Search, UserRound } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Building2, Plus, Search, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CrmContactEditorSheet } from "../components/CrmContactEditorSheet";
@@ -9,8 +9,18 @@ import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
 import { listCrmContacts } from "../lib/crm-api";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function CrmContactsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const treeRootParam = searchParams.get("treeRoot");
+  const treeRootCompanyId = useMemo(() => {
+    if (!treeRootParam || !UUID_RE.test(treeRootParam)) return undefined;
+    return treeRootParam;
+  }, [treeRootParam]);
+
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -33,8 +43,11 @@ export function CrmContactsPage() {
   const startedAt = useMemo(() => performance.now(), [debouncedSearch]);
 
   const contactsQuery = useInfiniteQuery({
-    queryKey: ["crm", "contacts", debouncedSearch],
-    queryFn: ({ pageParam }) => listCrmContacts(debouncedSearch, pageParam),
+    queryKey: ["crm", "contacts", debouncedSearch, treeRootCompanyId ?? null],
+    queryFn: ({ pageParam }) =>
+      listCrmContacts(debouncedSearch, pageParam, {
+        treeRootCompanyId: treeRootCompanyId,
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 60_000,
@@ -52,6 +65,21 @@ export function CrmContactsPage() {
         subtitle="Search and open contact timelines quickly from the field."
       />
       <CrmSubNav />
+
+      {treeRootCompanyId && (
+        <Card className="flex flex-col gap-2 border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <p>
+              Showing contacts linked to this company and its child companies (same scope as the hierarchy
+              roll-up on the company detail page).
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
+            <Link to="/crm/contacts">Clear company filter</Link>
+          </Button>
+        </Card>
+      )}
 
       <div className="flex justify-end">
         <Button onClick={() => setEditorOpen(true)}>
@@ -99,7 +127,9 @@ export function CrmContactsPage() {
       {!contactsQuery.isLoading && !contactsQuery.isError && contacts.length === 0 && (
         <Card className="border-border bg-card p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            No contacts found. Try a different search term.
+            {treeRootCompanyId
+              ? "No contacts linked to this company tree with the current search."
+              : "No contacts found. Try a different search term."}
           </p>
         </Card>
       )}

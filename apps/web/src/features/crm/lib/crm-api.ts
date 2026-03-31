@@ -229,26 +229,38 @@ function decodeCursor<T>(cursor: string | null | undefined): T | null {
   }
 }
 
-export async function listCrmContacts(search: string, cursor?: string | null): Promise<CrmPageResult<CrmContactSummary>> {
+export async function listCrmContacts(
+  search: string,
+  cursor?: string | null,
+  options?: { treeRootCompanyId?: string },
+): Promise<CrmPageResult<CrmContactSummary>> {
   const decodedCursor = decodeCursor<ContactListCursor>(cursor);
-  const { data, error } = await (crmSupabase as typeof crmSupabase & {
+  const treeRoot = options?.treeRootCompanyId?.trim();
+
+  const rpcClient = crmSupabase as typeof crmSupabase & {
     rpc: (
-      fn: "list_crm_contacts_page",
-      args: {
-        p_search: string | null;
-        p_after_last_name: string | null;
-        p_after_first_name: string | null;
-        p_after_id: string | null;
-        p_limit: number;
-      },
+      fn: "list_crm_contacts_page" | "list_crm_contacts_for_company_subtree_page",
+      args: Record<string, string | number | null>,
     ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-  }).rpc("list_crm_contacts_page", {
-    p_search: search.trim() || null,
-    p_after_last_name: decodedCursor?.lastName ?? null,
-    p_after_first_name: decodedCursor?.firstName ?? null,
-    p_after_id: decodedCursor?.id ?? null,
-    p_limit: CONTACTS_PAGE_SIZE + 1,
-  });
+  };
+
+  const { data, error } = treeRoot
+    ? await rpcClient.rpc("list_crm_contacts_for_company_subtree_page", {
+        p_company_id: treeRoot,
+        p_search: search.trim() || null,
+        p_after_last_name: decodedCursor?.lastName ?? null,
+        p_after_first_name: decodedCursor?.firstName ?? null,
+        p_after_id: decodedCursor?.id ?? null,
+        p_limit: CONTACTS_PAGE_SIZE + 1,
+      })
+    : await rpcClient.rpc("list_crm_contacts_page", {
+        p_search: search.trim() || null,
+        p_after_last_name: decodedCursor?.lastName ?? null,
+        p_after_first_name: decodedCursor?.firstName ?? null,
+        p_after_id: decodedCursor?.id ?? null,
+        p_limit: CONTACTS_PAGE_SIZE + 1,
+      });
+
   if (error) {
     throw new Error(error.message);
   }

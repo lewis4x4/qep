@@ -213,6 +213,13 @@ export async function fetchCompanyEquipment(companyId: string): Promise<CrmEquip
   return payload.items;
 }
 
+/** Equipment on this company and all descendant companies (matches hierarchy roll-up). */
+export async function fetchCompanySubtreeEquipment(companyId: string): Promise<CrmEquipment[]> {
+  const params = new URLSearchParams({ subtree_root: companyId });
+  const payload = await requestRouter<{ items: CrmEquipment[] }>(`/crm/equipment?${params.toString()}`);
+  return payload.items;
+}
+
 export async function createCompanyEquipment(input: {
   companyId: string;
   name: string;

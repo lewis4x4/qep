@@ -4,9 +4,13 @@ import type { CrmCompanyHierarchy } from "../lib/types";
 
 interface CrmCompanyHierarchyCardProps {
   hierarchy: CrmCompanyHierarchy;
+  companyId: string;
 }
 
-export function CrmCompanyHierarchyCard({ hierarchy }: CrmCompanyHierarchyCardProps) {
+const rollupLinkClass =
+  "inline-flex items-center rounded-md bg-secondary px-2 py-1.5 text-xs font-medium text-secondary-foreground ring-offset-background transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+export function CrmCompanyHierarchyCard({ hierarchy, companyId }: CrmCompanyHierarchyCardProps) {
   return (
     <Card className="space-y-4 border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -15,12 +19,20 @@ export function CrmCompanyHierarchyCard({ hierarchy }: CrmCompanyHierarchyCardPr
           <p className="text-sm text-muted-foreground">Ancestors, children, and subtree rollups.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded bg-secondary px-2 py-1 text-foreground">
+          <Link
+            to={`/crm/contacts?treeRoot=${encodeURIComponent(companyId)}`}
+            className={rollupLinkClass}
+            title="Open contacts linked to this company and its child companies"
+          >
             Contacts: {hierarchy.rollups.contacts}
-          </span>
-          <span className="rounded bg-secondary px-2 py-1 text-foreground">
+          </Link>
+          <Link
+            to={`/crm/companies/${companyId}#company-subtree-equipment`}
+            className={rollupLinkClass}
+            title="Jump to equipment listed across this company tree"
+          >
             Equipment: {hierarchy.rollups.equipment}
-          </span>
+          </Link>
         </div>
       </div>
 
