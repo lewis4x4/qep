@@ -176,6 +176,13 @@ export interface CrmActivityCreateInput {
 
 export interface CrmActivityTaskPatchInput {
   task: CrmTaskMetadata;
+  updatedAt?: string;
+}
+
+export interface CrmActivityPatchInput {
+  body?: string;
+  updatedAt?: string;
+  task?: CrmTaskMetadata;
 }
 
 export type CrmRecordType = "contact" | "company" | "equipment";

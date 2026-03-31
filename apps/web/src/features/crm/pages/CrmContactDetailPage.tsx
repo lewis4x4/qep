@@ -10,6 +10,7 @@ import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { CrmTerritoryConflictBadge } from "../components/CrmTerritoryConflictBadge";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
@@ -115,6 +116,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
     },
   });
 
+  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "contact", contactId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "contact", contactId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -313,13 +315,17 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 onLogActivity={() => setComposerOpen(true)}
                 entityLabel={contactName}
                 showEntityLabel={false}
+                pendingBodyId={pendingBodyId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
-                onPatchTask={async (activity, task) => {
-                  await patchTask({ activityId: activity.id, task });
+                onPatchBody={async (activity, body, updatedAt) => {
+                  await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchTask={async (activity, task, updatedAt) => {
+                  await patchTask({ activityId: activity.id, task, updatedAt });
                 }}
                 onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id });
+                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
                 }}
               />
             )}

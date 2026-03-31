@@ -38,6 +38,8 @@ export interface ActivityPayload {
 }
 
 export interface ActivityPatchPayload {
+  body?: string | null;
+  updatedAt?: string;
   task?: {
     dueAt?: string | null;
     status?: "open" | "completed";
@@ -46,6 +48,7 @@ export interface ActivityPatchPayload {
 
 export interface ActivityDeliverPayload {
   sendNow?: boolean;
+  updatedAt?: string;
 }
 
 export interface DealPatchPayload {
@@ -301,56 +304,105 @@ export async function patchActivity(
   payload: ActivityPatchPayload,
 ): Promise<unknown> {
   const activity = await getActivityForPatch(ctx, activityId);
+  const hasBody = Object.prototype.hasOwnProperty.call(payload, "body");
+  const hasTask = Object.prototype.hasOwnProperty.call(payload, "task");
+  const expectedUpdatedAt = cleanText(payload.updatedAt ?? null);
 
-  if (!payload.task) {
+  if (!hasBody && !hasTask) {
     throw new Error("VALIDATION_ACTIVITY_PATCH_REQUIRED");
   }
-  if (activity.activityType !== "task") {
-    throw new Error("VALIDATION_ACTIVITY_PATCH_UNSUPPORTED");
+  if (expectedUpdatedAt && expectedUpdatedAt !== activity.updatedAt) {
+    throw new Error("VALIDATION_ACTIVITY_STALE");
   }
 
-  const hasDueAt = Object.prototype.hasOwnProperty.call(payload.task, "dueAt");
-  const dueAt = hasDueAt ? cleanText(payload.task.dueAt ?? null) : undefined;
-  if (dueAt && Number.isNaN(Date.parse(dueAt))) {
-    throw new Error("VALIDATION_INVALID_TASK_DUE_AT");
-  }
-  const rawStatus = Object.prototype.hasOwnProperty.call(payload.task, "status")
-    ? payload.task.status
-    : undefined;
-  if (rawStatus !== undefined && rawStatus !== "open" && rawStatus !== "completed") {
-    throw new Error("VALIDATION_INVALID_TASK_STATUS");
+  const updates: Record<string, unknown> = {};
+
+  if (hasBody) {
+    const body = cleanText(payload.body ?? null);
+    if (!body) {
+      throw new Error("VALIDATION_ACTIVITY_BODY_REQUIRED");
+    }
+
+    if (activity.activityType === "email" || activity.activityType === "sms") {
+      const communication =
+        activity.metadata.communication &&
+          typeof activity.metadata.communication === "object" &&
+          !Array.isArray(activity.metadata.communication)
+          ? (activity.metadata.communication as Record<string, unknown>)
+          : null;
+
+      if (communication?.status === "sent") {
+        throw new Error("VALIDATION_ACTIVITY_BODY_LOCKED");
+      }
+      if (communication?.deliveryInProgress === true) {
+        throw new Error("VALIDATION_ACTIVITY_BODY_LOCKED");
+      }
+
+      const inProgressAt = typeof communication?.deliveryInProgressAt === "string"
+        ? Date.parse(communication.deliveryInProgressAt)
+        : Number.NaN;
+      const hasFreshDeliveryLock =
+        communication?.deliveryInProgress === true &&
+        Number.isFinite(inProgressAt) &&
+        Date.now() - inProgressAt < 2 * 60 * 1000;
+      if (hasFreshDeliveryLock) {
+        throw new Error("VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS");
+      }
+    }
+
+    updates.body = body;
   }
 
-  const existingTask =
-    activity.metadata.task && typeof activity.metadata.task === "object" && !Array.isArray(activity.metadata.task)
-      ? (activity.metadata.task as Record<string, unknown>)
-      : {};
+  if (hasTask) {
+    if (!payload.task || activity.activityType !== "task") {
+      throw new Error("VALIDATION_ACTIVITY_PATCH_UNSUPPORTED");
+    }
 
-  const nextMetadata = {
-    ...activity.metadata,
-    task: {
-      dueAt: dueAt === undefined
-        ? (existingTask.dueAt as string | null | undefined) ?? null
-        : dueAt
-        ? new Date(dueAt).toISOString()
-        : null,
-      status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
-    },
-  };
+    const hasDueAt = Object.prototype.hasOwnProperty.call(payload.task, "dueAt");
+    const dueAt = hasDueAt ? cleanText(payload.task.dueAt ?? null) : undefined;
+    if (dueAt && Number.isNaN(Date.parse(dueAt))) {
+      throw new Error("VALIDATION_INVALID_TASK_DUE_AT");
+    }
+    const rawStatus = Object.prototype.hasOwnProperty.call(payload.task, "status")
+      ? payload.task.status
+      : undefined;
+    if (rawStatus !== undefined && rawStatus !== "open" && rawStatus !== "completed") {
+      throw new Error("VALIDATION_INVALID_TASK_STATUS");
+    }
+
+    const existingTask =
+      activity.metadata.task && typeof activity.metadata.task === "object" && !Array.isArray(activity.metadata.task)
+        ? (activity.metadata.task as Record<string, unknown>)
+        : {};
+
+    updates.metadata = {
+      ...activity.metadata,
+      task: {
+        dueAt: dueAt === undefined
+          ? (existingTask.dueAt as string | null | undefined) ?? null
+          : dueAt
+          ? new Date(dueAt).toISOString()
+          : null,
+        status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
+      },
+    };
+  }
 
   const { data, error } = await ctx.callerDb
     .from("crm_activities")
-    .update({
-      metadata: nextMetadata,
-    })
+    .update(updates)
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", activityId)
+    .eq("updated_at", expectedUpdatedAt ?? activity.updatedAt)
     .select(
       "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
     )
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
+  if (!data) {
+    throw new Error("VALIDATION_ACTIVITY_STALE");
+  }
 
   return {
     id: data.id,
@@ -374,6 +426,10 @@ export async function deliverActivity(
   payload: ActivityDeliverPayload,
 ): Promise<unknown> {
   const activity = await getActivityForPatch(ctx, activityId);
+  const expectedUpdatedAt = cleanText(payload.updatedAt ?? null);
+  if (expectedUpdatedAt && expectedUpdatedAt !== activity.updatedAt) {
+    throw new Error("VALIDATION_ACTIVITY_STALE");
+  }
   if (activity.activityType !== "email" && activity.activityType !== "sms") {
     throw new Error("VALIDATION_ACTIVITY_DELIVERY_UNSUPPORTED");
   }
@@ -392,6 +448,9 @@ export async function deliverActivity(
     Date.now() - inProgressAt < 2 * 60 * 1000;
   if (hasFreshDeliveryLock) {
     throw new Error("VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS");
+  }
+  if (communication?.deliveryInProgress === true) {
+    throw new Error("VALIDATION_ACTIVITY_DELIVERY_REVIEW_REQUIRED");
   }
   if (communication?.status === "sent") {
     throw new Error("VALIDATION_ACTIVITY_DELIVERY_ALREADY_SENT");
@@ -413,7 +472,7 @@ export async function deliverActivity(
     })
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", activityId)
-    .eq("updated_at", activity.updatedAt)
+    .eq("updated_at", expectedUpdatedAt ?? activity.updatedAt)
     .select("id")
     .maybeSingle();
 

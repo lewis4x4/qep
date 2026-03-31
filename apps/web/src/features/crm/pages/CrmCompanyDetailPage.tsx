@@ -11,6 +11,7 @@ import { CrmCompanyEquipmentSection } from "../components/CrmCompanyEquipmentSec
 import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
@@ -117,6 +118,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
     },
   });
 
+  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "company", companyId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "company", companyId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -427,13 +429,17 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                 onLogActivity={() => setComposerOpen(true)}
                 entityLabel={companyName}
                 showEntityLabel={false}
+                pendingBodyId={pendingBodyId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
-                onPatchTask={async (activity, task) => {
-                  await patchTask({ activityId: activity.id, task });
+                onPatchBody={async (activity, body, updatedAt) => {
+                  await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchTask={async (activity, task, updatedAt) => {
+                  await patchTask({ activityId: activity.id, task, updatedAt });
                 }}
                 onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id });
+                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
                 }}
               />
             )}

@@ -100,6 +100,51 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "VALIDATION_ACTIVITY_BODY_REQUIRED") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Add activity details before saving.",
+    });
+  }
+
+  if (message === "VALIDATION_ACTIVITY_BODY_LOCKED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Sent messages are locked. Log a follow-up instead.",
+    });
+  }
+
+  if (message === "VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "This message is sending now. Try again when delivery finishes.",
+    });
+  }
+
+  if (message === "VALIDATION_ACTIVITY_DELIVERY_REVIEW_REQUIRED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "A previous delivery attempt needs review before another send.",
+    });
+  }
+
+  if (message === "VALIDATION_ACTIVITY_STALE") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "This activity changed somewhere else. Refresh and try again.",
+    });
+  }
+
   if (
     message.startsWith("VALIDATION_") ||
     message.startsWith("UNKNOWN_CUSTOM_FIELD:") ||

@@ -9,6 +9,7 @@ import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
@@ -129,6 +130,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     },
   });
 
+  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "deal", dealId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "deal", dealId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -289,13 +291,17 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 onLogActivity={() => setComposerOpen(true)}
                 entityLabel={dealName}
                 showEntityLabel={false}
+                pendingBodyId={pendingBodyId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
-                onPatchTask={async (activity, task) => {
-                  await patchTask({ activityId: activity.id, task });
+                onPatchBody={async (activity, body, updatedAt) => {
+                  await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchTask={async (activity, task, updatedAt) => {
+                  await patchTask({ activityId: activity.id, task, updatedAt });
                 }}
                 onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id });
+                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
                 }}
               />
             )}

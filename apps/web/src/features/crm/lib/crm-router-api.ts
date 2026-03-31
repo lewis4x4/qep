@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type {
   CrmActivityCreateInput,
+  CrmActivityPatchInput,
   CrmActivityTaskPatchInput,
   CrmActivityItem,
   CrmCompanyHierarchy,
@@ -92,12 +93,24 @@ export async function patchCrmActivityTaskViaRouter(
   return payload.activity;
 }
 
+export async function patchCrmActivityViaRouter(
+  activityId: string,
+  input: CrmActivityPatchInput,
+): Promise<CrmActivityItem> {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.activity;
+}
+
 export async function deliverCrmActivityViaRouter(
   activityId: string,
+  updatedAt?: string,
 ): Promise<CrmActivityItem> {
   const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}/deliver`, {
     method: "POST",
-    body: { sendNow: true },
+    body: { sendNow: true, updatedAt },
   });
   return payload.activity;
 }

@@ -11,7 +11,9 @@ interface CrmActivityTimelineProps {
   onLogActivity: () => void;
   entityLabel: string;
   showEntityLabel?: boolean;
-  onPatchTask?: (activity: CrmActivityItem, task: CrmTaskMetadata) => Promise<void>;
+  onPatchBody?: (activity: CrmActivityItem, body: string, updatedAt: string) => Promise<void>;
+  pendingBodyId?: string | null;
+  onPatchTask?: (activity: CrmActivityItem, task: CrmTaskMetadata, updatedAt: string) => Promise<void>;
   onToggleTaskStatus?: (activity: CrmActivityItem, nextStatus: "open" | "completed") => Promise<void>;
   pendingTaskId?: string | null;
   onDeliverCommunication?: (activity: CrmActivityItem) => Promise<void>;
@@ -29,6 +31,8 @@ const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: st
 
 interface CommunicationDeliveryMetadata {
   attempted?: boolean;
+  deliveryInProgress?: boolean;
+  deliveryInProgressAt?: string;
   status?: string;
   mode?: string;
   provider?: string;
@@ -104,6 +108,43 @@ function canRetryDelivery(delivery: CommunicationDeliveryMetadata): boolean {
   return delivery.status === "failed" || delivery.mode === "manual";
 }
 
+function bodyActionLabel(activity: CrmActivityItem): string {
+  return activity.body?.trim() ? "Edit details" : "Add details";
+}
+
+function hasFreshDeliveryLock(delivery: CommunicationDeliveryMetadata | null): boolean {
+  if (!delivery || delivery.deliveryInProgress !== true) return false;
+  const lockAt = typeof delivery.deliveryInProgressAt === "string"
+    ? Date.parse(delivery.deliveryInProgressAt)
+    : Number.NaN;
+  return Number.isFinite(lockAt) && Date.now() - lockAt < 2 * 60 * 1000;
+}
+
+function canEditBody(activity: CrmActivityItem, delivery: CommunicationDeliveryMetadata | null): boolean {
+  if (activity.isOptimistic) return false;
+  if (activity.activityType !== "email" && activity.activityType !== "sms") {
+    return true;
+  }
+  if (!delivery) return true;
+  if (delivery.status === "sent") return false;
+  if (delivery.deliveryInProgress === true) return false;
+  return true;
+}
+
+function bodyLockMessage(delivery: CommunicationDeliveryMetadata | null): string | null {
+  if (!delivery) return null;
+  if (hasFreshDeliveryLock(delivery)) {
+    return "This message is sending now. Edit it after delivery finishes.";
+  }
+  if (delivery.deliveryInProgress === true) {
+    return "This message needs delivery review before anyone edits it again.";
+  }
+  if (delivery.status === "sent") {
+    return "Sent messages are locked so the timeline stays audit-safe.";
+  }
+  return null;
+}
+
 function deliveryActionLabel(delivery: CommunicationDeliveryMetadata): string {
   return delivery.status === "failed" ? "Retry send" : "Send now";
 }
@@ -159,26 +200,96 @@ export function CrmActivityTimeline({
   onLogActivity,
   entityLabel,
   showEntityLabel = true,
+  onPatchBody,
+  pendingBodyId = null,
   onPatchTask,
   onToggleTaskStatus,
   pendingTaskId = null,
   onDeliverCommunication,
   pendingDeliveryId = null,
 }: CrmActivityTimelineProps) {
+  const [editingBodyId, setEditingBodyId] = useState<string | null>(null);
+  const [editingBodyUpdatedAt, setEditingBodyUpdatedAt] = useState<string | null>(null);
+  const [bodyConflictId, setBodyConflictId] = useState<string | null>(null);
+  const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
+  const [bodyInput, setBodyInput] = useState("");
+  const [bodyError, setBodyError] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskUpdatedAt, setEditingTaskUpdatedAt] = useState<string | null>(null);
+  const [taskConflictId, setTaskConflictId] = useState<string | null>(null);
+  const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({});
   const [dueAtInput, setDueAtInput] = useState("");
   const [dueAtError, setDueAtError] = useState<string | null>(null);
 
+  function startBodyEditor(activity: CrmActivityItem): void {
+    setEditingBodyId(activity.id);
+    setEditingBodyUpdatedAt(activity.updatedAt);
+    setBodyConflictId(null);
+    setBodyInput(bodyDrafts[activity.id] ?? activity.body ?? "");
+    setBodyError(null);
+  }
+
+  function closeBodyEditor(options?: { preserveDraft?: boolean }): void {
+    const preserveDraft = options?.preserveDraft === true;
+    if (editingBodyId && !preserveDraft) {
+      setBodyDrafts((current) => {
+        const next = { ...current };
+        delete next[editingBodyId];
+        return next;
+      });
+    }
+    setEditingBodyId(null);
+    setEditingBodyUpdatedAt(null);
+    setBodyConflictId(null);
+    setBodyInput("");
+    setBodyError(null);
+  }
+
   function startTaskEditor(activity: CrmActivityItem, task: CrmTaskMetadata): void {
     setEditingTaskId(activity.id);
-    setDueAtInput(toDateTimeLocalValue(task.dueAt ?? null));
+    setEditingTaskUpdatedAt(activity.updatedAt);
+    setTaskConflictId(null);
+    setDueAtInput(taskDrafts[activity.id] ?? toDateTimeLocalValue(task.dueAt ?? null));
     setDueAtError(null);
   }
 
-  function closeTaskEditor(): void {
+  function closeTaskEditor(options?: { preserveDraft?: boolean }): void {
+    const preserveDraft = options?.preserveDraft === true;
+    if (editingTaskId && !preserveDraft) {
+      setTaskDrafts((current) => {
+        const next = { ...current };
+        delete next[editingTaskId];
+        return next;
+      });
+    }
     setEditingTaskId(null);
+    setEditingTaskUpdatedAt(null);
+    setTaskConflictId(null);
     setDueAtInput("");
     setDueAtError(null);
+  }
+
+  async function saveBody(activity: CrmActivityItem): Promise<void> {
+    if (!onPatchBody) return;
+
+    const nextBody = bodyInput.trim();
+    if (!nextBody) {
+      setBodyError("Add details before saving.");
+      return;
+    }
+
+    try {
+      await onPatchBody(activity, nextBody, editingBodyUpdatedAt ?? activity.updatedAt);
+      closeBodyEditor();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update the activity.";
+      if (message.includes("changed somewhere else")) {
+        setBodyConflictId(activity.id);
+        setBodyError("This activity changed while you were editing. Cancel and reopen the editor to apply your draft.");
+        return;
+      }
+      setBodyError(message);
+    }
   }
 
   async function saveTaskDueAt(activity: CrmActivityItem, task: CrmTaskMetadata): Promise<void> {
@@ -191,21 +302,37 @@ export function CrmActivityTimeline({
     }
 
     try {
-      await onPatchTask(activity, { ...task, dueAt: nextDueAt });
+      await onPatchTask(activity, { ...task, dueAt: nextDueAt }, editingTaskUpdatedAt ?? activity.updatedAt);
       closeTaskEditor();
     } catch (error) {
-      setDueAtError(error instanceof Error ? error.message : "Could not update the task due date.");
+      const message = error instanceof Error ? error.message : "Could not update the task due date.";
+      if (message.includes("changed somewhere else")) {
+        setTaskConflictId(activity.id);
+        setDueAtError("This task changed while you were editing. Cancel and reopen the editor to apply your update.");
+        return;
+      }
+      setDueAtError(message);
     }
   }
 
   async function clearTaskDueAt(activity: CrmActivityItem, task: CrmTaskMetadata): Promise<void> {
     if (!onPatchTask) return;
+    setTaskDrafts((current) => ({
+      ...current,
+      [activity.id]: "",
+    }));
 
     try {
-      await onPatchTask(activity, { ...task, dueAt: null });
+      await onPatchTask(activity, { ...task, dueAt: null }, editingTaskUpdatedAt ?? activity.updatedAt);
       closeTaskEditor();
     } catch (error) {
-      setDueAtError(error instanceof Error ? error.message : "Could not clear the task due date.");
+      const message = error instanceof Error ? error.message : "Could not clear the task due date.";
+      if (message.includes("changed somewhere else")) {
+        setTaskConflictId(activity.id);
+        setDueAtError("This task changed while you were editing. Cancel and reopen the editor to apply your update.");
+        return;
+      }
+      setDueAtError(message);
     }
   }
 
@@ -232,11 +359,19 @@ export function CrmActivityTimeline({
         const Icon = typeMeta.icon;
         const delivery = readCommunicationDelivery(activity);
         const task = readTaskMetadata(activity);
+        const canUpdateBody = Boolean(onPatchBody) && canEditBody(activity, delivery);
+        const isEditingBody = editingBodyId === activity.id;
+        const isAnotherBodyEditorOpen = editingBodyId !== null && editingBodyId !== activity.id;
+        const isPendingBody = pendingBodyId === activity.id;
+        const hasBodyConflict = bodyConflictId === activity.id;
         const canPatchTask = Boolean(onPatchTask || onToggleTaskStatus);
         const isEditingTask = editingTaskId === activity.id;
+        const isAnotherTaskEditorOpen = editingTaskId !== null && editingTaskId !== activity.id;
         const isPendingTask = pendingTaskId === activity.id;
+        const hasTaskConflict = taskConflictId === activity.id;
         const attemptedLabel = delivery ? deliveryAttemptLabel(delivery) : null;
         const isPendingDelivery = pendingDeliveryId === activity.id;
+        const lockMessage = !canUpdateBody ? bodyLockMessage(delivery) : null;
 
         return (
           <article
@@ -259,9 +394,72 @@ export function CrmActivityTimeline({
               </time>
             </div>
 
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
-              {activity.body ?? "No details provided."}
-            </p>
+            {!isEditingBody ? (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                {activity.body ?? "No details provided."}
+              </p>
+            ) : (
+              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <label
+                  htmlFor={`crm-activity-body-${activity.id}`}
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                >
+                  Activity details
+                </label>
+                <textarea
+                  id={`crm-activity-body-${activity.id}`}
+                  value={bodyInput}
+                  onChange={(event) => {
+                    setBodyInput(event.target.value);
+                    setBodyDrafts((current) => ({
+                      ...current,
+                      [activity.id]: event.target.value,
+                    }));
+                    setBodyError(null);
+                    setBodyConflictId(null);
+                  }}
+                  disabled={isPendingBody}
+                  rows={4}
+                  className="min-h-[120px] w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                {bodyError && <p className="mt-2 text-xs text-[#B91C1C]">{bodyError}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingBody || hasBodyConflict}
+                    onClick={() => void saveBody(activity)}
+                  >
+                    {isPendingBody ? "Saving..." : "Save details"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingBody}
+                    onClick={() => closeBodyEditor({ preserveDraft: hasBodyConflict })}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {canUpdateBody && !isEditingBody && (
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2 text-xs text-[#475569]"
+                  disabled={isPendingBody || isAnotherBodyEditorOpen || editingTaskId !== null}
+                  onClick={() => startBodyEditor(activity)}
+                >
+                  {bodyActionLabel(activity)}
+                </Button>
+              </div>
+            )}
             {task && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <span className={cn("inline-flex items-center rounded-full px-2 py-1 font-semibold", taskStatusTone(task.status))}>
@@ -276,13 +474,13 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="outline"
                     className="h-8 px-2 text-xs"
-                    disabled={isPendingTask}
+                    disabled={isPendingTask || isEditingBody || isEditingTask}
                     onClick={() => {
                       const nextStatus = task.status === "completed" ? "open" : "completed";
                       if (onPatchTask) {
-                        void onPatchTask(activity, { ...task, status: nextStatus });
-                        return;
-                      }
+                          void onPatchTask(activity, { ...task, status: nextStatus }, activity.updatedAt);
+                          return;
+                        }
                       if (onToggleTaskStatus) {
                         void onToggleTaskStatus(activity, nextStatus);
                       }
@@ -301,10 +499,10 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="ghost"
                     className="h-8 px-2 text-xs text-[#475569]"
-                    disabled={isPendingTask}
+                    disabled={isPendingTask || isEditingBody || isAnotherTaskEditorOpen}
                     onClick={() => {
                       if (isEditingTask) {
-                        closeTaskEditor();
+                        closeTaskEditor({ preserveDraft: hasTaskConflict });
                         return;
                       }
                       startTaskEditor(activity, task);
@@ -329,7 +527,12 @@ export function CrmActivityTimeline({
                   value={dueAtInput}
                   onChange={(event) => {
                     setDueAtInput(event.target.value);
+                    setTaskDrafts((current) => ({
+                      ...current,
+                      [activity.id]: event.target.value,
+                    }));
                     setDueAtError(null);
+                    setTaskConflictId(null);
                   }}
                   disabled={isPendingTask}
                   className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
@@ -340,7 +543,7 @@ export function CrmActivityTimeline({
                     type="button"
                     size="sm"
                     className="h-8 px-3 text-xs"
-                    disabled={isPendingTask}
+                    disabled={isPendingTask || hasTaskConflict}
                     onClick={() => void saveTaskDueAt(activity, task)}
                   >
                     {isPendingTask ? "Saving..." : "Save due date"}
@@ -350,7 +553,7 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="outline"
                     className="h-8 px-3 text-xs"
-                    disabled={isPendingTask}
+                    disabled={isPendingTask || hasTaskConflict}
                     onClick={() => void clearTaskDueAt(activity, task)}
                   >
                     Clear due date
@@ -374,6 +577,9 @@ export function CrmActivityTimeline({
                 <p className={cn("mt-2 text-xs", deliveryTone(delivery.status))}>
                   {deliveryLabel(delivery)}
                 </p>
+                {lockMessage && (
+                  <p className="mt-2 text-[11px] text-[#64748B]">{lockMessage}</p>
+                )}
                 {(attemptedLabel || delivery.externalMessageId) && (
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#64748B]">
                     {attemptedLabel && (
@@ -391,7 +597,7 @@ export function CrmActivityTimeline({
                       size="sm"
                       variant="outline"
                       className="h-8 px-3 text-xs"
-                      disabled={isPendingDelivery}
+                      disabled={isPendingDelivery || isEditingBody || isPendingBody}
                       onClick={() => void onDeliverCommunication(activity)}
                     >
                       {isPendingDelivery ? "Sending..." : deliveryActionLabel(delivery)}

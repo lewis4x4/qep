@@ -2,11 +2,13 @@ import { crmSupabase, type CrmDatabase } from "./crm-supabase";
 import {
   createCrmActivityViaRouter,
   deliverCrmActivityViaRouter,
+  patchCrmActivityViaRouter,
   patchCrmActivityTaskViaRouter,
 } from "./crm-router-api";
 import type {
   CrmActivityCreateInput,
   CrmActivityItem,
+  CrmActivityPatchInput,
   CrmActivityTaskPatchInput,
   CrmCompanySummary,
   CrmContactTerritory,
@@ -291,8 +293,16 @@ export async function patchCrmActivityTask(
   return patchCrmActivityTaskViaRouter(activityId, input);
 }
 
+export async function patchCrmActivity(
+  activityId: string,
+  input: CrmActivityPatchInput,
+): Promise<CrmActivityItem> {
+  return patchCrmActivityViaRouter(activityId, input);
+}
+
 export async function deliverCrmActivity(
   activityId: string,
+  updatedAt?: string,
 ): Promise<CrmActivityItem> {
-  return deliverCrmActivityViaRouter(activityId);
+  return deliverCrmActivityViaRouter(activityId, updatedAt);
 }

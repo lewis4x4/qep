@@ -5,6 +5,7 @@ import type { CrmActivityItem } from "../lib/types";
 
 interface DeliverActivityInput {
   activityId: string;
+  updatedAt: string;
 }
 
 export function useCrmActivityDeliveryMutation(queryKey: QueryKey) {
@@ -12,17 +13,10 @@ export function useCrmActivityDeliveryMutation(queryKey: QueryKey) {
   const [pendingDeliveryId, setPendingDeliveryId] = useState<string | null>(null);
 
   const deliverActivityMutation = useMutation({
-    mutationFn: async ({ activityId }: DeliverActivityInput) => deliverCrmActivity(activityId),
+    mutationFn: async ({ activityId, updatedAt }: DeliverActivityInput) => deliverCrmActivity(activityId, updatedAt),
     onMutate: async ({ activityId }) => {
       setPendingDeliveryId(activityId);
       await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<CrmActivityItem[]>(queryKey) ?? [];
-      return { previous };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKey, context.previous);
-      }
     },
     onSuccess: (activity) => {
       queryClient.setQueryData<CrmActivityItem[]>(
