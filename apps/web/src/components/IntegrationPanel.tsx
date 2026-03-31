@@ -121,6 +121,11 @@ interface HubSpotCutoverConfig {
   note?: string | null;
 }
 
+interface HubSpotReasonSummary {
+  reasonCode: string;
+  count: number;
+}
+
 function statusToDataSource(status: IntegrationCardConfig["status"]): DataSourceState {
   switch (status) {
     case "connected": return "Live";
@@ -191,6 +196,46 @@ function formatHubSpotRunCount(run: HubSpotImportRunSummary): string {
   return `${total.toLocaleString()} records`;
 }
 
+function formatHubSpotReasonLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function hubspotReconciliationTone(errorCount: number): {
+  cardClassName: string;
+  labelClassName: string;
+  label: string;
+  nextAction: string;
+} {
+  if (errorCount === 0) {
+    return {
+      cardClassName: "border-[#BBF7D0] bg-[#F0FDF4]",
+      labelClassName: "bg-[#DCFCE7] text-[#166534]",
+      label: "Clear",
+      nextAction: "Validation is clean. Use the cutover summary to decide when HubSpot can drop to source-only.",
+    };
+  }
+
+  if (errorCount <= 3) {
+    return {
+      cardClassName: "border-[#FED7AA] bg-[#FFF7ED]",
+      labelClassName: "bg-[#FFEDD5] text-[#9A3412]",
+      label: "Needs review",
+      nextAction: "Resolve the remaining mismatches, rerun validation, and confirm the cutover note reflects the final decision.",
+    };
+  }
+
+  return {
+    cardClassName: "border-[#FECACA] bg-[#FFF1F2]",
+    labelClassName: "bg-[#FFE4E6] text-[#BE123C]",
+    label: "Blocked",
+    nextAction: "Keep parallel run active and reconcile the failing rows before marking cutover ready.",
+  };
+}
+
 function formatHubSpotValidationDate(value: string): string {
   if (!value) return "Not validated";
   const timestamp = Date.parse(value);
@@ -242,6 +287,7 @@ export function IntegrationPanel({
   const [hubSpotImportResult, setHubSpotImportResult] = useState<HubSpotImportResult | null>(null);
   const [hubSpotImportError, setHubSpotImportError] = useState<string | null>(null);
   const [selectedResumeRunId, setSelectedResumeRunId] = useState<string | null>(null);
+  const [selectedReviewRunId, setSelectedReviewRunId] = useState<string | null>(null);
   const [hubspotParallelRunEnabled, setHubspotParallelRunEnabled] = useState(true);
   const [hubspotCutoverReady, setHubspotCutoverReady] = useState(false);
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
@@ -265,6 +311,7 @@ export function IntegrationPanel({
     setHubSpotImportResult(null);
     setHubSpotImportError(null);
     setSelectedResumeRunId(null);
+    setSelectedReviewRunId(null);
     setHubspotParallelRunEnabled(cutover.parallel_run_enabled ?? true);
     setHubspotCutoverReady(cutover.cutover_ready ?? false);
     setHubspotValidatedAt(
@@ -285,6 +332,7 @@ export function IntegrationPanel({
   useEffect(() => {
     if (!isHubSpot) {
       setSelectedResumeRunId(null);
+      setSelectedReviewRunId(null);
       return;
     }
     const resumableRuns = hubSpotImportRuns.filter((run) =>
@@ -296,9 +344,21 @@ export function IntegrationPanel({
         : (resumableRuns[0]?.id ?? null)
     );
   }, [isHubSpot, actorUserId, hubSpotImportRuns]);
+  useEffect(() => {
+    if (!isHubSpot) {
+      setSelectedReviewRunId(null);
+      return;
+    }
+    setSelectedReviewRunId((current) =>
+      current && hubSpotImportRuns.some((run) => run.id === current)
+        ? current
+        : (hubSpotImportRuns[0]?.id ?? null)
+    );
+  }, [isHubSpot, hubSpotImportRuns]);
 
   if (!integration) return null;
-  const activeReconciliationRunId = hubSpotImportResult?.runId ??
+  const activeReconciliationRunId = selectedReviewRunId ??
+    hubSpotImportResult?.runId ??
     selectedResumeRunId ??
     hubSpotImportRuns[0]?.id ??
     null;
@@ -313,10 +373,18 @@ export function IntegrationPanel({
   const topEntityErrorRows = Object.entries(errorCountByEntity)
     .map(([entityType, count]) => ({ entityType, count }))
     .sort((a, b) => b.count - a.count);
+  const errorCountByReason = activeRunErrors.reduce<Record<string, number>>((acc, error) => {
+    acc[error.reasonCode] = (acc[error.reasonCode] ?? 0) + 1;
+    return acc;
+  }, {});
+  const topReasonErrorRows = Object.entries(errorCountByReason)
+    .map(([reasonCode, count]): HubSpotReasonSummary => ({ reasonCode, count }))
+    .sort((a, b) => b.count - a.count);
   const latestFinishedRun = hubSpotImportRuns.find((run) =>
     run.status === "completed" || run.status === "completed_with_errors" || run.status === "failed"
   ) ?? null;
   const cutoverBlockingCount = activeRunErrors.length;
+  const reconciliationTone = hubspotReconciliationTone(cutoverBlockingCount);
   const cutoverChecklist = [
     {
       label: "Parallel run",
@@ -556,6 +624,7 @@ export function IntegrationPanel({
       }
 
       setHubSpotImportResult(result);
+      setSelectedReviewRunId(result.runId);
       if (result.status === "completed_with_errors" || result.status === "failed") {
         setHubSpotImportError(
           result.status === "failed"
@@ -768,39 +837,122 @@ export function IntegrationPanel({
 
                 <div className="mt-3 rounded-lg border border-border bg-card p-3">
                   <p className="text-xs font-medium text-foreground">Reconciliation details</p>
+                  {hubSpotImportRuns.length > 1 && (
+                    <div className="mt-2 space-y-1">
+                      <Label htmlFor="hubspot-review-run" className="text-[11px] font-medium text-[#475569]">
+                        Review run
+                      </Label>
+                      <select
+                        id="hubspot-review-run"
+                        value={selectedReviewRunId ?? ""}
+                        onChange={(event) => setSelectedReviewRunId(event.target.value || null)}
+                        className="h-10 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                      >
+                        {hubSpotImportRuns.map((run) => (
+                          <option key={run.id} value={run.id}>
+                            {hubspotRunStatusLabel(run.status)} · {formatHubSpotRunTimestamp(run.completedAt ?? run.startedAt)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {!activeReconciliationRunId ? (
                     <p className="mt-1 text-xs text-[#64748B]">
                       Run an import to generate reconciliation data.
                     </p>
                   ) : activeRunErrors.length === 0 ? (
-                    <p className="mt-1 text-xs text-[#166534]">
-                      No error rows found for run {activeReconciliationRunId.slice(0, 8)}.
-                    </p>
-                  ) : (
-                    <div className="mt-2 space-y-2">
-                      <p className="text-[11px] text-[#64748B]">
-                        Run {activeReconciliationRunId.slice(0, 8)} has{" "}
-                        {activeRunErrors.length.toLocaleString()} error rows.
+                      <p className="mt-1 text-xs text-[#166534]">
+                        No error rows found for run {activeReconciliationRunId.slice(0, 8)}.
                       </p>
-                      <div className="space-y-1">
-                        {topEntityErrorRows.slice(0, 4).map((row) => (
-                          <div
-                            key={row.entityType}
-                            className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
-                          >
-                            <span className="font-medium text-foreground">{row.entityType}</span>
-                            <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        <div className={cn("rounded-lg border p-3", reconciliationTone.cardClassName)}>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-xs font-medium text-foreground">Reconciliation status</p>
+                              <p className="mt-1 text-xs text-[#475569]">
+                                Run {activeReconciliationRunId.slice(0, 8)} is the current cutover validation source.
+                              </p>
+                            </div>
+                            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", reconciliationTone.labelClassName)}>
+                              {reconciliationTone.label}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                      {activeRunErrors.slice(0, 2).map((error) => (
-                        <p key={error.id} className="text-[11px] text-[#B91C1C] line-clamp-2">
-                          {error.reasonCode}: {error.message ?? "No message provided."}
+                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded border border-white/70 bg-white px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Error rows</p>
+                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                                {activeRunErrors.length.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded border border-white/70 bg-white px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Top reason</p>
+                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                                {topReasonErrorRows[0] ? formatHubSpotReasonLabel(topReasonErrorRows[0].reasonCode) : "None"}
+                              </p>
+                            </div>
+                            <div className="rounded border border-white/70 bg-white px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Top entity</p>
+                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                                {topEntityErrorRows[0]?.entityType ?? "None"}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-xs text-[#475569]">{reconciliationTone.nextAction}</p>
+                        </div>
+
+                        <p className="text-[11px] text-[#64748B]">
+                          Run {activeReconciliationRunId.slice(0, 8)} has{" "}
+                          {activeRunErrors.length.toLocaleString()} error rows.
                         </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {topEntityErrorRows.slice(0, 4).map((row) => (
+                            <div
+                              key={`entity-${row.entityType}`}
+                              className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
+                            >
+                              <span className="font-medium text-foreground">{row.entityType}</span>
+                              <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                            </div>
+                          ))}
+                          {topReasonErrorRows.slice(0, 4).map((row) => (
+                            <div
+                              key={`reason-${row.reasonCode}`}
+                              className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
+                            >
+                              <span className="font-medium text-foreground">{formatHubSpotReasonLabel(row.reasonCode)}</span>
+                              <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="space-y-2">
+                          {activeRunErrors.slice(0, 3).map((error) => (
+                            <div key={error.id} className="rounded border border-[#FECACA] bg-white px-3 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#BE123C]">
+                                  {formatHubSpotReasonLabel(error.reasonCode)}
+                                </span>
+                                <span className="text-[10px] text-[#64748B]">
+                                  {new Date(error.createdAt).toLocaleString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-[11px] font-medium text-[#881337]">
+                                {error.entityType}
+                              </p>
+                              <p className="mt-1 text-[11px] text-[#4C0519]">
+                                {error.message ?? "No message provided."}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                 <div
                   className={cn(
