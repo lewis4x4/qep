@@ -1,5 +1,5 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   listCrmDealStages,
   listCrmOpenDealsForBoard,
   listCrmWeightedOpenDeals,
+  patchCrmDeal,
 } from "../lib/crm-api";
 import type { CrmRepSafeDeal } from "../lib/types";
 
@@ -80,6 +81,20 @@ function getFollowUpSortTime(value: string | null): number {
   return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
 }
 
+function getFutureFollowUpIso(daysAhead: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  return date.toISOString();
+}
+
+function updateDealNextFollowUp(
+  deals: CrmRepSafeDeal[] | null,
+  dealId: string,
+  nextFollowUpAt: string | null
+): CrmRepSafeDeal[] | null {
+  return deals?.map((deal) => (deal.id === dealId ? { ...deal, nextFollowUpAt } : deal)) ?? deals;
+}
+
 function readCachedOpenDeals(): CachedOpenDealsPayload | null {
   if (typeof window === "undefined") {
     return null;
@@ -140,6 +155,7 @@ async function fetchOpenDealsFirstPage(): Promise<OpenDealsFirstPageResult> {
 }
 
 export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
+  const queryClient = useQueryClient();
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
@@ -147,6 +163,8 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   const [isHydratingRemainingDeals, setIsHydratingRemainingDeals] = useState(false);
   const [dealHydrationWarning, setDealHydrationWarning] = useState<string | null>(null);
   const [hydrationAttempt, setHydrationAttempt] = useState(0);
+  const pipelineRefreshTimeoutRef = useRef<number | null>(null);
+  const refreshedDealIdsRef = useRef<Set<string>>(new Set());
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
   const stagesQuery = useQuery({
@@ -410,6 +428,51 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     );
   }, [weightedDealsQuery.data]);
 
+  useEffect(() => {
+    return () => {
+      if (pipelineRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(pipelineRefreshTimeoutRef.current);
+      }
+      refreshedDealIdsRef.current.clear();
+    };
+  }, []);
+
+  function schedulePipelineRefresh(dealId: string): void {
+    refreshedDealIdsRef.current.add(dealId);
+
+    if (typeof window === "undefined") {
+      void queryClient.invalidateQueries({ queryKey: ["crm", "deals", "open-table"] }).finally(() => {
+        refreshedDealIdsRef.current.clear();
+      });
+      return;
+    }
+
+    if (pipelineRefreshTimeoutRef.current !== null) {
+      window.clearTimeout(pipelineRefreshTimeoutRef.current);
+    }
+
+    pipelineRefreshTimeoutRef.current = window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ["crm", "deals", "open-table"] }).finally(() => {
+        refreshedDealIdsRef.current.clear();
+      });
+      pipelineRefreshTimeoutRef.current = null;
+    }, 2000);
+  }
+
+  function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
+    setHydratedDeals((current) => updateDealNextFollowUp(current, dealId, nextFollowUpAt));
+    queryClient.setQueryData<OpenDealsFirstPageResult>(["crm", "deals", "open-table"], (current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        items: updateDealNextFollowUp(current.items, dealId, nextFollowUpAt) ?? current.items,
+      };
+    });
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
@@ -580,30 +643,13 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
               </thead>
               <tbody>
                 {filteredDeals.map((deal) => (
-                  <tr key={deal.id} className="border-t border-[#E2E8F0]">
-                    <td className="px-4 py-3">
-                      <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-[#0F172A] hover:text-[#B45309]">
-                        {deal.name}
-                      </Link>
-                      <p className="text-xs text-[#64748B]">Last activity: {formatDate(deal.lastActivityAt)}</p>
-                    </td>
-                    <td className="px-4 py-3 text-[#334155]">{stageNameById.get(deal.stageId) ?? "Unknown stage"}</td>
-                    <td className="px-4 py-3 text-right text-[#334155]">{formatMoney(deal.amount)}</td>
-                    <td className="px-4 py-3 text-[#334155]">{formatDate(deal.expectedCloseOn)}</td>
-                    <td className="px-4 py-3 text-[#334155]">{formatDate(deal.nextFollowUpAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button asChild variant="outline" size="sm">
-                          <Link
-                            to={`/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
-                          >
-                            <FileText className="mr-1 h-4 w-4" />
-                            New Quote
-                          </Link>
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+                  <PipelineDealTableRow
+                    key={deal.id}
+                    deal={deal}
+                    stageName={stageNameById.get(deal.stageId) ?? "Unknown stage"}
+                    onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+                    onSchedulePipelineRefresh={schedulePipelineRefresh}
+                  />
                 ))}
               </tbody>
             </table>
@@ -638,33 +684,12 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
                     )}
 
                     {column.deals.map((deal) => (
-                      <article key={deal.id} className="rounded-lg border border-[#E2E8F0] bg-white p-3 shadow-sm">
-                        <Link
-                          to={`/crm/deals/${deal.id}`}
-                          className="text-sm font-semibold text-[#0F172A] hover:text-[#B45309]"
-                        >
-                          {deal.name}
-                        </Link>
-                        <p className="mt-1 text-xs text-[#475569]">
-                          {formatMoney(deal.amount)} • Follow-up {formatDate(deal.nextFollowUpAt)}
-                        </p>
-                        <div className="mt-2">
-                          <CrmDealSignalBadges deal={deal} />
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
-                            <Link to={`/crm/deals/${deal.id}`}>Open</Link>
-                          </Button>
-                          <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
-                            <Link
-                              to={`/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
-                            >
-                              <FileText className="mr-1 h-3.5 w-3.5" />
-                              Quote
-                            </Link>
-                          </Button>
-                        </div>
-                      </article>
+                      <PipelineDealCard
+                        key={deal.id}
+                        deal={deal}
+                        onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+                        onSchedulePipelineRefresh={schedulePipelineRefresh}
+                      />
                     ))}
                   </div>
                 </section>
@@ -683,6 +708,248 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-xs uppercase tracking-wide text-[#64748B]">{label}</p>
       <p className="mt-1 text-lg font-semibold text-[#0F172A]">{value}</p>
     </div>
+  );
+}
+
+function FollowUpQuickActions({
+  isPending,
+  errorMessage,
+  compact = false,
+  onSetFollowUp,
+}: {
+  isPending: boolean;
+  errorMessage: string | null;
+  compact?: boolean;
+  onSetFollowUp: (daysAhead: number) => void;
+}) {
+  const options = [
+    { daysAhead: 1, label: "Tomorrow" },
+    { daysAhead: 3, label: "3 Days" },
+    { daysAhead: 7, label: "1 Week" },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <div className={`flex flex-wrap items-center gap-2 ${compact ? "justify-start" : ""}`}>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-[#64748B]">Set follow-up</span>
+        {options.map((option) => (
+          <Button
+            key={option.daysAhead}
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-[44px] px-3 text-xs"
+            disabled={isPending}
+            onClick={() => onSetFollowUp(option.daysAhead)}
+          >
+            {isPending ? "Saving..." : option.label}
+          </Button>
+        ))}
+      </div>
+      {errorMessage && (
+        <p className="text-xs text-[#B91C1C]" role="status" aria-live="polite">
+          {errorMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function PipelineDealTableRow({
+  deal,
+  stageName,
+  onCommitPipelineFollowUp,
+  onSchedulePipelineRefresh,
+}: {
+  deal: CrmRepSafeDeal;
+  stageName: string;
+  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
+  onSchedulePipelineRefresh: (dealId: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
+  const [isPending, setIsPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayFollowUpAt(deal.nextFollowUpAt);
+    setErrorMessage(null);
+  }, [deal.id, deal.nextFollowUpAt]);
+
+  const effectiveDeal = useMemo(
+    () => ({ ...deal, nextFollowUpAt: displayFollowUpAt }),
+    [deal, displayFollowUpAt]
+  );
+
+  async function handleSetFollowUp(daysAhead: number): Promise<void> {
+    const nextFollowUpAt = getFutureFollowUpIso(daysAhead);
+    const previousFollowUpAt = displayFollowUpAt;
+    const previousDetailDeal = queryClient.getQueryData<CrmRepSafeDeal | null>(["crm", "deal", deal.id]) ?? null;
+
+    setErrorMessage(null);
+    setIsPending(true);
+    setDisplayFollowUpAt(nextFollowUpAt);
+    queryClient.setQueryData(["crm", "deal", deal.id], (current: CrmRepSafeDeal | null | undefined) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        nextFollowUpAt,
+      };
+    });
+
+    try {
+      const updatedDeal = await patchCrmDeal(deal.id, { nextFollowUpAt });
+      setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
+      onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
+      queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);
+      onSchedulePipelineRefresh(deal.id);
+    } catch (error) {
+      setDisplayFollowUpAt(previousFollowUpAt);
+      if (previousDetailDeal) {
+        queryClient.setQueryData(["crm", "deal", deal.id], previousDetailDeal);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["crm", "deal", deal.id] });
+      }
+      setErrorMessage(error instanceof Error ? error.message : "Could not update follow-up. Try again.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <tr className="border-t border-[#E2E8F0]">
+      <td className="px-4 py-3">
+        <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-[#0F172A] hover:text-[#B45309]">
+          {effectiveDeal.name}
+        </Link>
+        <p className="text-xs text-[#64748B]">Last activity: {formatDate(effectiveDeal.lastActivityAt)}</p>
+      </td>
+      <td className="px-4 py-3 text-[#334155]">{stageName}</td>
+      <td className="px-4 py-3 text-right text-[#334155]">{formatMoney(effectiveDeal.amount)}</td>
+      <td className="px-4 py-3 text-[#334155]">{formatDate(effectiveDeal.expectedCloseOn)}</td>
+      <td className="px-4 py-3 text-[#334155]">{formatDate(effectiveDeal.nextFollowUpAt)}</td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to={`/quote?crm_deal_id=${effectiveDeal.id}${effectiveDeal.primaryContactId ? `&crm_contact_id=${effectiveDeal.primaryContactId}` : ""}`}
+            >
+              <FileText className="mr-1 h-4 w-4" />
+              New Quote
+            </Link>
+          </Button>
+          <FollowUpQuickActions
+            isPending={isPending}
+            errorMessage={errorMessage}
+            onSetFollowUp={(daysAhead) => void handleSetFollowUp(daysAhead)}
+          />
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function PipelineDealCard({
+  deal,
+  onCommitPipelineFollowUp,
+  onSchedulePipelineRefresh,
+}: {
+  deal: CrmRepSafeDeal;
+  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
+  onSchedulePipelineRefresh: (dealId: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
+  const [isPending, setIsPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDisplayFollowUpAt(deal.nextFollowUpAt);
+    setErrorMessage(null);
+  }, [deal.id, deal.nextFollowUpAt]);
+
+  const effectiveDeal = useMemo(
+    () => ({ ...deal, nextFollowUpAt: displayFollowUpAt }),
+    [deal, displayFollowUpAt]
+  );
+
+  async function handleSetFollowUp(daysAhead: number): Promise<void> {
+    const nextFollowUpAt = getFutureFollowUpIso(daysAhead);
+    const previousFollowUpAt = displayFollowUpAt;
+    const previousDetailDeal = queryClient.getQueryData<CrmRepSafeDeal | null>(["crm", "deal", deal.id]) ?? null;
+
+    setErrorMessage(null);
+    setIsPending(true);
+    setDisplayFollowUpAt(nextFollowUpAt);
+    queryClient.setQueryData(["crm", "deal", deal.id], (current: CrmRepSafeDeal | null | undefined) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        nextFollowUpAt,
+      };
+    });
+
+    try {
+      const updatedDeal = await patchCrmDeal(deal.id, { nextFollowUpAt });
+      setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
+      onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
+      queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);
+      onSchedulePipelineRefresh(deal.id);
+    } catch (error) {
+      setDisplayFollowUpAt(previousFollowUpAt);
+      if (previousDetailDeal) {
+        queryClient.setQueryData(["crm", "deal", deal.id], previousDetailDeal);
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ["crm", "deal", deal.id] });
+      }
+      setErrorMessage(error instanceof Error ? error.message : "Could not update follow-up. Try again.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <article className="rounded-lg border border-[#E2E8F0] bg-white p-3 shadow-sm">
+      <Link
+        to={`/crm/deals/${deal.id}`}
+        className="text-sm font-semibold text-[#0F172A] hover:text-[#B45309]"
+      >
+        {effectiveDeal.name}
+      </Link>
+      <p className="mt-1 text-xs text-[#475569]">
+        {formatMoney(effectiveDeal.amount)} • Follow-up {formatDate(effectiveDeal.nextFollowUpAt)}
+      </p>
+      <div className="mt-2">
+        <CrmDealSignalBadges deal={effectiveDeal} />
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
+          <Link to={`/crm/deals/${deal.id}`}>Open</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
+          <Link
+            to={`/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
+          >
+            <FileText className="mr-1 h-3.5 w-3.5" />
+            Quote
+          </Link>
+        </Button>
+      </div>
+      <div className="mt-2">
+        <FollowUpQuickActions
+          isPending={isPending}
+          errorMessage={errorMessage}
+          compact
+          onSetFollowUp={(daysAhead) => void handleSetFollowUp(daysAhead)}
+        />
+      </div>
+    </article>
   );
 }
 
