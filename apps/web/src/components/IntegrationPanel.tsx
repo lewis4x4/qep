@@ -1909,7 +1909,7 @@ export function IntegrationPanel({
             {isHubSpot ? (
               <>
                 <p className="mb-3 text-xs text-[#64748B]">
-                  Real import runs and credential audit events only. Current handoff state stays in the cutover summary above.
+                  Real import runs plus recorded integration and cutover audit events only. Current handoff state stays in the cutover summary above.
                 </p>
                 {hubspotHistoryItems.length > 0 ? (
                 <div className="space-y-2">
@@ -1964,7 +1964,7 @@ export function IntegrationPanel({
               ) : (
                 <div className="flex items-center gap-2 text-[#64748B]">
                   <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  <p className="text-xs">No execution history yet — imports and credential events will appear here.</p>
+                  <p className="text-xs">No execution history yet — imports and audit events will appear here.</p>
                 </div>
               )}
               </>
