@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { crmSupabase } from "@/features/crm/lib/crm-supabase";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -67,6 +68,12 @@ interface CaptureResult {
   hubspot_task_id: string | null;
 }
 
+interface DealLookupOption {
+  id: string;
+  name: string;
+  companyName: string | null;
+}
+
 type RecentCapture = Pick<
   Database["public"]["Tables"]["voice_captures"]["Row"],
   "id" | "created_at" | "duration_seconds" | "sync_status" | "hubspot_deal_id" | "transcript"
@@ -89,6 +96,12 @@ const PROCESSING_STEPS = [
   { label: "Done", icon: Sparkles },
 ];
 
+function looksLikeCrmRecordId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
   const { toast } = useToast();
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -96,6 +109,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
   const [hubspotDealId, setHubspotDealId] = useState("");
+  const [dealLookupQuery, setDealLookupQuery] = useState("");
+  const [dealLookupOptions, setDealLookupOptions] = useState<DealLookupOption[]>([]);
+  const [dealLookupLoading, setDealLookupLoading] = useState(false);
+  const [selectedDealLabel, setSelectedDealLabel] = useState<string | null>(null);
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [editedTranscript, setEditedTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,6 +143,68 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   useEffect(() => {
     void loadRecentCaptures();
   }, []);
+
+  useEffect(() => {
+    const query = dealLookupQuery.trim();
+    if (query.length < 2 || looksLikeCrmRecordId(query)) {
+      setDealLookupOptions([]);
+      setDealLookupLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDealLookupLoading(true);
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const { data, error } = await crmSupabase
+          .from("crm_deals_rep_safe")
+          .select("id, name, company_id")
+          .ilike("name", `%${query}%`)
+          .is("deleted_at", null)
+          .limit(6);
+
+        if (cancelled) return;
+        if (error || !data) {
+          setDealLookupOptions([]);
+          setDealLookupLoading(false);
+          return;
+        }
+
+        const companyIds = Array.from(
+          new Set(data.map((row) => row.company_id).filter((value): value is string => Boolean(value))),
+        );
+
+        let companyNameById = new Map<string, string>();
+        if (companyIds.length > 0) {
+          const companyResult = await crmSupabase
+            .from("crm_companies")
+            .select("id, name")
+            .in("id", companyIds)
+            .is("deleted_at", null);
+
+          if (!cancelled && !companyResult.error && companyResult.data) {
+            companyNameById = new Map(companyResult.data.map((row) => [row.id, row.name]));
+          }
+        }
+
+        if (cancelled) return;
+        setDealLookupOptions(
+          data.map((row) => ({
+            id: row.id,
+            name: row.name,
+            companyName: row.company_id ? companyNameById.get(row.company_id) ?? null : null,
+          })),
+        );
+        setDealLookupLoading(false);
+      })();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [dealLookupQuery]);
 
   async function loadRecentCaptures(): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -239,6 +318,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setAudioBlob(null);
     setAudioBlobUrl(null);
     setElapsedSeconds(0);
+    setHubspotDealId("");
+    setDealLookupQuery("");
+    setDealLookupOptions([]);
+    setSelectedDealLabel(null);
     setResult(null);
     setEditedTranscript("");
     setErrorMessage(null);
@@ -371,6 +454,121 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setTimeout(() => setTranscriptCopied(false), 2000);
   }
 
+  function handleDealLookupChange(value: string): void {
+    setDealLookupQuery(value);
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setHubspotDealId("");
+      setSelectedDealLabel(null);
+      setDealLookupOptions([]);
+      return;
+    }
+
+    if (looksLikeCrmRecordId(trimmed)) {
+      setHubspotDealId(trimmed);
+      setSelectedDealLabel(null);
+      setDealLookupOptions([]);
+      return;
+    }
+
+    setHubspotDealId("");
+    setSelectedDealLabel(null);
+  }
+
+  function handleDealOptionSelect(option: DealLookupOption): void {
+    const label = option.companyName ? `${option.name} · ${option.companyName}` : option.name;
+    setHubspotDealId(option.id);
+    setSelectedDealLabel(label);
+    setDealLookupQuery(label);
+    setDealLookupOptions([]);
+  }
+
+  function clearDealSelection(): void {
+    setHubspotDealId("");
+    setSelectedDealLabel(null);
+    setDealLookupQuery("");
+    setDealLookupOptions([]);
+  }
+
+  function renderDealLookupField(inputId: string): React.JSX.Element {
+    const trimmedQuery = dealLookupQuery.trim();
+    const isDirectId = looksLikeCrmRecordId(trimmedQuery);
+    const showOptions = trimmedQuery.length >= 2 && !isDirectId;
+    const selectedSummary = selectedDealLabel
+      ? { title: selectedDealLabel, detail: hubspotDealId }
+      : hubspotDealId
+      ? { title: "Linked by pasted CRM deal ID", detail: hubspotDealId }
+      : null;
+
+    return (
+      <div className="space-y-2">
+        <Input
+          id={inputId}
+          type="text"
+          value={dealLookupQuery}
+          onChange={(e) => handleDealLookupChange(e.target.value)}
+          placeholder="Search by deal name or paste CRM deal ID"
+          autoComplete="off"
+        />
+
+        {selectedSummary && (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{selectedSummary.title}</p>
+              <p className="truncate text-xs text-muted-foreground">{selectedSummary.detail}</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={clearDealSelection}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
+
+        {showOptions && (
+          <div className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+            {dealLookupLoading ? (
+              <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching deals...
+              </div>
+            ) : dealLookupOptions.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-muted-foreground">
+                No matching deals found. Paste a CRM deal ID if you already have one.
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {dealLookupOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleDealOptionSelect(option)}
+                    className="flex w-full flex-col items-start gap-1 px-3 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="text-sm font-medium text-foreground">{option.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.companyName ?? "No linked company"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          Search by deal name or paste the CRM deal ID directly. If you leave it blank, we&apos;ll
+          still try to match the note by customer details.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider>
       <div className="flex-1 overflow-y-auto">
@@ -392,7 +590,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── IDLE ──────────────────────────────────────────────────────────── */}
           {recordingState === "idle" && (
             <div className="space-y-6">
-              {/* CRM Deal ID input */}
+              {/* CRM Deal input */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="deal-id">CRM Deal ID</Label>
@@ -408,20 +606,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side={isMobile ? "bottom" : "right"} align={isMobile ? "start" : "center"} className="max-w-[200px]">
-                      Paste the CRM deal ID to link this note directly. Don't know it? We'll match by customer name automatically.
+                      Search by deal name or paste the CRM deal ID to link this note directly.
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <Input
-                  id="deal-id"
-                  type="text"
-                  value={hubspotDealId}
-                  onChange={(e) => setHubspotDealId(e.target.value)}
-                  placeholder="Paste the CRM deal ID if you know it"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Don't know it? We'll try to match by customer name automatically.
-                </p>
+                {renderDealLookupField("deal-id")}
               </div>
 
               {/* Record button */}
@@ -502,16 +691,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 </CardContent>
               </Card>
 
-              {/* Deal ID (editable) */}
+              {/* Deal link (editable) */}
               <div className="space-y-1.5">
                 <Label htmlFor="deal-id-review">CRM Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                <Input
-                  id="deal-id-review"
-                  type="text"
-                  value={hubspotDealId}
-                  onChange={(e) => setHubspotDealId(e.target.value)}
-                  placeholder="Paste CRM deal ID if known"
-                />
+                {renderDealLookupField("deal-id-review")}
               </div>
 
               <div className="flex gap-3">
