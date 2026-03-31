@@ -11,6 +11,7 @@ import {
   Truck,
   Wrench,
 } from "lucide-react";
+import qepLoginYardHero from "@/assets/qep-login-yard-hero.svg";
 import { supabase } from "../lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -128,68 +129,28 @@ export function LoginPage({ authError }: LoginPageProps) {
 
                   <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[#0B1322]">
                     <div className="relative aspect-[4/3] bg-[linear-gradient(180deg,_#304563_0%,_#1A2D45_34%,_#182232_62%,_#0B1322_100%)]">
+                      <img
+                        src={qepLoginYardHero}
+                        alt="Stylized QEP dealership yard with equipment, service building, and machines ready for the day."
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(11,19,34,0.08)_0%,_rgba(11,19,34,0.2)_48%,_rgba(10,18,30,0.72)_100%)]" />
                       <div className="absolute inset-x-0 bottom-0 h-[44%] bg-[linear-gradient(180deg,_rgba(19,31,49,0)_0%,_rgba(9,15,24,0.25)_32%,_#0A121E_100%)]" />
-                      <svg
-                        viewBox="0 0 900 620"
-                        aria-hidden="true"
-                        className="absolute inset-0 h-full w-full"
-                        preserveAspectRatio="xMidYMid slice"
-                      >
-                        <defs>
-                          <linearGradient id="qep-login-sky" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#566B88" />
-                            <stop offset="45%" stopColor="#2C425E" />
-                            <stop offset="100%" stopColor="#162235" />
-                          </linearGradient>
-                          <linearGradient id="qep-login-ground" x1="0" x2="1" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#172334" />
-                            <stop offset="100%" stopColor="#0A121E" />
-                          </linearGradient>
-                          <linearGradient id="qep-login-road" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#293647" />
-                            <stop offset="100%" stopColor="#111A27" />
-                          </linearGradient>
-                        </defs>
-                        <rect width="900" height="620" fill="url(#qep-login-sky)" />
-                        <circle cx="702" cy="122" r="84" fill="rgba(232,119,34,0.24)" />
-                        <path d="M0 250C112 220 216 240 328 230C455 218 530 160 640 168C752 176 826 224 900 206V620H0Z" fill="#223550" opacity="0.78" />
-                        <path d="M0 302C108 278 192 288 310 276C424 264 514 224 618 240C724 256 816 314 900 296V620H0Z" fill="#1A2A42" opacity="0.88" />
-                        <path d="M0 358C134 338 206 350 294 340C406 328 486 292 586 302C682 312 782 360 900 344V620H0Z" fill="url(#qep-login-ground)" />
-                        <path d="M378 620L442 332H504L566 620Z" fill="url(#qep-login-road)" />
-                        <path d="M426 412L450 412L448 620L430 620Z" fill="#F4B52E" opacity="0.85" />
-                        <path d="M498 412L522 412L520 620L502 620Z" fill="#F4B52E" opacity="0.85" />
-                        <rect x="78" y="338" width="188" height="108" rx="16" fill="#122034" stroke="rgba(255,255,255,0.12)" />
-                        <rect x="102" y="294" width="138" height="56" rx="10" fill="#1E334D" />
-                        <rect x="116" y="310" width="44" height="18" rx="4" fill="#D6DEE9" opacity="0.82" />
-                        <rect x="168" y="310" width="58" height="18" rx="4" fill="#D6DEE9" opacity="0.82" />
-                        <rect x="116" y="364" width="34" height="34" rx="6" fill="#E87722" />
-                        <rect x="162" y="364" width="34" height="34" rx="6" fill="#E87722" />
-                        <rect x="208" y="364" width="34" height="34" rx="6" fill="#E87722" />
-                        <rect x="610" y="356" width="112" height="42" rx="14" fill="#E87722" />
-                        <rect x="668" y="324" width="62" height="38" rx="10" fill="#324861" />
-                        <circle cx="636" cy="412" r="18" fill="#0F172A" />
-                        <circle cx="694" cy="412" r="18" fill="#0F172A" />
-                        <rect x="556" y="388" width="88" height="28" rx="8" fill="#C6D0DD" opacity="0.88" />
-                        <rect x="318" y="352" width="90" height="34" rx="12" fill="#304763" />
-                        <rect x="332" y="330" width="44" height="28" rx="8" fill="#E87722" />
-                        <circle cx="338" cy="392" r="15" fill="#0F172A" />
-                        <circle cx="388" cy="392" r="15" fill="#0F172A" />
-                        <g fill="#D6DEE9" opacity="0.84">
-                          <circle cx="285" cy="428" r="6" />
-                          <circle cx="303" cy="450" r="6" />
-                          <circle cx="322" cy="430" r="6" />
-                          <circle cx="586" cy="444" r="6" />
-                          <circle cx="604" cy="426" r="6" />
-                          <circle cx="620" cy="446" r="6" />
-                        </g>
-                      </svg>
-
                       <div className="absolute left-4 top-4 rounded-2xl border border-white/10 bg-[#0A121E]/78 px-3 py-2 backdrop-blur">
                         <div className="flex items-center gap-2 text-xs text-slate-200">
                           <MapPin className="h-3.5 w-3.5 text-[#E87722]" />
                           Lake City operations
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400">Sales, parts, rentals, and service on one screen.</p>
+                      </div>
+
+                      <div className="absolute bottom-4 left-4 max-w-[60%] rounded-2xl border border-white/10 bg-[#0A121E]/82 px-3 py-2 backdrop-blur">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+                          Sales to service, one system
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-white">
+                          A dealership login screen should look like the business it runs.
+                        </p>
                       </div>
 
                       <div className="absolute bottom-4 right-4 rounded-2xl border border-white/10 bg-[#0A121E]/82 px-3 py-2 backdrop-blur">
