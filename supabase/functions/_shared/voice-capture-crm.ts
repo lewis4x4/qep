@@ -701,6 +701,8 @@ async function ensureNoteActivity(
       body: buildVoiceCaptureNoteBody(transcript, extracted),
       occurred_at: occurredAtIso,
       deal_id: target.dealId,
+      contact_id: target.contactId,
+      company_id: target.companyId,
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",
@@ -769,6 +771,8 @@ async function ensureTaskActivity(
       body: taskBody,
       occurred_at: occurredAtIso,
       deal_id: target.dealId,
+      contact_id: target.contactId,
+      company_id: target.companyId,
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",

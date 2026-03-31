@@ -1,10 +1,16 @@
-import { CalendarClock, Mail, MessageSquareText, Phone, StickyNote, ClipboardList } from "lucide-react";
+import { CalendarClock, ClipboardList, Mail, MessageSquareText, Mic, Phone, StickyNote } from "lucide-react";
 import { useState, type ComponentType } from "react";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import type { CrmActivityItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
+import {
+  isVoiceCaptureActivity,
+  readVoiceCaptureTimelineSignals,
+  voiceCaptureSignalsHaveContent,
+} from "../lib/voice-capture-activity-metadata";
+import { CrmVoiceCaptureSignalBlock } from "./CrmVoiceCaptureSignalBlock";
 
 interface CrmActivityTimelineProps {
   activities: CrmActivityItem[];
@@ -442,6 +448,10 @@ export function CrmActivityTimeline({
         const attemptedLabel = delivery ? deliveryAttemptLabel(delivery) : null;
         const isPendingDelivery = pendingDeliveryId === activity.id;
         const lockMessage = !canUpdateBody ? bodyLockMessage(delivery) : null;
+        const voiceSignals = readVoiceCaptureTimelineSignals(activity);
+        const voiceCapture = isVoiceCaptureActivity(activity);
+        const showVoiceSignalBlock = Boolean(voiceSignals && voiceCaptureSignalsHaveContent(voiceSignals));
+        const showVoiceCaptureFallback = voiceCapture && !showVoiceSignalBlock;
 
         return (
           <article
@@ -453,9 +463,18 @@ export function CrmActivityTimeline({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold", typeMeta.badge)}>
+                <span
+                  className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold", typeMeta.badge)}
+                  title={voiceCapture ? "Synced from field note" : undefined}
+                >
                   <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   {typeMeta.label}
+                  {voiceCapture && (
+                    <>
+                      <Mic className="h-3 w-3 shrink-0 opacity-80" aria-hidden="true" />
+                      <span className="sr-only">Field note</span>
+                    </>
+                  )}
                 </span>
                 {showEntityLabel && <span className="text-xs text-[#475569]">{entityLabel}</span>}
               </div>
@@ -477,6 +496,14 @@ export function CrmActivityTimeline({
                 )}
               </div>
             </div>
+
+            {showVoiceSignalBlock && voiceSignals && <CrmVoiceCaptureSignalBlock signals={voiceSignals} />}
+            {showVoiceCaptureFallback && (
+              <p className="mt-2 flex items-center gap-2 text-xs text-[#64748B]">
+                <Mic className="h-3.5 w-3.5 shrink-0 text-[#E87722]" aria-hidden="true" />
+                Field note activity — open the Field Note screen for the full extracted summary, or re-sync from a new capture.
+              </p>
+            )}
 
             {isEditingOccurredAt && (
               <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">

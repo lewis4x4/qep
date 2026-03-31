@@ -5,6 +5,7 @@ import {
   resolveCallerContext,
   type UserRole,
 } from "../_shared/dge-auth.ts";
+import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -617,25 +618,14 @@ Deno.serve(async (req) => {
 
     const callerClient = createCallerClient(caller.authHeader);
 
-    const { data: allowed, error: rlError } = await adminClient.rpc("check_rate_limit", {
-      p_user_id: caller.userId,
-      p_endpoint: "chat",
-      p_max_requests: 10,
-      p_window_seconds: 60,
+    const rateOk = await enforceRateLimitWithFallback(adminClient, {
+      userId: caller.userId,
+      endpoint: "chat",
+      maxRequests: 10,
+      windowSeconds: 60,
     });
 
-    if (rlError) {
-      console.error(`[chat:${traceId}] rate limit check failed`, rlError);
-      return jsonError(
-        traceId,
-        503,
-        "RATE_LIMIT_CHECK_FAILED",
-        "Chat is temporarily unavailable. Please try again shortly.",
-        { ...ch, "Retry-After": "10" },
-      );
-    }
-
-    if (allowed !== true) {
+    if (!rateOk) {
       return jsonError(
         traceId,
         429,
