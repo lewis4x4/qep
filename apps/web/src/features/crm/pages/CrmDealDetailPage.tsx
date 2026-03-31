@@ -192,7 +192,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
       <div className="flex items-center justify-between gap-3">
         <Link
           to="/crm/deals"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A]"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to deals
@@ -227,15 +227,15 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
         </div>
       </div>
 
-      {dealQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+      {dealQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
       {dealQuery.isError && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Unable to load this deal right now. Please refresh and try again.</p>
+          <p className="text-sm text-muted-foreground">Unable to load this deal right now. Please refresh and try again.</p>
         </Card>
       )}
       {!dealQuery.isLoading && !dealQuery.isError && !dealQuery.data && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">This deal isn&apos;t available or you don&apos;t have access.</p>
+          <p className="text-sm text-muted-foreground">This deal isn&apos;t available or you don&apos;t have access.</p>
         </Card>
       )}
 
@@ -246,24 +246,24 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           <Card className="p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[#475569]">Amount</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Amount</dt>
+                <dd className="font-medium text-foreground">
                   {typeof dealQuery.data.amount === "number" ? `$${dealQuery.data.amount.toLocaleString()}` : "Amount TBD"}
                 </dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Closed at</dt>
-                <dd className="font-medium text-[#0F172A]">{formatTimestamp(dealQuery.data.closedAt)}</dd>
+                <dt className="text-muted-foreground">Closed at</dt>
+                <dd className="font-medium text-foreground">{formatTimestamp(dealQuery.data.closedAt)}</dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Primary contact</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Primary contact</dt>
+                <dd className="font-medium text-foreground">
                   {contactQuery.data ? <Link to={`/crm/contacts/${contactQuery.data.id}`}>{contactQuery.data.firstName} {contactQuery.data.lastName}</Link> : "Not linked"}
                 </dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Company</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Company</dt>
+                <dd className="font-medium text-foreground">
                   {companyQuery.data ? <Link to={`/crm/companies/${companyQuery.data.id}`}>{companyQuery.data.name}</Link> : "Not linked"}
                 </dd>
               </div>
@@ -291,17 +291,17 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-[#334155]" />
-              <h2 className="text-base font-semibold text-[#0F172A]">Activity Timeline</h2>
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
             </div>
             {activitiesQuery.isLoading ? (
               <div className="space-y-3" role="status" aria-label="Loading activities">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-24 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                  <div key={index} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
                 ))}
               </div>
             ) : activitiesQuery.isError ? (
-              <Card className="p-4 text-sm text-[#334155]">Couldn&apos;t load activities for this deal.</Card>
+              <Card className="p-4 text-sm text-muted-foreground">Couldn&apos;t load activities for this deal.</Card>
             ) : (
               <CrmActivityTimeline
                 activities={activitiesQuery.data ?? []}

@@ -140,19 +140,19 @@ export function CrmDuplicatesPage({ userRole }: CrmDuplicatesPageProps) {
       {duplicatesQuery.isLoading && (
         <div className="space-y-3" role="status" aria-label="Loading duplicate candidates">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-40 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+            <div key={index} className="h-40 animate-pulse rounded-xl border border-border bg-card" />
           ))}
         </div>
       )}
 
       {duplicatesQuery.isError && (
-        <Card className="p-6 text-center text-sm text-[#334155]">
+        <Card className="p-6 text-center text-sm text-muted-foreground">
           Couldn&apos;t load duplicate candidates. Refresh and try again.
         </Card>
       )}
 
       {!duplicatesQuery.isLoading && !duplicatesQuery.isError && candidates.length === 0 && (
-        <Card className="p-6 text-center text-sm text-[#334155]">
+        <Card className="p-6 text-center text-sm text-muted-foreground">
           No open duplicate candidates.
         </Card>
       )}
@@ -162,9 +162,9 @@ export function CrmDuplicatesPage({ userRole }: CrmDuplicatesPageProps) {
           {candidates.map((candidate) => (
             <Card key={candidate.id} className="p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-[#334155]">
-                  <AlertTriangle className="h-4 w-4 text-[#B45309]" />
-                  Rule: <span className="font-semibold text-[#0F172A]">{candidate.ruleId}</span>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-primary" />
+                  Rule: <span className="font-semibold text-foreground">{candidate.ruleId}</span>
                   <span className="rounded bg-secondary px-2 py-0.5 text-xs">Score {candidate.score.toFixed(2)}</span>
                 </div>
                 <div className="flex gap-2">

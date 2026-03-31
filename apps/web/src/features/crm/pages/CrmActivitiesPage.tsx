@@ -96,7 +96,7 @@ function isOverdueTask(activity: CrmActivityFeedItem): boolean {
 }
 
 function taskTone(task: CrmTaskMetadata | null): string {
-  if (!task) return "text-[#475569]";
+  if (!task) return "text-muted-foreground";
   if (task.status === "completed") return "text-emerald-700";
   if (task.dueAt && new Date(task.dueAt).getTime() < Date.now()) return "text-rose-700";
   return "text-amber-700";
@@ -1160,21 +1160,21 @@ export function CrmActivitiesPage() {
       <Card className="space-y-4 p-3 sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#475569]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder="Search activity body, rep, contact, company, or deal"
-              className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white pl-9 pr-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="h-11 w-full rounded-md border border-input bg-card pl-9 pr-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-[#64748B]" aria-hidden="true" />
+            <Filter className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <select
               value={typeFilter}
               onChange={(event) => setTypeFilter(event.target.value as CrmActivityType | "all")}
-              className="h-11 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="h-11 rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
               aria-label="Filter by activity type"
             >
               <option value="all">All types</option>
@@ -1203,8 +1203,8 @@ export function CrmActivitiesPage() {
               className={cn(
                 "min-h-[44px] rounded-full px-4",
                 feedFilter === item.key
-                  ? "border-[#E87722] bg-[#FFF1E6] text-[#B45309] hover:bg-[#FFF1E6]"
-                  : "border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  ? "border-primary bg-primary/15 text-primary hover:bg-primary/15"
+                  : "border-input bg-card text-muted-foreground hover:bg-muted/30"
               )}
             >
               {item.label}
@@ -1212,8 +1212,8 @@ export function CrmActivitiesPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#475569]">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-muted/30 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Queue actions
           </p>
           <Button
@@ -1221,17 +1221,17 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredSendableSelected ? clearFilteredEligible : selectFilteredEligible}
             disabled={filteredSendableActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#FFF7ED] hover:text-[#B45309]"
+            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
           >
             {allFilteredSendableSelected ? "Clear eligible" : `Select eligible (${filteredSendableActivityIds.length})`}
           </Button>
-          <span className="text-xs text-[#64748B]">
+          <span className="text-xs text-muted-foreground">
             Uses the current filters to queue manual and failed email/SMS items for review.
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#475569]">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-muted/30 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Task queue
           </p>
           <Button
@@ -1239,7 +1239,7 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredOpenTasksSelected ? clearFilteredOpenTasks : selectFilteredOpenTasks}
             disabled={filteredOpenTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#FFFBEB] hover:text-[#92400E]"
+            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-200"
           >
             {allFilteredOpenTasksSelected
               ? "Clear open tasks"
@@ -1250,24 +1250,24 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredCompletedTasksSelected ? clearFilteredCompletedTasks : selectFilteredCompletedTasks}
             disabled={filteredCompletedTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F0FDF4] hover:text-[#166534]"
+            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-emerald-500/10 hover:text-green-700 dark:text-green-400"
           >
             {allFilteredCompletedTasksSelected
               ? "Clear completed tasks"
               : `Select completed tasks (${filteredCompletedTaskActivityIds.length})`}
           </Button>
-          <span className="text-xs text-[#64748B]">
+          <span className="text-xs text-muted-foreground">
             Use the same inbox filters to batch-close overdue work or reopen completed follow-through.
           </span>
         </div>
 
         {selectedActivities.length > 0 && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-2xl border border-amber-300/60 bg-primary/10 dark:border-amber-500/35 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-[#9A3412]">
+              <p className="text-sm font-semibold text-primary">
                 {selectedActivities.length} inbox item{selectedActivities.length === 1 ? "" : "s"} selected
               </p>
-              <p className="mt-1 text-xs text-[#9A3412]">
+              <p className="mt-1 text-xs text-primary">
                 {selectedCommunications.length > 0 && (
                   <>
                     {selectedCommunications.length} communication{selectedCommunications.length === 1 ? "" : "s"} ready for review
@@ -1289,7 +1289,7 @@ export function CrmActivitiesPage() {
                 type="button"
                 variant="outline"
                 onClick={() => setSelectedActivityIds([])}
-                className="border-[#FDBA74] bg-white text-[#9A3412] hover:bg-[#FFF1E6]"
+                className="border-orange-300/50 bg-card text-primary hover:bg-primary/15"
               >
                 Clear
               </Button>
@@ -1299,7 +1299,7 @@ export function CrmActivitiesPage() {
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("completed")}
                   disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
-                  className="border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
+                  className="border-amber-300/50 bg-card text-amber-800 dark:text-amber-200 hover:bg-amber-500/10"
                 >
                   {bulkTaskAction === "completed" ? "Updating..." : `Complete tasks (${selectedOpenTasks.length})`}
                 </Button>
@@ -1310,7 +1310,7 @@ export function CrmActivitiesPage() {
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("open")}
                   disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
-                  className="border-[#BBF7D0] bg-white text-[#166534] hover:bg-[#F0FDF4]"
+                  className="border-emerald-400/40 bg-card text-green-700 dark:text-green-400 hover:bg-emerald-500/10"
                 >
                   {bulkTaskAction === "open" ? "Updating..." : `Reopen tasks (${selectedCompletedTasks.length})`}
                 </Button>
@@ -1319,7 +1319,7 @@ export function CrmActivitiesPage() {
                 <Button
                   type="button"
                   onClick={() => setReviewOpen(true)}
-                  className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
+                  className="bg-primary text-white hover:bg-primary/90"
                 >
                   <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
                   Review selected
@@ -1330,11 +1330,11 @@ export function CrmActivitiesPage() {
         )}
 
         {operationIssues.length > 0 && (
-          <Card className="rounded-2xl border border-[#FECACA] bg-[#FFF1F2] p-4 shadow-none">
+          <Card className="rounded-2xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-[#9F1239]">Queue issues still need attention</p>
-                <p className="mt-1 text-xs text-[#9F1239]">
+                <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">Queue issues still need attention</p>
+                <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
                   Failed inbox actions stay listed here so operators know exactly what still needs follow-through.
                 </p>
               </div>
@@ -1343,7 +1343,7 @@ export function CrmActivitiesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setOperationIssues([])}
-                className="border-[#FBCFE8] bg-white text-[#9F1239] hover:bg-[#FFF1F2]"
+                className="border-pink-300/50 bg-card text-rose-700 dark:text-rose-300 hover:bg-rose-500/10"
               >
                 Clear list
               </Button>
@@ -1352,10 +1352,10 @@ export function CrmActivitiesPage() {
               {operationIssues.map((issue) => (
                 <div
                   key={`${issue.activityId}-${issue.action}`}
-                  className="rounded-xl border border-[#FBCFE8] bg-white px-3 py-2"
+                  className="rounded-xl border border-pink-300/50 bg-card px-3 py-2"
                 >
-                  <p className="text-sm font-semibold text-[#881337]">{issue.label}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[#BE123C]">
+                  <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">{issue.label}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-rose-700 dark:text-rose-300">
                     {issue.action === "send"
                       ? "Send issue"
                       : issue.action === "save"
@@ -1364,7 +1364,7 @@ export function CrmActivitiesPage() {
                       ? "Archive issue"
                       : "Task issue"}
                   </p>
-                  <p className="mt-2 text-sm text-[#4C0519]">{issue.message}</p>
+                  <p className="mt-2 text-sm text-rose-950 dark:text-rose-100">{issue.message}</p>
                 </div>
               ))}
             </div>
@@ -1375,20 +1375,20 @@ export function CrmActivitiesPage() {
       {activitiesQuery.isLoading && (
         <div className="space-y-3" role="status" aria-label="Loading activities">
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+            <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
           ))}
         </div>
       )}
 
       {activitiesQuery.isError && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Failed to load the CRM activity feed. Refresh and try again.</p>
+          <p className="text-sm text-muted-foreground">Failed to load the CRM activity feed. Refresh and try again.</p>
         </Card>
       )}
 
       {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length === 0 && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">No activity matches the current filters.</p>
+          <p className="text-sm text-muted-foreground">No activity matches the current filters.</p>
         </Card>
       )}
 
@@ -1407,17 +1407,17 @@ export function CrmActivitiesPage() {
             const deliveryPending = isPending(pendingDeliveryIds, activity.id);
 
             return (
-              <Card key={activity.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+              <Card key={activity.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {(canSendFromInbox(activity) || canSelectTaskFromInbox(activity)) && (
-                        <label className="inline-flex items-center gap-2 rounded-full border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-medium text-[#334155]">
+                        <label className="inline-flex items-center gap-2 rounded-full border border-input bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">
                           <input
                             type="checkbox"
                             checked={selectedActivityIds.includes(activity.id)}
                             onChange={() => toggleSelected(activity.id)}
-                            className="h-4 w-4 rounded border-[#CBD5E1] text-[#E87722] focus:ring-[#E87722]"
+                            className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
                             aria-label={`Select ${meta.label} activity`}
                           />
                           Select
@@ -1427,7 +1427,7 @@ export function CrmActivitiesPage() {
                         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                         {meta.label}
                       </span>
-                      <span className="text-xs font-medium text-[#64748B]">
+                      <span className="text-xs font-medium text-muted-foreground">
                         {formatTimeLabel(activity.occurredAt)}
                       </span>
                       {delivery && typeof delivery.status === "string" && (
@@ -1446,11 +1446,11 @@ export function CrmActivitiesPage() {
                       )}
                     </div>
 
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
                       {activity.body || "No activity details logged."}
                     </p>
 
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[#475569]">
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
                       <span>Logged by {activity.actorName || "Unknown user"}</span>
                       {activity.contactName && <span>Contact: {activity.contactName}</span>}
                       {activity.companyName && <span>Company: {activity.companyName}</span>}
@@ -1458,10 +1458,10 @@ export function CrmActivitiesPage() {
                     </div>
 
                     {task && isEditingTask && (
-                      <div className="mt-4 rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-3">
+                      <div className="mt-4 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-3">
                         <label
                           htmlFor={`crm-inbox-task-due-${activity.id}`}
-                          className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[#92400E]"
+                          className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200"
                         >
                           Task due time
                         </label>
@@ -1476,10 +1476,10 @@ export function CrmActivitiesPage() {
                             }
                           }}
                           disabled={taskPending}
-                          className="h-11 w-full rounded-md border border-[#FCD34D] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                          className="h-11 w-full rounded-md border border-amber-400/50 bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
                         />
                         {taskDueError && (
-                          <p className="mt-2 text-xs font-medium text-[#B91C1C]">{taskDueError}</p>
+                          <p className="mt-2 text-xs font-medium text-destructive">{taskDueError}</p>
                         )}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
@@ -1487,7 +1487,7 @@ export function CrmActivitiesPage() {
                             size="sm"
                             onClick={() => void saveTask(activity, task)}
                             disabled={taskPending}
-                            className="min-h-[40px] bg-[#E87722] text-white hover:bg-[#D46B1B]"
+                            className="min-h-[40px] bg-primary text-white hover:bg-primary/90"
                           >
                             {taskPending ? "Saving..." : "Save due time"}
                           </Button>
@@ -1497,7 +1497,7 @@ export function CrmActivitiesPage() {
                             variant="outline"
                             onClick={() => void clearTaskDueAt(activity, task)}
                             disabled={taskPending}
-                            className="min-h-[40px] border-[#FCD34D] bg-white text-[#92400E] hover:bg-[#FFF7ED]"
+                            className="min-h-[40px] border-amber-400/50 bg-card text-amber-800 dark:text-amber-200 hover:bg-primary/10"
                           >
                             Clear due time
                           </Button>
@@ -1507,7 +1507,7 @@ export function CrmActivitiesPage() {
                             variant="outline"
                             onClick={stopTaskEditor}
                             disabled={taskPending}
-                            className="min-h-[40px] border-[#D6E0EA] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                            className="min-h-[40px] border-border bg-card text-muted-foreground hover:bg-muted/30"
                           >
                             Cancel
                           </Button>
@@ -1529,8 +1529,8 @@ export function CrmActivitiesPage() {
                             className={cn(
                               "min-h-[44px] rounded-full px-4",
                               task.status === "completed"
-                                ? "border-[#BBF7D0] bg-white text-[#166534] hover:bg-[#F0FDF4]"
-                                : "border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
+                                ? "border-emerald-400/40 bg-card text-green-700 dark:text-green-400 hover:bg-emerald-500/10"
+                                : "border-amber-300/50 bg-card text-amber-800 dark:text-amber-200 hover:bg-amber-500/10"
                             )}
                           >
                             {taskPending
@@ -1545,7 +1545,7 @@ export function CrmActivitiesPage() {
                             variant="outline"
                             onClick={() => (isEditingTask ? stopTaskEditor() : beginTaskEditor(activity, task))}
                             disabled={taskPending}
-                            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white px-4 text-[#334155] hover:bg-[#F8FAFC]"
+                            className="min-h-[44px] rounded-full border-input bg-card px-4 text-muted-foreground hover:bg-muted/30"
                           >
                             {isEditingTask ? "Close due editor" : "Edit due time"}
                           </Button>
@@ -1558,7 +1558,7 @@ export function CrmActivitiesPage() {
                           variant="outline"
                           onClick={() => void archiveActivity(activity)}
                           disabled={archivePending || taskPending}
-                          className="min-h-[44px] rounded-full border-[#FBCFE8] bg-white px-4 text-[#9D174D] hover:bg-[#FDF2F8]"
+                          className="min-h-[44px] rounded-full border-pink-300/50 bg-card px-4 text-rose-700 dark:text-rose-300 hover:bg-pink-500/10"
                         >
                           <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
                           {archivePending ? "Archiving..." : "Archive"}
@@ -1570,7 +1570,7 @@ export function CrmActivitiesPage() {
                           size="sm"
                           onClick={() => void sendSingleActivity(activity)}
                           disabled={deliveryPending || taskPending}
-                          className="min-h-[44px] rounded-full bg-[#E87722] px-4 text-white hover:bg-[#D46B1B]"
+                          className="min-h-[44px] rounded-full bg-primary px-4 text-white hover:bg-primary/90"
                         >
                           <Send className="mr-2 h-4 w-4" aria-hidden="true" />
                           {deliveryPending ? "Sending..." : deliveryActionLabel(delivery)}
@@ -1578,7 +1578,7 @@ export function CrmActivitiesPage() {
                       )}
                       <Link
                         to={targetHref}
-                        className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D6E0EA] bg-[#F8FAFC] px-4 py-2 text-sm font-medium text-[#0F172A] transition hover:border-[#E87722]/50 hover:text-[#B45309]"
+                        className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-muted/30 px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 hover:text-primary"
                       >
                         {targetLabel}
                         <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
@@ -1592,11 +1592,11 @@ export function CrmActivitiesPage() {
         </div>
       )}
 
-      <Card className="rounded-2xl border border-[#D6E0EA] bg-[#F8FAFC] p-4">
+      <Card className="rounded-2xl border border-border bg-muted/30 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold text-[#0F172A]">Next communication-hub closeout</p>
-              <p className="mt-1 text-sm text-[#475569]">
+            <p className="text-sm font-semibold text-foreground">Next communication-hub closeout</p>
+              <p className="mt-1 text-sm text-muted-foreground">
               After bulk task handling lands, the next remaining Sprint 4 gap is deeper send governance and template execution control on top of the inbox workflow.
               </p>
           </div>
@@ -1618,18 +1618,18 @@ export function CrmActivitiesPage() {
 
           <div className="space-y-3">
             {selectedCommunications.length === 0 && (
-              <Card className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
+              <Card className="rounded-xl border border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
                 No communications selected.
               </Card>
             )}
 
             {selectedCommunications.length > 0 && (
-              <Card className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 shadow-sm">
+              <Card className="rounded-xl border border-border bg-muted/30 p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-[#0F172A]">Send governance</p>
-                      <p className="mt-1 text-xs text-[#475569]">
+                      <p className="text-sm font-semibold text-foreground">Send governance</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Apply the right language, save edits, then explicitly approve each message before bulk send.
                       </p>
                     </div>
@@ -1648,23 +1648,23 @@ export function CrmActivitiesPage() {
                     </div>
                   </div>
                   {nonApprovableSelectedCommunications.length > 0 && (
-                    <p className="text-xs text-[#B45309]">
+                    <p className="text-xs text-primary">
                       {nonApprovableSelectedCommunications.length} selected communication{nonApprovableSelectedCommunications.length === 1 ? "" : "s"} still need message copy before approval.
                     </p>
                   )}
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Selected</p>
-                      <p className="mt-2 text-2xl font-bold text-[#0F172A]">{selectedCommunications.length}</p>
+                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Selected</p>
+                      <p className="mt-2 text-2xl font-bold text-foreground">{selectedCommunications.length}</p>
                     </Card>
-                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Approved</p>
+                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Approved</p>
                       <p className="mt-2 text-2xl font-bold text-emerald-700">{approvedSelectedCommunications.length}</p>
                     </Card>
-                    <Card className="rounded-xl border border-[#E2E8F0] bg-white p-3 shadow-none">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748B]">Still reviewing</p>
-                      <p className="mt-2 text-2xl font-bold text-[#B45309]">
+                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Still reviewing</p>
+                      <p className="mt-2 text-2xl font-bold text-primary">
                         {Math.max(selectedCommunications.length - approvedSelectedCommunications.length, 0)}
                       </p>
                     </Card>
@@ -1675,13 +1675,13 @@ export function CrmActivitiesPage() {
                       {reviewTemplateGroups.map((group) => (
                         <div
                           key={group.activityType}
-                          className="flex flex-col gap-2 rounded-xl border border-[#E2E8F0] bg-white p-3 sm:flex-row sm:items-center"
+                          className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-[#0F172A]">
+                            <p className="text-sm font-semibold text-foreground">
                               {group.activityType === "sms" ? "SMS" : "Email"} batch
                             </p>
-                            <p className="mt-1 text-xs text-[#64748B]">
+                            <p className="mt-1 text-xs text-muted-foreground">
                               Apply one saved template across {group.count} selected {group.activityType === "sms" ? "texts" : "emails"} before approval.
                             </p>
                           </div>
@@ -1693,7 +1693,7 @@ export function CrmActivitiesPage() {
                                   ...current,
                                   [group.activityType]: event.target.value,
                                 }))}
-                              className="h-10 min-w-[220px] rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                              className="h-10 min-w-[220px] rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                               aria-label={`Apply ${group.activityType} template`}
                             >
                               <option value="">Choose a template</option>
@@ -1734,16 +1734,16 @@ export function CrmActivitiesPage() {
                 body: readDraftBody(activity),
               });
               return (
-                <Card key={activity.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
+                <Card key={activity.id} className="rounded-xl border border-border p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", deliveryTone(delivery))}>
                           {deliveryActionLabel(delivery)}
                         </span>
-                        <span className="text-xs text-[#64748B]">{formatTimeLabel(activity.occurredAt)}</span>
+                        <span className="text-xs text-muted-foreground">{formatTimeLabel(activity.occurredAt)}</span>
                         {dirty && (
-                          <span className="inline-flex rounded-full bg-[#FFF1E6] px-2.5 py-1 text-xs font-semibold text-[#B45309]">
+                          <span className="inline-flex rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
                             Unsaved edits
                           </span>
                         )}
@@ -1772,7 +1772,7 @@ export function CrmActivitiesPage() {
                               }
                             }
                             rows={6}
-                            className="min-h-[144px] w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                            className="min-h-[144px] w-full rounded-xl border border-input bg-card px-3 py-2 text-sm leading-6 text-foreground shadow-sm focus:border-primary focus:outline-none"
                             aria-label={`Edit ${activity.activityType} body`}
                           />
                           <div className="flex flex-wrap items-center gap-2">
@@ -1798,18 +1798,18 @@ export function CrmActivitiesPage() {
                               size="sm"
                               onClick={() => void handleSaveDraft(activity)}
                               disabled={!dirty || bodyPending}
-                              className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                              className="bg-foreground text-background hover:bg-foreground/90"
                             >
                               {bodyPending ? "Saving..." : "Save draft"}
                             </Button>
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
                           {activity.body || "No message body available."}
                         </p>
                       )}
-                      <p className="mt-3 text-xs text-[#475569]">
+                      <p className="mt-3 text-xs text-muted-foreground">
                         {activity.contactName || activity.companyName || activity.dealName || "Unlinked record"}
                       </p>
                     </div>
@@ -1832,14 +1832,14 @@ export function CrmActivitiesPage() {
                       disabled={!approvable}
                       className={cn(
                         approved
-                          ? "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                          : "bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                          ? "border-emerald-200 bg-card text-emerald-700 hover:bg-emerald-50"
+                          : "bg-foreground text-background hover:bg-foreground/90"
                       )}
                     >
                       {approved ? "Clear approval" : "Approve to send"}
                     </Button>
                     {!approvable && (
-                      <p className="text-xs text-[#B45309]">
+                      <p className="text-xs text-primary">
                         Add message copy before approval.
                       </p>
                     )}
@@ -1852,7 +1852,7 @@ export function CrmActivitiesPage() {
                         size="sm"
                         onClick={() => void archiveActivity(activity)}
                         disabled={archivePending}
-                        className="border-[#FBCFE8] bg-white text-[#9D174D] hover:bg-[#FDF2F8]"
+                        className="border-pink-300/50 bg-card text-rose-700 dark:text-rose-300 hover:bg-pink-500/10"
                       >
                         <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
                         {archivePending ? "Archiving..." : "Archive instead"}
@@ -1865,16 +1865,16 @@ export function CrmActivitiesPage() {
           </div>
 
           {selectedCommunicationIssues.length > 0 && (
-            <Card className="mt-4 rounded-xl border border-[#FECACA] bg-[#FFF1F2] p-4 shadow-none">
-              <p className="text-sm font-semibold text-[#9F1239]">Selected message issues</p>
-              <p className="mt-1 text-xs text-[#9F1239]">
+            <Card className="mt-4 rounded-xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
+              <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">Selected message issues</p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
                 These items failed during review, delivery, or archive handling. Fix them here before sending again.
               </p>
               <div className="mt-3 space-y-2">
                 {selectedCommunicationIssues.map((issue) => (
-                  <div key={`${issue.activityId}-${issue.action}`} className="rounded-xl border border-[#FBCFE8] bg-white px-3 py-2">
-                    <p className="text-sm font-semibold text-[#881337]">{issue.label}</p>
-                    <p className="mt-1 text-sm text-[#4C0519]">{issue.message}</p>
+                  <div key={`${issue.activityId}-${issue.action}`} className="rounded-xl border border-pink-300/50 bg-card px-3 py-2">
+                    <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">{issue.label}</p>
+                    <p className="mt-1 text-sm text-rose-950 dark:text-rose-100">{issue.message}</p>
                   </div>
                 ))}
               </div>
@@ -1895,7 +1895,7 @@ export function CrmActivitiesPage() {
                 bulkSendPending ||
                 selectedCommunicationHasPendingWork
               }
-              className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
+              className="bg-primary text-white hover:bg-primary/90"
             >
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
               {bulkSendPending

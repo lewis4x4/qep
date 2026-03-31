@@ -236,7 +236,7 @@ export function CrmActivityComposer({
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="crm-activity-type" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+            <label htmlFor="crm-activity-type" className="mb-1.5 block text-sm font-medium text-foreground">
               Type
             </label>
             <select
@@ -246,7 +246,7 @@ export function CrmActivityComposer({
                 setActivityType(event.target.value as CrmActivityType);
                 setSelectedTemplateId(null);
               }}
-              className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               {ACTIVITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -256,20 +256,20 @@ export function CrmActivityComposer({
             </select>
           </div>
 
-          <div className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <div className="rounded-md border border-border bg-muted/30 p-3">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#475569]">Quick starts</p>
-                <p className="text-xs text-[#475569]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quick starts</p>
+                <p className="text-xs text-muted-foreground">
                   One tap loads dealership-ready language you can tweak before saving.
                 </p>
               </div>
-              <p className="text-xs text-[#64748B]">
+              <p className="text-xs text-muted-foreground">
                 {isTaskType ? "Applies a task note and due default." : "Applies a clean starting draft."}
               </p>
             </div>
             {templatesQuery.isError && (
-              <p className="mt-2 text-xs text-[#B45309]">
+              <p className="mt-2 text-xs text-primary">
                 Workspace templates could not be loaded. Built-in quick starts are still available.
               </p>
             )}
@@ -281,42 +281,42 @@ export function CrmActivityComposer({
                   onClick={() => applyTemplate(template.id)}
                   className={`rounded-lg border px-3 py-2 text-left transition ${
                     selectedTemplateId === template.id
-                      ? "border-[#E87722] bg-[#FFF7ED]"
-                      : "border-[#CBD5E1] bg-white hover:border-[#E87722]/60 hover:bg-[#FFFBF5]"
+                      ? "border-primary bg-primary/10"
+                      : "border-input bg-card hover:border-primary/60 hover:bg-primary/5"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium text-[#0F172A]">{template.label}</div>
+                    <div className="text-sm font-medium text-foreground">{template.label}</div>
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
                         template.source === "workspace"
-                          ? "bg-[#E0F2FE] text-[#075985]"
-                          : "bg-[#E2E8F0] text-[#334155]"
+                          ? "bg-sky-500/15 text-sky-900 dark:text-sky-100"
+                          : "bg-muted text-muted-foreground"
                       )}
                     >
                       {template.source === "workspace" ? "Workspace" : "Built in"}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-[#475569]">{template.description}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{template.description}</p>
                 </button>
               ))}
             </div>
           </div>
 
           {isCommunicationType && (
-            <div className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+            <div className="rounded-md border border-border bg-muted/30 p-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#475569]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Delivery Mode
                 </p>
                 {deliveryAvailability.loading ? (
-                  <span className="text-xs text-[#64748B]">Checking…</span>
+                  <span className="text-xs text-muted-foreground">Checking…</span>
                 ) : (
                   <DataSourceBadge state={deliveryAvailability.connected ? "Live" : "Manual"} />
                 )}
               </div>
-              <p className="mt-2 text-xs text-[#475569]">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {deliveryAvailability.loading
                   ? "Checking integration status for this communication type."
                   : deliveryAvailability.connected
@@ -324,12 +324,12 @@ export function CrmActivityComposer({
                   : `Integration is not connected. Save Activity records a manual ${activityType.toUpperCase()} log.`}
               </p>
               {!deliveryAvailability.loading && deliveryAvailability.connected && (
-                <label className="mt-3 flex items-center gap-2 text-xs text-[#334155]">
+                <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={sendNow}
                     onChange={(event) => setSendNow(event.target.checked)}
-                    className="h-4 w-4 rounded border-[#CBD5E1] text-[#E87722] focus:ring-[#E87722]"
+                    className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
                   />
                   Send now via {activityType === "email" ? "SendGrid" : "Twilio"}
                 </label>
@@ -338,9 +338,9 @@ export function CrmActivityComposer({
           )}
 
           {isTaskType && (
-            <div className="grid gap-4 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3 sm:grid-cols-2">
+            <div className="grid gap-4 rounded-md border border-border bg-muted/30 p-3 sm:grid-cols-2">
               <div>
-                <label htmlFor="crm-task-due-at" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                <label htmlFor="crm-task-due-at" className="mb-1.5 block text-sm font-medium text-foreground">
                   Due date
                 </label>
                 <input
@@ -352,11 +352,11 @@ export function CrmActivityComposer({
                     setTaskError(null);
                     setSelectedTemplateId(null);
                   }}
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                  className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="crm-task-status" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                <label htmlFor="crm-task-status" className="mb-1.5 block text-sm font-medium text-foreground">
                   Task status
                 </label>
                 <select
@@ -366,7 +366,7 @@ export function CrmActivityComposer({
                     setTaskStatus(event.target.value as CrmTaskStatus);
                     setSelectedTemplateId(null);
                   }}
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                  className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                 >
                   <option value="open">Open task</option>
                   <option value="completed">Completed</option>
@@ -375,10 +375,10 @@ export function CrmActivityComposer({
             </div>
           )}
 
-          {taskError && <p className="text-sm text-[#B91C1C]">{taskError}</p>}
+          {taskError && <p className="text-sm text-destructive">{taskError}</p>}
 
           <div>
-            <label htmlFor="crm-activity-body" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+            <label htmlFor="crm-activity-body" className="mb-1.5 block text-sm font-medium text-foreground">
               Notes
             </label>
             <textarea
@@ -394,7 +394,7 @@ export function CrmActivityComposer({
                   ? "Message summary, intent, and follow-up commitment"
                   : "Key points, next steps, and customer intent"
               }
-              className="w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm leading-6 text-foreground shadow-sm focus:border-primary focus:outline-none"
             />
           </div>
 

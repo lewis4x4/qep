@@ -39,7 +39,7 @@ export function CrmPipelineManagerMetrics({ deals }: CrmPipelineManagerMetricsPr
 
   return (
     <section
-      className="grid grid-cols-2 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4 sm:grid-cols-5"
+      className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-5"
       aria-label="Manager pipeline metrics"
     >
       <Metric label="Open Deals" value={String(summary.totalDeals)} />
@@ -54,8 +54,8 @@ export function CrmPipelineManagerMetrics({ deals }: CrmPipelineManagerMetricsPr
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-[#64748B]">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-[#0F172A]">{value}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
     </div>
   );
 }

@@ -199,7 +199,7 @@ export function CrmCompanyEditorSheet({
             </div>
           </div>
 
-          {formError ? <p className="text-sm text-[#B91C1C]">{formError}</p> : null}
+          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             {company ? (

@@ -239,7 +239,7 @@ export function CrmDealEditorSheet({
               id="crm-deal-stage"
               value={stageId}
               onChange={(event) => setStageId(event.target.value)}
-              className="flex h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
               required
             >
               <option value="">Select a stage</option>
@@ -262,7 +262,7 @@ export function CrmDealEditorSheet({
             <select
               value={primaryContactId}
               onChange={(event) => setPrimaryContactId(event.target.value)}
-              className="flex h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               <option value="">No primary contact</option>
               {contactOptions.map((contactOption) => (
@@ -284,7 +284,7 @@ export function CrmDealEditorSheet({
             <select
               value={companyId}
               onChange={(event) => setCompanyId(event.target.value)}
-              className="flex h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               <option value="">No company linked</option>
               {companyOptions.map((companyOption) => (
@@ -327,7 +327,7 @@ export function CrmDealEditorSheet({
             />
           </div>
 
-          {formError ? <p className="text-sm text-[#B91C1C]">{formError}</p> : null}
+          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             {deal ? (

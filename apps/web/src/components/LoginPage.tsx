@@ -83,13 +83,13 @@ export function LoginPage({ authError }: LoginPageProps) {
           <section className="order-2 relative overflow-hidden border-t border-white/10 bg-[linear-gradient(160deg,_rgba(27,42,61,0.98)_0%,_rgba(19,31,49,0.96)_55%,_rgba(12,21,34,0.98)_100%)] p-6 sm:p-8 lg:order-1 lg:border-r lg:border-t-0 lg:border-white/10 lg:p-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(232,119,34,0.22),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(96,165,250,0.14),_transparent_28%)]" />
             <div className="absolute inset-y-0 right-0 w-px bg-white/10" />
-            <div className="absolute left-8 top-8 h-24 w-24 rounded-full bg-[#E87722]/12 blur-3xl" />
+            <div className="absolute left-8 top-8 h-24 w-24 rounded-full bg-primary/12 blur-3xl" />
             <div className="absolute bottom-12 right-8 h-32 w-32 rounded-full bg-[#38A169]/12 blur-3xl" />
 
             <div className="relative z-10 flex h-full flex-col justify-between gap-8">
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E87722] shadow-[0_18px_40px_rgba(232,119,34,0.28)]">
+                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-[0_18px_40px_rgba(232,119,34,0.28)]">
                     <HardHat className="h-7 w-7 text-white" />
                   </div>
                   <div>
@@ -99,7 +99,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                 </div>
 
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-200">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#E87722]" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
                   Built for the yard, counter, and close
                 </div>
 
@@ -138,7 +138,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                       <div className="absolute inset-x-0 bottom-0 h-[44%] bg-[linear-gradient(180deg,_rgba(19,31,49,0)_0%,_rgba(9,15,24,0.25)_32%,_#0A121E_100%)]" />
                       <div className="absolute left-4 top-4 rounded-2xl border border-white/10 bg-[#0A121E]/78 px-3 py-2 backdrop-blur">
                         <div className="flex items-center gap-2 text-xs text-slate-200">
-                          <MapPin className="h-3.5 w-3.5 text-[#E87722]" />
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
                           Lake City operations
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400">Sales, parts, rentals, and service on one screen.</p>
@@ -173,7 +173,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                         className="border-white/10 bg-white/[0.04] text-white shadow-none backdrop-blur"
                       >
                         <CardContent className="flex items-start gap-3 p-4">
-                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/8 text-[#E87722]">
+                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/8 text-primary">
                             <Icon className="h-5 w-5" />
                           </div>
                           <div>
@@ -193,7 +193,7 @@ export function LoginPage({ authError }: LoginPageProps) {
             <div className="mx-auto w-full max-w-md">
               <div className="mb-8 space-y-4">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                  <HardHat className="h-3.5 w-3.5 text-[#E87722]" />
+                  <HardHat className="h-3.5 w-3.5 text-primary" />
                   Secure operator access
                 </div>
 
@@ -221,10 +221,10 @@ export function LoginPage({ authError }: LoginPageProps) {
                 <CardContent className="p-5 sm:p-6">
                   <Tabs defaultValue="password">
                     <TabsList className="mb-6 grid w-full grid-cols-2 border border-white/10 bg-[#0A121E] p-1">
-                      <TabsTrigger value="password" className="data-[state=active]:bg-[#E87722] data-[state=active]:text-white">
+                      <TabsTrigger value="password" className="data-[state=active]:bg-primary data-[state=active]:text-white">
                         Password
                       </TabsTrigger>
-                      <TabsTrigger value="magic" className="data-[state=active]:bg-[#E87722] data-[state=active]:text-white">
+                      <TabsTrigger value="magic" className="data-[state=active]:bg-primary data-[state=active]:text-white">
                         Magic link
                       </TabsTrigger>
                     </TabsList>
@@ -272,7 +272,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                         <Button
                           id="login-button"
                           type="submit"
-                          className="h-12 w-full gap-2 bg-[#E87722] text-base font-semibold text-white hover:bg-[#D96C1D]"
+                          className="h-12 w-full gap-2 bg-primary text-base font-semibold text-white hover:bg-[#D96C1D]"
                           disabled={loading}
                         >
                           {loading ? "Signing In..." : "Sign In"}
@@ -308,7 +308,7 @@ export function LoginPage({ authError }: LoginPageProps) {
 
                         <Button
                           type="submit"
-                          className="h-12 w-full gap-2 bg-[#E87722] text-base font-semibold text-white hover:bg-[#D96C1D]"
+                          className="h-12 w-full gap-2 bg-primary text-base font-semibold text-white hover:bg-[#D96C1D]"
                           disabled={loading}
                         >
                           {loading ? "Sending..." : "Send Magic Link"}
@@ -326,7 +326,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                   Role-based access enforced
                 </div>
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-[#E87722]" />
+                  <MapPin className="h-4 w-4 text-primary" />
                   Built for the field and the front office
                 </div>
               </div>

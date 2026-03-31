@@ -166,7 +166,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
       <div className="flex items-center justify-between gap-3">
         <Link
           to="/crm/contacts"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A]"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to contacts
@@ -188,17 +188,17 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         </div>
       </div>
 
-      {contactQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+      {contactQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
 
       {contactQuery.isError && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Unable to load this contact. Refresh the page or go back to your contacts list.</p>
+          <p className="text-sm text-muted-foreground">Unable to load this contact. Refresh the page or go back to your contacts list.</p>
         </Card>
       )}
 
       {!contactQuery.isLoading && !contactQuery.isError && !contactQuery.data && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">This contact isn&apos;t available. It may have been removed or you might not have access.</p>
+          <p className="text-sm text-muted-foreground">This contact isn&apos;t available. It may have been removed or you might not have access.</p>
         </Card>
       )}
 
@@ -211,10 +211,10 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
 
           {contactQuery.data.dgeCustomerProfileId && (
             <Card className="p-3">
-              <p className="inline-flex items-center gap-2 text-sm text-[#334155]">
-                <Link2 className="h-4 w-4 text-[#B45309]" />
+              <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Link2 className="h-4 w-4 text-primary" />
                 <Link
-                  className="font-medium text-[#0F172A] underline-offset-2 hover:underline"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
                   to={`/chat?customer_profile_id=${contactQuery.data.dgeCustomerProfileId}&contact_id=${contactId}${
                     contactQuery.data.primaryCompanyId ? `&company_id=${contactQuery.data.primaryCompanyId}` : ""
                   }`}
@@ -242,20 +242,20 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
           <Card className="p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[#475569]">Email</dt>
-                <dd className="font-medium text-[#0F172A]">{contactQuery.data.email || "Not provided"}</dd>
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="font-medium text-foreground">{contactQuery.data.email || "Not provided"}</dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Phone</dt>
-                <dd className="font-medium text-[#0F172A]">{contactQuery.data.phone || "Not provided"}</dd>
+                <dt className="text-muted-foreground">Phone</dt>
+                <dd className="font-medium text-foreground">{contactQuery.data.phone || "Not provided"}</dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Primary company</dt>
-                <dd className="font-medium text-[#0F172A]">{companyQuery.data?.name || "Not linked"}</dd>
+                <dt className="text-muted-foreground">Primary company</dt>
+                <dd className="font-medium text-foreground">{companyQuery.data?.name || "Not linked"}</dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Last updated</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Last updated</dt>
+                <dd className="font-medium text-foreground">
                   {new Date(contactQuery.data.updatedAt).toLocaleString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -274,21 +274,21 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
           />
 
           <Card className="p-4 sm:p-5">
-            <h2 className="text-base font-semibold text-[#0F172A]">Open Deals</h2>
-            {dealsQuery.isLoading && <div className="mt-3 h-10 animate-pulse rounded bg-[#F8FAFC]" />}
+            <h2 className="text-base font-semibold text-foreground">Open Deals</h2>
+            {dealsQuery.isLoading && <div className="mt-3 h-10 animate-pulse rounded bg-muted/30" />}
             {!dealsQuery.isLoading && (dealsQuery.data?.length ?? 0) === 0 && (
-              <p className="mt-2 text-sm text-[#475569]">No linked deals yet.</p>
+              <p className="mt-2 text-sm text-muted-foreground">No linked deals yet.</p>
             )}
             {!dealsQuery.isLoading && (dealsQuery.data?.length ?? 0) > 0 && (
               <ul className="mt-3 space-y-2">
                 {dealsQuery.data?.map((deal) => (
-                  <li key={deal.id} className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm">
+                  <li key={deal.id} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <Link to={`/crm/deals/${deal.id}`} className="font-medium text-[#0F172A] hover:text-[#B45309]">
+                      <Link to={`/crm/deals/${deal.id}`} className="font-medium text-foreground hover:text-primary">
                         {deal.name}
                       </Link>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-[#475569]">{deal.amount ? `$${deal.amount.toLocaleString()}` : "Amount TBD"}</span>
+                        <span className="text-xs text-muted-foreground">{deal.amount ? `$${deal.amount.toLocaleString()}` : "Amount TBD"}</span>
                         <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                           <Link to={`/quote?crm_contact_id=${contactId}&crm_deal_id=${deal.id}`}>
                             Quote
@@ -297,7 +297,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                       </div>
                     </div>
                     <CrmDealSignalBadges deal={deal} />
-                    {deal.expectedCloseOn && <p className="mt-1 text-xs text-[#475569]">Target close: {deal.expectedCloseOn}</p>}
+                    {deal.expectedCloseOn && <p className="mt-1 text-xs text-muted-foreground">Target close: {deal.expectedCloseOn}</p>}
                   </li>
                 ))}
               </ul>
@@ -306,18 +306,18 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-[#334155]" />
-              <h2 className="text-base font-semibold text-[#0F172A]">Activity Timeline</h2>
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
             </div>
 
             {activitiesQuery.isLoading ? (
               <div className="space-y-3" role="status" aria-label="Loading activities">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-24 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                  <div key={index} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
                 ))}
               </div>
             ) : activitiesQuery.isError ? (
-              <Card className="p-4 text-sm text-[#334155]">Couldn&apos;t load activities. Try refreshing the page.</Card>
+              <Card className="p-4 text-sm text-muted-foreground">Couldn&apos;t load activities. Try refreshing the page.</Card>
             ) : (
               <CrmActivityTimeline
                 activities={activitiesQuery.data ?? []}

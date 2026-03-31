@@ -48,14 +48,14 @@ export function CrmDealUpdateCard({
     <Card className="space-y-4 p-4 sm:p-5">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="crm-deal-stage" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+          <label htmlFor="crm-deal-stage" className="mb-1.5 block text-sm font-medium text-foreground">
             Stage
           </label>
           <select
             id="crm-deal-stage"
             value={stageId}
             onChange={(event) => setStageId(event.target.value)}
-            className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+            className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
           >
             {visibleStages.map((stage) => (
               <option key={stage.id} value={stage.id}>
@@ -65,7 +65,7 @@ export function CrmDealUpdateCard({
           </select>
         </div>
         <div>
-          <label htmlFor="crm-next-follow-up" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+          <label htmlFor="crm-next-follow-up" className="mb-1.5 block text-sm font-medium text-foreground">
             Next follow-up
           </label>
           <input
@@ -73,7 +73,7 @@ export function CrmDealUpdateCard({
             type="datetime-local"
             value={nextFollowUpInput}
             onChange={(event) => setNextFollowUpInput(event.target.value)}
-            className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+            className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
           />
         </div>
       </div>
@@ -81,7 +81,7 @@ export function CrmDealUpdateCard({
       {isElevatedRole && showClosedLostFields && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
-            <label htmlFor="crm-loss-reason" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+            <label htmlFor="crm-loss-reason" className="mb-1.5 block text-sm font-medium text-foreground">
               Loss reason
             </label>
             <textarea
@@ -90,11 +90,11 @@ export function CrmDealUpdateCard({
               value={lossReason}
               onChange={(event) => setLossReason(event.target.value)}
               placeholder="Capture why this opportunity was lost."
-              className="w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm leading-6 text-foreground shadow-sm focus:border-primary focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="crm-loss-competitor" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+            <label htmlFor="crm-loss-competitor" className="mb-1.5 block text-sm font-medium text-foreground">
               Competitor
             </label>
             <input
@@ -102,14 +102,14 @@ export function CrmDealUpdateCard({
               value={competitor}
               onChange={(event) => setCompetitor(event.target.value)}
               placeholder="e.g. Local Dealer Inc."
-              className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             />
           </div>
         </div>
       )}
 
-      {formError && <p className="text-sm text-[#B91C1C]">{formError}</p>}
-      {saveError && !formError && <p className="text-sm text-[#B91C1C]">Couldn&apos;t save updates. Please retry.</p>}
+      {formError && <p className="text-sm text-destructive">{formError}</p>}
+      {saveError && !formError && <p className="text-sm text-destructive">Couldn&apos;t save updates. Please retry.</p>}
 
       <div className="flex justify-end">
         <Button onClick={onSave} disabled={savePending || stagesLoading}>

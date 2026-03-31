@@ -11,8 +11,8 @@ import {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-[minmax(0,7rem)_1fr] sm:gap-x-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#64748B]">{label}</div>
-      <div className="text-xs leading-snug text-[#0F172A]">{children}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xs leading-snug text-foreground">{children}</div>
     </div>
   );
 }
@@ -45,14 +45,14 @@ export function CrmVoiceCaptureSignalBlock({ signals, className }: CrmVoiceCaptu
   return (
     <div
       className={cn(
-        "mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3",
+        "mt-3 rounded-lg border border-border bg-muted/30 p-3",
         className,
       )}
       role="region"
       aria-label="Field note signal summary"
     >
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#0F172A]">
-        <Mic className="h-3.5 w-3.5 shrink-0 text-[#E87722]" aria-hidden="true" />
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
+        <Mic className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
         Field note signals
       </div>
 
@@ -73,8 +73,8 @@ export function CrmVoiceCaptureSignalBlock({ signals, className }: CrmVoiceCaptu
         {s.recommendedNextAction && <Row label="Suggested action">{s.recommendedNextAction}</Row>}
         {actionItems.length > 0 && (
           <div className="pt-1">
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#64748B]">Action items</div>
-            <ul className="list-inside list-disc space-y-0.5 text-xs leading-snug text-[#0F172A]">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Action items</div>
+            <ul className="list-inside list-disc space-y-0.5 text-xs leading-snug text-foreground">
               {actionItems.map((item, i) => (
                 <li key={`${i}-${item.slice(0, 48)}`}>{item}</li>
               ))}

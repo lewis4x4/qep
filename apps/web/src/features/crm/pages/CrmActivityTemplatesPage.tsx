@@ -166,7 +166,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
       />
 
       <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="space-y-4 rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+        <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex flex-wrap gap-2">
             {ACTIVITY_OPTIONS.map((option) => (
               <Button
@@ -182,8 +182,8 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                 className={cn(
                   "min-h-[44px] rounded-full px-4",
                   selectedType === option.value
-                    ? "border-[#E87722] bg-[#FFF1E6] text-[#B45309] hover:bg-[#FFF1E6]"
-                    : "border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-primary bg-primary/15 text-primary hover:bg-primary/15"
+                    : "border-input bg-card text-muted-foreground hover:bg-muted/30"
                 )}
               >
                 {option.label}
@@ -194,7 +194,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
           {templatesQuery.isLoading && (
             <div className="space-y-3" role="status" aria-label="Loading CRM templates">
               {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
               ))}
             </div>
           )}
@@ -206,7 +206,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
           )}
 
           {!templatesQuery.isLoading && !templatesQuery.isError && filteredTemplates.length === 0 && (
-            <Card className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
+            <Card className="rounded-xl border border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
               No saved templates for {selectedType}. Start by adding the language your team uses most.
             </Card>
           )}
@@ -216,13 +216,13 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
               {filteredTemplates.map((template) => (
                 <Card
                   key={template.id}
-                  className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm"
+                  className="rounded-xl border border-border p-4 shadow-sm"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[#0F172A]">{template.label}</p>
-                      <p className="mt-1 text-xs text-[#64748B]">{template.description || "No description added."}</p>
-                      <p className="mt-3 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-[#334155]">
+                      <p className="text-sm font-semibold text-foreground">{template.label}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{template.description || "No description added."}</p>
+                      <p className="mt-3 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                         {template.body}
                       </p>
                     </div>
@@ -257,13 +257,13 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
           )}
         </Card>
 
-        <Card className="rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+        <Card className="rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[#0F172A]">
+              <h2 className="text-lg font-semibold text-foreground">
                 {editor.id ? "Edit template" : "New template"}
               </h2>
-              <p className="mt-1 text-sm text-[#475569]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Keep rep language tight, clear, and dealership-native.
               </p>
             </div>
@@ -275,7 +275,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
 
           <div className="mt-4 space-y-4">
             <div>
-              <label htmlFor="crm-template-type" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+              <label htmlFor="crm-template-type" className="mb-1.5 block text-sm font-medium text-foreground">
                 Type
               </label>
               <select
@@ -287,7 +287,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                     activityType: event.target.value as CrmActivityType,
                   }))
                 }
-                className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
               >
                 {ACTIVITY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -298,19 +298,19 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
             </div>
 
             <div>
-              <label htmlFor="crm-template-label" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+              <label htmlFor="crm-template-label" className="mb-1.5 block text-sm font-medium text-foreground">
                 Label
               </label>
               <input
                 id="crm-template-label"
                 value={editor.label}
                 onChange={(event) => setEditor((current) => ({ ...current, label: event.target.value }))}
-                className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
               />
             </div>
 
             <div>
-              <label htmlFor="crm-template-description" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+              <label htmlFor="crm-template-description" className="mb-1.5 block text-sm font-medium text-foreground">
                 Description
               </label>
               <input
@@ -319,12 +319,12 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                 onChange={(event) =>
                   setEditor((current) => ({ ...current, description: event.target.value }))
                 }
-                className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
               />
             </div>
 
             <div>
-              <label htmlFor="crm-template-body" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+              <label htmlFor="crm-template-body" className="mb-1.5 block text-sm font-medium text-foreground">
                 Body
               </label>
               <textarea
@@ -332,13 +332,13 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                 value={editor.body}
                 onChange={(event) => setEditor((current) => ({ ...current, body: event.target.value }))}
                 rows={8}
-                className="w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm leading-6 text-foreground shadow-sm focus:border-primary focus:outline-none"
               />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="crm-template-sort-order" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                <label htmlFor="crm-template-sort-order" className="mb-1.5 block text-sm font-medium text-foreground">
                   Sort order
                 </label>
                 <input
@@ -348,13 +348,13 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                   onChange={(event) =>
                     setEditor((current) => ({ ...current, sortOrder: event.target.value }))
                   }
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                  className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                 />
               </div>
 
               {editor.activityType === "task" ? (
                 <div>
-                  <label htmlFor="crm-template-task-due" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                  <label htmlFor="crm-template-task-due" className="mb-1.5 block text-sm font-medium text-foreground">
                     Task due minutes
                   </label>
                   <input
@@ -365,11 +365,11 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                     onChange={(event) =>
                       setEditor((current) => ({ ...current, taskDueMinutes: event.target.value }))
                     }
-                    className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                    className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                   />
                 </div>
               ) : (
-                <div className="rounded-md border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-3 text-sm text-[#64748B]">
+                <div className="rounded-md border border-dashed border-input bg-muted/30 p-3 text-sm text-muted-foreground">
                   Task defaults only apply to task templates.
                 </div>
               )}
@@ -377,7 +377,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
 
             {editor.activityType === "task" && (
               <div>
-                <label htmlFor="crm-template-task-status" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                <label htmlFor="crm-template-task-status" className="mb-1.5 block text-sm font-medium text-foreground">
                   Task status default
                 </label>
                 <select
@@ -389,7 +389,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                       taskStatus: event.target.value as CrmTaskStatus,
                     }))
                   }
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                  className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                 >
                   <option value="open">Open task</option>
                   <option value="completed">Completed</option>
@@ -397,7 +397,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
               </div>
             )}
 
-            {saveError && <p className="text-sm text-[#B91C1C]">{saveError}</p>}
+            {saveError && <p className="text-sm text-destructive">{saveError}</p>}
 
             <div className="flex items-center justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => resetEditor(selectedType)}>

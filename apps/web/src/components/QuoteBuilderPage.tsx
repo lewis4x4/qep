@@ -969,16 +969,16 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
                 </CardContent>
               </Card>
 
-              <Card className="border-[#E2E8F0] bg-[#F8FAFC]">
+              <Card className="border-border bg-muted/30">
                 <CardContent className="pt-4 pb-3 space-y-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-[#475569]">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     CRM Linkage
                   </p>
-                  <p className="text-sm text-[#0F172A]">
+                  <p className="text-sm text-foreground">
                     {crmContextSummary ?? "No CRM entity selected."}
                   </p>
                   {!crmContactId && !crmDealId && (
-                    <p className="text-xs text-[#64748B]">
+                    <p className="text-xs text-muted-foreground">
                       This quote will save as <strong>draft</strong> until it is started from a contact or deal.
                     </p>
                   )}

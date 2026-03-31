@@ -204,11 +204,11 @@ function hubspotRunStatusTone(
 ): string {
   switch (status) {
     case "completed":
-      return "text-[#166534]";
+      return "text-green-700 dark:text-green-400";
     case "completed_with_errors":
-      return "text-[#9A3412]";
+      return "text-primary";
     case "failed":
-      return "text-[#B91C1C]";
+      return "text-destructive";
     case "running":
       return "text-[#1D4ED8]";
     default:
@@ -250,8 +250,8 @@ function hubspotReconciliationTone(errorCount: number): {
 } {
   if (errorCount === 0) {
     return {
-      cardClassName: "border-[#BBF7D0] bg-[#F0FDF4]",
-      labelClassName: "bg-[#DCFCE7] text-[#166534]",
+      cardClassName: "border-emerald-400/40 bg-emerald-500/10",
+      labelClassName: "bg-[#DCFCE7] text-green-700 dark:text-green-400",
       label: "Clear",
       nextAction: "Validation is clean. Use the cutover summary to decide when HubSpot can drop to source-only.",
     };
@@ -259,15 +259,15 @@ function hubspotReconciliationTone(errorCount: number): {
 
   if (errorCount <= 3) {
     return {
-      cardClassName: "border-[#FED7AA] bg-[#FFF7ED]",
-      labelClassName: "bg-[#FFEDD5] text-[#9A3412]",
+      cardClassName: "border-[#FED7AA] bg-primary/10",
+      labelClassName: "bg-[#FFEDD5] text-primary",
       label: "Needs review",
       nextAction: "Resolve the remaining mismatches, rerun validation, and confirm the cutover note reflects the final decision.",
     };
   }
 
   return {
-    cardClassName: "border-[#FECACA] bg-[#FFF1F2]",
+    cardClassName: "border-[#FECACA] bg-rose-500/10",
     labelClassName: "bg-[#FFE4E6] text-[#BE123C]",
     label: "Blocked",
     nextAction: "Keep parallel run active and reconcile the failing rows before marking cutover ready.",
@@ -738,43 +738,43 @@ export function IntegrationPanel({
     {
       label: "Parallel run",
       value: hubspotParallelRunEnabled ? "Still active" : "Ready to disable",
-      tone: hubspotParallelRunEnabled ? "text-[#9A3412]" : "text-[#166534]",
+      tone: hubspotParallelRunEnabled ? "text-primary" : "text-green-700 dark:text-green-400",
     },
     {
       label: "Validation date",
       value: formatHubSpotValidationDate(hubspotValidatedAt),
-      tone: hubspotValidatedAt ? "text-[#166534]" : "text-[#9A3412]",
+      tone: hubspotValidatedAt ? "text-green-700 dark:text-green-400" : "text-primary",
     },
     {
       label: "Run issues",
       value: cutoverBlockingCount === 0 ? "No open reconciliation rows" : `${cutoverBlockingCount.toLocaleString()} rows still need review`,
-      tone: cutoverBlockingCount === 0 ? "text-[#166534]" : "text-[#B91C1C]",
+      tone: cutoverBlockingCount === 0 ? "text-green-700 dark:text-green-400" : "text-destructive",
     },
     {
       label: "Cutover flag",
       value: hubspotCutoverReady ? "Ready for deploy gate" : "Still validating",
-      tone: hubspotCutoverReady ? "text-[#166534]" : "text-[#9A3412]",
+      tone: hubspotCutoverReady ? "text-green-700 dark:text-green-400" : "text-primary",
     },
     {
       label: "Deploy gate",
       value: effectiveDeployGateReady ? "Approved for handoff" : "Pending approval",
-      tone: effectiveDeployGateReady ? "text-[#166534]" : "text-[#9A3412]",
+      tone: effectiveDeployGateReady ? "text-green-700 dark:text-green-400" : "text-primary",
     },
     {
       label: "HubSpot mode",
       value: hubspotSourceOnlyEnabled
         ? `Source-only since ${formatHubSpotValidationDate(hubspotSourceOnlyActivatedAt)}`
         : "Still active for operators",
-      tone: hubspotSourceOnlyEnabled ? "text-[#166534]" : "text-[#9A3412]",
+      tone: hubspotSourceOnlyEnabled ? "text-green-700 dark:text-green-400" : "text-primary",
     },
     {
       label: "Handoff call",
       value: cutoverDecisionLabel,
       tone: effectiveCutoverDecision === "rollback_validation"
-        ? "text-[#B91C1C]"
+        ? "text-destructive"
         : effectiveCutoverDecision === "hold_parallel_run"
-        ? "text-[#9A3412]"
-        : "text-[#166534]",
+        ? "text-primary"
+        : "text-green-700 dark:text-green-400",
     },
   ];
   const cutoverHandoffReady = cutoverPacketReady && effectiveDeployGateReady;
@@ -798,12 +798,12 @@ export function IntegrationPanel({
     ? "Packet ready for deploy gate"
     : "Parallel-run review in progress";
   const cutoverStageTone = hubspotSourceOnlyEnabled
-    ? "bg-[#DCFCE7] text-[#166534]"
+    ? "bg-[#DCFCE7] text-green-700 dark:text-green-400"
     : cutoverHandoffReady
     ? "bg-[#DBEAFE] text-[#1D4ED8]"
     : cutoverPacketReady
-    ? "bg-[#FEF3C7] text-[#92400E]"
-    : "bg-[#FFEDD5] text-[#9A3412]";
+    ? "bg-[#FEF3C7] text-amber-800 dark:text-amber-200"
+    : "bg-[#FFEDD5] text-primary";
   const cutoverMissingItems = [
     hubspotParallelRunEnabled ? "Disable parallel run after final validation." : null,
     hubspotValidatedAt.trim().length === 0 ? "Add a validation date." : null,
@@ -1364,7 +1364,7 @@ export function IntegrationPanel({
               <SheetTitle className="text-[15px] font-semibold text-foreground leading-5">
                 {integration.name}
               </SheetTitle>
-              <SheetDescription className="text-xs text-[#64748B] mt-0.5">
+              <SheetDescription className="text-xs text-muted-foreground mt-0.5">
                 {integration.category}
               </SheetDescription>
             </div>
@@ -1382,7 +1382,7 @@ export function IntegrationPanel({
               className={cn(
                 "rounded-lg border p-4 flex items-start gap-3",
                 integration.status === "connected"
-                  ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                  ? "bg-emerald-500/10 border-emerald-400/40"
                   : integration.status === "error"
                   ? "bg-[#FEF2F2] border-[#FECACA]"
                   : "bg-muted border-border"
@@ -1409,7 +1409,7 @@ export function IntegrationPanel({
                   <p className="text-xs text-[#DC2626] mt-1 break-words">{integration.lastSyncError}</p>
                 )}
                 {integration.status === "pending_credentials" && (
-                  <p className="text-xs text-[#64748B] mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Add your credentials below to connect. It'll run in demo mode until you do.
                   </p>
                 )}
@@ -1473,11 +1473,11 @@ export function IntegrationPanel({
 
           {isHubSpot && (
             <>
-              <Separator className="bg-[#F1F5F9]" />
+              <Separator className="bg-muted/40" />
 
               <section>
                 <h4 className="text-sm font-semibold text-foreground mb-1">Bulk import</h4>
-                <p className="text-xs text-[#64748B] mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   Import HubSpot companies, contacts, deals, and activities into CRM.
                 </p>
                 <Button
@@ -1498,8 +1498,8 @@ export function IntegrationPanel({
                 </Button>
 
                 {resumableHubSpotRuns.length > 0 && (
-                  <div className="mt-3 rounded-lg border border-[#FED7AA] bg-[#FFF7ED] p-3">
-                    <p className="text-xs font-medium text-[#9A3412]">
+                  <div className="mt-3 rounded-lg border border-[#FED7AA] bg-primary/10 p-3">
+                    <p className="text-xs font-medium text-primary">
                       Resume a failed/cancelled run from your account
                     </p>
                     <div className="mt-2 space-y-2">
@@ -1513,7 +1513,7 @@ export function IntegrationPanel({
                             "h-auto min-h-[44px] w-full justify-start px-3 py-2 text-left",
                             selectedResumeRunId === run.id
                               ? "border-qep-orange ring-1 ring-qep-orange"
-                              : "border-[#FED7AA] bg-white",
+                              : "border-[#FED7AA] bg-card",
                           )}
                           onClick={() => setSelectedResumeRunId(run.id)}
                         >
@@ -1522,11 +1522,11 @@ export function IntegrationPanel({
                               <span className={cn("text-xs font-semibold", hubspotRunStatusTone(run.status))}>
                                 {hubspotRunStatusLabel(run.status)}
                               </span>
-                              <span className="text-[10px] text-[#64748B]">
+                              <span className="text-[10px] text-muted-foreground">
                                 {formatHubSpotRunTimestamp(run.startedAt)}
                               </span>
                             </span>
-                            <span className="mt-1 block text-[11px] text-[#64748B]">
+                            <span className="mt-1 block text-[11px] text-muted-foreground">
                               {formatHubSpotRunCount(run)}
                               {run.errorCount > 0
                                 ? ` • ${run.errorCount.toLocaleString()} errors`
@@ -1539,7 +1539,7 @@ export function IntegrationPanel({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="mt-2 w-full border-[#FED7AA] text-[#9A3412] hover:bg-[#FFEDD5] focus-visible:ring-qep-orange"
+                      className="mt-2 w-full border-[#FED7AA] text-primary hover:bg-[#FFEDD5] focus-visible:ring-qep-orange"
                       onClick={() => void runHubSpotImport(selectedResumeRunId ?? undefined)}
                       disabled={isRunningHubSpotImport || !selectedResumeRunId}
                     >
@@ -1551,7 +1551,7 @@ export function IntegrationPanel({
                 <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-xs font-medium text-foreground">Recent import runs</p>
                   {hubSpotImportRuns.length === 0 ? (
-                    <p className="mt-1 text-xs text-[#64748B]">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       No prior runs in this workspace.
                     </p>
                   ) : (
@@ -1565,18 +1565,18 @@ export function IntegrationPanel({
                             <span className={cn("font-semibold", hubspotRunStatusTone(run.status))}>
                               {hubspotRunStatusLabel(run.status)}
                             </span>
-                            <span className="text-[#64748B]">
+                            <span className="text-muted-foreground">
                               {formatHubSpotRunTimestamp(run.completedAt ?? run.startedAt)}
                             </span>
                           </div>
-                          <p className="mt-1 text-[#64748B]">
+                          <p className="mt-1 text-muted-foreground">
                             {formatHubSpotRunCount(run)}
                             {run.errorCount > 0
                               ? ` • ${run.errorCount.toLocaleString()} errors`
                               : ""}
                           </p>
                           {run.errorSummary && (
-                            <p className="mt-1 text-[#B91C1C] line-clamp-2">{run.errorSummary}</p>
+                            <p className="mt-1 text-destructive line-clamp-2">{run.errorSummary}</p>
                           )}
                         </div>
                       ))}
@@ -1588,14 +1588,14 @@ export function IntegrationPanel({
                   <p className="text-xs font-medium text-foreground">Reconciliation details</p>
                   {hubSpotImportRuns.length > 1 && (
                     <div className="mt-2 space-y-1">
-                      <Label htmlFor="hubspot-review-run" className="text-[11px] font-medium text-[#475569]">
+                      <Label htmlFor="hubspot-review-run" className="text-[11px] font-medium text-muted-foreground">
                         Review run
                       </Label>
                       <select
                         id="hubspot-review-run"
                         value={selectedReviewRunId ?? ""}
                         onChange={(event) => setSelectedReviewRunId(event.target.value || null)}
-                        className="h-10 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                        className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                       >
                         {hubSpotImportRuns.map((run) => (
                           <option key={run.id} value={run.id}>
@@ -1606,11 +1606,11 @@ export function IntegrationPanel({
                     </div>
                   )}
                   {!activeReconciliationRunId ? (
-                    <p className="mt-1 text-xs text-[#64748B]">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       Run an import to generate reconciliation data.
                     </p>
                   ) : activeRunErrors.length === 0 ? (
-                      <p className="mt-1 text-xs text-[#166534]">
+                      <p className="mt-1 text-xs text-green-700 dark:text-green-400">
                         No error rows found for run {activeReconciliationRunId.slice(0, 8)}.
                       </p>
                     ) : (
@@ -1619,7 +1619,7 @@ export function IntegrationPanel({
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                               <p className="text-xs font-medium text-foreground">Reconciliation status</p>
-                              <p className="mt-1 text-xs text-[#475569]">
+                              <p className="mt-1 text-xs text-muted-foreground">
                                 Run {activeReconciliationRunId.slice(0, 8)} is the current cutover validation source.
                               </p>
                             </div>
@@ -1628,29 +1628,29 @@ export function IntegrationPanel({
                             </span>
                           </div>
                           <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                            <div className="rounded border border-white/70 bg-white px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Error rows</p>
-                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                            <div className="rounded border border-white/70 bg-card px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Error rows</p>
+                              <p className="mt-1 text-sm font-semibold text-foreground">
                                 {activeRunErrors.length.toLocaleString()}
                               </p>
                             </div>
-                            <div className="rounded border border-white/70 bg-white px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Top reason</p>
-                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                            <div className="rounded border border-white/70 bg-card px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Top reason</p>
+                              <p className="mt-1 text-sm font-semibold text-foreground">
                                 {topReasonErrorRows[0] ? formatHubSpotReasonLabel(topReasonErrorRows[0].reasonCode) : "None"}
                               </p>
                             </div>
-                            <div className="rounded border border-white/70 bg-white px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">Top entity</p>
-                              <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                            <div className="rounded border border-white/70 bg-card px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Top entity</p>
+                              <p className="mt-1 text-sm font-semibold text-foreground">
                                 {topEntityErrorRows[0]?.entityType ?? "None"}
                               </p>
                             </div>
                           </div>
-                          <p className="mt-3 text-xs text-[#475569]">{reconciliationTone.nextAction}</p>
+                          <p className="mt-3 text-xs text-muted-foreground">{reconciliationTone.nextAction}</p>
                         </div>
 
-                        <p className="text-[11px] text-[#64748B]">
+                        <p className="text-[11px] text-muted-foreground">
                           Run {activeReconciliationRunId.slice(0, 8)} has{" "}
                           {activeRunErrors.length.toLocaleString()} error rows.
                         </p>
@@ -1661,7 +1661,7 @@ export function IntegrationPanel({
                               className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
                             >
                               <span className="font-medium text-foreground">{row.entityType}</span>
-                              <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                              <span className="text-destructive">{row.count.toLocaleString()}</span>
                             </div>
                           ))}
                           {topReasonErrorRows.slice(0, 4).map((row) => (
@@ -1670,18 +1670,18 @@ export function IntegrationPanel({
                               className="flex items-center justify-between rounded border border-border px-2 py-1 text-[11px]"
                             >
                               <span className="font-medium text-foreground">{formatHubSpotReasonLabel(row.reasonCode)}</span>
-                              <span className="text-[#B91C1C]">{row.count.toLocaleString()}</span>
+                              <span className="text-destructive">{row.count.toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
                         <div className="space-y-2">
                           {activeRunErrors.slice(0, 3).map((error) => (
-                            <div key={error.id} className="rounded border border-[#FECACA] bg-white px-3 py-2">
+                            <div key={error.id} className="rounded border border-[#FECACA] bg-card px-3 py-2">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#BE123C]">
                                   {formatHubSpotReasonLabel(error.reasonCode)}
                                 </span>
-                                <span className="text-[10px] text-[#64748B]">
+                                <span className="text-[10px] text-muted-foreground">
                                   {new Date(error.createdAt).toLocaleString("en-US", {
                                     month: "short",
                                     day: "numeric",
@@ -1707,20 +1707,20 @@ export function IntegrationPanel({
                   className={cn(
                     "mt-3 rounded-lg border p-3",
                     cutoverPacketReady
-                      ? "border-[#BBF7D0] bg-[#F0FDF4]"
-                      : "border-[#FED7AA] bg-[#FFF7ED]",
+                      ? "border-emerald-400/40 bg-emerald-500/10"
+                      : "border-[#FED7AA] bg-primary/10",
                   )}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-xs font-medium text-foreground">Cutover summary</p>
-                      <p className="mt-1 text-xs text-[#64748B]">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Keep the migration decision in one place before HubSpot becomes source-only.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {hubspotCutoverDirty && (
-                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-[#92400E]">
+                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                           Unsaved handoff changes
                         </span>
                       )}
@@ -1737,8 +1737,8 @@ export function IntegrationPanel({
 
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {cutoverChecklist.map((item) => (
-                        <div key={item.label} className="rounded border border-white/70 bg-white px-3 py-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <div key={item.label} className="rounded border border-white/70 bg-card px-3 py-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           {item.label}
                         </p>
                         <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
@@ -1746,10 +1746,10 @@ export function IntegrationPanel({
                     ))}
                   </div>
 
-                  <div className="mt-3 rounded border border-white/70 bg-white px-3 py-3">
+                  <div className="mt-3 rounded border border-white/70 bg-card px-3 py-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Recommendation
                         </p>
                       </div>
@@ -1759,20 +1759,20 @@ export function IntegrationPanel({
                         size="sm"
                         onClick={() => void handleCopyCutoverPacket()}
                         disabled={isCopyingCutoverPacket}
-                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                        className="border-input bg-card text-muted-foreground hover:bg-muted/30"
                       >
                         <Copy className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
                         {isCopyingCutoverPacket ? "Copying..." : "Copy packet"}
                       </Button>
                     </div>
-                    <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverRecommendation}</p>
-                    <div className="mt-3 rounded border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3">
+                    <p className="mt-1 text-sm font-semibold text-foreground">{cutoverRecommendation}</p>
+                    <div className="mt-3 rounded border border-border bg-muted/30 px-3 py-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Final handoff call
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverDecisionLabel}</p>
+                          <p className="mt-1 text-sm font-semibold text-foreground">{cutoverDecisionLabel}</p>
                         </div>
                         <span
                           className={cn(
@@ -1780,15 +1780,15 @@ export function IntegrationPanel({
                             effectiveCutoverDecision === "rollback_validation"
                               ? "bg-[#FFE4E6] text-[#BE123C]"
                               : effectiveCutoverDecision === "hold_parallel_run"
-                              ? "bg-[#FFEDD5] text-[#9A3412]"
-                              : "bg-[#DCFCE7] text-[#166534]",
+                              ? "bg-[#FFEDD5] text-primary"
+                              : "bg-[#DCFCE7] text-green-700 dark:text-green-400",
                           )}
                         >
                           {cutoverDecisionLabel}
                         </span>
                       </div>
-                      <p className="mt-2 text-xs text-[#475569]">{cutoverDecisionDescription}</p>
-                      <p className="mt-2 text-sm text-[#334155]">
+                      <p className="mt-2 text-xs text-muted-foreground">{cutoverDecisionDescription}</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
                         {hubspotCutoverDecisionNote.trim() || "Add the owner-facing handoff note in the details panel before the packet leaves the team."}
                       </p>
                     </div>
@@ -1799,7 +1799,7 @@ export function IntegrationPanel({
                         variant="outline"
                         onClick={() => setShowHubspotCutoverDetails((value) => !value)}
                         disabled={isSaving}
-                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                        className="border-input bg-card text-muted-foreground hover:bg-muted/30"
                       >
                         {showHubspotCutoverDetails ? "Hide handoff details" : "Review handoff details"}
                       </Button>
@@ -1809,7 +1809,7 @@ export function IntegrationPanel({
                         variant="outline"
                         onClick={() => void handleSave({ closeOnSuccess: false })}
                         disabled={isSaving || !hubspotCutoverDirty}
-                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                        className="border-input bg-card text-muted-foreground hover:bg-muted/30"
                       >
                         {isSaving ? "Saving..." : "Save handoff changes"}
                       </Button>
@@ -1819,7 +1819,7 @@ export function IntegrationPanel({
                           size="sm"
                           onClick={handleApproveDeployGate}
                           disabled={isSaving || !cutoverPacketReady}
-                          className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                          className="bg-foreground text-background hover:bg-foreground/90"
                         >
                           Approve deploy gate
                         </Button>
@@ -1842,7 +1842,7 @@ export function IntegrationPanel({
                           variant="outline"
                           onClick={handleReopenParallelRun}
                           disabled={isSaving}
-                          className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                          className="border-input bg-card text-muted-foreground hover:bg-muted/30"
                         >
                           Reopen parallel run
                         </Button>
@@ -1850,20 +1850,20 @@ export function IntegrationPanel({
                     </div>
                     {cutoverMissingItems.length > 0 ? (
                       <div className="mt-3 space-y-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Remaining handoff items
                         </p>
-                        <ul className="space-y-1 text-sm text-[#334155]">
+                        <ul className="space-y-1 text-sm text-muted-foreground">
                           {cutoverMissingItems.map((item) => (
                             <li key={item} className="flex gap-2">
-                              <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-[#E87722]" aria-hidden="true" />
+                              <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
                               <span>{item}</span>
                             </li>
                           ))}
                         </ul>
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm text-[#166534]">
+                      <p className="mt-3 text-sm text-green-700 dark:text-green-400">
                         No remaining handoff items are blocking the cutover package.
                       </p>
                     )}
@@ -1872,25 +1872,25 @@ export function IntegrationPanel({
                   {(latestFinishedRun || hubspotCutoverNote.trim().length > 0) && (
                     <div className="mt-3 space-y-2">
                       {latestFinishedRun && (
-                        <div className="rounded border border-white/70 bg-white px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <div className="rounded border border-white/70 bg-card px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Latest finished run
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                          <p className="mt-1 text-sm font-semibold text-foreground">
                             {hubspotRunStatusLabel(latestFinishedRun.status)}
                           </p>
-                          <p className="mt-1 text-xs text-[#475569]">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {formatHubSpotRunCount(latestFinishedRun)} • {formatHubSpotRunTimestamp(latestFinishedRun.completedAt ?? latestFinishedRun.startedAt)}
                           </p>
                         </div>
                       )}
                       {(effectiveDeployGateReady || hubspotSourceOnlyEnabled) && (
-                        <div className="rounded border border-white/70 bg-white px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <div className="rounded border border-white/70 bg-card px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Handoff status
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverStageLabel}</p>
-                          <p className="mt-1 text-xs text-[#475569]">
+                          <p className="mt-1 text-sm font-semibold text-foreground">{cutoverStageLabel}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
                             Deploy gate {effectiveDeployGateReady ? "approved" : "not approved"} • HubSpot{" "}
                             {hubspotSourceOnlyEnabled
                               ? `source-only since ${formatHubSpotValidationDate(hubspotSourceOnlyActivatedAt)}`
@@ -1899,20 +1899,20 @@ export function IntegrationPanel({
                         </div>
                       )}
                       {hubspotCutoverNote.trim().length > 0 && (
-                        <div className="rounded border border-white/70 bg-white px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <div className="rounded border border-white/70 bg-card px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Validation note
                           </p>
-                          <p className="mt-1 text-sm text-[#334155]">{hubspotCutoverNote.trim()}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{hubspotCutoverNote.trim()}</p>
                         </div>
                       )}
                       {(hubspotCutoverDecisionNote.trim().length > 0 || effectiveCutoverDecision !== "hold_parallel_run") && (
-                        <div className="rounded border border-white/70 bg-white px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                        <div className="rounded border border-white/70 bg-card px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                             Handoff note
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverDecisionLabel}</p>
-                          <p className="mt-1 text-sm text-[#334155]">
+                          <p className="mt-1 text-sm font-semibold text-foreground">{cutoverDecisionLabel}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
                             {hubspotCutoverDecisionNote.trim() || "No owner-facing handoff note is recorded yet."}
                           </p>
                         </div>
@@ -1930,8 +1930,8 @@ export function IntegrationPanel({
                     className={cn(
                       "mt-3 rounded-lg border p-3 text-xs",
                       hubSpotImportResult.status === "completed"
-                        ? "bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]"
-                        : "bg-[#FFF7ED] border-[#FED7AA] text-[#9A3412]"
+                        ? "bg-emerald-500/10 border-emerald-400/40 text-green-700 dark:text-green-400"
+                        : "bg-primary/10 border-[#FED7AA] text-primary"
                     )}
                     role="status"
                     aria-live="polite"
@@ -1958,19 +1958,19 @@ export function IntegrationPanel({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-medium text-foreground">Handoff details</p>
-                        <p className="mt-1 text-xs text-[#64748B]">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           Directly edit validation fields when the quick actions above are not enough.
                         </p>
                       </div>
                       {hubspotCutoverDirty && (
-                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-[#92400E]">
+                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
                           Unsaved
                         </span>
                       )}
                     </div>
                     <div className="mt-3 space-y-3">
                     <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
-                      <span className="text-xs text-[#334155]">Parallel run active</span>
+                      <span className="text-xs text-muted-foreground">Parallel run active</span>
                       <button
                         type="button"
                         role="switch"
@@ -1995,7 +1995,7 @@ export function IntegrationPanel({
                     </label>
 
                     <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
-                      <span className="text-xs text-[#334155]">Cutover ready</span>
+                      <span className="text-xs text-muted-foreground">Cutover ready</span>
                       <button
                         type="button"
                         role="switch"
@@ -2020,7 +2020,7 @@ export function IntegrationPanel({
                     </label>
 
                     <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
-                      <span className="text-xs text-[#334155]">Deploy gate approved</span>
+                      <span className="text-xs text-muted-foreground">Deploy gate approved</span>
                       <button
                         type="button"
                         role="switch"
@@ -2058,7 +2058,7 @@ export function IntegrationPanel({
                     </label>
 
                     <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
-                      <span className="text-xs text-[#334155]">HubSpot source-only</span>
+                      <span className="text-xs text-muted-foreground">HubSpot source-only</span>
                       <button
                         type="button"
                         role="switch"
@@ -2196,7 +2196,7 @@ export function IntegrationPanel({
             </>
           )}
 
-          <Separator className="bg-[#F1F5F9]" />
+          <Separator className="bg-muted/40" />
 
           {/* Section 2: Credential form */}
           <section>
@@ -2205,11 +2205,11 @@ export function IntegrationPanel({
               {isOneDrive ? (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-sm font-medium text-foreground">Microsoft 365 OAuth connection</p>
-                  <p className="mt-1 text-xs text-[#64748B]">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     OneDrive is authorized through Microsoft OAuth. Use the connect button above to rotate access, then run a sync when you want to refresh indexed documents.
                   </p>
                   {typeof integration.config?.drive_id === "string" && integration.config.drive_id ? (
-                    <p className="mt-2 text-xs text-[#475569]">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Drive ID: <span className="font-mono">{integration.config.drive_id}</span>
                     </p>
                   ) : null}
@@ -2219,7 +2219,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-client-id" className="text-xs font-medium text-[#374151]">
                       HubSpot Client ID
-                      <span className="text-[#64748B] ml-1">(optional)</span>
+                      <span className="text-muted-foreground ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-client-id"
@@ -2234,7 +2234,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-client-secret" className="text-xs font-medium text-[#374151]">
                       HubSpot Client Secret
-                      <span className="text-[#64748B] ml-1">(optional)</span>
+                      <span className="text-muted-foreground ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-client-secret"
@@ -2249,7 +2249,7 @@ export function IntegrationPanel({
                   <div className="space-y-1.5">
                     <Label htmlFor="hubspot-app-id" className="text-xs font-medium text-[#374151]">
                       HubSpot App ID
-                      <span className="text-[#64748B] ml-1">(optional)</span>
+                      <span className="text-muted-foreground ml-1">(optional)</span>
                     </Label>
                     <Input
                       id="hubspot-app-id"
@@ -2261,7 +2261,7 @@ export function IntegrationPanel({
                       autoComplete="off"
                     />
                   </div>
-                  <p className="text-xs text-[#64748B]">
+                  <p className="text-xs text-muted-foreground">
                     Stored with AES-256-GCM encryption. Values are only used server-side for OAuth,
                     webhook verification, and token refresh. Leave blank to keep existing credentials.
                   </p>
@@ -2270,7 +2270,7 @@ export function IntegrationPanel({
                 <div className="space-y-1.5">
                   <Label htmlFor="credentials" className="text-xs font-medium text-[#374151]">
                     API Key / Token
-                    <span className="text-[#64748B] ml-1">(encrypted at rest)</span>
+                    <span className="text-muted-foreground ml-1">(encrypted at rest)</span>
                   </Label>
                   <Input
                     id="credentials"
@@ -2285,7 +2285,7 @@ export function IntegrationPanel({
                     className="font-mono text-sm focus-visible:ring-qep-orange"
                     autoComplete="off"
                   />
-                  <p className="text-xs text-[#64748B]">
+                  <p className="text-xs text-muted-foreground">
                     Stored with AES-256-GCM encryption. Never logged or exposed in plaintext.
                   </p>
                 </div>
@@ -2294,7 +2294,7 @@ export function IntegrationPanel({
                 <div className="space-y-1.5">
                   <Label htmlFor="endpoint-url" className="text-xs font-medium text-[#374151]">
                     Endpoint URL
-                    <span className="text-[#64748B] ml-1">(optional)</span>
+                    <span className="text-muted-foreground ml-1">(optional)</span>
                   </Label>
                   <Input
                     id="endpoint-url"
@@ -2312,7 +2312,7 @@ export function IntegrationPanel({
             )}
           </section>
 
-          <Separator className="bg-[#F1F5F9]" />
+          <Separator className="bg-muted/40" />
 
           {/* Section 3: Connection test */}
           <section>
@@ -2364,7 +2364,7 @@ export function IntegrationPanel({
                 className={cn(
                   "mt-3 rounded-lg border p-3 flex items-start gap-2",
                   testResult.success
-                    ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                    ? "bg-emerald-500/10 border-emerald-400/40"
                     : "bg-[#FEF2F2] border-[#FECACA]"
                 )}
                 role="status"
@@ -2381,7 +2381,7 @@ export function IntegrationPanel({
                       ? "Connection successful"
                       : "Connection failed — check your credentials and endpoint URL, then try again."}
                   </p>
-                  <p className="text-xs text-[#64748B] mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {testResult.success
                       ? `Response in ${testResult.latencyMs}ms`
                       : testResult.error}
@@ -2391,13 +2391,13 @@ export function IntegrationPanel({
             )}
           </section>
 
-          <Separator className="bg-[#F1F5F9]" />
+          <Separator className="bg-muted/40" />
 
           {/* Section 4: Sync scope toggles */}
           {scopes.length > 0 && (
             <section>
               <h4 className="text-sm font-semibold text-foreground mb-1">Sync scope</h4>
-              <p className="text-xs text-[#64748B] mb-3">
+              <p className="text-xs text-muted-foreground mb-3">
                 Choose which data types to sync from this integration.
               </p>
               <div className="space-y-3">
@@ -2405,7 +2405,7 @@ export function IntegrationPanel({
                   <div key={scope.key} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground leading-none">{scope.label}</p>
-                      <p className="text-xs text-[#64748B] mt-0.5">{scope.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{scope.description}</p>
                     </div>
                     <button
                       type="button"
@@ -2434,7 +2434,7 @@ export function IntegrationPanel({
             </section>
           )}
 
-          <Separator className="bg-[#F1F5F9]" />
+          <Separator className="bg-muted/40" />
 
           {/* Section 5: Audit / activity log */}
           <section>
@@ -2443,7 +2443,7 @@ export function IntegrationPanel({
             </h4>
             {isHubSpot ? (
               <>
-                <p className="mb-3 text-xs text-[#64748B]">
+                <p className="mb-3 text-xs text-muted-foreground">
                   Real import runs plus recorded integration and cutover audit events only. Current handoff state stays in the cutover summary above.
                 </p>
                 {hubspotHistoryItems.length > 0 ? (
@@ -2456,9 +2456,9 @@ export function IntegrationPanel({
                         item.tone === "danger"
                           ? "bg-[#FEF2F2] border-[#FECACA]"
                           : item.tone === "warning"
-                          ? "bg-[#FFF7ED] border-[#FED7AA]"
+                          ? "bg-primary/10 border-[#FED7AA]"
                           : item.tone === "success"
-                          ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                          ? "bg-emerald-500/10 border-emerald-400/40"
                           : "bg-muted border-border",
                       )}
                     >
@@ -2469,25 +2469,25 @@ export function IntegrationPanel({
                       ) : item.tone === "success" ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
                       ) : (
-                        <Clock className="w-3.5 h-3.5 text-[#475569] shrink-0 mt-0.5" aria-hidden="true" />
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-medium text-foreground">{item.title}</p>
-                          <span className="text-[10px] text-[#64748B] shrink-0">
+                          <span className="text-[10px] text-muted-foreground shrink-0">
                             {formatPanelTimestamp(item.occurredAt)}
                           </span>
                         </div>
-                        <p className="text-xs text-[#64748B] mt-0.5 break-words">{item.detail}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">{item.detail}</p>
                       </div>
                     </div>
                   ))}
                   {isLoadingCredentialAudit && (
-                    <p className="text-[11px] text-[#64748B]">Loading credential audit events…</p>
+                    <p className="text-[11px] text-muted-foreground">Loading credential audit events…</p>
                   )}
                 </div>
               ) : isLoadingCredentialAudit ? (
-                <div className="flex items-center gap-2 text-[#64748B]">
+                <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="w-4 h-4 shrink-0 animate-spin" aria-hidden="true" />
                   <p className="text-xs">Loading execution history…</p>
                 </div>
@@ -2497,7 +2497,7 @@ export function IntegrationPanel({
                   <p className="text-xs">Execution history could not load. {credentialAuditError}</p>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-[#64748B]">
+                <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
                   <p className="text-xs">No execution history yet — imports and audit events will appear here.</p>
                 </div>
@@ -2510,7 +2510,7 @@ export function IntegrationPanel({
                     "rounded-lg border p-3 flex items-start gap-2.5",
                     integration.lastSyncError
                       ? "bg-[#FEF2F2] border-[#FECACA]"
-                      : "bg-[#F0FDF4] border-[#BBF7D0]"
+                      : "bg-emerald-500/10 border-emerald-400/40"
                   )}
                 >
                   {integration.lastSyncError ? (
@@ -2523,7 +2523,7 @@ export function IntegrationPanel({
                       <p className="text-xs font-medium text-foreground">
                         {integration.lastSyncError ? "Sync failed" : "Sync completed"}
                       </p>
-                      <span className="text-[10px] text-[#64748B] shrink-0">
+                      <span className="text-[10px] text-muted-foreground shrink-0">
                         {new Date(integration.lastSyncAt).toLocaleString("en-US", {
                           month: "short",
                           day: "numeric",
@@ -2535,7 +2535,7 @@ export function IntegrationPanel({
                     {integration.lastSyncError ? (
                       <p className="text-xs text-[#DC2626] mt-0.5 break-words">{integration.lastSyncError}</p>
                     ) : integration.syncRecords !== null ? (
-                      <p className="text-xs text-[#64748B] mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         <Database className="w-3 h-3 inline mr-1 -mt-px" aria-hidden="true" />
                         {integration.syncRecords.toLocaleString()} records synced
                       </p>
@@ -2544,19 +2544,19 @@ export function IntegrationPanel({
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-[#64748B]">
+              <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-4 h-4 shrink-0" aria-hidden="true" />
                 <p className="text-xs">No sync history — first sync will run after connecting.</p>
               </div>
             )}
           </section>
 
-          <Separator className="bg-[#F1F5F9]" />
+          <Separator className="bg-muted/40" />
 
           {/* Section 6: Fallback / demo mode explanation */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-2">Demo mode</h4>
-            <p className="text-sm text-[#64748B] leading-relaxed">
+            <p className="text-sm text-muted-foreground leading-relaxed">
               While disconnected, we use realistic sample data that mirrors what{" "}
               <strong className="text-foreground">{integration.name}</strong> would provide.
               All Deal Genome Engine features remain fully operational. Data source badges
@@ -2583,7 +2583,7 @@ export function IntegrationPanel({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 border-[#FECACA] text-[#B91C1C] hover:bg-[#FEF2F2] focus-visible:ring-[#DC2626]"
+                  className="flex-1 border-[#FECACA] text-destructive hover:bg-[#FEF2F2] focus-visible:ring-[#DC2626]"
                   onClick={() => void handleClearCredentials()}
                   disabled={isSaving || isClearingCredentials || isTesting}
                 >

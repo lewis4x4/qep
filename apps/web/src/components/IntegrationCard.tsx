@@ -86,15 +86,15 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
             </h3>
             <DataSourceBadge state={isStale ? "Stale" : dataSourceState} />
           </div>
-          <p className="text-xs text-[#64748B] mt-0.5">{config.category}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{config.category}</p>
         </div>
       </div>
 
       {/* Sync info */}
-      <div className="flex items-center justify-between text-xs text-[#64748B]">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
           Last sync:{" "}
-          <span className={cn(isStale ? "text-amber-600" : "text-[#64748B]", "font-medium")}>
+          <span className={cn(isStale ? "text-amber-600" : "text-muted-foreground", "font-medium")}>
             {formatLastSync(config.lastSyncAt)}
           </span>
         </span>
@@ -104,14 +104,14 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
       </div>
 
       {/* Description */}
-      <p className="text-sm text-[#64748B] leading-relaxed flex-1 line-clamp-2">
+      <p className="text-sm text-muted-foreground leading-relaxed flex-1 line-clamp-2">
         {config.description}
       </p>
 
       {/* Footer: environment state + actions — stacked to prevent overflow at narrow card widths */}
       <div className="flex flex-col gap-2 pt-1 border-t border-[#F1F5F9]">
         {/* Environment pill */}
-        <div className="flex items-center gap-1.5 text-xs text-[#64748B]">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Plug className="w-3 h-3" aria-hidden="true" />
           <span>
             {config.status === "connected"

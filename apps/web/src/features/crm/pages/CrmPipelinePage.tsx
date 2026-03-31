@@ -494,7 +494,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       {isElevated && !weightedDealsQuery.isLoading && (
         <section
-          className="grid grid-cols-3 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4"
+          className="grid grid-cols-3 gap-3 rounded-xl border border-border bg-card p-4"
           aria-label="Manager deal summary"
         >
           <Metric label="Open deals" value={String(weightedTotals.openDeals)} />
@@ -505,12 +505,12 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       {isElevated && stageSummary.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="border-b border-[#E2E8F0] px-4 py-3">
-            <h2 className="text-sm font-semibold text-[#0F172A]">Stage distribution</h2>
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Stage distribution</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-[#F8FAFC] text-xs uppercase tracking-wide text-[#475569]">
+              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 text-left">Stage</th>
                   <th className="px-4 py-2 text-right">Deals</th>
@@ -519,10 +519,10 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
               </thead>
               <tbody>
                 {stageSummary.map((item) => (
-                  <tr key={item.stageId} className="border-t border-[#E2E8F0]">
-                    <td className="px-4 py-2 text-[#0F172A]">{item.stageName}</td>
-                    <td className="px-4 py-2 text-right text-[#334155]">{item.count}</td>
-                    <td className="px-4 py-2 text-right text-[#334155]">{formatMoney(item.amount)}</td>
+                  <tr key={item.stageId} className="border-t border-border">
+                    <td className="px-4 py-2 text-foreground">{item.stageName}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{item.count}</td>
+                    <td className="px-4 py-2 text-right text-muted-foreground">{formatMoney(item.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -534,14 +534,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       <Card className="p-3 sm:p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <label htmlFor="crm-stage-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">
+            <label htmlFor="crm-stage-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Filter stage
             </label>
             <select
               id="crm-stage-filter"
               value={selectedStageId}
               onChange={(event) => setSelectedStageId(event.target.value)}
-              className="h-11 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm transition focus:border-[#E87722] focus:outline-none focus:ring-2 focus:ring-[#E87722]/25"
+              className="h-11 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               <option value="all">All open stages</option>
               {stageOptions.map((stage) => (
@@ -552,14 +552,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
             </select>
           </div>
           <div>
-            <label htmlFor="crm-urgency-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">
+            <label htmlFor="crm-urgency-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Follow-up queue
             </label>
             <select
               id="crm-urgency-filter"
               value={urgencyFilter}
               onChange={(event) => setUrgencyFilter(event.target.value as UrgencyFilter)}
-              className="h-11 w-full rounded-xl border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm transition focus:border-[#E87722] focus:outline-none focus:ring-2 focus:ring-[#E87722]/25"
+              className="h-11 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
               <option value="all">All deals in stage ({urgencyEvaluation.counts.all})</option>
               <option value="attention">Needs attention ({urgencyEvaluation.counts.attention})</option>
@@ -568,11 +568,11 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
               <option value="stalled">Stalled activity ({urgencyEvaluation.counts.stalled})</option>
               <option value="data_issues">Data issues ({urgencyEvaluation.counts.data_issues})</option>
             </select>
-            <p className="mt-1 text-xs text-[#64748B]">Counts reflect the currently selected stage.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Counts reflect the currently selected stage.</p>
           </div>
           <div>
-            <p className="mb-2 block text-xs font-medium uppercase tracking-wide text-[#64748B]">View</p>
-            <div className="flex rounded-md border border-[#CBD5E1] bg-white p-1">
+            <p className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">View</p>
+            <div className="flex rounded-md border border-input bg-card p-1">
               <Button
                 type="button"
                 size="sm"
@@ -599,14 +599,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       {isLoading && (
         <div className="space-y-3" role="status" aria-label="Loading deals table">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-16 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+            <div key={index} className="h-16 animate-pulse rounded-xl border border-border bg-card" />
           ))}
         </div>
       )}
 
       {hasError && !isLoading && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Unable to load deals right now. Refresh and try again.</p>
+          <p className="text-sm text-muted-foreground">Unable to load deals right now. Refresh and try again.</p>
         </Card>
       )}
 
@@ -635,7 +635,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       {!isLoading && !hasError && filteredDeals.length === 0 && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">No open deals matched this filter.</p>
+          <p className="text-sm text-muted-foreground">No open deals matched this filter.</p>
         </Card>
       )}
 
@@ -643,7 +643,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm" aria-label="CRM deals table">
-              <thead className="bg-[#F8FAFC] text-xs uppercase tracking-wide text-[#475569]">
+              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 text-left">Deal</th>
                   <th className="px-4 py-2 text-left">Stage</th>
@@ -676,21 +676,21 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
               {stageColumns.map((column) => (
                 <section
                   key={column.stageId}
-                  className="w-[300px] shrink-0 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]"
+                  className="w-[300px] shrink-0 rounded-xl border border-border bg-muted/30"
                 >
-                  <header className="border-b border-[#E2E8F0] px-3 py-2">
+                  <header className="border-b border-border px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-[#0F172A]">{column.stageName}</h3>
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs text-[#475569]">
+                      <h3 className="text-sm font-semibold text-foreground">{column.stageName}</h3>
+                      <span className="rounded-full bg-card px-2 py-0.5 text-xs text-muted-foreground">
                         {column.deals.length}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-[#64748B]">{formatMoney(column.amount)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatMoney(column.amount)}</p>
                   </header>
 
                   <div className="space-y-2 p-2">
                     {column.deals.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-[#CBD5E1] bg-white px-3 py-4 text-center text-xs text-[#64748B]">
+                      <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
                         No open deals in this stage.
                       </div>
                     )}
@@ -723,8 +723,8 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-[#64748B]">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-[#0F172A]">{value}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
     </div>
   );
 }
@@ -749,7 +749,7 @@ function FollowUpQuickActions({
   return (
     <div className="space-y-2">
       <div className={`flex flex-wrap items-center gap-2 ${compact ? "justify-start" : ""}`}>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[#64748B]">Set follow-up</span>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Set follow-up</span>
         {options.map((option) => (
           <Button
             key={option.daysAhead}
@@ -765,7 +765,7 @@ function FollowUpQuickActions({
         ))}
       </div>
       {errorMessage && (
-        <p className="text-xs text-[#B91C1C]" role="status" aria-live="polite">
+        <p className="text-xs text-destructive" role="status" aria-live="polite">
           {errorMessage}
         </p>
       )}
@@ -838,17 +838,17 @@ function PipelineDealTableRow({
   }
 
   return (
-    <tr className="border-t border-[#E2E8F0]">
+    <tr className="border-t border-border">
       <td className="px-4 py-3">
-        <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-[#0F172A] hover:text-[#B45309]">
+        <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-foreground hover:text-primary">
           {effectiveDeal.name}
         </Link>
-        <p className="text-xs text-[#64748B]">Last activity: {formatDate(effectiveDeal.lastActivityAt)}</p>
+        <p className="text-xs text-muted-foreground">Last activity: {formatDate(effectiveDeal.lastActivityAt)}</p>
       </td>
-      <td className="px-4 py-3 text-[#334155]">{stageName}</td>
-      <td className="px-4 py-3 text-right text-[#334155]">{formatMoney(effectiveDeal.amount)}</td>
-      <td className="px-4 py-3 text-[#334155]">{formatDate(effectiveDeal.expectedCloseOn)}</td>
-      <td className="px-4 py-3 text-[#334155]">{formatDate(effectiveDeal.nextFollowUpAt)}</td>
+      <td className="px-4 py-3 text-muted-foreground">{stageName}</td>
+      <td className="px-4 py-3 text-right text-muted-foreground">{formatMoney(effectiveDeal.amount)}</td>
+      <td className="px-4 py-3 text-muted-foreground">{formatDate(effectiveDeal.expectedCloseOn)}</td>
+      <td className="px-4 py-3 text-muted-foreground">{formatDate(effectiveDeal.nextFollowUpAt)}</td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
@@ -933,14 +933,14 @@ function PipelineDealCard({
   }
 
   return (
-    <article className="rounded-lg border border-[#E2E8F0] bg-white p-3 shadow-sm">
+    <article className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <Link
         to={`/crm/deals/${deal.id}`}
-        className="text-sm font-semibold text-[#0F172A] hover:text-[#B45309]"
+        className="text-sm font-semibold text-foreground hover:text-primary"
       >
         {effectiveDeal.name}
       </Link>
-      <p className="mt-1 text-xs text-[#475569]">
+      <p className="mt-1 text-xs text-muted-foreground">
         {formatMoney(effectiveDeal.amount)} • Follow-up {formatDate(effectiveDeal.nextFollowUpAt)}
       </p>
       <div className="mt-2">

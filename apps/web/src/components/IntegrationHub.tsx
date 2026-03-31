@@ -286,33 +286,33 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
       <div className="flex items-center gap-1.5 text-[#16A34A]">
         <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
         <span className="font-semibold">{connected}</span>
-        <span className="text-[#64748B]">Connected</span>
+        <span className="text-muted-foreground">Connected</span>
       </div>
       {demo > 0 && (
         <div className="flex items-center gap-1.5 text-[#C2410C]">
           <Wifi className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{demo}</span>
-          <span className="text-[#64748B]">Demo</span>
+          <span className="text-muted-foreground">Demo</span>
         </div>
       )}
       {pendingSetup > 0 && (
-        <div className="flex items-center gap-1.5 text-[#64748B]">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
           <Settings className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{pendingSetup}</span>
-          <span className="text-[#64748B]">Credentials needed</span>
+          <span className="text-muted-foreground">Credentials needed</span>
         </div>
       )}
       {errors > 0 && (
         <div className="flex items-center gap-1.5 text-[#DC2626]">
           <AlertTriangle className="w-4 h-4" aria-hidden="true" />
           <span className="font-semibold">{errors}</span>
-          <span className="text-[#64748B]">Attention needed</span>
+          <span className="text-muted-foreground">Attention needed</span>
         </div>
       )}
       {lastSync && (
-        <div className="flex items-center gap-1.5 text-[#64748B]">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
           <Clock className="w-4 h-4" aria-hidden="true" />
-          <span className="text-[#64748B]">
+          <span className="text-muted-foreground">
             Last sync:{" "}
             <span className="font-medium text-[#374151]">
               {new Date(lastSync).toLocaleString("en-US", {
@@ -337,20 +337,20 @@ function CardSkeleton({ index }: { index: number }) {
       className="bg-card rounded-xl border border-border p-5 flex flex-col gap-4 animate-pulse"
     >
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-[#F1F5F9] shrink-0" />
+        <div className="w-10 h-10 rounded-lg bg-muted/40 shrink-0" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 w-32 bg-[#F1F5F9] rounded" />
-          <div className="h-3 w-20 bg-[#F1F5F9] rounded" />
+          <div className="h-4 w-32 bg-muted/40 rounded" />
+          <div className="h-3 w-20 bg-muted/40 rounded" />
         </div>
       </div>
-      <div className="h-3 w-24 bg-[#F1F5F9] rounded" />
+      <div className="h-3 w-24 bg-muted/40 rounded" />
       <div className="space-y-1.5">
-        <div className="h-3 w-full bg-[#F1F5F9] rounded" />
-        <div className="h-3 w-3/4 bg-[#F1F5F9] rounded" />
+        <div className="h-3 w-full bg-muted/40 rounded" />
+        <div className="h-3 w-3/4 bg-muted/40 rounded" />
       </div>
       <div className="flex justify-between items-center pt-1 border-t border-[#F1F5F9]">
-        <div className="h-3 w-20 bg-[#F1F5F9] rounded" />
-        <div className="h-11 w-24 bg-[#F1F5F9] rounded" />
+        <div className="h-3 w-20 bg-muted/40 rounded" />
+        <div className="h-11 w-24 bg-muted/40 rounded" />
       </div>
     </div>
   );
@@ -614,13 +614,13 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
         <div className="text-center max-w-sm">
           <AlertTriangle className="w-10 h-10 text-[#DC2626] mx-auto mb-3" aria-hidden="true" />
           <h3 className="text-base font-semibold text-foreground mb-1">Failed to load integrations</h3>
-          <p className="text-sm text-[#64748B]">{error}</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
           <button
             onClick={() => {
               setLoading(true);
               void loadIntegrations();
             }}
-            className="mt-4 text-sm text-[#C2410C] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722] rounded"
+            className="mt-4 text-sm text-[#C2410C] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
           >
             Try again
           </button>
@@ -634,7 +634,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
       <div className="space-y-3">
         <div>
           <h1 className="text-[28px] font-bold text-foreground leading-8">Integrations</h1>
-          <p className="text-sm text-[#64748B] mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Connect external data sources to power the Deal Genome Engine.
           </p>
         </div>
@@ -643,7 +643,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
             className={cn(
               "rounded-xl border px-4 py-3 text-sm",
               (hubspotStatus === "connected" || onedriveStatus === "connected")
-                ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]"
+                ? "border-emerald-400/40 bg-emerald-500/10 text-green-700 dark:text-green-400"
                 : "border-[#FECACA] bg-[#FEF2F2] text-[#991B1B]",
             )}
           >
@@ -690,7 +690,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           <div className="text-center max-w-sm">
             <Wifi className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" aria-hidden="true" />
             <h3 className="text-base font-semibold text-foreground mb-1">No integrations found</h3>
-            <p className="text-sm text-[#64748B]">
+            <p className="text-sm text-muted-foreground">
               Your integrations aren't set up yet. Contact your administrator or QEP support to complete
               initial setup.
             </p>

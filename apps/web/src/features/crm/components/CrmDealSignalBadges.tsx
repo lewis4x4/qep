@@ -25,7 +25,7 @@ export function CrmDealSignalBadges({ deal }: CrmDealSignalBadgesProps) {
         </span>
       )}
       {isStalled && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-[#FDE68A] bg-[#FFFBEB] px-2 py-0.5 text-xs font-medium text-[#92400E]">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
           <Clock3 className="h-3 w-3" aria-hidden="true" />
           Stalled
         </span>

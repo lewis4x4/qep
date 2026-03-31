@@ -223,11 +223,11 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
       />
 
       <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="space-y-4 rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+        <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[#0F172A]">Sequence library</h2>
-              <p className="mt-1 text-sm text-[#475569]">
+              <h2 className="text-lg font-semibold text-foreground">Sequence library</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Activate the plays that should auto-enroll when a deal hits a trigger stage.
               </p>
             </div>
@@ -246,7 +246,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
           {sequencesQuery.isLoading ? (
             <div className="space-y-3" role="status" aria-label="Loading follow-up sequences">
               {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
               ))}
             </div>
           ) : sequencesQuery.isError ? (
@@ -254,7 +254,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
               Could not load follow-up sequences.
             </Card>
           ) : sequences.length === 0 ? (
-            <Card className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
+            <Card className="rounded-xl border border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
               No follow-up sequences yet.
             </Card>
           ) : (
@@ -263,13 +263,13 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                 <Card
                   key={sequence.id}
                   className={`rounded-xl border p-4 shadow-sm ${
-                    selectedSequenceId === sequence.id ? "border-[#E87722] bg-[#FFF7ED]" : "border-[#E2E8F0]"
+                    selectedSequenceId === sequence.id ? "border-primary bg-primary/10" : "border-border"
                   }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-[#0F172A]">{sequence.name}</p>
+                        <p className="text-sm font-semibold text-foreground">{sequence.name}</p>
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs ${
                             sequence.isActive
@@ -280,17 +280,17 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                           {sequence.isActive ? "Active" : "Paused"}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-[#475569]">
-                        Trigger stage: <span className="font-medium text-[#0F172A]">{sequence.triggerStage}</span>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Trigger stage: <span className="font-medium text-foreground">{sequence.triggerStage}</span>
                       </p>
-                      <p className="mt-1 text-sm text-[#475569]">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {sequence.description || "No description added yet."}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {sequence.steps.map((step) => (
                           <span
                             key={step.id}
-                            className="rounded-full bg-[#F8FAFC] px-2 py-1 text-xs text-[#334155]"
+                            className="rounded-full bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
                           >
                             Day {step.dayOffset} · {step.stepType.replace("_", " ")}
                           </span>
@@ -313,13 +313,13 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
           )}
         </Card>
 
-        <Card className="rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+        <Card className="rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[#0F172A]">
+              <h2 className="text-lg font-semibold text-foreground">
                 {editor.id ? "Edit sequence" : "New sequence"}
               </h2>
-              <p className="mt-1 text-sm text-[#475569]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Keep step timing and copy dealership-native and operator-safe.
               </p>
             </div>
@@ -353,7 +353,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                 id="crm-sequence-description"
                 value={editor.description}
                 onChange={(event) => setEditor((current) => ({ ...current, description: event.target.value }))}
-                className="min-h-[88px] w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                className="min-h-[88px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                 placeholder="What this sequence is for and when to use it."
                 disabled={isSaving}
               />
@@ -366,7 +366,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                   id="crm-sequence-trigger-stage"
                   value={editor.triggerStage}
                   onChange={(event) => setEditor((current) => ({ ...current, triggerStage: event.target.value }))}
-                  className="flex h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                  className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                   disabled={isSaving}
                 >
                   {ALLOWED_SEQUENCE_TRIGGER_STAGES.map((triggerStage) => (
@@ -376,7 +376,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                   ))}
                 </select>
               </div>
-              <label className="flex min-h-[44px] items-center gap-2 rounded-md border border-[#CBD5E1] px-3 text-sm text-[#0F172A]">
+              <label className="flex min-h-[44px] items-center gap-2 rounded-md border border-input px-3 text-sm text-foreground">
                 <input
                   type="checkbox"
                   checked={editor.isActive}
@@ -389,7 +389,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[#0F172A]">Steps</h3>
+                <h3 className="text-sm font-semibold text-foreground">Steps</h3>
                 <Button
                   type="button"
                   variant="outline"
@@ -415,9 +415,9 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
               </div>
 
               {editor.steps.map((step, index) => (
-                <Card key={step.id ?? `${index}-${step.stepType}`} className="rounded-xl border border-[#E2E8F0] p-4">
+                <Card key={step.id ?? `${index}-${step.stepType}`} className="rounded-xl border border-border p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-[#0F172A]">Step {index + 1}</p>
+                    <p className="text-sm font-semibold text-foreground">Step {index + 1}</p>
                     {editor.steps.length > 1 ? (
                       <Button
                         type="button"
@@ -470,7 +470,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                             ),
                           }))
                         }
-                        className="flex h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                        className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                       >
                         {STEP_TYPE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -516,7 +516,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                             ),
                           }))
                         }
-                        className="min-h-[88px] w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                        className="min-h-[88px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
                         placeholder="Use {{contact_name}}, {{deal_name}}, and {{rep_name}} where needed."
                       />
                     </div>
@@ -525,7 +525,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
               ))}
             </div>
 
-            {saveError ? <p className="text-sm text-[#B91C1C]">{saveError}</p> : null}
+            {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
 
             <div className="flex justify-end">
               <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
@@ -537,15 +537,15 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
         </Card>
       </div>
 
-      <Card className="rounded-2xl border border-[#E2E8F0] p-4 shadow-sm">
+      <Card className="rounded-2xl border border-border p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F172A]">Live enrollments</h2>
-            <p className="mt-1 text-sm text-[#475569]">
+            <h2 className="text-lg font-semibold text-foreground">Live enrollments</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               See which deals are in motion and pause, resume, or cancel them before the scheduler runs the next step.
             </p>
           </div>
-          <div className="rounded-full bg-[#F8FAFC] px-3 py-1 text-sm text-[#334155]">
+          <div className="rounded-full bg-muted/30 px-3 py-1 text-sm text-muted-foreground">
             {selectedEnrollments.length} visible
           </div>
         </div>
@@ -553,7 +553,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
         {enrollmentsQuery.isLoading ? (
           <div className="mt-4 space-y-3" role="status" aria-label="Loading sequence enrollments">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-20 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+              <div key={index} className="h-20 animate-pulse rounded-xl border border-border bg-card" />
             ))}
           </div>
         ) : enrollmentsQuery.isError ? (
@@ -561,20 +561,20 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
             Could not load active enrollments.
           </Card>
         ) : selectedEnrollments.length === 0 ? (
-          <Card className="mt-4 rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
+          <Card className="mt-4 rounded-xl border border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
             No enrollments are visible for this filter yet.
           </Card>
         ) : (
           <div className="mt-4 space-y-3">
             {selectedEnrollments.map((enrollment) => (
-              <Card key={enrollment.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
+              <Card key={enrollment.id} className="rounded-xl border border-border p-4 shadow-sm">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-[#0F172A]">
+                      <p className="text-sm font-semibold text-foreground">
                         {enrollment.dealName ?? enrollment.dealId}
                       </p>
-                      <span className="rounded-full bg-[#F8FAFC] px-2 py-0.5 text-xs text-[#334155]">
+                      <span className="rounded-full bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground">
                         {enrollment.sequenceName}
                       </span>
                       <span
@@ -591,7 +591,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                         {formatEnrollmentStatus(enrollment.status)}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-[#475569]">
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
                       <span>Contact: {enrollment.contactName ?? "Not linked"}</span>
                       <span>Hub: {enrollment.hubId}</span>
                       <span>Step {enrollment.currentStep}</span>
