@@ -5,6 +5,7 @@ import {
   type UserRole,
 } from "../_shared/dge-auth.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
+import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
 const CHAT_EDGE_REVISION = "20260331-openai-nano-retrieval2";
@@ -803,6 +804,7 @@ async function buildCustomerContextEvidence(
           `Amount: ${formatCurrency(deal.amount)}`,
           deal.expected_close_on ? `Expected close: ${deal.expected_close_on}` : null,
           deal.next_follow_up_at ? `Next follow-up: ${deal.next_follow_up_at}` : null,
+          suggestedFollowUpHintLine(deal.next_follow_up_at),
         ].filter(Boolean).join("\n"),
         420,
       ),

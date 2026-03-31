@@ -176,6 +176,8 @@ export interface CrmDealBoardListInput {
   limit?: number;
 }
 
+export type CrmFollowUpReminderSource = "pipeline_quick" | "deal_detail" | "voice" | "system";
+
 export interface CrmDealPatchInput {
   name?: string;
   stageId?: string;
@@ -188,6 +190,7 @@ export interface CrmDealPatchInput {
   lossReason?: string | null;
   competitor?: string | null;
   archive?: boolean;
+  followUpReminderSource?: CrmFollowUpReminderSource;
 }
 
 export interface CrmContactUpsertInput {
@@ -219,6 +222,7 @@ export interface CrmDealCreateInput {
   amount?: number | null;
   expectedCloseOn?: string | null;
   nextFollowUpAt?: string | null;
+  followUpReminderSource?: CrmFollowUpReminderSource;
 }
 
 export interface CrmFollowUpStep {
@@ -342,6 +346,23 @@ export interface CrmCompanyHierarchy {
   subtreeCompanyIds: string[];
 }
 
+export type CrmEquipmentCategory =
+  | "excavator" | "loader" | "backhoe" | "dozer" | "skid_steer"
+  | "crane" | "forklift" | "telehandler"
+  | "truck" | "trailer" | "dump_truck"
+  | "aerial_lift" | "boom_lift" | "scissor_lift"
+  | "compactor" | "roller"
+  | "generator" | "compressor" | "pump" | "welder"
+  | "attachment" | "bucket" | "breaker"
+  | "concrete" | "paving"
+  | "drill" | "boring"
+  | "other";
+
+export type CrmEquipmentCondition = "new" | "excellent" | "good" | "fair" | "poor" | "salvage";
+export type CrmEquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+export type CrmEquipmentOwnership = "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
+export type CrmDealEquipmentRole = "subject" | "trade_in" | "rental" | "part_exchange";
+
 export interface CrmEquipment {
   id: string;
   companyId: string;
@@ -349,11 +370,59 @@ export interface CrmEquipment {
   name: string;
   assetTag: string | null;
   serialNumber: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  category: CrmEquipmentCategory | null;
+  vinPin: string | null;
+  condition: CrmEquipmentCondition | null;
+  availability: CrmEquipmentAvailability;
+  ownership: CrmEquipmentOwnership;
+  engineHours: number | null;
+  mileage: number | null;
+  fuelType: string | null;
+  weightClass: string | null;
+  operatingCapacity: string | null;
+  locationDescription: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  purchasePrice: number | null;
+  currentMarketValue: number | null;
+  replacementCost: number | null;
+  dailyRentalRate: number | null;
+  weeklyRentalRate: number | null;
+  monthlyRentalRate: number | null;
+  warrantyExpiresOn: string | null;
+  lastInspectionAt: string | null;
+  nextServiceDueAt: string | null;
+  notes: string | null;
+  photoUrls: string[];
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
-  /** Present when loaded via subtree equipment API (which company row the asset belongs to). */
+  /** Present when loaded via subtree equipment API. */
   companyName?: string | null;
+}
+
+export interface CrmDealEquipmentLink {
+  id: string;
+  dealId: string;
+  equipmentId: string;
+  role: CrmDealEquipmentRole;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  equipment: {
+    name: string;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    category: CrmEquipmentCategory | null;
+    assetTag: string | null;
+    serialNumber: string | null;
+    availability: CrmEquipmentAvailability;
+    condition: CrmEquipmentCondition | null;
+  } | null;
 }
 
 export interface CrmCustomField {

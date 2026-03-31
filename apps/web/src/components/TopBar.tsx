@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
   HardHat,
@@ -83,11 +83,22 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/admin": null,
 };
 
-function useBadge(): [boolean, () => void] {
-  const [hasBadge, setHasBadge] = useState(false);
+type CrmBellRow = {
+  id: string;
+  title: string;
+  body: string | null;
+  deal_id: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+function useTopBarBell(profileId: string) {
+  const [docVoiceBadge, setDocVoiceBadge] = useState(false);
+  const [crmRows, setCrmRows] = useState<CrmBellRow[]>([]);
+  const [crmUnread, setCrmUnread] = useState(0);
 
   useEffect(() => {
-    async function checkUnread() {
+    async function checkDocVoiceUnread() {
       try {
         const lastClick = localStorage.getItem(BELL_STORAGE_KEY);
         const since = lastClick ?? new Date(0).toISOString();
@@ -103,25 +114,82 @@ function useBadge(): [boolean, () => void] {
             .gte("created_at", since),
         ]);
         const total = (docsResult.count ?? 0) + (voiceResult.count ?? 0);
-        setHasBadge(total > 0);
+        setDocVoiceBadge(total > 0);
       } catch {
-        // localStorage unavailable or query failed — no badge
-        setHasBadge(false);
+        setDocVoiceBadge(false);
       }
     }
-    void checkUnread();
+    void checkDocVoiceUnread();
   }, []);
 
-  function clearBadge() {
+  const refreshCrmNotifications = useCallback(async () => {
+    if (!profileId) return;
+    try {
+      const [{ count }, { data, error }] = await Promise.all([
+        supabase
+          .from("crm_in_app_notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", profileId)
+          .is("read_at", null),
+        supabase
+          .from("crm_in_app_notifications")
+          .select("id, title, body, deal_id, created_at, read_at")
+          .eq("user_id", profileId)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+      if (error) {
+        setCrmUnread(0);
+        setCrmRows([]);
+        return;
+      }
+      setCrmUnread(count ?? 0);
+      setCrmRows((data ?? []) as CrmBellRow[]);
+    } catch {
+      setCrmUnread(0);
+      setCrmRows([]);
+    }
+  }, [profileId]);
+
+  useEffect(() => {
+    void refreshCrmNotifications();
+  }, [refreshCrmNotifications]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void refreshCrmNotifications(), 90_000);
+    return () => window.clearInterval(id);
+  }, [refreshCrmNotifications]);
+
+  function clearDocVoiceBadge() {
     try {
       localStorage.setItem(BELL_STORAGE_KEY, new Date().toISOString());
     } catch {
       // localStorage unavailable — ignore
     }
-    setHasBadge(false);
+    setDocVoiceBadge(false);
   }
 
-  return [hasBadge, clearBadge];
+  const markCrmNotificationRead = useCallback(
+    async (notificationId: string) => {
+      await supabase
+        .from("crm_in_app_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", notificationId)
+        .eq("user_id", profileId);
+      await refreshCrmNotifications();
+    },
+    [profileId, refreshCrmNotifications],
+  );
+
+  return {
+    showBadge: docVoiceBadge || crmUnread > 0,
+    docVoiceBadge,
+    crmUnread,
+    crmRows,
+    clearDocVoiceBadge,
+    refreshCrmNotifications,
+    markCrmNotificationRead,
+  };
 }
 
 export function TopBar({ profile, onLogout }: TopBarProps) {
@@ -129,7 +197,15 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState("");
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
-  const [hasBadge, clearBadge] = useBadge();
+  const {
+    showBadge,
+    docVoiceBadge,
+    crmUnread,
+    crmRows,
+    clearDocVoiceBadge,
+    refreshCrmNotifications,
+    markCrmNotificationRead,
+  } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
   const showCrmSearch = location.pathname.startsWith("/crm");
 
@@ -279,22 +355,75 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Notification bell */}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={hasBadge ? "Notifications — new items" : "Notifications"}
-            onClick={clearBadge}
-            className="relative text-[#94A3B8] hover:text-white hover:bg-white/10"
+          {/* Notifications: follow-up alerts + knowledge / field notes */}
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) void refreshCrmNotifications();
+            }}
           >
-            <Bell className="w-5 h-5" />
-            {hasBadge && (
-              <span
-                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-qep-orange"
-                aria-hidden="true"
-              />
-            )}
-          </Button>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={showBadge ? "Notifications — new items" : "Notifications"}
+                aria-haspopup="menu"
+                className="relative text-[#94A3B8] hover:text-white hover:bg-white/10"
+              >
+                <Bell className="w-5 h-5" />
+                {showBadge && (
+                  <span
+                    className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-qep-orange"
+                    aria-hidden="true"
+                  />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 max-h-[min(70vh,420px)] overflow-y-auto">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Follow-up alerts
+                {crmUnread > 0 ? (
+                  <span className="ml-2 text-qep-orange tabular-nums">({crmUnread} unread)</span>
+                ) : null}
+              </DropdownMenuLabel>
+              {crmRows.length === 0 ? (
+                <p className="px-2 pb-2 text-xs text-muted-foreground">No follow-up notifications.</p>
+              ) : (
+                crmRows.map((row) => (
+                  <DropdownMenuItem
+                    key={row.id}
+                    className="flex cursor-pointer flex-col items-start gap-0.5 py-2"
+                    disabled={!row.deal_id}
+                    onClick={() => {
+                      if (!row.deal_id) return;
+                      void markCrmNotificationRead(row.id);
+                      navigate(`/crm/deals/${row.deal_id}`);
+                    }}
+                  >
+                    <span className="text-sm font-medium text-foreground">{row.title}</span>
+                    {row.body ? (
+                      <span className="line-clamp-2 text-xs text-muted-foreground">{row.body}</span>
+                    ) : null}
+                    <span className="text-[10px] text-muted-foreground">
+                      {row.read_at ? "Read" : "Unread — opens deal"}
+                    </span>
+                  </DropdownMenuItem>
+                ))
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Knowledge &amp; field notes
+                {docVoiceBadge ? (
+                  <span className="ml-2 text-qep-orange tabular-nums">(new)</span>
+                ) : null}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                className="cursor-pointer text-sm"
+                onClick={() => clearDocVoiceBadge()}
+              >
+                Mark documents &amp; voice captures as seen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* User avatar dropdown */}
           <DropdownMenu>

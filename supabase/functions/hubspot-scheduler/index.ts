@@ -6,6 +6,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
+import { shouldSkipHubSpotSequenceTaskForNativeFollowUp } from "../_shared/crm-follow-up-reminders.ts";
 
 const STALLED_THRESHOLD_DAYS = 7;
 
@@ -321,16 +322,36 @@ async function processEnrollmentStep(
   const body = step.body_template ? interpolate(step.body_template) : null;
 
   let engagementId: string | null = null;
+  let skippedForNativeFollowUp = false;
+
+  const { data: qepDealRow } = await supabase
+    .from("crm_deals")
+    .select("next_follow_up_at")
+    .eq("hubspot_deal_id", enrollment.deal_id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  const qepNextFollowUp =
+    qepDealRow && typeof qepDealRow === "object" && "next_follow_up_at" in qepDealRow
+      ? (qepDealRow as { next_follow_up_at: string | null }).next_follow_up_at
+      : null;
 
   switch (step.step_type) {
     case "task":
-      engagementId = await createHubSpotTask(
-        token,
-        enrollment,
-        subject,
-        body,
-        step.task_priority ?? "MEDIUM",
-      );
+      if (shouldSkipHubSpotSequenceTaskForNativeFollowUp(qepNextFollowUp)) {
+        skippedForNativeFollowUp = true;
+        console.log(
+          "[hubspot-scheduler] skipping HubSpot task — native next_follow_up_at within dedupe window",
+          { enrollmentId: enrollment.id, hubspotDealId: enrollment.deal_id },
+        );
+      } else {
+        engagementId = await createHubSpotTask(
+          token,
+          enrollment,
+          subject,
+          body,
+          step.task_priority ?? "MEDIUM",
+        );
+      }
       break;
 
     case "email":
@@ -366,7 +387,12 @@ async function processEnrollmentStep(
       : "stalled_alert",
     step_number: enrollment.current_step,
     hubspot_engagement_id: engagementId,
-    payload: { subject, step_type: step.step_type },
+    payload: {
+      subject,
+      step_type: step.step_type,
+      skipped_for_native_follow_up: skippedForNativeFollowUp,
+      qep_next_follow_up_at: qepNextFollowUp,
+    },
     success: true,
   });
 

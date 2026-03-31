@@ -1237,6 +1237,143 @@ export type Database = {
           },
         ]
       }
+      crm_in_app_notifications: {
+        Row: {
+          id: string
+          workspace_id: string
+          user_id: string
+          kind: string
+          title: string
+          body: string | null
+          deal_id: string | null
+          reminder_instance_id: string | null
+          read_at: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          user_id: string
+          kind?: string
+          title: string
+          body?: string | null
+          deal_id?: string | null
+          reminder_instance_id?: string | null
+          read_at?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          user_id?: string
+          kind?: string
+          title?: string
+          body?: string | null
+          deal_id?: string | null
+          reminder_instance_id?: string | null
+          read_at?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_in_app_notifications_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_in_app_notifications_reminder_instance_id_fkey"
+            columns: ["reminder_instance_id"]
+            isOneToOne: false
+            referencedRelation: "crm_reminder_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_in_app_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_reminder_instances: {
+        Row: {
+          id: string
+          workspace_id: string
+          deal_id: string
+          assigned_user_id: string
+          due_at: string
+          status: Database["public"]["Enums"]["crm_reminder_status"]
+          source: Database["public"]["Enums"]["crm_reminder_source"]
+          idempotency_key: string
+          task_activity_id: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+          fired_at: string | null
+        }
+        Insert: {
+          id?: string
+          workspace_id?: string
+          deal_id: string
+          assigned_user_id: string
+          due_at: string
+          status?: Database["public"]["Enums"]["crm_reminder_status"]
+          source?: Database["public"]["Enums"]["crm_reminder_source"]
+          idempotency_key?: string
+          task_activity_id?: string | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          fired_at?: string | null
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          deal_id?: string
+          assigned_user_id?: string
+          due_at?: string
+          status?: Database["public"]["Enums"]["crm_reminder_status"]
+          source?: Database["public"]["Enums"]["crm_reminder_source"]
+          idempotency_key?: string
+          task_activity_id?: string | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+          fired_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_reminder_instances_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_reminder_instances_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_reminder_instances_task_activity_id_fkey"
+            columns: ["task_activity_id"]
+            isOneToOne: false
+            referencedRelation: "crm_activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_merge_audit_events: {
         Row: {
           actor_user_id: string | null
@@ -3471,6 +3608,30 @@ export type Database = {
         }
         Returns: Json
       }
+      crm_dismiss_follow_up_reminder: { Args: { p_reminder_id: string }; Returns: boolean }
+      crm_dispatch_due_follow_up_reminders: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      crm_manager_at_risk_deals: {
+        Args: { p_limit?: number }
+        Returns: {
+          deal_id: string
+          deal_name: string
+          next_follow_up_at: string
+          amount: number | null
+          assigned_rep_id: string | null
+          hours_overdue: number
+        }[]
+      }
+      crm_schedule_follow_up_reminder: {
+        Args: {
+          p_deal_id: string
+          p_due_at: string | null
+          p_source: Database["public"]["Enums"]["crm_reminder_source"]
+        }
+        Returns: string | null
+      }
       crm_refresh_deal_last_activity: {
         Args: { p_deal_id: string }
         Returns: undefined
@@ -3689,6 +3850,8 @@ export type Database = {
         | "completed_with_errors"
         | "failed"
         | "cancelled"
+      crm_reminder_source: "pipeline_quick" | "deal_detail" | "voice" | "system"
+      crm_reminder_status: "scheduled" | "fired" | "dismissed" | "superseded"
       document_audience:
         | "company_wide"
         | "finance"
@@ -3909,6 +4072,8 @@ export const Constants = {
         "failed",
         "cancelled",
       ],
+      crm_reminder_source: ["pipeline_quick", "deal_detail", "voice", "system"],
+      crm_reminder_status: ["scheduled", "fired", "dismissed", "superseded"],
       document_audience: [
         "company_wide",
         "finance",

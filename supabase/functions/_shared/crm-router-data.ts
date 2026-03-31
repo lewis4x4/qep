@@ -3,6 +3,23 @@ import { deliverCrmCommunication } from "./crm-communication-delivery.ts";
 
 export type CustomRecordType = "contact" | "company" | "equipment";
 
+export type EquipmentCategory =
+  | "excavator" | "loader" | "backhoe" | "dozer" | "skid_steer"
+  | "crane" | "forklift" | "telehandler"
+  | "truck" | "trailer" | "dump_truck"
+  | "aerial_lift" | "boom_lift" | "scissor_lift"
+  | "compactor" | "roller"
+  | "generator" | "compressor" | "pump" | "welder"
+  | "attachment" | "bucket" | "breaker"
+  | "concrete" | "paving"
+  | "drill" | "boring"
+  | "other";
+
+export type EquipmentCondition = "new" | "excellent" | "good" | "fair" | "poor" | "salvage";
+export type EquipmentAvailability = "available" | "rented" | "sold" | "in_service" | "in_transit" | "reserved" | "decommissioned";
+export type EquipmentOwnership = "owned" | "leased" | "customer_owned" | "rental_fleet" | "consignment";
+export type DealEquipmentRole = "subject" | "trade_in" | "rental" | "part_exchange";
+
 export interface EquipmentPayload {
   companyId: string;
   name: string;
@@ -10,6 +27,40 @@ export interface EquipmentPayload {
   serialNumber?: string | null;
   primaryContactId?: string | null;
   metadata?: Record<string, unknown>;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  category?: EquipmentCategory | null;
+  vinPin?: string | null;
+  condition?: EquipmentCondition | null;
+  availability?: EquipmentAvailability | null;
+  ownership?: EquipmentOwnership | null;
+  engineHours?: number | null;
+  mileage?: number | null;
+  fuelType?: string | null;
+  weightClass?: string | null;
+  operatingCapacity?: string | null;
+  locationDescription?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  purchasePrice?: number | null;
+  currentMarketValue?: number | null;
+  replacementCost?: number | null;
+  dailyRentalRate?: number | null;
+  weeklyRentalRate?: number | null;
+  monthlyRentalRate?: number | null;
+  warrantyExpiresOn?: string | null;
+  lastInspectionAt?: string | null;
+  nextServiceDueAt?: string | null;
+  notes?: string | null;
+  photoUrls?: string[];
+}
+
+export interface DealEquipmentPayload {
+  dealId: string;
+  equipmentId: string;
+  role?: DealEquipmentRole;
+  notes?: string | null;
 }
 
 export interface CustomFieldDefinitionPayload {
@@ -53,6 +104,8 @@ export interface ActivityDeliverPayload {
   updatedAt?: string;
 }
 
+export type FollowUpReminderSource = "pipeline_quick" | "deal_detail" | "voice" | "system";
+
 export interface DealPatchPayload {
   name?: string;
   stageId?: string;
@@ -65,6 +118,8 @@ export interface DealPatchPayload {
   lossReason?: string | null;
   competitor?: string | null;
   archive?: boolean;
+  /** Optional telemetry for crm_reminder_instances.source */
+  followUpReminderSource?: FollowUpReminderSource;
 }
 
 export interface ContactUpsertPayload {
@@ -96,12 +151,30 @@ export interface DealCreatePayload {
   amount?: number | null;
   expectedCloseOn?: string | null;
   nextFollowUpAt?: string | null;
+  followUpReminderSource?: FollowUpReminderSource;
 }
 
 function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+async function syncFollowUpReminderFromDealRow(
+  ctx: RouterCtx,
+  dealId: string,
+  row: { next_follow_up_at: string | null; closed_at: string | null },
+  source: FollowUpReminderSource,
+): Promise<void> {
+  const due = row.closed_at ? null : row.next_follow_up_at;
+  const { error } = await ctx.callerDb.rpc("crm_schedule_follow_up_reminder", {
+    p_deal_id: dealId,
+    p_due_at: due,
+    p_source: source,
+  });
+  if (error) {
+    console.error("[crm-router-data] crm_schedule_follow_up_reminder failed", error);
+  }
 }
 
 function normalizeKey(value: string): string {
@@ -205,15 +278,68 @@ async function getActivityForPatch(
   };
 }
 
+const EQUIPMENT_SELECT_COLS = [
+  "id", "company_id", "primary_contact_id", "name", "asset_tag", "serial_number",
+  "make", "model", "year", "category", "vin_pin",
+  "condition", "availability", "ownership",
+  "engine_hours", "mileage", "fuel_type", "weight_class", "operating_capacity",
+  "location_description", "latitude", "longitude",
+  "purchase_price", "current_market_value", "replacement_cost",
+  "daily_rental_rate", "weekly_rental_rate", "monthly_rental_rate",
+  "warranty_expires_on", "last_inspection_at", "next_service_due_at",
+  "notes", "photo_urls",
+  "metadata", "created_at", "updated_at",
+].join(", ");
+
+// deno-lint-ignore no-explicit-any
+function mapEquipmentRow(row: any) {
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    primaryContactId: row.primary_contact_id,
+    name: row.name,
+    assetTag: row.asset_tag,
+    serialNumber: row.serial_number,
+    make: row.make ?? null,
+    model: row.model ?? null,
+    year: row.year ?? null,
+    category: row.category ?? null,
+    vinPin: row.vin_pin ?? null,
+    condition: row.condition ?? null,
+    availability: row.availability ?? "available",
+    ownership: row.ownership ?? "customer_owned",
+    engineHours: row.engine_hours != null ? Number(row.engine_hours) : null,
+    mileage: row.mileage != null ? Number(row.mileage) : null,
+    fuelType: row.fuel_type ?? null,
+    weightClass: row.weight_class ?? null,
+    operatingCapacity: row.operating_capacity ?? null,
+    locationDescription: row.location_description ?? null,
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
+    purchasePrice: row.purchase_price != null ? Number(row.purchase_price) : null,
+    currentMarketValue: row.current_market_value != null ? Number(row.current_market_value) : null,
+    replacementCost: row.replacement_cost != null ? Number(row.replacement_cost) : null,
+    dailyRentalRate: row.daily_rental_rate != null ? Number(row.daily_rental_rate) : null,
+    weeklyRentalRate: row.weekly_rental_rate != null ? Number(row.weekly_rental_rate) : null,
+    monthlyRentalRate: row.monthly_rental_rate != null ? Number(row.monthly_rental_rate) : null,
+    warrantyExpiresOn: row.warranty_expires_on ?? null,
+    lastInspectionAt: row.last_inspection_at ?? null,
+    nextServiceDueAt: row.next_service_due_at ?? null,
+    notes: row.notes ?? null,
+    photoUrls: Array.isArray(row.photo_urls) ? row.photo_urls : [],
+    metadata: row.metadata ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export async function listEquipment(
   ctx: RouterCtx,
   companyId: string | null,
 ): Promise<unknown[]> {
   let query = ctx.callerDb
     .from("crm_equipment")
-    .select(
-      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
-    )
+    .select(EQUIPMENT_SELECT_COLS)
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
@@ -226,17 +352,7 @@ export async function listEquipment(
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    companyId: row.company_id,
-    primaryContactId: row.primary_contact_id,
-    name: row.name,
-    assetTag: row.asset_tag,
-    serialNumber: row.serial_number,
-    metadata: row.metadata ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (data ?? []).map(mapEquipmentRow);
 }
 
 export async function listEquipmentForCompanySubtree(
@@ -255,9 +371,7 @@ export async function listEquipmentForCompanySubtree(
 
   const { data, error } = await ctx.callerDb
     .from("crm_equipment")
-    .select(
-      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
-    )
+    .select(EQUIPMENT_SELECT_COLS)
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .in("company_id", ids)
@@ -280,15 +394,7 @@ export async function listEquipmentForCompanySubtree(
   }
 
   return rows.map((row) => ({
-    id: row.id,
-    companyId: row.company_id,
-    primaryContactId: row.primary_contact_id,
-    name: row.name,
-    assetTag: row.asset_tag,
-    serialNumber: row.serial_number,
-    metadata: row.metadata ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    ...mapEquipmentRow(row),
     companyName: nameMap.get(String(row.company_id)) ?? null,
   }));
 }
@@ -543,6 +649,23 @@ export async function patchActivity(
   if (error) throw error;
   if (!data) {
     throw new Error("VALIDATION_ACTIVITY_STALE");
+  }
+
+  if (hasTask && activity.activityType === "task" && payload.task?.status === "completed") {
+    const md = activity.metadata as Record<string, unknown> | null;
+    const fr = md?.follow_up_reminder;
+    const reminderId =
+      fr && typeof fr === "object" && !Array.isArray(fr)
+        ? (fr as { reminderId?: unknown }).reminderId
+        : undefined;
+    if (typeof reminderId === "string") {
+      const { error: dismissErr } = await ctx.callerDb.rpc("crm_dismiss_follow_up_reminder", {
+        p_reminder_id: reminderId,
+      });
+      if (dismissErr) {
+        console.error("[crm-router-data] crm_dismiss_follow_up_reminder failed", dismissErr);
+      }
+    }
   }
 
   return {
@@ -1020,6 +1143,14 @@ export async function createDeal(
     .single();
 
   if (error) throw error;
+
+  await syncFollowUpReminderFromDealRow(
+    ctx,
+    data.id,
+    { next_follow_up_at: data.next_follow_up_at, closed_at: data.closed_at },
+    payload.followUpReminderSource ?? "deal_detail",
+  );
+
   return {
     id: data.id,
     workspaceId: data.workspace_id,
@@ -1172,6 +1303,20 @@ export async function patchDeal(
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
+
+  const shouldSyncFollowUpReminder =
+    payload.nextFollowUpAt !== undefined ||
+    payload.stageId !== undefined ||
+    payload.closedAt !== undefined;
+  if (shouldSyncFollowUpReminder) {
+    await syncFollowUpReminderFromDealRow(
+      ctx,
+      dealId,
+      { next_follow_up_at: data.next_follow_up_at, closed_at: data.closed_at },
+      payload.followUpReminderSource ?? "deal_detail",
+    );
+  }
+
   return {
     id: data.id,
     workspaceId: data.workspace_id,
@@ -1191,6 +1336,82 @@ export async function patchDeal(
   };
 }
 
+function validateNumericNonNegative(val: number | null | undefined, label: string): void {
+  if (val != null && (typeof val !== "number" || !Number.isFinite(val) || val < 0)) {
+    throw new Error(`VALIDATION_INVALID_${label}`);
+  }
+}
+
+function sanitizePhotoUrls(urls: string[] | undefined): string[] {
+  if (!urls || !Array.isArray(urls)) return [];
+  return urls
+    .filter((u): u is string => typeof u === "string")
+    .map((u) => u.trim())
+    .filter((u) => u.startsWith("https://"));
+}
+
+function applyEquipmentFields(
+  target: Record<string, unknown>,
+  payload: Partial<EquipmentPayload>,
+): void {
+  if (payload.make !== undefined) target.make = cleanText(payload.make ?? null);
+  if (payload.model !== undefined) target.model = cleanText(payload.model ?? null);
+  if (payload.year !== undefined) {
+    if (payload.year != null && (payload.year < 1900 || payload.year > 2100)) {
+      throw new Error("VALIDATION_INVALID_YEAR");
+    }
+    target.year = payload.year;
+  }
+  if (payload.category !== undefined) target.category = payload.category;
+  if (payload.vinPin !== undefined) target.vin_pin = cleanText(payload.vinPin ?? null);
+  if (payload.condition !== undefined) target.condition = payload.condition;
+  if (payload.availability !== undefined) target.availability = payload.availability;
+  if (payload.ownership !== undefined) target.ownership = payload.ownership;
+  if (payload.engineHours !== undefined) {
+    validateNumericNonNegative(payload.engineHours, "ENGINE_HOURS");
+    target.engine_hours = payload.engineHours;
+  }
+  if (payload.mileage !== undefined) {
+    validateNumericNonNegative(payload.mileage, "MILEAGE");
+    target.mileage = payload.mileage;
+  }
+  if (payload.fuelType !== undefined) target.fuel_type = cleanText(payload.fuelType ?? null);
+  if (payload.weightClass !== undefined) target.weight_class = cleanText(payload.weightClass ?? null);
+  if (payload.operatingCapacity !== undefined) target.operating_capacity = cleanText(payload.operatingCapacity ?? null);
+  if (payload.locationDescription !== undefined) target.location_description = cleanText(payload.locationDescription ?? null);
+  if (payload.latitude !== undefined) target.latitude = payload.latitude;
+  if (payload.longitude !== undefined) target.longitude = payload.longitude;
+  if (payload.purchasePrice !== undefined) {
+    validateNumericNonNegative(payload.purchasePrice, "PURCHASE_PRICE");
+    target.purchase_price = payload.purchasePrice;
+  }
+  if (payload.currentMarketValue !== undefined) {
+    validateNumericNonNegative(payload.currentMarketValue, "MARKET_VALUE");
+    target.current_market_value = payload.currentMarketValue;
+  }
+  if (payload.replacementCost !== undefined) {
+    validateNumericNonNegative(payload.replacementCost, "REPLACEMENT_COST");
+    target.replacement_cost = payload.replacementCost;
+  }
+  if (payload.dailyRentalRate !== undefined) {
+    validateNumericNonNegative(payload.dailyRentalRate, "DAILY_RATE");
+    target.daily_rental_rate = payload.dailyRentalRate;
+  }
+  if (payload.weeklyRentalRate !== undefined) {
+    validateNumericNonNegative(payload.weeklyRentalRate, "WEEKLY_RATE");
+    target.weekly_rental_rate = payload.weeklyRentalRate;
+  }
+  if (payload.monthlyRentalRate !== undefined) {
+    validateNumericNonNegative(payload.monthlyRentalRate, "MONTHLY_RATE");
+    target.monthly_rental_rate = payload.monthlyRentalRate;
+  }
+  if (payload.warrantyExpiresOn !== undefined) target.warranty_expires_on = payload.warrantyExpiresOn;
+  if (payload.lastInspectionAt !== undefined) target.last_inspection_at = payload.lastInspectionAt;
+  if (payload.nextServiceDueAt !== undefined) target.next_service_due_at = payload.nextServiceDueAt;
+  if (payload.notes !== undefined) target.notes = cleanText(payload.notes ?? null);
+  if (payload.photoUrls !== undefined) target.photo_urls = sanitizePhotoUrls(payload.photoUrls);
+}
+
 export async function createEquipment(
   ctx: RouterCtx,
   payload: EquipmentPayload,
@@ -1198,37 +1419,151 @@ export async function createEquipment(
   const name = cleanText(payload.name);
   if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
 
-  const insertPayload = {
+  const companyId = cleanText(payload.companyId);
+  if (!companyId) throw new Error("VALIDATION_COMPANY_ID_REQUIRED");
+  await ensureRecordVisible(ctx, "company", companyId);
+
+  const insertPayload: Record<string, unknown> = {
     workspace_id: ctx.workspaceId,
-    company_id: payload.companyId,
+    company_id: companyId,
     primary_contact_id: payload.primaryContactId ?? null,
     name,
     asset_tag: cleanText(payload.assetTag ?? null),
     serial_number: cleanText(payload.serialNumber ?? null),
     metadata: payload.metadata ?? {},
   };
+  applyEquipmentFields(insertPayload, payload);
 
   const { data, error } = await ctx.callerDb
     .from("crm_equipment")
     .insert(insertPayload)
-    .select(
-      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
-    )
+    .select(EQUIPMENT_SELECT_COLS)
     .single();
+
+  if (error) {
+    if (String(error.code) === "23505") {
+      const msg = String(error.message ?? "");
+      if (msg.includes("vin_pin")) throw new Error("VALIDATION_DUPLICATE_VIN_PIN");
+      if (msg.includes("asset_tag")) throw new Error("VALIDATION_DUPLICATE_ASSET_TAG");
+      throw new Error("VALIDATION_DUPLICATE_EQUIPMENT");
+    }
+    throw error;
+  }
+  return mapEquipmentRow(data);
+}
+
+export async function getEquipment(
+  ctx: RouterCtx,
+  equipmentId: string,
+): Promise<unknown> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_equipment")
+    .select(EQUIPMENT_SELECT_COLS)
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", equipmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+  return mapEquipmentRow(data);
+}
+
+export async function listDealEquipment(
+  ctx: RouterCtx,
+  dealId: string,
+): Promise<unknown[]> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_deal_equipment")
+    .select("id, deal_id, equipment_id, role, notes, created_at, updated_at, crm_equipment(name, make, model, year, category, asset_tag, serial_number, availability, condition)")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("deal_id", dealId)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).map((row: any) => {
+    const eq = row.crm_equipment;
+    return {
+      id: row.id,
+      dealId: row.deal_id,
+      equipmentId: row.equipment_id,
+      role: row.role,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      equipment: eq ? {
+        name: eq.name,
+        make: eq.make,
+        model: eq.model,
+        year: eq.year,
+        category: eq.category,
+        assetTag: eq.asset_tag,
+        serialNumber: eq.serial_number,
+        availability: eq.availability,
+        condition: eq.condition,
+      } : null,
+    };
+  });
+}
+
+export async function linkDealEquipment(
+  ctx: RouterCtx,
+  payload: DealEquipmentPayload,
+): Promise<unknown> {
+  const dealId = cleanText(payload.dealId);
+  const equipmentId = cleanText(payload.equipmentId);
+  if (!dealId) throw new Error("VALIDATION_DEAL_ID_REQUIRED");
+  if (!equipmentId) throw new Error("VALIDATION_EQUIPMENT_ID_REQUIRED");
+
+  const validRoles: DealEquipmentRole[] = ["subject", "trade_in", "rental", "part_exchange"];
+  const role = payload.role ?? "subject";
+  if (!validRoles.includes(role)) throw new Error("VALIDATION_INVALID_ROLE");
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_deal_equipment")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      deal_id: dealId,
+      equipment_id: equipmentId,
+      role,
+      notes: cleanText(payload.notes ?? null),
+    })
+    .select("id, deal_id, equipment_id, role, notes, created_at, updated_at")
+    .single();
+
+  if (error) {
+    if (String(error.code) === "23505") {
+      throw new Error("VALIDATION_EQUIPMENT_ALREADY_LINKED");
+    }
+    throw error;
+  }
   return {
     id: data.id,
-    companyId: data.company_id,
-    primaryContactId: data.primary_contact_id,
-    name: data.name,
-    assetTag: data.asset_tag,
-    serialNumber: data.serial_number,
-    metadata: data.metadata ?? {},
+    dealId: data.deal_id,
+    equipmentId: data.equipment_id,
+    role: data.role,
+    notes: data.notes,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
+}
+
+export async function unlinkDealEquipment(
+  ctx: RouterCtx,
+  linkId: string,
+): Promise<void> {
+  const id = cleanText(linkId);
+  if (!id) throw new Error("VALIDATION_LINK_ID_REQUIRED");
+
+  const { error, count } = await ctx.callerDb
+    .from("crm_deal_equipment")
+    .delete({ count: "exact" })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", id);
+  if (error) throw error;
+  if (count === 0) throw new Error("NOT_FOUND");
 }
 
 export async function patchEquipment(
@@ -1237,7 +1572,11 @@ export async function patchEquipment(
   payload: Partial<EquipmentPayload>,
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
-  if (payload.companyId !== undefined) updates.company_id = payload.companyId;
+  if (payload.companyId !== undefined) {
+    const cid = cleanText(payload.companyId);
+    if (cid) await ensureRecordVisible(ctx, "company", cid);
+    updates.company_id = cid;
+  }
   if (payload.primaryContactId !== undefined) {
     updates.primary_contact_id = payload.primaryContactId;
   }
@@ -1253,6 +1592,7 @@ export async function patchEquipment(
     updates.serial_number = cleanText(payload.serialNumber ?? null);
   }
   if (payload.metadata !== undefined) updates.metadata = payload.metadata ?? {};
+  applyEquipmentFields(updates, payload);
 
   if (Object.keys(updates).length === 0) {
     throw new Error("VALIDATION_EMPTY_PATCH");
@@ -1264,25 +1604,21 @@ export async function patchEquipment(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)
     .is("deleted_at", null)
-    .select(
-      "id, company_id, primary_contact_id, name, asset_tag, serial_number, metadata, created_at, updated_at",
-    )
+    .select(EQUIPMENT_SELECT_COLS)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (String(error.code) === "23505") {
+      const msg = String(error.message ?? "");
+      if (msg.includes("vin_pin")) throw new Error("VALIDATION_DUPLICATE_VIN_PIN");
+      if (msg.includes("asset_tag")) throw new Error("VALIDATION_DUPLICATE_ASSET_TAG");
+      throw new Error("VALIDATION_DUPLICATE_EQUIPMENT");
+    }
+    throw error;
+  }
   if (!data) throw new Error("NOT_FOUND");
 
-  return {
-    id: data.id,
-    companyId: data.company_id,
-    primaryContactId: data.primary_contact_id,
-    name: data.name,
-    assetTag: data.asset_tag,
-    serialNumber: data.serial_number,
-    metadata: data.metadata ?? {},
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
-  };
+  return mapEquipmentRow(data);
 }
 
 export async function patchCompanyParent(

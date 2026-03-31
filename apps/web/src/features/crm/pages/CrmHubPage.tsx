@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "../lib/crm-supabase";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 
@@ -24,6 +25,15 @@ interface CrmStats {
   contacts: number | null;
   companies: number | null;
   recentActivities: number | null;
+}
+
+interface AtRiskDealRow {
+  deal_id: string;
+  deal_name: string;
+  next_follow_up_at: string;
+  amount: number | null;
+  assigned_rep_id: string | null;
+  hours_overdue: number;
 }
 
 async function fetchCrmStats(): Promise<CrmStats> {
@@ -183,6 +193,17 @@ export function CrmHubPage({ userRole }: CrmHubPageProps) {
   const stats = statsQuery.data;
   const isAdmin = ADMIN_ROLES.includes(userRole);
 
+  const atRiskQuery = useQuery({
+    queryKey: ["crm", "manager-at-risk-deals"],
+    enabled: isAdmin,
+    queryFn: async (): Promise<AtRiskDealRow[]> => {
+      const { data, error } = await supabase.rpc("crm_manager_at_risk_deals", { p_limit: 12 });
+      if (error) throw error;
+      return (data ?? []) as AtRiskDealRow[];
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
       <CrmPageHeader title="CRM" subtitle="Customer relationship management hub" />
@@ -216,6 +237,35 @@ export function CrmHubPage({ userRole }: CrmHubPageProps) {
           </div>
         )}
       </section>
+
+      {isAdmin && atRiskQuery.data && atRiskQuery.data.length > 0 && (
+        <section aria-label="At-risk deals">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            At-risk deals (follow-up overdue 24h+)
+          </h2>
+          <Card className="border-destructive/25 bg-destructive/5 p-4">
+            <ul className="space-y-2">
+              {atRiskQuery.data.map((row) => (
+                <li
+                  key={row.deal_id}
+                  className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                >
+                  <Link
+                    to={`/crm/deals/${row.deal_id}`}
+                    className="font-medium text-foreground hover:text-primary"
+                  >
+                    {row.deal_name}
+                  </Link>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {Math.round(row.hours_overdue)}h overdue
+                    {row.amount != null ? ` · $${Number(row.amount).toLocaleString()}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
 
       {/* Primary sections */}
       <section aria-label="CRM sections">

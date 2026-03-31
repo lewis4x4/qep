@@ -209,6 +209,9 @@ export async function patchCrmDeal(dealId: string, input: CrmDealPatchInput): Pr
   if (input.closedAt !== undefined) payload.closedAt = input.closedAt;
   if (input.lossReason !== undefined) payload.lossReason = input.lossReason;
   if (input.competitor !== undefined) payload.competitor = input.competitor;
+  if (input.followUpReminderSource !== undefined) {
+    payload.followUpReminderSource = input.followUpReminderSource;
+  }
 
   if (Object.keys(payload).length === 0) {
     throw new Error("No deal fields were provided for update.");

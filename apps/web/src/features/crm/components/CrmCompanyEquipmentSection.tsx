@@ -1,38 +1,45 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Eye } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { createCompanyEquipment, fetchCompanyEquipment } from "../lib/crm-router-api";
+import { CrmEquipmentFormSheet, draftToPayload } from "./CrmEquipmentFormSheet";
 
 interface CrmCompanyEquipmentSectionProps {
   companyId: string;
 }
 
-interface NewEquipmentDraft {
-  name: string;
-  assetTag: string;
-  serialNumber: string;
+const conditionColor: Record<string, string> = {
+  new: "bg-emerald-500/15 text-emerald-400",
+  excellent: "bg-emerald-500/15 text-emerald-400",
+  good: "bg-sky-500/15 text-sky-400",
+  fair: "bg-amber-500/15 text-amber-400",
+  poor: "bg-orange-500/15 text-orange-400",
+  salvage: "bg-red-500/15 text-red-400",
+};
+
+const availabilityColor: Record<string, string> = {
+  available: "bg-emerald-500/15 text-emerald-400",
+  rented: "bg-violet-500/15 text-violet-400",
+  sold: "bg-zinc-500/15 text-zinc-400",
+  in_service: "bg-amber-500/15 text-amber-400",
+  in_transit: "bg-sky-500/15 text-sky-400",
+  reserved: "bg-indigo-500/15 text-indigo-400",
+  decommissioned: "bg-red-500/15 text-red-400",
+};
+
+function formatLabel(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSectionProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<NewEquipmentDraft>({
-    name: "",
-    assetTag: "",
-    serialNumber: "",
-  });
 
   const equipmentQuery = useQuery({
     queryKey: ["crm", "company", companyId, "equipment"],
@@ -41,18 +48,12 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
   });
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      createCompanyEquipment({
-        companyId,
-        name: draft.name,
-        assetTag: draft.assetTag || null,
-        serialNumber: draft.serialNumber || null,
-      }),
+    mutationFn: (payload: ReturnType<typeof draftToPayload>) =>
+      createCompanyEquipment({ ...payload, companyId }),
     onSuccess: async () => {
       setOpen(false);
-      setDraft({ name: "", assetTag: "", serialNumber: "" });
       await queryClient.invalidateQueries({ queryKey: ["crm", "company", companyId, "equipment"] });
-      toast({ title: "Equipment added", description: "The company equipment registry has been updated." });
+      toast({ title: "Equipment added", description: "The equipment record has been created." });
     },
     onError: (error) => {
       toast({
@@ -90,22 +91,57 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-4">Name</th>
-                <th className="py-2 pr-4">Asset Tag</th>
-                <th className="py-2 pr-4">Serial Number</th>
-                <th className="py-2 pr-2">Updated</th>
+                <th className="py-2 pr-4">Equipment</th>
+                <th className="py-2 pr-4">Category</th>
+                <th className="py-2 pr-4">Condition</th>
+                <th className="py-2 pr-4">Availability</th>
+                <th className="py-2 pr-2">Hours / Miles</th>
+                <th className="py-2 pr-2" />
               </tr>
             </thead>
             <tbody>
-              {equipmentQuery.data?.map((equipment) => (
-                <tr key={equipment.id} className="border-b border-border/60">
-                  <td className="py-2 pr-4 font-medium text-foreground">{equipment.name}</td>
-                  <td className="py-2 pr-4 text-muted-foreground">{equipment.assetTag || "-"}</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">
-                    {equipment.serialNumber || "-"}
+              {equipmentQuery.data?.map((eq) => (
+                <tr key={eq.id} className="border-b border-border/60">
+                  <td className="py-2 pr-4">
+                    <div className="font-medium text-foreground">{eq.name}</div>
+                    {(eq.make || eq.model || eq.year) && (
+                      <div className="text-xs text-muted-foreground">
+                        {[eq.year, eq.make, eq.model].filter(Boolean).join(" ")}
+                      </div>
+                    )}
+                    {eq.assetTag && (
+                      <div className="font-mono text-xs text-muted-foreground/70">{eq.assetTag}</div>
+                    )}
                   </td>
-                  <td className="py-2 pr-2 text-muted-foreground">
-                    {new Date(equipment.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <td className="py-2 pr-4 text-muted-foreground">
+                    {eq.category ? formatLabel(eq.category) : "-"}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {eq.condition ? (
+                      <Badge variant="outline" className={conditionColor[eq.condition] ?? ""}>
+                        {formatLabel(eq.condition)}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">
+                    <Badge variant="outline" className={availabilityColor[eq.availability] ?? ""}>
+                      {formatLabel(eq.availability)}
+                    </Badge>
+                  </td>
+                  <td className="py-2 pr-2 font-mono text-xs text-muted-foreground">
+                    {eq.engineHours != null ? `${eq.engineHours.toLocaleString()} hrs` : ""}
+                    {eq.engineHours != null && eq.mileage != null ? " / " : ""}
+                    {eq.mileage != null ? `${eq.mileage.toLocaleString()} mi` : ""}
+                    {eq.engineHours == null && eq.mileage == null ? "-" : ""}
+                  </td>
+                  <td className="py-2 pr-2">
+                    <Link to={`/crm/equipment/${eq.id}`}>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </td>
                 </tr>
               ))}
@@ -114,63 +150,12 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
         </div>
       )}
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Add equipment</SheetTitle>
-            <SheetDescription>
-              Keep company context while adding an equipment asset.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-name">
-                Name
-              </label>
-              <Input
-                id="equipment-name"
-                value={draft.name}
-                onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="CAT 320 Excavator"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-asset-tag">
-                Asset tag
-              </label>
-              <Input
-                id="equipment-asset-tag"
-                value={draft.assetTag}
-                onChange={(event) => setDraft((prev) => ({ ...prev, assetTag: event.target.value }))}
-                placeholder="QEP-EX-1003"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-serial">
-                Serial number
-              </label>
-              <Input
-                id="equipment-serial"
-                value={draft.serialNumber}
-                onChange={(event) => setDraft((prev) => ({ ...prev, serialNumber: event.target.value }))}
-                placeholder="SN12345"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button
-                disabled={createMutation.isPending || draft.name.trim().length === 0}
-                onClick={() => createMutation.mutate()}
-              >
-                {createMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Plus className="mr-1 h-4 w-4" />}
-                Save Equipment
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <CrmEquipmentFormSheet
+        open={open}
+        onOpenChange={setOpen}
+        isPending={createMutation.isPending}
+        onSubmit={(payload) => createMutation.mutate(payload)}
+      />
     </Card>
   );
 }

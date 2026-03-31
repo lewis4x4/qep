@@ -13,6 +13,8 @@ import type {
   CrmDealCreateInput,
   CrmDealPatchInput,
   CrmRepSafeDeal,
+  CrmDealEquipmentLink,
+  CrmDealEquipmentRole,
   CrmDuplicateCandidate,
   CrmEquipment,
   CrmRecordType,
@@ -31,7 +33,7 @@ interface EdgeErrorPayload {
 }
 
 interface RouterRequestOptions {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   idempotencyKey?: string;
 }
@@ -220,18 +222,53 @@ export async function fetchCompanySubtreeEquipment(companyId: string): Promise<C
   return payload.items;
 }
 
-export async function createCompanyEquipment(input: {
-  companyId: string;
-  name: string;
-  assetTag?: string | null;
-  serialNumber?: string | null;
-  primaryContactId?: string | null;
-}): Promise<CrmEquipment> {
+export async function createCompanyEquipment(input: Omit<Partial<CrmEquipment>, "id" | "createdAt" | "updatedAt" | "companyName"> & { companyId: string; name: string }): Promise<CrmEquipment> {
   const payload = await requestRouter<{ equipment: CrmEquipment }>("/crm/equipment", {
     method: "POST",
     body: input,
   });
   return payload.equipment;
+}
+
+export async function getEquipmentById(equipmentId: string): Promise<CrmEquipment> {
+  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/crm/equipment/${equipmentId}`);
+  return payload.equipment;
+}
+
+export async function patchEquipment(
+  equipmentId: string,
+  input: Partial<CrmEquipment>,
+): Promise<CrmEquipment> {
+  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/crm/equipment/${equipmentId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.equipment;
+}
+
+export async function fetchDealEquipment(dealId: string): Promise<CrmDealEquipmentLink[]> {
+  const params = new URLSearchParams({ deal_id: dealId });
+  const payload = await requestRouter<{ items: CrmDealEquipmentLink[] }>(`/crm/deal-equipment?${params.toString()}`);
+  return payload.items;
+}
+
+export async function linkEquipmentToDeal(input: {
+  dealId: string;
+  equipmentId: string;
+  role?: CrmDealEquipmentRole;
+  notes?: string | null;
+}): Promise<CrmDealEquipmentLink> {
+  const payload = await requestRouter<{ link: CrmDealEquipmentLink }>("/crm/deal-equipment", {
+    method: "POST",
+    body: input,
+  });
+  return payload.link;
+}
+
+export async function unlinkEquipmentFromDeal(linkId: string): Promise<void> {
+  await requestRouter<{ deleted: boolean }>(`/crm/deal-equipment/${linkId}`, {
+    method: "DELETE",
+  });
 }
 
 export async function listCustomFieldDefinitions(

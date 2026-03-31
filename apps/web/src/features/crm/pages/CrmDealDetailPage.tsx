@@ -8,6 +8,7 @@ import type { UserRole } from "@/lib/database.types";
 import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
+import { CrmDealEquipmentSection } from "../components/CrmDealEquipmentSection";
 import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
@@ -157,6 +158,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     const currentFollowUp = dealQuery.data.nextFollowUpAt ? new Date(dealQuery.data.nextFollowUpAt).toISOString() : null;
     if (normalizedNextFollowUp !== currentFollowUp) {
       payload.nextFollowUpAt = normalizedNextFollowUp;
+      payload.followUpReminderSource = "deal_detail";
     }
 
     if (isElevatedRole && selectedStage?.isClosedLost) {
@@ -288,6 +290,8 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
             stagesLoading={stagesQuery.isLoading}
             onSave={() => void handleSave()}
           />
+
+          <CrmDealEquipmentSection dealId={dealId} companyId={dealQuery.data?.companyId ?? null} />
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">

@@ -819,7 +819,10 @@ function PipelineDealTableRow({
     });
 
     try {
-      const updatedDeal = await patchCrmDeal(deal.id, { nextFollowUpAt });
+      const updatedDeal = await patchCrmDeal(deal.id, {
+        nextFollowUpAt,
+        followUpReminderSource: "pipeline_quick",
+      });
       setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
       onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
       queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);
@@ -914,7 +917,10 @@ function PipelineDealCard({
     });
 
     try {
-      const updatedDeal = await patchCrmDeal(deal.id, { nextFollowUpAt });
+      const updatedDeal = await patchCrmDeal(deal.id, {
+        nextFollowUpAt,
+        followUpReminderSource: "pipeline_quick",
+      });
       setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
       onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
       queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);

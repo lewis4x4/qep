@@ -1,6 +1,17 @@
 -- Enable pgvector extension
 create extension if not exists vector with schema extensions;
 
+-- Postgres 17: ensure extensions schema operators (e.g. vector <=>) are resolvable
+do $$
+begin
+  execute format(
+    'alter database %I set search_path to "$user", public, extensions',
+    current_database()
+  );
+end;
+$$;
+set search_path to "$user", public, extensions;
+
 -- ============================================================
 -- PROFILES (extends auth.users with role-based access)
 -- ============================================================

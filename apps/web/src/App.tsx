@@ -63,6 +63,11 @@ const CrmPipelinePage = lazy(() =>
 const CrmDuplicatesPage = lazy(() =>
   import("./features/crm/pages/CrmDuplicatesPage").then((m) => ({ default: m.CrmDuplicatesPage }))
 );
+const CrmEquipmentDetailPage = lazy(() =>
+  import("./features/crm/pages/CrmEquipmentDetailPage").then((m) => ({
+    default: m.CrmEquipmentDetailPage,
+  }))
+);
 const CrmActivitiesPage = lazy(() =>
   import("./features/crm/pages/CrmActivitiesPage").then((m) => ({ default: m.CrmActivitiesPage }))
 );
@@ -477,6 +482,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/equipment/:equipmentId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmEquipmentDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

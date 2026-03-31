@@ -29,12 +29,16 @@ import {
   createCustomFieldDefinition,
   createDeal,
   createEquipment,
+  getEquipment,
   dismissDuplicateCandidate,
   getRecordCustomFields,
   listCustomFieldDefinitions,
   listDuplicateCandidates,
   listEquipment,
   listEquipmentForCompanySubtree,
+  listDealEquipment,
+  linkDealEquipment,
+  unlinkDealEquipment,
   patchContact,
   patchDeal,
   patchCompanyParent,
@@ -49,6 +53,7 @@ import {
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
   type DealCreatePayload,
+  type DealEquipmentPayload,
   type DealPatchPayload,
   type EquipmentPayload,
 } from "../_shared/crm-router-data.ts";
@@ -169,6 +174,33 @@ function mapError(origin: string | null, error: unknown): Response {
       status: 409,
       code: "VALIDATION_ERROR",
       message: "Reassign linked equipment before archiving this company.",
+    });
+  }
+
+  if (message === "VALIDATION_DUPLICATE_VIN_PIN") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Another equipment record in this workspace already uses that VIN/PIN.",
+    });
+  }
+
+  if (message === "VALIDATION_DUPLICATE_ASSET_TAG") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Another equipment record in this workspace already uses that asset tag.",
+    });
+  }
+
+  if (message === "VALIDATION_EQUIPMENT_ALREADY_LINKED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "This equipment is already linked to this deal.",
     });
   }
 
@@ -495,10 +527,46 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return crmOk({ equipment }, { origin, status: 201 });
       }
 
+      if (req.method === "GET" && segments.length === 3) {
+        try {
+          const equipment = await getEquipment(ctx, segments[2]);
+          return crmOk({ equipment }, { origin });
+        } catch (error) {
+          if (error instanceof Error && error.message === "NOT_FOUND") {
+            return crmFail({ origin, status: 404, code: "NOT_FOUND", message: "Equipment not found." });
+          }
+          throw error;
+        }
+      }
+
       if (req.method === "PATCH" && segments.length === 3) {
         const body = await readJsonBody<Partial<EquipmentPayload>>(req);
         const equipment = await patchEquipment(ctx, segments[2], body);
         return crmOk({ equipment }, { origin });
+      }
+    }
+
+    if (segments[1] === "deal-equipment") {
+      requireCaller(ctx);
+
+      if (req.method === "GET" && segments.length === 2) {
+        const dealId = safeText(url.searchParams.get("deal_id"));
+        if (!dealId) {
+          return crmFail({ origin, status: 400, code: "VALIDATION_ERROR", message: "deal_id is required." });
+        }
+        const items = await listDealEquipment(ctx, dealId);
+        return crmOk({ items }, { origin });
+      }
+
+      if (req.method === "POST" && segments.length === 2) {
+        const body = await readJsonBody<DealEquipmentPayload>(req);
+        const link = await linkDealEquipment(ctx, body);
+        return crmOk({ link }, { origin, status: 201 });
+      }
+
+      if (req.method === "DELETE" && segments.length === 3) {
+        await unlinkDealEquipment(ctx, segments[2]);
+        return crmOk({ deleted: true }, { origin });
       }
     }
 
