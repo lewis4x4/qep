@@ -2,6 +2,20 @@
 
 This complements `knowledge-base-manual-test-checklist.md`. **Production checks require a human** signed into the deployed app (Netlify / `qep.blackrockai.co` or current URL) with real roles and documents.
 
+## Edge function reachability (automated)
+
+After deploy, from a shell with **no keys in the repo** (use Netlify env or a local `.env` you do not commit):
+
+```bash
+export SUPABASE_URL="https://<project-ref>.supabase.co"
+export SUPABASE_ANON_KEY="<anon-jwt>"
+# Optional if your CORS allowlist differs:
+# export SMOKE_ORIGIN="https://qep.blackrockai.co"
+bun run smoke:edge
+```
+
+Expect `OK (200)` for **chat**, **ingest**, and **document-admin**. A **404** means the function name or project URL is wrong.
+
 ## Preconditions
 
 - Remote DB migrations through **042** applied; Edge Functions **chat**, **ingest**, **document-admin** deployed.
