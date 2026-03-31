@@ -14,6 +14,8 @@ interface CrmActivityTimelineProps {
   onPatchTask?: (activity: CrmActivityItem, task: CrmTaskMetadata) => Promise<void>;
   onToggleTaskStatus?: (activity: CrmActivityItem, nextStatus: "open" | "completed") => Promise<void>;
   pendingTaskId?: string | null;
+  onDeliverCommunication?: (activity: CrmActivityItem) => Promise<void>;
+  pendingDeliveryId?: string | null;
 }
 
 const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: string }>; badge: string; label: string }> = {
@@ -98,6 +100,14 @@ function deliveryAttemptLabel(delivery: CommunicationDeliveryMetadata): string |
   return `Attempted ${formatted}`;
 }
 
+function canRetryDelivery(delivery: CommunicationDeliveryMetadata): boolean {
+  return delivery.status === "failed" || delivery.mode === "manual";
+}
+
+function deliveryActionLabel(delivery: CommunicationDeliveryMetadata): string {
+  return delivery.status === "failed" ? "Retry send" : "Send now";
+}
+
 function readTaskMetadata(activity: CrmActivityItem): CrmTaskMetadata | null {
   if (activity.activityType !== "task") return null;
   const metadata = activity.metadata;
@@ -152,6 +162,8 @@ export function CrmActivityTimeline({
   onPatchTask,
   onToggleTaskStatus,
   pendingTaskId = null,
+  onDeliverCommunication,
+  pendingDeliveryId = null,
 }: CrmActivityTimelineProps) {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [dueAtInput, setDueAtInput] = useState("");
@@ -224,6 +236,7 @@ export function CrmActivityTimeline({
         const isEditingTask = editingTaskId === activity.id;
         const isPendingTask = pendingTaskId === activity.id;
         const attemptedLabel = delivery ? deliveryAttemptLabel(delivery) : null;
+        const isPendingDelivery = pendingDeliveryId === activity.id;
 
         return (
           <article
@@ -369,6 +382,20 @@ export function CrmActivityTimeline({
                     {delivery.externalMessageId && (
                       <span className="font-mono">Ref {delivery.externalMessageId}</span>
                     )}
+                  </div>
+                )}
+                {onDeliverCommunication && canRetryDelivery(delivery) && (
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-3 text-xs"
+                      disabled={isPendingDelivery}
+                      onClick={() => void onDeliverCommunication(activity)}
+                    >
+                      {isPendingDelivery ? "Sending..." : deliveryActionLabel(delivery)}
+                    </Button>
                   </div>
                 )}
               </div>

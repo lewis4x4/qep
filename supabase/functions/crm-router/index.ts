@@ -21,6 +21,7 @@ import {
 } from "../_shared/crm-router-service.ts";
 import {
   createActivity,
+  deliverActivity,
   patchActivity,
   createCustomFieldDefinition,
   createEquipment,
@@ -34,6 +35,7 @@ import {
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
+  type ActivityDeliverPayload,
   type ActivityPayload,
   type ActivityPatchPayload,
   type CustomFieldDefinitionPayload,
@@ -192,6 +194,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       requireCaller(ctx);
       const body = await readJsonBody<ActivityPatchPayload>(req);
       const activity = await patchActivity(ctx, segments[2], body);
+      return crmOk({ activity }, { origin });
+    }
+
+    if (
+      segments[1] === "activities" &&
+      req.method === "POST" &&
+      segments.length === 4 &&
+      segments[3] === "deliver"
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<ActivityDeliverPayload>(req);
+      const activity = await deliverActivity(ctx, segments[2], body);
       return crmOk({ activity }, { origin });
     }
 

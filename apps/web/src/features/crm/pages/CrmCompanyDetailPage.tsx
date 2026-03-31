@@ -11,6 +11,7 @@ import { CrmCompanyEquipmentSection } from "../components/CrmCompanyEquipmentSec
 import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
   createCrmActivity,
@@ -117,6 +118,12 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   });
 
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "company", companyId, "activities"]);
+  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
+    "crm",
+    "company",
+    companyId,
+    "activities",
+  ]);
 
   const hierarchyMutation = useMutation({
     mutationFn: (nextParentId: string | null) => updateCompanyParent(companyId, nextParentId),
@@ -421,8 +428,12 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                 entityLabel={companyName}
                 showEntityLabel={false}
                 pendingTaskId={pendingTaskId}
+                pendingDeliveryId={pendingDeliveryId}
                 onPatchTask={async (activity, task) => {
                   await patchTask({ activityId: activity.id, task });
+                }}
+                onDeliverCommunication={async (activity) => {
+                  await deliverActivity({ activityId: activity.id });
                 }}
               />
             )}

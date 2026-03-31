@@ -10,6 +10,7 @@ import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { CrmTerritoryConflictBadge } from "../components/CrmTerritoryConflictBadge";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
@@ -115,6 +116,12 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   });
 
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "contact", contactId, "activities"]);
+  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
+    "crm",
+    "contact",
+    contactId,
+    "activities",
+  ]);
 
   const conflict = useMemo(() => {
     if (!contactQuery.data?.assignedRepId || !territoriesQuery.data) {
@@ -307,8 +314,12 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 entityLabel={contactName}
                 showEntityLabel={false}
                 pendingTaskId={pendingTaskId}
+                pendingDeliveryId={pendingDeliveryId}
                 onPatchTask={async (activity, task) => {
                   await patchTask({ activityId: activity.id, task });
+                }}
+                onDeliverCommunication={async (activity) => {
+                  await deliverActivity({ activityId: activity.id });
                 }}
               />
             )}

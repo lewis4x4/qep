@@ -1,5 +1,9 @@
 import { crmSupabase, type CrmDatabase } from "./crm-supabase";
-import { createCrmActivityViaRouter, patchCrmActivityTaskViaRouter } from "./crm-router-api";
+import {
+  createCrmActivityViaRouter,
+  deliverCrmActivityViaRouter,
+  patchCrmActivityTaskViaRouter,
+} from "./crm-router-api";
 import type {
   CrmActivityCreateInput,
   CrmActivityItem,
@@ -285,4 +289,10 @@ export async function patchCrmActivityTask(
   input: CrmActivityTaskPatchInput,
 ): Promise<CrmActivityItem> {
   return patchCrmActivityTaskViaRouter(activityId, input);
+}
+
+export async function deliverCrmActivity(
+  activityId: string,
+): Promise<CrmActivityItem> {
+  return deliverCrmActivityViaRouter(activityId);
 }

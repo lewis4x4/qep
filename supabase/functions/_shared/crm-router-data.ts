@@ -44,6 +44,10 @@ export interface ActivityPatchPayload {
   };
 }
 
+export interface ActivityDeliverPayload {
+  sendNow?: boolean;
+}
+
 export interface DealPatchPayload {
   stageId?: string;
   expectedCloseOn?: string | null;
@@ -127,11 +131,16 @@ async function getActivityForPatch(
 ): Promise<{
   id: string;
   activityType: string;
+  body: string | null;
+  contactId: string | null;
+  companyId: string | null;
+  dealId: string | null;
   metadata: Record<string, unknown>;
+  updatedAt: string;
 }> {
   const { data, error } = await ctx.callerDb
     .from("crm_activities")
-    .select("id, activity_type, metadata")
+    .select("id, activity_type, body, contact_id, company_id, deal_id, metadata, updated_at")
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", activityId)
     .is("deleted_at", null)
@@ -143,10 +152,15 @@ async function getActivityForPatch(
   return {
     id: data.id,
     activityType: data.activity_type,
+    body: data.body,
+    contactId: data.contact_id,
+    companyId: data.company_id,
+    dealId: data.deal_id,
     metadata:
       data.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
         ? (data.metadata as Record<string, unknown>)
         : {},
+    updatedAt: data.updated_at,
   };
 }
 
@@ -322,6 +336,119 @@ export async function patchActivity(
         : null,
       status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
     },
+  };
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_activities")
+    .update({
+      metadata: nextMetadata,
+    })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", activityId)
+    .select(
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
+    )
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    activityType: data.activity_type,
+    body: data.body,
+    occurredAt: data.occurred_at,
+    contactId: data.contact_id,
+    companyId: data.company_id,
+    dealId: data.deal_id,
+    createdBy: data.created_by,
+    metadata: (data.metadata as Record<string, unknown> | null) ?? {},
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function deliverActivity(
+  ctx: RouterCtx,
+  activityId: string,
+  payload: ActivityDeliverPayload,
+): Promise<unknown> {
+  const activity = await getActivityForPatch(ctx, activityId);
+  if (activity.activityType !== "email" && activity.activityType !== "sms") {
+    throw new Error("VALIDATION_ACTIVITY_DELIVERY_UNSUPPORTED");
+  }
+  const communication =
+    activity.metadata.communication &&
+      typeof activity.metadata.communication === "object" &&
+      !Array.isArray(activity.metadata.communication)
+      ? (activity.metadata.communication as Record<string, unknown>)
+      : null;
+  const inProgressAt = typeof communication?.deliveryInProgressAt === "string"
+    ? Date.parse(communication.deliveryInProgressAt)
+    : Number.NaN;
+  const hasFreshDeliveryLock =
+    communication?.deliveryInProgress === true &&
+    Number.isFinite(inProgressAt) &&
+    Date.now() - inProgressAt < 2 * 60 * 1000;
+  if (hasFreshDeliveryLock) {
+    throw new Error("VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS");
+  }
+  if (communication?.status === "sent") {
+    throw new Error("VALIDATION_ACTIVITY_DELIVERY_ALREADY_SENT");
+  }
+
+  const claimMetadata = {
+    ...activity.metadata,
+    communication: {
+      ...(communication ?? {}),
+      deliveryInProgress: true,
+      deliveryInProgressAt: new Date().toISOString(),
+    },
+  };
+
+  const { data: claimedActivity, error: claimError } = await ctx.callerDb
+    .from("crm_activities")
+    .update({
+      metadata: claimMetadata,
+    })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", activityId)
+    .eq("updated_at", activity.updatedAt)
+    .select("id")
+    .maybeSingle();
+
+  if (claimError) throw claimError;
+  if (!claimedActivity) {
+    throw new Error("VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS");
+  }
+
+  let deliveredCommunication: Record<string, unknown>;
+  try {
+    deliveredCommunication = await deliverCrmCommunication(ctx, {
+      activityType: activity.activityType,
+      sendNow: payload.sendNow !== false,
+      body: cleanText(activity.body ?? null),
+      contactId: activity.contactId,
+      companyId: activity.companyId,
+      dealId: activity.dealId,
+    });
+  } catch (error) {
+    await ctx.callerDb
+      .from("crm_activities")
+      .update({
+        metadata: {
+          ...activity.metadata,
+          communication: communication ?? {},
+        },
+      })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", activityId);
+    throw error;
+  }
+
+  const nextMetadata = {
+    ...activity.metadata,
+    communication: deliveredCommunication,
   };
 
   const { data, error } = await ctx.callerDb

@@ -9,6 +9,7 @@ import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import {
@@ -129,6 +130,12 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   });
 
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "deal", dealId, "activities"]);
+  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
+    "crm",
+    "deal",
+    dealId,
+    "activities",
+  ]);
 
   async function handleSave(): Promise<void> {
     if (!dealQuery.data) return;
@@ -283,8 +290,12 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 entityLabel={dealName}
                 showEntityLabel={false}
                 pendingTaskId={pendingTaskId}
+                pendingDeliveryId={pendingDeliveryId}
                 onPatchTask={async (activity, task) => {
                   await patchTask({ activityId: activity.id, task });
+                }}
+                onDeliverCommunication={async (activity) => {
+                  await deliverActivity({ activityId: activity.id });
                 }}
               />
             )}

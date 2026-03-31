@@ -92,6 +92,16 @@ export async function patchCrmActivityTaskViaRouter(
   return payload.activity;
 }
 
+export async function deliverCrmActivityViaRouter(
+  activityId: string,
+): Promise<CrmActivityItem> {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}/deliver`, {
+    method: "POST",
+    body: { sendNow: true },
+  });
+  return payload.activity;
+}
+
 export async function patchCrmDealViaRouter(
   dealId: string,
   input: CrmDealPatchInput,
