@@ -388,6 +388,7 @@ export function IntegrationPanel({
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
   const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
   const [hubspotCutoverSnapshot, setHubspotCutoverSnapshot] = useState<HubSpotCutoverSnapshot | null>(null);
+  const [showHubspotCutoverDetails, setShowHubspotCutoverDetails] = useState(false);
   const [recentCredentialAuditEvents, setRecentCredentialAuditEvents] = useState<IntegrationCredentialAuditEventRow[]>([]);
   const [isLoadingCredentialAudit, setIsLoadingCredentialAudit] = useState(false);
   const [credentialAuditError, setCredentialAuditError] = useState<string | null>(null);
@@ -440,6 +441,7 @@ export function IntegrationPanel({
     setHubspotCutoverNote(
       typeof cutover.note === "string" ? cutover.note : "",
     );
+    setShowHubspotCutoverDetails(false);
     setHubspotCutoverSnapshot({
       parallelRunEnabled: normalizedParallelRunEnabled,
       cutoverReady: normalizedCutoverReady,
@@ -1452,6 +1454,16 @@ export function IntegrationPanel({
                         type="button"
                         size="sm"
                         variant="outline"
+                        onClick={() => setShowHubspotCutoverDetails((value) => !value)}
+                        disabled={isSaving}
+                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                      >
+                        {showHubspotCutoverDetails ? "Hide handoff details" : "Review handoff details"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
                         onClick={() => void handleSave({ closeOnSuccess: false })}
                         disabled={isSaving || !hubspotCutoverDirty}
                         className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
@@ -1587,12 +1599,22 @@ export function IntegrationPanel({
                   </div>
                 )}
 
-                <div className="mt-3 rounded-lg border border-border bg-card p-3">
-                  <p className="text-xs font-medium text-foreground">Parallel-run controls</p>
-                  <p className="mt-1 text-xs text-[#64748B]">
-                    Track validation state before HubSpot cutover.
-                  </p>
-                  <div className="mt-3 space-y-3">
+                {showHubspotCutoverDetails && (
+                  <div className="mt-3 rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-foreground">Handoff details</p>
+                        <p className="mt-1 text-xs text-[#64748B]">
+                          Directly edit validation fields when the quick actions above are not enough.
+                        </p>
+                      </div>
+                      {hubspotCutoverDirty && (
+                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-[#92400E]">
+                          Unsaved
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 space-y-3">
                     <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
                       <span className="text-xs text-[#334155]">Parallel run active</span>
                       <button
@@ -1779,7 +1801,8 @@ export function IntegrationPanel({
                       />
                     </div>
                   </div>
-                </div>
+                  </div>
+                )}
               </section>
             </>
           )}
