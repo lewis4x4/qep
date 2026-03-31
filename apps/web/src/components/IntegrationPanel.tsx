@@ -122,7 +122,16 @@ interface HubSpotCutoverConfig {
   source_only_activated_at?: string | null;
   validated_at?: string | null;
   note?: string | null;
+  decision?: HubSpotCutoverDecision | null;
+  decision_note?: string | null;
 }
+
+type HubSpotCutoverDecision =
+  | "hold_parallel_run"
+  | "open_deploy_gate"
+  | "switch_source_only"
+  | "source_only_live"
+  | "rollback_validation";
 
 interface HubSpotCutoverSnapshot {
   parallelRunEnabled: boolean;
@@ -132,6 +141,8 @@ interface HubSpotCutoverSnapshot {
   sourceOnlyActivatedAt: string;
   validatedAt: string;
   note: string;
+  decision: HubSpotCutoverDecision;
+  decisionNote: string;
 }
 
 interface HubSpotReasonSummary {
@@ -338,6 +349,98 @@ function integrationHistorySortPriority(eventType: IntegrationCredentialAuditEve
   }
 }
 
+function defaultHubSpotCutoverDecision(params: {
+  parallelRunEnabled: boolean;
+  cutoverReady: boolean;
+  deployGateReady: boolean;
+  sourceOnlyEnabled: boolean;
+}): HubSpotCutoverDecision {
+  if (params.sourceOnlyEnabled) {
+    return "source_only_live";
+  }
+  if (params.deployGateReady) {
+    return "switch_source_only";
+  }
+  if (params.cutoverReady) {
+    return "open_deploy_gate";
+  }
+  if (params.parallelRunEnabled) {
+    return "hold_parallel_run";
+  }
+  return "rollback_validation";
+}
+
+function normalizeHubSpotCutoverDecision(
+  value: string | null | undefined,
+  fallback: HubSpotCutoverDecision,
+): HubSpotCutoverDecision {
+  switch (value) {
+    case "hold_parallel_run":
+    case "open_deploy_gate":
+    case "switch_source_only":
+    case "source_only_live":
+    case "rollback_validation":
+      return value;
+    default:
+      return fallback;
+  }
+}
+
+function hubspotCutoverDecisionLabel(decision: HubSpotCutoverDecision): string {
+  switch (decision) {
+    case "hold_parallel_run":
+      return "Hold in parallel run";
+    case "open_deploy_gate":
+      return "Open deploy gate";
+    case "switch_source_only":
+      return "Switch to source-only";
+    case "source_only_live":
+      return "Confirm source-only handoff";
+    case "rollback_validation":
+      return "Rollback for more validation";
+    default:
+      return "Hold in parallel run";
+  }
+}
+
+function hubspotCutoverDecisionDescription(decision: HubSpotCutoverDecision): string {
+  switch (decision) {
+    case "hold_parallel_run":
+      return "Keep HubSpot active for operators while validation continues.";
+    case "open_deploy_gate":
+      return "Validation is ready for approval, but operations has not switched the source mode yet.";
+    case "switch_source_only":
+      return "The handoff package is approved and the next move is the source-only switch.";
+    case "source_only_live":
+      return "Use this once the switch is complete and the board packet should reflect the live handoff.";
+    case "rollback_validation":
+      return "Reopen validation, fix the handoff blockers, and keep the board informed.";
+    default:
+      return "Keep HubSpot active for operators while validation continues.";
+  }
+}
+
+function allowedHubSpotCutoverDecisions(params: {
+  parallelRunEnabled: boolean;
+  cutoverPacketReady: boolean;
+  deployGateReady: boolean;
+  sourceOnlyEnabled: boolean;
+}): HubSpotCutoverDecision[] {
+  if (params.sourceOnlyEnabled) {
+    return ["source_only_live"];
+  }
+  if (params.deployGateReady && params.cutoverPacketReady) {
+    return ["switch_source_only", "rollback_validation"];
+  }
+  if (params.cutoverPacketReady) {
+    return ["open_deploy_gate", "rollback_validation"];
+  }
+  if (params.parallelRunEnabled) {
+    return ["hold_parallel_run", "rollback_validation"];
+  }
+  return ["rollback_validation"];
+}
+
 function readHubSpotCutoverConfig(config: Record<string, unknown> | undefined): HubSpotCutoverConfig {
   if (!config || typeof config !== "object") {
     return {};
@@ -387,6 +490,8 @@ export function IntegrationPanel({
   const [hubspotSourceOnlyActivatedAt, setHubspotSourceOnlyActivatedAt] = useState("");
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
   const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
+  const [hubspotCutoverDecision, setHubspotCutoverDecision] = useState<HubSpotCutoverDecision>("hold_parallel_run");
+  const [hubspotCutoverDecisionNote, setHubspotCutoverDecisionNote] = useState("");
   const [hubspotCutoverSnapshot, setHubspotCutoverSnapshot] = useState<HubSpotCutoverSnapshot | null>(null);
   const [showHubspotCutoverDetails, setShowHubspotCutoverDetails] = useState(false);
   const [recentCredentialAuditEvents, setRecentCredentialAuditEvents] = useState<IntegrationCredentialAuditEventRow[]>([]);
@@ -408,6 +513,15 @@ export function IntegrationPanel({
     const normalizedParallelRunEnabled = normalizedSourceOnlyEnabled
       ? false
       : (cutover.parallel_run_enabled ?? true);
+    const normalizedDecision = normalizeHubSpotCutoverDecision(
+      typeof cutover.decision === "string" ? cutover.decision : null,
+      defaultHubSpotCutoverDecision({
+        parallelRunEnabled: normalizedParallelRunEnabled,
+        cutoverReady: normalizedCutoverReady,
+        deployGateReady: normalizedDeployGateReady,
+        sourceOnlyEnabled: normalizedSourceOnlyEnabled,
+      }),
+    );
     setCredentials("");
     setHubspotClientId("");
     setHubspotClientSecret("");
@@ -441,6 +555,10 @@ export function IntegrationPanel({
     setHubspotCutoverNote(
       typeof cutover.note === "string" ? cutover.note : "",
     );
+    setHubspotCutoverDecision(normalizedDecision);
+    setHubspotCutoverDecisionNote(
+      typeof cutover.decision_note === "string" ? cutover.decision_note : "",
+    );
     setShowHubspotCutoverDetails(false);
     setHubspotCutoverSnapshot({
       parallelRunEnabled: normalizedParallelRunEnabled,
@@ -458,6 +576,8 @@ export function IntegrationPanel({
           ? cutover.validated_at.slice(0, 10)
           : "",
       note: typeof cutover.note === "string" ? cutover.note : "",
+      decision: normalizedDecision,
+      decisionNote: typeof cutover.decision_note === "string" ? cutover.decision_note : "",
     });
   }, [integration?.key, integration?.config]);
 
@@ -578,6 +698,15 @@ export function IntegrationPanel({
   ) ?? null;
   const cutoverBlockingCount = activeRunErrors.length;
   const reconciliationTone = hubspotReconciliationTone(cutoverBlockingCount);
+  const normalizedCutoverDecision = normalizeHubSpotCutoverDecision(
+    hubspotCutoverDecision,
+    defaultHubSpotCutoverDecision({
+      parallelRunEnabled: hubspotParallelRunEnabled,
+      cutoverReady: hubspotCutoverReady,
+      deployGateReady: hubspotDeployGateReady,
+      sourceOnlyEnabled: hubspotSourceOnlyEnabled,
+    }),
+  );
   const cutoverPacketReady =
     hubspotCutoverReady &&
     !hubspotParallelRunEnabled &&
@@ -587,6 +716,17 @@ export function IntegrationPanel({
   const effectiveDeployGateReady = hubspotSourceOnlyEnabled
     ? true
     : (hubspotDeployGateReady && cutoverPacketReady);
+  const allowedCutoverDecisions = allowedHubSpotCutoverDecisions({
+    parallelRunEnabled: hubspotParallelRunEnabled,
+    cutoverPacketReady,
+    deployGateReady: effectiveDeployGateReady,
+    sourceOnlyEnabled: hubspotSourceOnlyEnabled,
+  });
+  const effectiveCutoverDecision = allowedCutoverDecisions.includes(normalizedCutoverDecision)
+    ? normalizedCutoverDecision
+    : allowedCutoverDecisions[0];
+  const cutoverDecisionLabel = hubspotCutoverDecisionLabel(effectiveCutoverDecision);
+  const cutoverDecisionDescription = hubspotCutoverDecisionDescription(effectiveCutoverDecision);
   const cutoverChecklist = [
     {
       label: "Parallel run",
@@ -620,6 +760,15 @@ export function IntegrationPanel({
         : "Still active for operators",
       tone: hubspotSourceOnlyEnabled ? "text-[#166534]" : "text-[#9A3412]",
     },
+    {
+      label: "Handoff call",
+      value: cutoverDecisionLabel,
+      tone: effectiveCutoverDecision === "rollback_validation"
+        ? "text-[#B91C1C]"
+        : effectiveCutoverDecision === "hold_parallel_run"
+        ? "text-[#9A3412]"
+        : "text-[#166534]",
+    },
   ];
   const cutoverHandoffReady = cutoverPacketReady && effectiveDeployGateReady;
   const hubspotCutoverDirty =
@@ -630,7 +779,9 @@ export function IntegrationPanel({
       hubspotCutoverSnapshot.sourceOnlyEnabled !== hubspotSourceOnlyEnabled ||
       hubspotCutoverSnapshot.sourceOnlyActivatedAt !== hubspotSourceOnlyActivatedAt.trim() ||
       hubspotCutoverSnapshot.validatedAt !== hubspotValidatedAt.trim() ||
-      hubspotCutoverSnapshot.note !== hubspotCutoverNote.trim()
+      hubspotCutoverSnapshot.note !== hubspotCutoverNote.trim() ||
+      hubspotCutoverSnapshot.decision !== effectiveCutoverDecision ||
+      hubspotCutoverSnapshot.decisionNote !== hubspotCutoverDecisionNote.trim()
     );
   const cutoverStageLabel = hubspotSourceOnlyEnabled
     ? "HubSpot source-only active"
@@ -652,23 +803,28 @@ export function IntegrationPanel({
     cutoverBlockingCount > 0 ? `Resolve ${cutoverBlockingCount.toLocaleString()} reconciliation row${cutoverBlockingCount === 1 ? "" : "s"}.` : null,
     !hubspotCutoverReady ? "Flip the cutover-ready flag once the board approves." : null,
     hubspotCutoverNote.trim().length === 0 ? "Add a short validation note for the deploy gate." : null,
+    hubspotCutoverDecisionNote.trim().length === 0 ? "Add an owner-facing handoff note." : null,
     cutoverPacketReady && !effectiveDeployGateReady ? "Mark the deploy gate approved when handoff is cleared." : null,
     hubspotSourceOnlyEnabled && hubspotSourceOnlyActivatedAt.trim().length === 0 ? "Record the HubSpot source-only transition date." : null,
     cutoverHandoffReady && !hubspotSourceOnlyEnabled ? "Switch HubSpot into source-only mode after the deploy gate opens." : null,
   ].filter((value): value is string => Boolean(value));
-  const cutoverRecommendation = hubspotSourceOnlyEnabled
+  const cutoverRecommendation = hubspotSourceOnlyEnabled || effectiveCutoverDecision === "source_only_live"
     ? "HubSpot is in source-only mode. Keep the packet attached while post-cutover validation runs."
-    : cutoverHandoffReady
-    ? "Deploy gate is clear. Switch HubSpot into source-only mode and record the transition date."
-    : cutoverPacketReady
-    ? "The cutover packet is complete. Open the deploy gate and hand the switch plan to operations."
+    : effectiveCutoverDecision === "rollback_validation"
+    ? "Do not cut over yet. Reopen validation, keep HubSpot active for operators, and close the remaining blockers."
+    : effectiveCutoverDecision === "switch_source_only"
+    ? cutoverHandoffReady
+      ? "Deploy gate is clear. Switch HubSpot into source-only mode and record the transition date."
+      : "The operator call is to switch HubSpot to source-only, but the handoff package is not fully ready yet."
+    : effectiveCutoverDecision === "open_deploy_gate"
+    ? cutoverPacketReady
+      ? "The cutover packet is complete. Open the deploy gate and hand the switch plan to operations."
+      : "The operator call is to open the deploy gate, but validation evidence is still incomplete."
     : cutoverBlockingCount > 0
     ? "Do not cut over yet. Keep HubSpot in parallel run until the remaining reconciliation issues are resolved."
     : hubspotValidatedAt.trim().length === 0 || hubspotCutoverNote.trim().length === 0
     ? "Validation evidence is incomplete. Add the validation date and board-facing note before cutover."
-    : hubspotParallelRunEnabled
-    ? "Validation looks close. Finish the parallel-run review, then disable it before cutover."
-    : "Validation is partially complete. Finish the remaining handoff items before cutover.";
+    : "Keep HubSpot in parallel run until the final handoff call changes.";
   const hubspotHistoryItems = isHubSpot
     ? [
         ...[...hubSpotImportRuns]
@@ -753,6 +909,8 @@ export function IntegrationPanel({
           ? `${hubspotRunStatusLabel(latestFinishedRun.status)} (${formatHubSpotRunCount(latestFinishedRun)} · ${formatHubSpotRunTimestamp(latestFinishedRun.completedAt ?? latestFinishedRun.startedAt)})`
           : "none"
       }`,
+      `Handoff call: ${cutoverDecisionLabel}`,
+      `Handoff note: ${hubspotCutoverDecisionNote.trim() || "not set"}`,
       `Validation note: ${hubspotCutoverNote.trim() || "not set"}`,
       cutoverMissingItems.length > 0
         ? `Remaining handoff items:\n- ${cutoverMissingItems.join("\n- ")}`
@@ -788,6 +946,12 @@ export function IntegrationPanel({
     }
 
     setHubspotDeployGateReady(true);
+    setHubspotCutoverDecision("switch_source_only");
+    setHubspotCutoverDecisionNote((current) =>
+      current.trim().length > 0
+        ? current
+        : "Validation is complete and the deploy gate is approved. Operations can move HubSpot to source-only when the switch window opens.",
+    );
     toast({
       title: "Deploy gate approved",
       description: "HubSpot is cleared for the source-only handoff step.",
@@ -806,6 +970,12 @@ export function IntegrationPanel({
 
     setHubspotSourceOnlyEnabled(true);
     setHubspotSourceOnlyActivatedAt((current) => current || new Date().toISOString().slice(0, 10));
+    setHubspotCutoverDecision("source_only_live");
+    setHubspotCutoverDecisionNote((current) =>
+      current.trim().length > 0
+        ? current
+        : "HubSpot is now source-only. Operators should stay in QEP OS while post-cutover validation runs.",
+    );
     toast({
       title: "HubSpot moved to source-only",
       description: "The handoff state is now recorded in the cutover package.",
@@ -818,6 +988,12 @@ export function IntegrationPanel({
     setHubspotDeployGateReady(false);
     setHubspotParallelRunEnabled(true);
     setHubspotCutoverReady(false);
+    setHubspotCutoverDecision("rollback_validation");
+    setHubspotCutoverDecisionNote((current) =>
+      current.trim().length > 0
+        ? current
+        : "The handoff has been rolled back. HubSpot stays active for operators while validation continues.",
+    );
     toast({
       title: "Parallel run reopened",
       description: "The cutover handoff has been rolled back so validation can continue.",
@@ -871,6 +1047,8 @@ export function IntegrationPanel({
             source_only_activated_at: hubspotSourceOnlyActivatedAt.trim() || null,
             validated_at: hubspotValidatedAt.trim() || null,
             note: hubspotCutoverNote.trim() || null,
+            decision: effectiveCutoverDecision,
+            decision_note: hubspotCutoverDecisionNote.trim() || null,
           },
         };
       } else if (credentials.trim().length > 0) {
@@ -905,6 +1083,8 @@ export function IntegrationPanel({
           sourceOnlyActivatedAt: hubspotSourceOnlyActivatedAt.trim(),
           validatedAt: hubspotValidatedAt.trim(),
           note: hubspotCutoverNote.trim(),
+          decision: effectiveCutoverDecision,
+          decisionNote: hubspotCutoverDecisionNote.trim(),
         });
       }
       onSaved();
@@ -1449,6 +1629,32 @@ export function IntegrationPanel({
                       </Button>
                     </div>
                     <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverRecommendation}</p>
+                    <div className="mt-3 rounded border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                            Final handoff call
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverDecisionLabel}</p>
+                        </div>
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                            effectiveCutoverDecision === "rollback_validation"
+                              ? "bg-[#FFE4E6] text-[#BE123C]"
+                              : effectiveCutoverDecision === "hold_parallel_run"
+                              ? "bg-[#FFEDD5] text-[#9A3412]"
+                              : "bg-[#DCFCE7] text-[#166534]",
+                          )}
+                        >
+                          {cutoverDecisionLabel}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-[#475569]">{cutoverDecisionDescription}</p>
+                      <p className="mt-2 text-sm text-[#334155]">
+                        {hubspotCutoverDecisionNote.trim() || "Add the owner-facing handoff note in the details panel before the packet leaves the team."}
+                      </p>
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button
                         type="button"
@@ -1561,6 +1767,17 @@ export function IntegrationPanel({
                             Validation note
                           </p>
                           <p className="mt-1 text-sm text-[#334155]">{hubspotCutoverNote.trim()}</p>
+                        </div>
+                      )}
+                      {(hubspotCutoverDecisionNote.trim().length > 0 || effectiveCutoverDecision !== "hold_parallel_run") && (
+                        <div className="rounded border border-white/70 bg-white px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                            Handoff note
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverDecisionLabel}</p>
+                          <p className="mt-1 text-sm text-[#334155]">
+                            {hubspotCutoverDecisionNote.trim() || "No owner-facing handoff note is recorded yet."}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1796,6 +2013,41 @@ export function IntegrationPanel({
                         placeholder="Parallel-run summary for board/deploy gate"
                         value={hubspotCutoverNote}
                         onChange={(event) => setHubspotCutoverNote(event.target.value)}
+                        disabled={isSaving}
+                        className="text-sm focus-visible:ring-qep-orange"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="hubspot-cutover-decision" className="text-xs font-medium text-[#374151]">
+                        Final Handoff Call
+                      </Label>
+                      <select
+                        id="hubspot-cutover-decision"
+                        value={effectiveCutoverDecision}
+                        onChange={(event) =>
+                          setHubspotCutoverDecision(event.target.value as HubSpotCutoverDecision)}
+                        disabled={isSaving}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-qep-orange disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <option value="hold_parallel_run" disabled={!allowedCutoverDecisions.includes("hold_parallel_run")}>Hold in parallel run</option>
+                        <option value="open_deploy_gate" disabled={!allowedCutoverDecisions.includes("open_deploy_gate")}>Open deploy gate</option>
+                        <option value="switch_source_only" disabled={!allowedCutoverDecisions.includes("switch_source_only")}>Switch to source-only</option>
+                        <option value="source_only_live" disabled={!allowedCutoverDecisions.includes("source_only_live")}>Confirm source-only handoff</option>
+                        <option value="rollback_validation" disabled={!allowedCutoverDecisions.includes("rollback_validation")}>Rollback for more validation</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="hubspot-cutover-decision-note" className="text-xs font-medium text-[#374151]">
+                        Owner Handoff Note
+                      </Label>
+                      <Input
+                        id="hubspot-cutover-decision-note"
+                        type="text"
+                        placeholder="Short board-facing call on what operations should do next"
+                        value={hubspotCutoverDecisionNote}
+                        onChange={(event) => setHubspotCutoverDecisionNote(event.target.value)}
                         disabled={isSaving}
                         className="text-sm focus-visible:ring-qep-orange"
                       />
