@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   Mic,
   Square,
@@ -1043,6 +1044,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
               {/* Action buttons */}
               <div className="flex gap-3">
+                {looksLikeCrmRecordId(result.hubspot_deal_id ?? hubspotDealId ?? "") && (
+                  <Button asChild variant="outline" className="flex-1">
+                    <Link to={`/crm/deals/${result.hubspot_deal_id ?? hubspotDealId}`}>
+                      Open CRM Deal
+                    </Link>
+                  </Button>
+                )}
                 {!result.hubspot_synced && (
                   <Button
                     className="flex-1"
