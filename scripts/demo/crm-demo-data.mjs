@@ -102,6 +102,8 @@ const DEMO_IDS = {
     banditDemo: "51000000-0000-4000-8000-000000000002",
     prinothRevision: "51000000-0000-4000-8000-000000000003",
     yanmarRental: "51000000-0000-4000-8000-000000000004",
+    asvWon: "51000000-0000-4000-8000-000000000005",
+    municipalLost: "51000000-0000-4000-8000-000000000006",
   },
   activities: {
     barkoCall: "71000000-0000-4000-8000-000000000001",
@@ -126,6 +128,14 @@ const DEMO_IDS = {
     demoRecap: "88000000-0000-4000-8000-000000000001",
     branchCheckin: "88000000-0000-4000-8000-000000000002",
     rentalTask: "88000000-0000-4000-8000-000000000003",
+  },
+  hubspotImportRuns: {
+    completed: "98000000-0000-4000-8000-000000000001",
+    completedWithErrors: "98000000-0000-4000-8000-000000000002",
+  },
+  hubspotImportErrors: {
+    companyStageFallback: "99000000-0000-4000-8000-000000000001",
+    activityMissingOwner: "99000000-0000-4000-8000-000000000002",
   },
 };
 
@@ -306,6 +316,185 @@ function deliveryMetadata({ mode, provider, status, destination, attemptedAt, ex
     message,
   };
 }
+
+const DEMO_INTEGRATION_ROWS = [
+  {
+    integration_key: "hubspot",
+    display_name: "HubSpot CRM",
+    status: "connected",
+    auth_type: "oauth_app",
+    sync_frequency: "manual",
+    endpoint_url: "https://app.hubspot.com",
+    last_sync_records: 412,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 188,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      hubspot_cutover: {
+        parallel_run_enabled: true,
+        cutover_ready: false,
+        validated_at: buildDate(0),
+        note: "Demo validation window active. Daily reconciliation still required before final cutover.",
+      },
+    },
+  },
+  {
+    integration_key: "sendgrid",
+    display_name: "SendGrid Email",
+    status: "demo_mode",
+    auth_type: "api_key",
+    sync_frequency: "manual",
+    endpoint_url: "https://api.sendgrid.com",
+    last_sync_records: 28,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 142,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      mode: "manual_fallback",
+    },
+  },
+  {
+    integration_key: "twilio",
+    display_name: "Twilio SMS",
+    status: "error",
+    auth_type: "api_key",
+    sync_frequency: "manual",
+    endpoint_url: "https://api.twilio.com",
+    last_sync_records: 11,
+    last_sync_error: "Latest connection check failed. Messages still log safely in manual mode.",
+    last_test_success: false,
+    last_test_latency_ms: 0,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      mode: "manual_fallback",
+    },
+  },
+  {
+    integration_key: "intellidealer",
+    display_name: "IntelliDealer (VitalEdge)",
+    status: "pending_credentials",
+    auth_type: "oauth2",
+    sync_frequency: "manual",
+    endpoint_url: null,
+    last_sync_records: 0,
+    last_sync_error: null,
+    last_test_success: null,
+    last_test_latency_ms: null,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+    },
+  },
+  {
+    integration_key: "ironguides",
+    display_name: "Iron Solutions / IronGuides",
+    status: "demo_mode",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: null,
+    last_sync_records: 64,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 211,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      mode: "estimated_pricing",
+    },
+  },
+  {
+    integration_key: "rouse",
+    display_name: "Rouse Analytics",
+    status: "pending_credentials",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: null,
+    last_sync_records: 0,
+    last_sync_error: null,
+    last_test_success: null,
+    last_test_latency_ms: null,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+    },
+  },
+  {
+    integration_key: "aemp",
+    display_name: "AEMP 2.0 Telematics",
+    status: "pending_credentials",
+    auth_type: "oauth2",
+    sync_frequency: "hourly",
+    endpoint_url: null,
+    last_sync_records: 0,
+    last_sync_error: null,
+    last_test_success: null,
+    last_test_latency_ms: null,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+    },
+  },
+  {
+    integration_key: "financing",
+    display_name: "Financing Partners",
+    status: "demo_mode",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: null,
+    last_sync_records: 9,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 119,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      mode: "configured_rates",
+    },
+  },
+  {
+    integration_key: "manufacturer_incentives",
+    display_name: "Manufacturer Incentives",
+    status: "pending_credentials",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: null,
+    last_sync_records: 0,
+    last_sync_error: null,
+    last_test_success: null,
+    last_test_latency_ms: null,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+    },
+  },
+  {
+    integration_key: "auction_data",
+    display_name: "Auction Data",
+    status: "demo_mode",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: null,
+    last_sync_records: 37,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 154,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+      mode: "market_comps_demo",
+    },
+  },
+  {
+    integration_key: "fred_usda",
+    display_name: "FRED / USDA Economic Data",
+    status: "connected",
+    auth_type: "api_key",
+    sync_frequency: "daily",
+    endpoint_url: "https://api.stlouisfed.org",
+    last_sync_records: 12,
+    last_sync_error: null,
+    last_test_success: true,
+    last_test_latency_ms: 96,
+    config: {
+      demo_seed_batch_id: DEMO_BATCH_ID,
+    },
+  },
+];
 
 async function listAuthUsers(admin) {
   const users = [];
@@ -537,6 +726,111 @@ async function ensureDealStages(admin) {
   if (refreshedError) throw refreshedError;
 
   return Object.fromEntries((refreshed ?? []).map((row) => [row.name, row.id]));
+}
+
+async function seedDemoIntegrationStatuses(admin) {
+  const keys = DEMO_INTEGRATION_ROWS.map((row) => row.integration_key);
+  const { data, error } = await admin
+    .from("integration_status")
+    .select("workspace_id, integration_key, credentials_encrypted, config")
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
+    .in("integration_key", keys);
+  if (error) throw error;
+
+  const existingByKey = new Map((data ?? []).map((row) => [row.integration_key, row]));
+  const upserts = [];
+
+  for (const row of DEMO_INTEGRATION_ROWS) {
+    const existing = existingByKey.get(row.integration_key);
+    const existingConfig =
+      existing?.config && typeof existing.config === "object" && !Array.isArray(existing.config)
+        ? existing.config
+        : {};
+    const ownedByDemo = existingConfig?.demo_seed_batch_id === DEMO_BATCH_ID;
+    const hasLiveCredentials = typeof existing?.credentials_encrypted === "string" && existing.credentials_encrypted.trim().length > 0;
+
+    if (hasLiveCredentials && !ownedByDemo) {
+      continue;
+    }
+
+    upserts.push({
+      workspace_id: DEMO_WORKSPACE_ID,
+      integration_key: row.integration_key,
+      display_name: row.display_name,
+      status: row.status,
+      auth_type: row.auth_type,
+      sync_frequency: row.sync_frequency,
+      endpoint_url: row.endpoint_url,
+      last_sync_at: buildTimestamp({ hours: -2 }),
+      last_sync_records: row.last_sync_records,
+      last_sync_error: row.last_sync_error,
+      last_test_at: buildTimestamp({ hours: -1 }),
+      last_test_success: row.last_test_success,
+      last_test_latency_ms: row.last_test_latency_ms,
+      config: {
+        ...existingConfig,
+        ...row.config,
+      },
+    });
+  }
+
+  if (upserts.length === 0) {
+    return;
+  }
+
+  const { error: upsertError } = await admin
+    .from("integration_status")
+    .upsert(upserts, { onConflict: "workspace_id,integration_key" });
+  if (upsertError) throw upsertError;
+}
+
+async function resetDemoIntegrationStatuses(admin) {
+  const keys = DEMO_INTEGRATION_ROWS.map((row) => row.integration_key);
+  const { data, error } = await admin
+    .from("integration_status")
+    .select("workspace_id, integration_key, credentials_encrypted, config")
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
+    .in("integration_key", keys);
+  if (error) throw error;
+
+  const resets = [];
+  for (const row of data ?? []) {
+    const config =
+      row.config && typeof row.config === "object" && !Array.isArray(row.config)
+        ? { ...row.config }
+        : {};
+    if (config.demo_seed_batch_id !== DEMO_BATCH_ID) {
+      continue;
+    }
+
+    delete config.demo_seed_batch_id;
+    if (config.hubspot_cutover?.note === "Demo validation window active. Daily reconciliation still required before final cutover.") {
+      delete config.hubspot_cutover;
+    }
+
+    resets.push({
+      workspace_id: row.workspace_id,
+      integration_key: row.integration_key,
+      status: row.credentials_encrypted ? "connected" : "pending_credentials",
+      endpoint_url: null,
+      last_sync_at: null,
+      last_sync_records: 0,
+      last_sync_error: null,
+      last_test_at: null,
+      last_test_success: null,
+      last_test_latency_ms: null,
+      config,
+    });
+  }
+
+  if (resets.length === 0) {
+    return;
+  }
+
+  const { error: resetError } = await admin
+    .from("integration_status")
+    .upsert(resets, { onConflict: "workspace_id,integration_key" });
+  if (resetError) throw resetError;
 }
 
 function buildDemoDataset(userIds, stageIds) {
@@ -922,6 +1216,36 @@ function buildDemoDataset(userIds, stageIds) {
         next_follow_up_at: timestamps.tomorrowMidday,
         metadata: { demoSeedBatchId: DEMO_BATCH_ID, fleet_need: "rental utilization" },
       },
+      {
+        id: DEMO_IDS.deals.asvWon,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "ASV RT-135 storm response package",
+        stage_id: stageIds["Closed Won"],
+        primary_contact_id: DEMO_IDS.contacts.wes,
+        company_id: DEMO_IDS.companies.apexLakeCity,
+        assigned_rep_id: userIds.rep_primary,
+        amount: 214000,
+        expected_close_on: buildDate(-5),
+        next_follow_up_at: null,
+        closed_at: timestamps.yesterdayMorning,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, win_story: "Won on uptime, operator support, and freight timing" },
+      },
+      {
+        id: DEMO_IDS.deals.municipalLost,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Municipal mulcher replacement",
+        stage_id: stageIds["Closed Lost"],
+        primary_contact_id: DEMO_IDS.contacts.jordan,
+        company_id: DEMO_IDS.companies.gulfCoast,
+        assigned_rep_id: userIds.rep_secondary,
+        amount: 248000,
+        expected_close_on: buildDate(-3),
+        next_follow_up_at: null,
+        closed_at: timestamps.yesterdayAfternoon,
+        loss_reason: "Budget committee delayed replacement to next fiscal cycle",
+        competitor: "Fecon dealer network",
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, loss_story: "Lost on budget timing and competitor delivery slot" },
+      },
     ],
     activities: [
       {
@@ -1189,6 +1513,60 @@ function buildDemoDataset(userIds, stageIds) {
         created_by: userIds.manager,
       },
     ],
+    hubspotImportRuns: [
+      {
+        id: DEMO_IDS.hubspotImportRuns.completed,
+        workspace_id: DEMO_WORKSPACE_ID,
+        initiated_by: userIds.owner,
+        status: "completed",
+        started_at: timestamps.yesterdayMorning,
+        completed_at: timestamps.yesterdayAfternoon,
+        contacts_processed: 148,
+        companies_processed: 42,
+        deals_processed: 67,
+        activities_processed: 155,
+        error_count: 0,
+        error_summary: null,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, mode: "parallel_run_validation" },
+      },
+      {
+        id: DEMO_IDS.hubspotImportRuns.completedWithErrors,
+        workspace_id: DEMO_WORKSPACE_ID,
+        initiated_by: userIds.owner,
+        status: "completed_with_errors",
+        started_at: timestamps.thisMorning,
+        completed_at: timestamps.ninetyMinutesAgo,
+        contacts_processed: 152,
+        companies_processed: 44,
+        deals_processed: 69,
+        activities_processed: 161,
+        error_count: 2,
+        error_summary: "Two records still need reconciliation review before cutover.",
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, mode: "parallel_run_validation" },
+      },
+    ],
+    hubspotImportErrors: [
+      {
+        id: DEMO_IDS.hubspotImportErrors.companyStageFallback,
+        workspace_id: DEMO_WORKSPACE_ID,
+        run_id: DEMO_IDS.hubspotImportRuns.completedWithErrors,
+        entity_type: "deal",
+        external_id: "hs-deal-demo-001",
+        payload_snippet: { stage: "appointmentscheduled", dealname: "Municipal mulcher replacement" },
+        reason_code: "unknown_hubspot_stage",
+        message: "HubSpot stage did not match a current CRM pipeline stage and needs mapping review.",
+      },
+      {
+        id: DEMO_IDS.hubspotImportErrors.activityMissingOwner,
+        workspace_id: DEMO_WORKSPACE_ID,
+        run_id: DEMO_IDS.hubspotImportRuns.completedWithErrors,
+        entity_type: "activity",
+        external_id: "hs-activity-demo-002",
+        payload_snippet: { type: "NOTE", association: "contact" },
+        reason_code: "missing_owner_mapping",
+        message: "Imported note could not resolve an owner and was held for reconciliation.",
+      },
+    ],
     customerDealHistory: [
       {
         id: "62000000-0000-4000-8000-000000000001",
@@ -1239,6 +1617,8 @@ async function deleteByIds(admin, table, ids) {
 }
 
 async function resetDemoData(admin) {
+  await deleteByIds(admin, "crm_hubspot_import_errors", Object.values(DEMO_IDS.hubspotImportErrors));
+  await deleteByIds(admin, "crm_hubspot_import_runs", Object.values(DEMO_IDS.hubspotImportRuns));
   await deleteByIds(admin, "crm_activity_templates", Object.values(DEMO_IDS.activityTemplates));
   await deleteByIds(admin, "crm_duplicate_candidates", Object.values(DEMO_IDS.duplicateCandidates));
   await deleteByIds(admin, "quotes", Object.values(DEMO_IDS.quotes));
@@ -1257,6 +1637,7 @@ async function resetDemoData(admin) {
     "62000000-0000-4000-8000-000000000002",
   ]);
   await deleteByIds(admin, "customer_profiles_extended", Object.values(DEMO_IDS.customerProfiles));
+  await resetDemoIntegrationStatuses(admin);
   await deleteByIds(
     admin,
     "crm_deal_stages",
@@ -1268,6 +1649,7 @@ async function resetDemoData(admin) {
 async function seedDemoData(admin) {
   const userIds = await ensureDemoUsers(admin);
   const stageIds = await ensureDealStages(admin);
+  await seedDemoIntegrationStatuses(admin);
   const dataset = buildDemoDataset(userIds, stageIds);
 
   const { error: customerProfileError } = await admin
@@ -1340,6 +1722,16 @@ async function seedDemoData(admin) {
     .upsert(dataset.activityTemplates, { onConflict: "id" });
   if (templateError) throw templateError;
 
+  const { error: importRunsError } = await admin
+    .from("crm_hubspot_import_runs")
+    .upsert(dataset.hubspotImportRuns, { onConflict: "id" });
+  if (importRunsError) throw importRunsError;
+
+  const { error: importErrorsError } = await admin
+    .from("crm_hubspot_import_errors")
+    .upsert(dataset.hubspotImportErrors, { onConflict: "id" });
+  if (importErrorsError) throw importErrorsError;
+
   const { error: dealHistoryError } = await admin
     .from("customer_deal_history")
     .upsert(dataset.customerDealHistory, { onConflict: "id" });
@@ -1361,9 +1753,11 @@ Workspace:
 
 What this seed covers:
   - 4 demo operator accounts (owner, manager, 2 reps)
+  - Sprint 1 integration hub states across HubSpot, SendGrid, Twilio, pricing, and market data
+  - 2 HubSpot import runs with reconciliation-ready error rows
   - 4 companies with one parent/child hierarchy
   - 6 contacts including one duplicate candidate pair
-  - 4 active deals across discovery, demo, quote, and negotiation
+  - 6 deals across discovery, demo, quote, negotiation, closed won, and closed lost
   - 11 CRM activities with sent, failed, manual, overdue, and completed states
   - 3 equipment assets
   - 4 custom field definitions + seeded values
@@ -1372,9 +1766,9 @@ What this seed covers:
   - 1 DGE-linked customer profile + 2 historical deals
 
 What this seed intentionally does not fake:
-  - HubSpot import runs
   - Live integration credentials
   - Phase 2+ department data (parts, service, rental ops, financial ops)
+  - Full HubSpot OAuth connection material or real portal credentials
   - Production client/customer PII
 
 Reset behavior:

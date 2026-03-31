@@ -15,6 +15,13 @@ The Thursday, April 2, 2026 demo should not wait for full CRM completion. It nee
 
 This seed pack is intentionally scoped to those flows. It does not fake unfinished phases.
 
+It now also covers the Phase 1 admin/operator story needed to show Sprint 1 through Sprint 4 together:
+
+- integration hub status cards
+- HubSpot import run history and reconciliation detail
+- parallel-run / cutover controls in the HubSpot drawer
+- closed won / closed lost examples for pipeline and deal-detail review
+
 ## Data strategy
 
 - Workspace target: `default`
@@ -82,13 +89,22 @@ QepDemo!2026
 - One demo-scheduled chipper deal
 - One quote-working tracked-machine deal
 - One discovery-stage rental/fleet deal
+- One closed-won machine package
+- One closed-lost municipal replacement with loss reason + competitor
 - Failed, manual, sent, overdue, and completed activities in the timeline/inbox
 - A linked quote for CRM handoff
 - One DGE-linked customer profile to support the AI-native story
+- Integration Hub cards spanning connected, demo, pending, and error states
+- Two HubSpot import runs plus reconciliation error rows
 
 ## What is intentionally not seeded
 
-- HubSpot import/cutover state
 - production credentials or live communication sends
 - parts/service/rental ops phase data beyond what current CRM surfaces need
+- full HubSpot OAuth connection material or real portal credentials
 - real customer names, real phones, or real emails
+
+Note:
+
+- Integration Hub demo rows are non-destructive. The seed only takes over integration rows that are blank or already owned by this demo batch.
+- `demo:reset` only unwinds integration rows marked with this demo batch id.
