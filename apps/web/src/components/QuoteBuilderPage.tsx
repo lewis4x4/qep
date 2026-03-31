@@ -382,15 +382,19 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     setSaveQuoteError(null);
   }
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const effectiveSearchQuery = normalizedSearchQuery.length > 256
+    ? normalizedSearchQuery.slice(0, 256)
+    : normalizedSearchQuery;
+
   const filteredMachines = machines.filter((m) => {
     if (categoryFilter !== "all" && m.category !== categoryFilter) return false;
     if (conditionFilter !== "all" && m.condition !== conditionFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+    if (effectiveSearchQuery) {
       if (
-        !m.make.toLowerCase().includes(q) &&
-        !m.model.toLowerCase().includes(q) &&
-        !(CATEGORY_LABELS[m.category] ?? "").toLowerCase().includes(q)
+        !m.make.toLowerCase().includes(effectiveSearchQuery) &&
+        !m.model.toLowerCase().includes(effectiveSearchQuery) &&
+        !(CATEGORY_LABELS[m.category] ?? "").toLowerCase().includes(effectiveSearchQuery)
       )
         return false;
     }

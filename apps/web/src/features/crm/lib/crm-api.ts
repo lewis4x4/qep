@@ -27,6 +27,17 @@ type CrmCompanyRow = CrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
 type CrmActivityRow = CrmDatabase["public"]["Tables"]["crm_activities"]["Row"];
 type CrmActivityTemplateRow = CrmDatabase["public"]["Tables"]["crm_activity_templates"]["Row"];
 
+interface ContactListCursor {
+  lastName: string;
+  firstName: string;
+  id: string;
+}
+
+interface CompanyListCursor {
+  name: string;
+  id: string;
+}
+
 function toContactSummary(row: CrmContactRow): CrmContactSummary {
   return {
     id: row.id,
@@ -198,34 +209,62 @@ export {
   updateCrmQuote,
 } from "./crm-quotes-api";
 
-export async function listCrmContacts(search: string): Promise<CrmPageResult<CrmContactSummary>> {
-  const term = search.trim();
-  let query = crmSupabase
-    .from("crm_contacts")
-    .select(
-      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at"
-    )
-    .is("deleted_at", null)
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true })
-    .limit(CONTACTS_PAGE_SIZE + 1);
-
-  if (term.length > 0) {
-    const escaped = term.replace(/[%_]/g, "");
-    query = query.or(
-      `first_name.ilike.%${escaped}%,last_name.ilike.%${escaped}%,email.ilike.%${escaped}%,phone.ilike.%${escaped}%`
-    );
+function encodeCursor(value: ContactListCursor | CompanyListCursor): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
+  return btoa(binary);
+}
 
-  const { data, error } = await query;
+function decodeCursor<T>(cursor: string | null | undefined): T | null {
+  if (!cursor) return null;
+  try {
+    const binary = atob(cursor);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+  } catch {
+    throw new Error("Invalid list cursor.");
+  }
+}
+
+export async function listCrmContacts(search: string, cursor?: string | null): Promise<CrmPageResult<CrmContactSummary>> {
+  const decodedCursor = decodeCursor<ContactListCursor>(cursor);
+  const { data, error } = await (crmSupabase as typeof crmSupabase & {
+    rpc: (
+      fn: "list_crm_contacts_page",
+      args: {
+        p_search: string | null;
+        p_after_last_name: string | null;
+        p_after_first_name: string | null;
+        p_after_id: string | null;
+        p_limit: number;
+      },
+    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  }).rpc("list_crm_contacts_page", {
+    p_search: search.trim() || null,
+    p_after_last_name: decodedCursor?.lastName ?? null,
+    p_after_first_name: decodedCursor?.firstName ?? null,
+    p_after_id: decodedCursor?.id ?? null,
+    p_limit: CONTACTS_PAGE_SIZE + 1,
+  });
   if (error) {
     throw new Error(error.message);
   }
 
   const rows = (data ?? []) as CrmContactRow[];
+  const visibleRows = rows.slice(0, CONTACTS_PAGE_SIZE);
+  const nextRow = rows.length > CONTACTS_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
   return {
-    items: rows.slice(0, CONTACTS_PAGE_SIZE).map(toContactSummary),
-    nextCursor: rows.length > CONTACTS_PAGE_SIZE ? rows[CONTACTS_PAGE_SIZE].id : null,
+    items: visibleRows.map(toContactSummary),
+    nextCursor: nextRow
+      ? encodeCursor({
+          lastName: nextRow.last_name,
+          firstName: nextRow.first_name,
+          id: nextRow.id,
+        })
+      : null,
   };
 }
 
@@ -246,29 +285,39 @@ export async function getCrmContact(contactId: string): Promise<CrmContactSummar
   return data ? toContactSummary(data as CrmContactRow) : null;
 }
 
-export async function listCrmCompanies(search: string): Promise<CrmPageResult<CrmCompanySummary>> {
-  const term = search.trim();
-  let query = crmSupabase
-    .from("crm_companies")
-    .select("id, workspace_id, name, parent_company_id, assigned_rep_id, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at")
-    .is("deleted_at", null)
-    .order("name", { ascending: true })
-    .limit(COMPANIES_PAGE_SIZE + 1);
-
-  if (term.length > 0) {
-    const escaped = term.replace(/[%_]/g, "");
-    query = query.or(`name.ilike.%${escaped}%,city.ilike.%${escaped}%,state.ilike.%${escaped}%`);
-  }
-
-  const { data, error } = await query;
+export async function listCrmCompanies(search: string, cursor?: string | null): Promise<CrmPageResult<CrmCompanySummary>> {
+  const decodedCursor = decodeCursor<CompanyListCursor>(cursor);
+  const { data, error } = await (crmSupabase as typeof crmSupabase & {
+    rpc: (
+      fn: "list_crm_companies_page",
+      args: {
+        p_search: string | null;
+        p_after_name: string | null;
+        p_after_id: string | null;
+        p_limit: number;
+      },
+    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  }).rpc("list_crm_companies_page", {
+    p_search: search.trim() || null,
+    p_after_name: decodedCursor?.name ?? null,
+    p_after_id: decodedCursor?.id ?? null,
+    p_limit: COMPANIES_PAGE_SIZE + 1,
+  });
   if (error) {
     throw new Error(error.message);
   }
 
   const rows = (data ?? []) as CrmCompanyRow[];
+  const visibleRows = rows.slice(0, COMPANIES_PAGE_SIZE);
+  const nextRow = rows.length > COMPANIES_PAGE_SIZE ? visibleRows[visibleRows.length - 1] : null;
   return {
-    items: rows.slice(0, COMPANIES_PAGE_SIZE).map(toCompanySummary),
-    nextCursor: rows.length > COMPANIES_PAGE_SIZE ? rows[COMPANIES_PAGE_SIZE].id : null,
+    items: visibleRows.map(toCompanySummary),
+    nextCursor: nextRow
+      ? encodeCursor({
+          name: nextRow.name,
+          id: nextRow.id,
+        })
+      : null,
   };
 }
 

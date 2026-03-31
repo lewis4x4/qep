@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Building2, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -28,13 +28,17 @@ export function CrmCompaniesPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const companiesQuery = useQuery({
+  const companiesQuery = useInfiniteQuery({
     queryKey: ["crm", "companies", debouncedSearch],
-    queryFn: () => listCrmCompanies(debouncedSearch),
+    queryFn: ({ pageParam }) => listCrmCompanies(debouncedSearch, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 60_000,
   });
 
-  const companies = companiesQuery.data?.items ?? [];
+  const companies = companiesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const hasNextPage = companiesQuery.hasNextPage;
+  const isFetchingNextPage = companiesQuery.isFetchingNextPage;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -88,27 +92,45 @@ export function CrmCompaniesPage() {
       )}
 
       {!companiesQuery.isLoading && !companiesQuery.isError && companies.length > 0 && (
-        <div className="space-y-3" aria-label="Company results">
-          {companies.map((company) => (
-            <Link
-              key={company.id}
-              to={`/crm/companies/${company.id}`}
-              className="block min-h-[44px] rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:border-[#E87722]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722]"
-            >
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[#1E293B]">
-                  <Building2 className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#0F172A]">{company.name}</p>
-                  <p className="truncate text-sm text-[#334155]">
-                    {[company.city, company.state, company.country].filter(Boolean).join(", ") ||
-                      "Location not specified"}
-                  </p>
+        <div className="space-y-4">
+          <div className="space-y-3" aria-label="Company results">
+            {companies.map((company) => (
+              <Link
+                key={company.id}
+                to={`/crm/companies/${company.id}`}
+                className="block min-h-[44px] rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:border-[#E87722]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722]"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E2E8F0] text-[#1E293B]">
+                    <Building2 className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#0F172A]">{company.name}</p>
+                    <p className="truncate text-sm text-[#334155]">
+                      {[company.city, company.state, company.country].filter(Boolean).join(", ") ||
+                        "Location not specified"}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-[#475569]">{companies.length} companies loaded</p>
+            {hasNextPage ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void companiesQuery.fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? "Loading more..." : "Load more companies"}
+              </Button>
+            ) : (
+              <p className="text-xs text-[#64748B]">You&apos;re at the end of the company list.</p>
+            )}
+          </div>
         </div>
       )}
 
