@@ -29,7 +29,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import type { UserRole, ExtractedDealData, Database } from "../lib/database.types";
+import type { UserRole, Database } from "../lib/database.types";
+import type { ExtractedDealData } from "../lib/voice-capture-extraction.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

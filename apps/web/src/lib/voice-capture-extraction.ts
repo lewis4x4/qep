@@ -2,7 +2,7 @@ import type {
   ExtractedDealData,
   ExtractedEvidenceSnippet,
   SignalConfidence,
-} from "./database.types";
+} from "./voice-capture-extraction.types";
 
 type LegacyExtractedDealData = {
   customer_name?: unknown;

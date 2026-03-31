@@ -1,34 +1,96 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
 import { AppLayout } from "./components/AppLayout";
 import { DashboardPage } from "./components/DashboardPage";
-import { ChatPage } from "./components/ChatPage";
-import { AdminPage } from "./components/AdminPage";
-import { VoiceCapturePage } from "./components/VoiceCapturePage";
-import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
-import { QuoteBuilderGate } from "./components/QuoteBuilderGate";
-import { IntegrationHub } from "./components/IntegrationHub";
-import { IntegrationCallbackPage } from "./components/IntegrationCallbackPage";
-import { HubSpotConnectPage } from "./components/HubSpotConnectPage";
-import { NotFoundPage } from "./components/NotFoundPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import { CrmContactsPage } from "./features/crm/pages/CrmContactsPage";
-import { CrmContactDetailPage } from "./features/crm/pages/CrmContactDetailPage";
-import { CrmCompaniesPage } from "./features/crm/pages/CrmCompaniesPage";
-import { CrmCompanyDetailPage } from "./features/crm/pages/CrmCompanyDetailPage";
-import { CrmDealDetailPage } from "./features/crm/pages/CrmDealDetailPage";
-import { CrmPipelinePage } from "./features/crm/pages/CrmPipelinePage";
-import { CrmDuplicatesPage } from "./features/crm/pages/CrmDuplicatesPage";
-import { CrmActivitiesPage } from "./features/crm/pages/CrmActivitiesPage";
-import { CrmActivityTemplatesPage } from "./features/crm/pages/CrmActivityTemplatesPage";
-import { CrmFollowUpSequencesPage } from "./features/crm/pages/CrmFollowUpSequencesPage";
+import { NotFoundPage } from "./components/NotFoundPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
+
+const ChatPage = lazy(() =>
+  import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
+);
+const AdminPage = lazy(() =>
+  import("./components/AdminPage").then((m) => ({ default: m.AdminPage }))
+);
+const VoiceCapturePage = lazy(() =>
+  import("./components/VoiceCapturePage").then((m) => ({ default: m.VoiceCapturePage }))
+);
+const QuoteBuilderPage = lazy(() =>
+  import("./components/QuoteBuilderPage").then((m) => ({ default: m.QuoteBuilderPage }))
+);
+const QuoteBuilderGate = lazy(() =>
+  import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
+);
+const IntegrationHub = lazy(() =>
+  import("./components/IntegrationHub").then((m) => ({ default: m.IntegrationHub }))
+);
+const IntegrationCallbackPage = lazy(() =>
+  import("./components/IntegrationCallbackPage").then((m) => ({
+    default: m.IntegrationCallbackPage,
+  }))
+);
+const HubSpotConnectPage = lazy(() =>
+  import("./components/HubSpotConnectPage").then((m) => ({ default: m.HubSpotConnectPage }))
+);
+const CrmContactsPage = lazy(() =>
+  import("./features/crm/pages/CrmContactsPage").then((m) => ({ default: m.CrmContactsPage }))
+);
+const CrmContactDetailPage = lazy(() =>
+  import("./features/crm/pages/CrmContactDetailPage").then((m) => ({
+    default: m.CrmContactDetailPage,
+  }))
+);
+const CrmCompaniesPage = lazy(() =>
+  import("./features/crm/pages/CrmCompaniesPage").then((m) => ({ default: m.CrmCompaniesPage }))
+);
+const CrmCompanyDetailPage = lazy(() =>
+  import("./features/crm/pages/CrmCompanyDetailPage").then((m) => ({
+    default: m.CrmCompanyDetailPage,
+  }))
+);
+const CrmDealDetailPage = lazy(() =>
+  import("./features/crm/pages/CrmDealDetailPage").then((m) => ({ default: m.CrmDealDetailPage }))
+);
+const CrmPipelinePage = lazy(() =>
+  import("./features/crm/pages/CrmPipelinePage").then((m) => ({ default: m.CrmPipelinePage }))
+);
+const CrmDuplicatesPage = lazy(() =>
+  import("./features/crm/pages/CrmDuplicatesPage").then((m) => ({ default: m.CrmDuplicatesPage }))
+);
+const CrmActivitiesPage = lazy(() =>
+  import("./features/crm/pages/CrmActivitiesPage").then((m) => ({ default: m.CrmActivitiesPage }))
+);
+const CrmActivityTemplatesPage = lazy(() =>
+  import("./features/crm/pages/CrmActivityTemplatesPage").then((m) => ({
+    default: m.CrmActivityTemplatesPage,
+  }))
+);
+const CrmFollowUpSequencesPage = lazy(() =>
+  import("./features/crm/pages/CrmFollowUpSequencesPage").then((m) => ({
+    default: m.CrmFollowUpSequencesPage,
+  }))
+);
+
+function RouteFallback() {
+  return (
+    <div
+      className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-6"
+      role="status"
+      aria-label="Loading page"
+    >
+      <div
+        className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 const envIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
 
@@ -40,7 +102,9 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   return (
     <div key={location.pathname} className="animate-page-in">
-      <Routes location={location}>{children}</Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes location={location}>{children}</Routes>
+      </Suspense>
     </div>
   );
 }

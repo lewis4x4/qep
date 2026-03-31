@@ -12,11 +12,12 @@
     "demo:seed": "bun ./scripts/demo/crm-demo-data.mjs seed",
     "demo:reset": "bun ./scripts/demo/crm-demo-data.mjs reset",
     "demo:reseed": "bun ./scripts/demo/crm-demo-data.mjs reseed",
-    "design:review": "node ./.agents/qep-design-review-runner.js",
+    "design:review": "node ./scripts/design-review-runner.js",
     "stress:test": "bun ./.agents/stress-test/run.ts",
     "segment:gates": "bun ./scripts/agent-gates/run-segment-gates.mjs",
     "supabase:start": "supabase start",
     "supabase:push": "supabase db push",
-    "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts"
+    "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
+    "supabase:types:remote": "sh -c 'supabase gen types typescript --project-id xbfzymdhlfhfhaqhawzs --schema public 2>/dev/null > apps/web/src/lib/database.types.ts && printf \"\\nexport type UserRole = Database[\\\"public\\\"][\\\"Enums\\\"][\\\"user_role\\\"]\\n\" >> apps/web/src/lib/database.types.ts'"
   }
 }

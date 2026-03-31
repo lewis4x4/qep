@@ -108,6 +108,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   const [editAudience, setEditAudience] = useState<DocumentAudience>("company_wide");
   const [editStatus, setEditStatus] = useState<DocumentStatus>("draft");
   const [editReviewDueAt, setEditReviewDueAt] = useState("");
+  const [editReviewOwnerUserId, setEditReviewOwnerUserId] = useState("");
+  const [reviewAssignees, setReviewAssignees] = useState<
+    Array<{ id: string; full_name: string | null; email: string | null }>
+  >([]);
   const [reindexingId, setReindexingId] = useState<string | null>(null);
   const [docSearch, setDocSearch] = useState("");
   const [docFilter, setDocFilter] = useState<(typeof DOCUMENT_FILTERS)[number]>("all");
@@ -120,6 +124,26 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   useEffect(() => {
     loadDocuments();
   }, []);
+
+  useEffect(() => {
+    if (!canReviewDocs) return;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .in("role", ["admin", "manager", "owner"])
+        .order("full_name", { ascending: true });
+      if (!error && data) {
+        setReviewAssignees(
+          data.map((row) => ({
+            id: row.id,
+            full_name: row.full_name,
+            email: row.email,
+          })),
+        );
+      }
+    })();
+  }, [canReviewDocs]);
 
   async function loadDocuments(): Promise<void> {
     // Elevated roles: RLS allows full document rows (see migrations on documents_select_elevated_all).
@@ -280,6 +304,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       audience?: DocumentAudience;
       status?: DocumentStatus;
       reviewDueAt?: string | null;
+      reviewOwnerUserId?: string | null;
     }
   ): Promise<boolean> {
     try {
@@ -289,6 +314,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
         audience: updates.audience,
         status: updates.status,
         reviewDueAt: updates.reviewDueAt,
+        reviewOwnerUserId: updates.reviewOwnerUserId,
       });
       if (updated) {
         setDocuments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -328,6 +354,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
     setEditAudience((doc.audience as DocumentAudience | null) ?? "company_wide");
     setEditStatus((doc.status as DocumentStatus | null) ?? "draft");
     setEditReviewDueAt(doc.review_due_at ? doc.review_due_at.slice(0, 10) : "");
+    setEditReviewOwnerUserId(doc.review_owner_user_id ?? "");
   }
 
   async function saveGovernanceEditor(): Promise<void> {
@@ -337,6 +364,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       audience: editAudience,
       status: editStatus,
       reviewDueAt: editReviewDueAt || null,
+      reviewOwnerUserId: editReviewOwnerUserId || null,
     });
     if (ok) {
       toast({ title: "Document access updated" });
@@ -807,6 +835,92 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
           <UsersTab callerRole={userRole} callerId={userId} />
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={!!editTarget}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit document access</DialogTitle>
+            <DialogDescription>
+              Audience, publication status, and review routing for &ldquo;{editTarget?.title}&rdquo;.
+            </DialogDescription>
+          </DialogHeader>
+          {editTarget && canReviewDocs && (
+            <div className="grid gap-4 py-2">
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Audience
+                </span>
+                <select
+                  value={editAudience}
+                  onChange={(e) => setEditAudience(e.target.value as DocumentAudience)}
+                  className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  {DOCUMENT_AUDIENCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Status
+                </span>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as DocumentStatus)}
+                  className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  {DOCUMENT_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Review due date
+                </span>
+                <input
+                  type="date"
+                  value={editReviewDueAt}
+                  onChange={(e) => setEditReviewDueAt(e.target.value)}
+                  className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Review owner
+                </span>
+                <select
+                  value={editReviewOwnerUserId}
+                  onChange={(e) => setEditReviewOwnerUserId(e.target.value)}
+                  className="min-h-[40px] rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="">Unassigned</option>
+                  {reviewAssignees.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name?.trim() || p.email || p.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setEditTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void saveGovernanceEditor()}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
