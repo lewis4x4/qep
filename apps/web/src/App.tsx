@@ -24,6 +24,7 @@ import { CrmPipelinePage } from "./features/crm/pages/CrmPipelinePage";
 import { CrmDuplicatesPage } from "./features/crm/pages/CrmDuplicatesPage";
 import { CrmActivitiesPage } from "./features/crm/pages/CrmActivitiesPage";
 import { CrmActivityTemplatesPage } from "./features/crm/pages/CrmActivityTemplatesPage";
+import { CrmFollowUpSequencesPage } from "./features/crm/pages/CrmFollowUpSequencesPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
@@ -306,6 +307,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmActivityTemplatesPage userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/sequences"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmFollowUpSequencesPage userId={profile.id} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

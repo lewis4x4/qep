@@ -1,6 +1,8 @@
 export type CrmActivityType = "note" | "call" | "email" | "meeting" | "task" | "sms";
 
 export type CrmTaskStatus = "open" | "completed";
+export type CrmFollowUpStepType = "task" | "email" | "call_log" | "stalled_alert";
+export type CrmEnrollmentStatus = "active" | "completed" | "paused" | "cancelled";
 
 export interface CrmActivityTemplate {
   id: string;
@@ -214,6 +216,67 @@ export interface CrmDealCreateInput {
   amount?: number | null;
   expectedCloseOn?: string | null;
   nextFollowUpAt?: string | null;
+}
+
+export interface CrmFollowUpStep {
+  id: string;
+  sequenceId: string;
+  stepNumber: number;
+  dayOffset: number;
+  stepType: CrmFollowUpStepType;
+  subject: string | null;
+  bodyTemplate: string | null;
+  taskPriority: string | null;
+  createdAt: string;
+}
+
+export interface CrmFollowUpSequence {
+  id: string;
+  name: string;
+  description: string | null;
+  triggerStage: string;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  steps: CrmFollowUpStep[];
+}
+
+export interface CrmFollowUpSequenceEditorInput {
+  id?: string;
+  name: string;
+  description?: string | null;
+  triggerStage: string;
+  isActive: boolean;
+  steps: Array<{
+    id?: string;
+    stepNumber: number;
+    dayOffset: number;
+    stepType: CrmFollowUpStepType;
+    subject?: string | null;
+    bodyTemplate?: string | null;
+    taskPriority?: string | null;
+  }>;
+}
+
+export interface CrmSequenceEnrollment {
+  id: string;
+  sequenceId: string;
+  sequenceName: string;
+  dealId: string;
+  dealName: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  ownerId: string | null;
+  hubId: string;
+  enrolledAt: string;
+  currentStep: number;
+  nextStepDueAt: string | null;
+  status: CrmEnrollmentStatus;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  metadata: Record<string, unknown>;
+  updatedAt: string;
 }
 
 export interface CrmPageResult<T> {

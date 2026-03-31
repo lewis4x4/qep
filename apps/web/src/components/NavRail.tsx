@@ -125,6 +125,12 @@ const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
+    label: "CRM Sequences",
+    href: "/crm/sequences",
+    icon: NotebookPen,
+    roles: ["admin", "manager", "owner"],
+  },
+  {
     label: "CRM Templates",
     href: "/crm/templates",
     icon: NotebookPen,
