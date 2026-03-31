@@ -64,6 +64,7 @@ export interface DealPatchPayload {
   closedAt?: string | null;
   lossReason?: string | null;
   competitor?: string | null;
+  archive?: boolean;
 }
 
 export interface ContactUpsertPayload {
@@ -73,6 +74,7 @@ export interface ContactUpsertPayload {
   phone?: string | null;
   title?: string | null;
   primaryCompanyId?: string | null;
+  archive?: boolean;
 }
 
 export interface CompanyUpsertPayload {
@@ -83,6 +85,7 @@ export interface CompanyUpsertPayload {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  archive?: boolean;
 }
 
 export interface DealCreatePayload {
@@ -707,6 +710,7 @@ export async function patchContact(
   payload: ContactUpsertPayload,
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
+  const hasArchive = payload.archive === true;
 
   if (payload.firstName !== undefined) {
     const firstName = cleanText(payload.firstName);
@@ -739,6 +743,14 @@ export async function patchContact(
       await ensureRecordVisible(ctx, "company", nextPrimaryCompanyId);
     }
     updates.primary_company_id = nextPrimaryCompanyId;
+  }
+
+  if (hasArchive) {
+    const { data, error } = await ctx.callerDb.rpc("archive_crm_contact", {
+      p_contact_id: contactId,
+    });
+    if (error) throw error;
+    return data;
   }
 
   if (Object.keys(updates).length === 0) {
@@ -824,6 +836,7 @@ export async function patchCompany(
   payload: CompanyUpsertPayload,
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
+  const hasArchive = payload.archive === true;
 
   if (payload.name !== undefined) {
     const name = cleanText(payload.name);
@@ -848,6 +861,14 @@ export async function patchCompany(
   }
   if (payload.country !== undefined) {
     updates.country = cleanText(payload.country ?? null);
+  }
+
+  if (hasArchive) {
+    const { data, error } = await ctx.callerDb.rpc("archive_crm_company", {
+      p_company_id: companyId,
+    });
+    if (error) throw error;
+    return data;
   }
 
   if (Object.keys(updates).length === 0) {
@@ -970,6 +991,7 @@ export async function patchDeal(
   payload: DealPatchPayload,
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
+  const hasArchive = payload.archive === true;
 
   if (payload.name !== undefined) {
     const name = cleanText(payload.name);
@@ -1069,6 +1091,14 @@ export async function patchDeal(
     if (hasCompetitor) {
       updates.competitor = cleanText(payload.competitor ?? null);
     }
+  }
+
+  if (hasArchive) {
+    const { data, error } = await ctx.callerDb.rpc("archive_crm_deal", {
+      p_deal_id: dealId,
+    });
+    if (error) throw error;
+    return data;
   }
 
   if (Object.keys(updates).length === 0) {

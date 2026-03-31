@@ -13,6 +13,7 @@ interface CrmCompanyEditorSheetProps {
   onOpenChange: (open: boolean) => void;
   company?: CrmCompanySummary | null;
   onSaved?: (company: CrmCompanySummary) => void;
+  onArchived?: () => void;
 }
 
 export function CrmCompanyEditorSheet({
@@ -20,6 +21,7 @@ export function CrmCompanyEditorSheet({
   onOpenChange,
   company,
   onSaved,
+  onArchived,
 }: CrmCompanyEditorSheetProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -45,7 +47,14 @@ export function CrmCompanyEditorSheet({
   }, [company, open]);
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ archive }: { archive: boolean }) => {
+      if (archive) {
+        if (!company) {
+          throw new Error("Only existing companies can be archived.");
+        }
+        return patchCrmCompanyViaRouter(company.id, { archive: true });
+      }
+
       const payload = {
         name,
         addressLine1: addressLine1.trim() || null,
@@ -60,18 +69,24 @@ export function CrmCompanyEditorSheet({
         ? patchCrmCompanyViaRouter(company.id, payload)
         : createCrmCompanyViaRouter(payload);
     },
-    onSuccess: async (savedCompany) => {
+    onSuccess: async (savedCompany, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "companies"] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "company", savedCompany.id] }),
       ]);
       toast({
-        title: company ? "Company updated" : "Company created",
-        description: company
-          ? "The account record is up to date."
-          : "The company is ready for contact, equipment, and activity work.",
+        title: variables.archive ? "Company archived" : company ? "Company updated" : "Company created",
+        description: variables.archive
+          ? "The company is out of the active CRM and can be restored from backups if needed."
+          : company
+            ? "The account record is up to date."
+            : "The company is ready for contact, equipment, and activity work.",
       });
-      onSaved?.(savedCompany);
+      if (variables.archive) {
+        onArchived?.();
+      } else {
+        onSaved?.(savedCompany);
+      }
       onOpenChange(false);
     },
     onError: (error) => {
@@ -88,7 +103,16 @@ export function CrmCompanyEditorSheet({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    await mutation.mutateAsync();
+    await mutation.mutateAsync({ archive: false });
+  }
+
+  async function handleArchive(): Promise<void> {
+    if (!company || mutation.isPending) return;
+    if (!window.confirm(`Archive ${company.name}? This removes the company from active CRM views.`)) {
+      return;
+    }
+    setFormError(null);
+    await mutation.mutateAsync({ archive: true });
   }
 
   return (
@@ -178,6 +202,17 @@ export function CrmCompanyEditorSheet({
           {formError ? <p className="text-sm text-[#B91C1C]">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            {company ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleArchive()}
+                disabled={mutation.isPending}
+                className="sm:mr-auto"
+              >
+                {mutation.isPending ? "Working..." : "Archive company"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"

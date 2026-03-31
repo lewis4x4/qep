@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, FileText, Plus } from "lucide-react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
@@ -34,6 +34,7 @@ interface CrmDealDetailPageProps {
 
 export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) {
   const { dealId } = useParams<{ dealId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isElevatedRole = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
@@ -341,6 +342,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
         open={editorOpen}
         onOpenChange={setEditorOpen}
         deal={dealQuery.data}
+        onArchived={() => navigate("/crm/deals")}
       />
     </div>
   );

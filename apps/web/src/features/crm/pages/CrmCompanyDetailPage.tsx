@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, GitMerge, Loader2, Plus } from "lucide-react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
@@ -33,6 +33,7 @@ interface CrmCompanyDetailPageProps {
 
 export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageProps) {
   const { companyId } = useParams<{ companyId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
   const [hierarchyEditorOpen, setHierarchyEditorOpen] = useState(false);
@@ -482,6 +483,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         open={editorOpen}
         onOpenChange={setEditorOpen}
         company={companyQuery.data}
+        onArchived={() => navigate("/crm/companies")}
       />
     </div>
   );

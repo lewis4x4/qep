@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
-import { getCrmCompany, getCrmContact, listCrmCompanies, listCrmContacts, listCrmDealStages, patchCrmDeal } from "../lib/crm-api";
+import { getCrmCompany, getCrmContact, listCrmCompanies, listCrmContacts, listCrmDealStages } from "../lib/crm-api";
 import { toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
-import { createCrmDealViaRouter } from "../lib/crm-router-api";
+import { createCrmDealViaRouter, patchCrmDealViaRouter } from "../lib/crm-router-api";
 import type { CrmRepSafeDeal } from "../lib/types";
 
 interface CrmDealEditorSheetProps {
@@ -15,6 +15,7 @@ interface CrmDealEditorSheetProps {
   onOpenChange: (open: boolean) => void;
   deal?: CrmRepSafeDeal | null;
   onSaved?: (deal: CrmRepSafeDeal) => void;
+  onArchived?: () => void;
 }
 
 export function CrmDealEditorSheet({
@@ -22,6 +23,7 @@ export function CrmDealEditorSheet({
   onOpenChange,
   deal,
   onSaved,
+  onArchived,
 }: CrmDealEditorSheetProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -126,14 +128,21 @@ export function CrmDealEditorSheet({
   );
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ archive }: { archive: boolean }) => {
+      if (archive) {
+        if (!deal) {
+          throw new Error("Only existing deals can be archived.");
+        }
+        return patchCrmDealViaRouter(deal.id, { archive: true });
+      }
+
       const amount = amountInput.trim().length > 0 ? Number(amountInput) : null;
       if (amountInput.trim().length > 0 && !Number.isFinite(amount)) {
         throw new Error("Enter a valid deal amount.");
       }
 
       if (deal) {
-        return patchCrmDeal(deal.id, {
+        return patchCrmDealViaRouter(deal.id, {
           name,
           stageId,
           primaryContactId: primaryContactId || null,
@@ -154,7 +163,7 @@ export function CrmDealEditorSheet({
         nextFollowUpAt: toIsoOrNull(nextFollowUpInput),
       });
     },
-    onSuccess: async (savedDeal) => {
+    onSuccess: async (savedDeal, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "deals"] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "pipeline"] }),
@@ -162,12 +171,18 @@ export function CrmDealEditorSheet({
         queryClient.invalidateQueries({ queryKey: ["crm", "contact"] }),
       ]);
       toast({
-        title: deal ? "Deal updated" : "Deal created",
-        description: deal
-          ? "The pipeline record has been updated."
-          : "The deal is live in the CRM pipeline.",
+        title: variables.archive ? "Deal archived" : deal ? "Deal updated" : "Deal created",
+        description: variables.archive
+          ? "The deal is out of the active pipeline."
+          : deal
+            ? "The pipeline record has been updated."
+            : "The deal is live in the CRM pipeline.",
       });
-      onSaved?.(savedDeal);
+      if (variables.archive) {
+        onArchived?.();
+      } else {
+        onSaved?.(savedDeal);
+      }
       onOpenChange(false);
     },
     onError: (error) => {
@@ -184,7 +199,16 @@ export function CrmDealEditorSheet({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    await mutation.mutateAsync();
+    await mutation.mutateAsync({ archive: false });
+  }
+
+  async function handleArchive(): Promise<void> {
+    if (!deal || mutation.isPending) return;
+    if (!window.confirm(`Archive ${deal.name}? This removes the deal from the active pipeline.`)) {
+      return;
+    }
+    setFormError(null);
+    await mutation.mutateAsync({ archive: true });
   }
 
   return (
@@ -306,6 +330,17 @@ export function CrmDealEditorSheet({
           {formError ? <p className="text-sm text-[#B91C1C]">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            {deal ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleArchive()}
+                disabled={mutation.isPending}
+                className="sm:mr-auto"
+              >
+                {mutation.isPending ? "Working..." : "Archive deal"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"

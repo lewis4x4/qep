@@ -365,6 +365,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         open={editorOpen}
         onOpenChange={setEditorOpen}
         contact={contactQuery.data}
+        onArchived={() => navigate("/crm/contacts")}
       />
     </div>
   );

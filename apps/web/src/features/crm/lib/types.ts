@@ -187,6 +187,7 @@ export interface CrmDealPatchInput {
   closedAt?: string | null;
   lossReason?: string | null;
   competitor?: string | null;
+  archive?: boolean;
 }
 
 export interface CrmContactUpsertInput {
@@ -196,6 +197,7 @@ export interface CrmContactUpsertInput {
   phone?: string | null;
   title?: string | null;
   primaryCompanyId?: string | null;
+  archive?: boolean;
 }
 
 export interface CrmCompanyUpsertInput {
@@ -206,6 +208,7 @@ export interface CrmCompanyUpsertInput {
   state?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  archive?: boolean;
 }
 
 export interface CrmDealCreateInput {

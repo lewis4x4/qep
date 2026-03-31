@@ -108,6 +108,78 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "CONTACT_ARCHIVE_HAS_DEALS") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Move or close this contact's active deals before archiving the contact.",
+    });
+  }
+
+  if (message === "CONTACT_ARCHIVE_HAS_EQUIPMENT") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Reassign linked equipment before archiving the contact.",
+    });
+  }
+
+  if (message === "COMPANY_ARCHIVE_HAS_CHILDREN") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Remove or re-parent child companies before archiving this company.",
+    });
+  }
+
+  if (message === "COMPANY_ARCHIVE_HAS_CONTACTS") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Move linked contacts before archiving this company.",
+    });
+  }
+
+  if (message === "COMPANY_ARCHIVE_HAS_DEALS") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Move or close active deals before archiving this company.",
+    });
+  }
+
+  if (message === "COMPANY_ARCHIVE_HAS_EQUIPMENT") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Reassign linked equipment before archiving this company.",
+    });
+  }
+
+  if (message === "DEAL_ARCHIVE_HAS_QUOTES") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Archive or unlink active quotes before archiving this deal.",
+    });
+  }
+
+  if (message === "DEAL_ARCHIVE_HAS_SEQUENCES") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Pause or cancel live follow-up enrollments before archiving this deal.",
+    });
+  }
+
   if (message === "VALIDATION_ACTIVITY_BODY_REQUIRED") {
     return crmFail({
       origin,

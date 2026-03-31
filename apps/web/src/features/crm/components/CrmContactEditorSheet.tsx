@@ -14,6 +14,7 @@ interface CrmContactEditorSheetProps {
   onOpenChange: (open: boolean) => void;
   contact?: CrmContactSummary | null;
   onSaved?: (contact: CrmContactSummary) => void;
+  onArchived?: () => void;
 }
 
 export function CrmContactEditorSheet({
@@ -21,6 +22,7 @@ export function CrmContactEditorSheet({
   onOpenChange,
   contact,
   onSaved,
+  onArchived,
 }: CrmContactEditorSheetProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -80,7 +82,14 @@ export function CrmContactEditorSheet({
   }, [companiesQuery.data?.items, selectedCompanyQuery.data]);
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ archive }: { archive: boolean }) => {
+      if (archive) {
+        if (!contact) {
+          throw new Error("Only existing contacts can be archived.");
+        }
+        return patchCrmContactViaRouter(contact.id, { archive: true });
+      }
+
       const payload = {
         firstName,
         lastName,
@@ -94,19 +103,25 @@ export function CrmContactEditorSheet({
         ? patchCrmContactViaRouter(contact.id, payload)
         : createCrmContactViaRouter(payload);
     },
-    onSuccess: async (savedContact) => {
+    onSuccess: async (savedContact, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "contacts"] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "contact", savedContact.id] }),
         queryClient.invalidateQueries({ queryKey: ["crm", "activities"] }),
       ]);
       toast({
-        title: contact ? "Contact updated" : "Contact created",
-        description: contact
-          ? "The CRM contact record is up to date."
-          : "The contact is ready for activity logging and deal work.",
+        title: variables.archive ? "Contact archived" : contact ? "Contact updated" : "Contact created",
+        description: variables.archive
+          ? "The contact is out of the active CRM without a database cleanup step."
+          : contact
+            ? "The CRM contact record is up to date."
+            : "The contact is ready for activity logging and deal work.",
       });
-      onSaved?.(savedContact);
+      if (variables.archive) {
+        onArchived?.();
+      } else {
+        onSaved?.(savedContact);
+      }
       onOpenChange(false);
     },
     onError: (error) => {
@@ -123,7 +138,16 @@ export function CrmContactEditorSheet({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
-    await mutation.mutateAsync();
+    await mutation.mutateAsync({ archive: false });
+  }
+
+  async function handleArchive(): Promise<void> {
+    if (!contact || mutation.isPending) return;
+    if (!window.confirm(`Archive ${contact.firstName} ${contact.lastName}? This removes the contact from active CRM views.`)) {
+      return;
+    }
+    setFormError(null);
+    await mutation.mutateAsync({ archive: true });
   }
 
   return (
@@ -217,6 +241,17 @@ export function CrmContactEditorSheet({
           {formError ? <p className="text-sm text-[#B91C1C]">{formError}</p> : null}
 
           <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            {contact ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleArchive()}
+                disabled={mutation.isPending}
+                className="sm:mr-auto"
+              >
+                {mutation.isPending ? "Working..." : "Archive contact"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
