@@ -1,23 +1,28 @@
 import { useDeferredValue, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
   Building2,
   CheckCircle2,
   ClipboardList,
+  Eye,
   Filter,
   Mail,
   MessageSquareText,
   Phone,
   Search,
+  Send,
   UserRound,
+  X,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { CrmPageHeader } from "../components/CrmPageHeader";
-import { listCrmActivityFeed } from "../lib/crm-api";
+import { deliverCrmActivity, listCrmActivityFeed } from "../lib/crm-api";
 import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
@@ -89,6 +94,20 @@ function deliveryTone(delivery: Record<string, unknown> | null): string {
   return "bg-slate-100 text-slate-700";
 }
 
+function canSendFromInbox(activity: CrmActivityFeedItem): boolean {
+  const delivery = readDeliveryMetadata(activity);
+  if (!delivery || (activity.activityType !== "email" && activity.activityType !== "sms")) {
+    return false;
+  }
+  const status = typeof delivery.status === "string" ? delivery.status : null;
+  return status === "failed" || status === "manual_logged";
+}
+
+function deliveryActionLabel(delivery: Record<string, unknown> | null): string {
+  const status = typeof delivery?.status === "string" ? delivery.status : null;
+  return status === "failed" ? "Retry send" : "Send now";
+}
+
 function activityTargetHref(activity: CrmActivityFeedItem): string | null {
   if (activity.dealId) return `/crm/deals/${activity.dealId}`;
   if (activity.contactId) return `/crm/contacts/${activity.contactId}`;
@@ -104,18 +123,46 @@ function activityTargetLabel(activity: CrmActivityFeedItem): string {
 }
 
 export function CrmActivitiesPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchInput, setSearchInput] = useState("");
   const [typeFilter, setTypeFilter] = useState<CrmActivityType | "all">("all");
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
+  const queryKey = ["crm", "activities", "feed"] as const;
 
   const activitiesQuery = useQuery({
-    queryKey: ["crm", "activities", "feed"],
+    queryKey,
     queryFn: listCrmActivityFeed,
     staleTime: 30_000,
   });
 
   const activities = activitiesQuery.data ?? [];
+  const selectedActivities = useMemo(
+    () => activities.filter((activity) => selectedActivityIds.includes(activity.id)),
+    [activities, selectedActivityIds],
+  );
+
+  const deliveryMutation = useMutation({
+    mutationFn: async (input: { activityId: string; updatedAt: string }) =>
+      deliverCrmActivity(input.activityId, input.updatedAt),
+    onSuccess: (updatedActivity) => {
+      queryClient.setQueryData<CrmActivityFeedItem[]>(
+        queryKey,
+        (current) =>
+          current?.map((item) =>
+            item.id === updatedActivity.id
+              ? {
+                  ...item,
+                  ...updatedActivity,
+                }
+              : item
+          ) ?? [],
+      );
+    },
+  });
 
   const filteredActivities = useMemo(() => {
     return activities.filter((activity) => {
@@ -172,6 +219,75 @@ export function CrmActivitiesPage() {
 
     return { openTasks, overdueTasks, failedDeliveries, todayTouches };
   }, [activities]);
+
+  function toggleSelected(activityId: string): void {
+    setSelectedActivityIds((current) =>
+      current.includes(activityId)
+        ? current.filter((id) => id !== activityId)
+        : [...current, activityId]
+    );
+  }
+
+  async function sendSingleActivity(activity: CrmActivityFeedItem): Promise<void> {
+    try {
+      await deliveryMutation.mutateAsync({
+        activityId: activity.id,
+        updatedAt: activity.updatedAt,
+      });
+      setSelectedActivityIds((current) => current.filter((id) => id !== activity.id));
+      toast({
+        title: "Message queued",
+        description: `${activity.activityType === "sms" ? "SMS" : "Email"} delivery was retried from the activity inbox.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Delivery failed",
+        description: error instanceof Error ? error.message : "Could not send the selected activity.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function sendSelectedActivities(): Promise<void> {
+    const sendableActivities = selectedActivities.filter(canSendFromInbox);
+    if (sendableActivities.length === 0) {
+      setReviewOpen(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      sendableActivities.map((activity) =>
+        deliveryMutation.mutateAsync({
+          activityId: activity.id,
+          updatedAt: activity.updatedAt,
+        }).then(() => activity.id)
+      ),
+    );
+
+    const succeeded = results
+      .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
+      .map((result) => result.value);
+    const failed = results.filter((result) => result.status === "rejected");
+
+    if (succeeded.length > 0) {
+      setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+    }
+
+    if (failed.length === 0) {
+      setReviewOpen(false);
+      toast({
+        title: "Bulk send complete",
+        description: `${succeeded.length} communication${succeeded.length === 1 ? "" : "s"} sent from the inbox.`,
+      });
+      return;
+    }
+
+    toast({
+      title: "Bulk send completed with issues",
+      description: `${succeeded.length} sent, ${failed.length} still need review.`,
+      variant: "destructive",
+    });
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -248,6 +364,37 @@ export function CrmActivitiesPage() {
             </Button>
           ))}
         </div>
+
+        {selectedActivities.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#9A3412]">
+                {selectedActivities.length} communication{selectedActivities.length === 1 ? "" : "s"} selected
+              </p>
+              <p className="mt-1 text-xs text-[#9A3412]">
+                Review manual and failed messages together, then send them as one operator action.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSelectedActivityIds([])}
+                className="border-[#FDBA74] bg-white text-[#9A3412] hover:bg-[#FFF1E6]"
+              >
+                Clear
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setReviewOpen(true)}
+                className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
+              >
+                <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
+                Review selected
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {activitiesQuery.isLoading && (
@@ -285,6 +432,18 @@ export function CrmActivitiesPage() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {canSendFromInbox(activity) && (
+                        <label className="inline-flex items-center gap-2 rounded-full border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-medium text-[#334155]">
+                          <input
+                            type="checkbox"
+                            checked={selectedActivityIds.includes(activity.id)}
+                            onChange={() => toggleSelected(activity.id)}
+                            className="h-4 w-4 rounded border-[#CBD5E1] text-[#E87722] focus:ring-[#E87722]"
+                            aria-label={`Select ${meta.label} activity`}
+                          />
+                          Select
+                        </label>
+                      )}
                       <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold", meta.badgeClassName)}>
                         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                         {meta.label}
@@ -321,13 +480,27 @@ export function CrmActivitiesPage() {
                   </div>
 
                   {targetHref && (
-                    <Link
-                      to={targetHref}
-                      className="inline-flex min-h-[44px] items-center gap-2 self-start rounded-full border border-[#D6E0EA] bg-[#F8FAFC] px-4 py-2 text-sm font-medium text-[#0F172A] transition hover:border-[#E87722]/50 hover:text-[#B45309]"
-                    >
-                      {targetLabel}
-                      <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-2 self-start">
+                      {canSendFromInbox(activity) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void sendSingleActivity(activity)}
+                          disabled={deliveryMutation.isPending}
+                          className="min-h-[44px] rounded-full bg-[#E87722] px-4 text-white hover:bg-[#D46B1B]"
+                        >
+                          <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                          {deliveryMutation.isPending ? "Sending..." : deliveryActionLabel(delivery)}
+                        </Button>
+                      )}
+                      <Link
+                        to={targetHref}
+                        className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#D6E0EA] bg-[#F8FAFC] px-4 py-2 text-sm font-medium text-[#0F172A] transition hover:border-[#E87722]/50 hover:text-[#B45309]"
+                      >
+                        {targetLabel}
+                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                    </div>
                   )}
                 </div>
               </Card>
@@ -350,6 +523,73 @@ export function CrmActivitiesPage() {
           </span>
         </div>
       </Card>
+
+      <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Review selected communications</SheetTitle>
+            <SheetDescription>
+              Confirm the messages that need to go out now from the activity inbox.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-3">
+            {selectedActivities.length === 0 && (
+              <Card className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
+                No communications selected.
+              </Card>
+            )}
+
+            {selectedActivities.map((activity) => {
+              const delivery = readDeliveryMetadata(activity);
+              return (
+                <Card key={activity.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", deliveryTone(delivery))}>
+                          {deliveryActionLabel(delivery)}
+                        </span>
+                        <span className="text-xs text-[#64748B]">{formatTimeLabel(activity.occurredAt)}</span>
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                        {activity.body || "No message body available."}
+                      </p>
+                      <p className="mt-3 text-xs text-[#475569]">
+                        {activity.contactName || activity.companyName || activity.dealName || "Unlinked record"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleSelected(activity.id)}
+                    >
+                      <X className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Remove
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void sendSelectedActivities()}
+              disabled={selectedActivities.length === 0 || deliveryMutation.isPending}
+              className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
+            >
+              <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+              {deliveryMutation.isPending ? "Sending..." : `Send selected (${selectedActivities.length})`}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
