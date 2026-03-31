@@ -25,9 +25,22 @@ import { cn } from "@/lib/utils";
 import { mergeActivityTemplates } from "../lib/activity-templates";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, listCrmActivityTemplates, patchCrmActivity, patchCrmActivityTask } from "../lib/crm-api";
-import type { CrmActivityFeedItem, CrmActivityTemplate, CrmActivityType, CrmTaskMetadata } from "../lib/types";
+import type { CrmActivityFeedItem, CrmActivityItem, CrmActivityTemplate, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
+type PendingMap = Record<string, true>;
+
+interface OperationIssue {
+  activityId: string;
+  action: "send" | "save" | "archive" | "task";
+  label: string;
+  message: string;
+}
+
+interface IssueTarget {
+  activityId: string;
+  action: OperationIssue["action"];
+}
 
 const ACTIVITY_META: Record<
   CrmActivityType,
@@ -162,6 +175,28 @@ function activityTargetLabel(activity: CrmActivityFeedItem): string {
   return "Open record";
 }
 
+function updatePendingMap(current: PendingMap, activityId: string, nextState: boolean): PendingMap {
+  if (nextState) {
+    return current[activityId] ? current : { ...current, [activityId]: true };
+  }
+
+  if (!current[activityId]) {
+    return current;
+  }
+
+  const next = { ...current };
+  delete next[activityId];
+  return next;
+}
+
+function activityIssueLabel(activity: CrmActivityFeedItem): string {
+  return `${ACTIVITY_META[activity.activityType].label} · ${activityTargetLabel(activity)}`;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
+}
+
 export function CrmActivitiesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -176,6 +211,13 @@ export function CrmActivitiesPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [approvedActivityIds, setApprovedActivityIds] = useState<string[]>([]);
   const [selectedTemplateByType, setSelectedTemplateByType] = useState<Partial<Record<"email" | "sms", string>>>({});
+  const [pendingDeliveryIds, setPendingDeliveryIds] = useState<PendingMap>({});
+  const [pendingBodyIds, setPendingBodyIds] = useState<PendingMap>({});
+  const [pendingArchiveIds, setPendingArchiveIds] = useState<PendingMap>({});
+  const [pendingTaskIds, setPendingTaskIds] = useState<PendingMap>({});
+  const [bulkSendPending, setBulkSendPending] = useState(false);
+  const [bulkTaskAction, setBulkTaskAction] = useState<"open" | "completed" | null>(null);
+  const [operationIssues, setOperationIssues] = useState<OperationIssue[]>([]);
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
   const queryKey = ["crm", "activities", "feed"] as const;
 
@@ -441,6 +483,25 @@ export function CrmActivitiesPage() {
     return { openTasks, overdueTasks, failedDeliveries, todayTouches };
   }, [activities]);
 
+  const selectedCommunicationHasPendingWork = useMemo(
+    () =>
+      selectedCommunications.some(
+        (activity) =>
+          Boolean(pendingDeliveryIds[activity.id]) ||
+          Boolean(pendingBodyIds[activity.id]) ||
+          Boolean(pendingArchiveIds[activity.id]),
+      ),
+    [pendingArchiveIds, pendingBodyIds, pendingDeliveryIds, selectedCommunications],
+  );
+  const selectedTaskHasPendingWork = useMemo(
+    () => selectedTaskActivities.some((activity) => Boolean(pendingTaskIds[activity.id])),
+    [pendingTaskIds, selectedTaskActivities],
+  );
+  const selectedCommunicationIssues = useMemo(
+    () => operationIssues.filter((issue) => selectedCommunications.some((activity) => activity.id === issue.activityId)),
+    [operationIssues, selectedCommunications],
+  );
+
   function toggleSelected(activityId: string): void {
     setSelectedActivityIds((current) =>
       current.includes(activityId)
@@ -451,6 +512,82 @@ export function CrmActivitiesPage() {
 
   function clearApproval(activityId: string): void {
     setApprovedActivityIds((current) => current.filter((id) => id !== activityId));
+  }
+
+  function updateIssueLedger(nextIssues: OperationIssue[], targetsToClear: IssueTarget[] = []): void {
+    setOperationIssues((current) => {
+      const filtered = current.filter(
+        (issue) =>
+          !targetsToClear.some(
+            (target) => target.activityId === issue.activityId && target.action === issue.action,
+          ),
+      );
+      if (nextIssues.length === 0) {
+        return filtered;
+      }
+      return [...filtered, ...nextIssues];
+    });
+  }
+
+  function clearIssueTargets(targets: IssueTarget[]): void {
+    if (targets.length === 0) {
+      return;
+    }
+    updateIssueLedger([], targets);
+  }
+
+  function isPending(map: PendingMap, activityId: string): boolean {
+    return Boolean(map[activityId]);
+  }
+
+  async function runDeliveryMutation(activityId: string, updatedAt: string): Promise<CrmActivityItem> {
+    setPendingDeliveryIds((current) => updatePendingMap(current, activityId, true));
+    try {
+      return await deliveryMutation.mutateAsync({
+        activityId,
+        updatedAt,
+      });
+    } finally {
+      setPendingDeliveryIds((current) => updatePendingMap(current, activityId, false));
+    }
+  }
+
+  async function runBodyMutation(activityId: string, body: string, updatedAt: string): Promise<CrmActivityItem> {
+    setPendingBodyIds((current) => updatePendingMap(current, activityId, true));
+    try {
+      return await bodyMutation.mutateAsync({
+        activityId,
+        body,
+        updatedAt,
+      });
+    } finally {
+      setPendingBodyIds((current) => updatePendingMap(current, activityId, false));
+    }
+  }
+
+  async function runArchiveMutation(activityId: string, updatedAt: string): Promise<CrmActivityItem> {
+    setPendingArchiveIds((current) => updatePendingMap(current, activityId, true));
+    try {
+      return await archiveMutation.mutateAsync({
+        activityId,
+        updatedAt,
+      });
+    } finally {
+      setPendingArchiveIds((current) => updatePendingMap(current, activityId, false));
+    }
+  }
+
+  async function runTaskMutation(activityId: string, task: CrmTaskMetadata, updatedAt: string): Promise<CrmActivityItem> {
+    setPendingTaskIds((current) => updatePendingMap(current, activityId, true));
+    try {
+      return await taskMutation.mutateAsync({
+        activityId,
+        task,
+        updatedAt,
+      });
+    } finally {
+      setPendingTaskIds((current) => updatePendingMap(current, activityId, false));
+    }
   }
 
   function toggleApproved(activity: CrmActivityFeedItem): void {
@@ -579,11 +716,7 @@ export function CrmActivitiesPage() {
       return activity;
     }
 
-    const updatedActivity = await bodyMutation.mutateAsync({
-      activityId: activity.id,
-      body: nextBody,
-      updatedAt: activity.updatedAt,
-    });
+    const updatedActivity = await runBodyMutation(activity.id, nextBody, activity.updatedAt);
 
     return {
       ...activity,
@@ -594,14 +727,23 @@ export function CrmActivitiesPage() {
   async function handleSaveDraft(activity: CrmActivityFeedItem): Promise<void> {
     try {
       await saveActivityDraft(activity);
+      clearIssueTargets([{ activityId: activity.id, action: "save" }]);
       toast({
         title: "Draft saved",
         description: `${activity.activityType === "sms" ? "SMS" : "Email"} content was updated in review.`,
       });
     } catch (error) {
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "save",
+          label: activityIssueLabel(activity),
+          message: errorMessage(error, "Review changes were not saved."),
+        },
+      ], [{ activityId: activity.id, action: "save" }]);
       toast({
         title: "Could not save draft",
-        description: error instanceof Error ? error.message : "Review changes were not saved.",
+        description: errorMessage(error, "Review changes were not saved."),
         variant: "destructive",
       });
     }
@@ -609,19 +751,25 @@ export function CrmActivitiesPage() {
 
   async function sendSingleActivity(activity: CrmActivityFeedItem): Promise<void> {
     try {
-      await deliveryMutation.mutateAsync({
-        activityId: activity.id,
-        updatedAt: activity.updatedAt,
-      });
+      await runDeliveryMutation(activity.id, activity.updatedAt);
       setSelectedActivityIds((current) => current.filter((id) => id !== activity.id));
+      clearIssueTargets([{ activityId: activity.id, action: "send" }]);
       toast({
         title: "Message queued",
         description: `${activity.activityType === "sms" ? "SMS" : "Email"} delivery was retried from the activity inbox.`,
       });
     } catch (error) {
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "send",
+          label: activityIssueLabel(activity),
+          message: errorMessage(error, "Could not send the selected activity."),
+        },
+      ], [{ activityId: activity.id, action: "send" }]);
       toast({
         title: "Delivery failed",
-        description: error instanceof Error ? error.message : "Could not send the selected activity.",
+        description: errorMessage(error, "Could not send the selected activity."),
         variant: "destructive",
       });
     }
@@ -633,6 +781,14 @@ export function CrmActivitiesPage() {
       setReviewOpen(false);
       return;
     }
+    if (nonApprovableSelectedCommunications.length > 0) {
+      toast({
+        title: "Message copy still missing",
+        description: "Add message copy for every selected email or SMS before sending the batch.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!sendableActivities.every((activity) => approvedActivityIds.includes(activity.id))) {
       toast({
         title: "Approval required",
@@ -642,41 +798,100 @@ export function CrmActivitiesPage() {
       return;
     }
 
-    const results = await Promise.allSettled(
-      sendableActivities.map(async (activity) => {
-        const preparedActivity = await saveActivityDraft(activity);
-        await deliveryMutation.mutateAsync({
-          activityId: preparedActivity.id,
-          updatedAt: preparedActivity.updatedAt,
-        });
-        return activity.id;
-      }),
+    setBulkSendPending(true);
+    clearIssueTargets(
+      sendableActivities.flatMap((activity) => [
+        { activityId: activity.id, action: "save" as const },
+        { activityId: activity.id, action: "send" as const },
+      ]),
     );
 
-    const succeeded = results
-      .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
-      .map((result) => result.value);
-    const failed = results.filter((result) => result.status === "rejected");
+    try {
+      const results = await Promise.allSettled(
+        sendableActivities.map(async (activity) => {
+          let preparedActivity = activity;
+          try {
+            preparedActivity = await saveActivityDraft(activity);
+          } catch (error) {
+            throw {
+              action: "save" as const,
+              message: errorMessage(error, "Review changes were not saved."),
+            };
+          }
 
-    if (succeeded.length > 0) {
-      setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
-      setApprovedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
-    }
+          try {
+            await runDeliveryMutation(preparedActivity.id, preparedActivity.updatedAt);
+          } catch (error) {
+            throw {
+              action: "send" as const,
+              message: errorMessage(error, "Delivery did not complete for this communication."),
+            };
+          }
 
-    if (failed.length === 0) {
-      setReviewOpen(false);
-      toast({
-        title: "Bulk send complete",
-        description: `${succeeded.length} communication${succeeded.length === 1 ? "" : "s"} sent from the inbox.`,
+          return activity.id;
+        }),
+      );
+
+      const succeeded: string[] = [];
+      const failedIssues: OperationIssue[] = [];
+
+      results.forEach((result, index) => {
+        const activity = sendableActivities[index];
+        if (result.status === "fulfilled") {
+          succeeded.push(result.value);
+          return;
+        }
+
+        failedIssues.push({
+          activityId: activity.id,
+          action:
+            typeof result.reason === "object" &&
+            result.reason &&
+            "action" in result.reason &&
+            result.reason.action === "save"
+              ? "save"
+              : "send",
+          label: activityIssueLabel(activity),
+          message:
+            typeof result.reason === "object" &&
+            result.reason &&
+            "message" in result.reason &&
+            typeof result.reason.message === "string"
+              ? result.reason.message
+              : "Delivery did not complete for this communication.",
+        });
       });
-      return;
-    }
 
-    toast({
-      title: "Bulk send completed with issues",
-      description: `${succeeded.length} sent, ${failed.length} still need review.`,
-      variant: "destructive",
-    });
+      if (succeeded.length > 0) {
+        setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+        setApprovedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+      }
+
+      updateIssueLedger(
+        failedIssues,
+        succeeded.flatMap((activityId) => [
+          { activityId, action: "save" as const },
+          { activityId, action: "send" as const },
+        ]),
+      );
+
+      if (failedIssues.length === 0) {
+        setReviewOpen(false);
+        toast({
+          title: "Bulk send complete",
+          description: `${succeeded.length} communication${succeeded.length === 1 ? "" : "s"} sent from the inbox.`,
+        });
+        return;
+      }
+
+      toast({
+        title: "Bulk send completed with issues",
+        description: `${succeeded.length} sent, ${failedIssues.length} still need review.`,
+        variant: "destructive",
+      });
+    } finally {
+      setBulkSendPending(false);
+    }
   }
 
   function applyTemplateToSelected(activityType: "email" | "sms"): void {
@@ -718,68 +933,100 @@ export function CrmActivitiesPage() {
       return;
     }
 
-    const results = await Promise.allSettled(
-      targetActivities.map(async (activity) => {
-        const task = readTaskMetadata(activity);
-        if (!task) {
-          return null;
+    setBulkTaskAction(nextStatus);
+    clearIssueTargets(targetActivities.map((activity) => ({ activityId: activity.id, action: "task" as const })));
+
+    try {
+      const results = await Promise.allSettled(
+        targetActivities.map(async (activity) => {
+          const task = readTaskMetadata(activity);
+          if (!task) {
+            return null;
+          }
+
+          await runTaskMutation(
+            activity.id,
+            {
+              ...task,
+              status: nextStatus,
+            },
+            activity.updatedAt,
+          );
+
+          return activity.id;
+        }),
+      );
+
+      const succeeded: string[] = [];
+      const failedIssues: OperationIssue[] = [];
+
+      results.forEach((result, index) => {
+        const activity = targetActivities[index];
+        if (result.status === "fulfilled") {
+          if (result.value) {
+            succeeded.push(result.value);
+          }
+          return;
         }
 
-        await taskMutation.mutateAsync({
+        failedIssues.push({
           activityId: activity.id,
-          task: {
-            ...task,
-            status: nextStatus,
-          },
-          updatedAt: activity.updatedAt,
+          action: "task",
+          label: activityIssueLabel(activity),
+          message: errorMessage(result.reason, "Task status could not be updated."),
         });
-
-        return activity.id;
-      }),
-    );
-
-    const succeeded = results
-      .filter((result): result is PromiseFulfilledResult<string | null> => result.status === "fulfilled")
-      .map((result) => result.value)
-      .filter((value): value is string => Boolean(value));
-    const failed = results.filter((result) => result.status === "rejected").length;
-
-    if (succeeded.length > 0) {
-      setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
-    }
-
-    if (failed === 0) {
-      toast({
-        title: nextStatus === "completed" ? "Tasks completed" : "Tasks reopened",
-        description:
-          nextStatus === "completed"
-            ? `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} moved out of the active queue.`
-            : `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} returned to the active queue.`,
       });
-      return;
-    }
 
-    toast({
-      title: nextStatus === "completed" ? "Bulk complete finished with issues" : "Bulk reopen finished with issues",
-      description: `${succeeded.length} updated, ${failed} still need attention.`,
-      variant: "destructive",
-    });
+      if (succeeded.length > 0) {
+        setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+      }
+
+      updateIssueLedger(
+        failedIssues,
+        succeeded.map((activityId) => ({ activityId, action: "task" as const })),
+      );
+
+      if (failedIssues.length === 0) {
+        toast({
+          title: nextStatus === "completed" ? "Tasks completed" : "Tasks reopened",
+          description:
+            nextStatus === "completed"
+              ? `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} moved out of the active queue.`
+              : `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} returned to the active queue.`,
+        });
+        return;
+      }
+
+      toast({
+        title: nextStatus === "completed" ? "Bulk complete finished with issues" : "Bulk reopen finished with issues",
+        description: `${succeeded.length} updated, ${failedIssues.length} still need attention.`,
+        variant: "destructive",
+      });
+    } finally {
+      setBulkTaskAction(null);
+    }
   }
 
   async function archiveActivity(activity: CrmActivityFeedItem): Promise<void> {
     try {
-      await archiveMutation.mutateAsync({
-        activityId: activity.id,
-        updatedAt: activity.updatedAt,
-      });
+      await runArchiveMutation(activity.id, activity.updatedAt);
+      clearIssueTargets([{ activityId: activity.id, action: "archive" }]);
       toast({
         title: "Activity archived",
         description: "The entry was removed from the active inbox without touching delivered history.",
       });
     } catch (error) {
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "archive",
+          label: activityIssueLabel(activity),
+          message: errorMessage(error, "The activity could not be archived."),
+        },
+      ], [{ activityId: activity.id, action: "archive" }]);
       toast({
         title: "Could not archive activity",
-        description: error instanceof Error ? error.message : "The activity could not be archived.",
+        description: errorMessage(error, "The activity could not be archived."),
         variant: "destructive",
       });
     }
@@ -793,55 +1040,76 @@ export function CrmActivitiesPage() {
     }
 
     try {
-      await taskMutation.mutateAsync({
-        activityId: activity.id,
-        task: {
+      await runTaskMutation(
+        activity.id,
+        {
           ...task,
           dueAt: nextDueAt,
         },
-        updatedAt: activity.updatedAt,
-      });
+        activity.updatedAt,
+      );
       stopTaskEditor();
+      clearIssueTargets([{ activityId: activity.id, action: "task" }]);
       toast({
         title: "Task updated",
         description: "The due time was updated from the activity inbox.",
       });
     } catch (error) {
-      setTaskDueError(error instanceof Error ? error.message : "Could not update the task.");
+      const message = errorMessage(error, "Could not update the task.");
+      setTaskDueError(message);
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "task",
+          label: activityIssueLabel(activity),
+          message,
+        },
+      ], [{ activityId: activity.id, action: "task" }]);
     }
   }
 
   async function clearTaskDueAt(activity: CrmActivityFeedItem, task: CrmTaskMetadata): Promise<void> {
     try {
-      await taskMutation.mutateAsync({
-        activityId: activity.id,
-        task: {
+      await runTaskMutation(
+        activity.id,
+        {
           ...task,
           dueAt: null,
         },
-        updatedAt: activity.updatedAt,
-      });
+        activity.updatedAt,
+      );
       stopTaskEditor();
+      clearIssueTargets([{ activityId: activity.id, action: "task" }]);
       toast({
         title: "Due time cleared",
         description: "The task stays open without a scheduled due time.",
       });
     } catch (error) {
-      setTaskDueError(error instanceof Error ? error.message : "Could not clear the due time.");
+      const message = errorMessage(error, "Could not clear the due time.");
+      setTaskDueError(message);
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "task",
+          label: activityIssueLabel(activity),
+          message,
+        },
+      ], [{ activityId: activity.id, action: "task" }]);
     }
   }
 
   async function toggleTaskStatus(activity: CrmActivityFeedItem, task: CrmTaskMetadata): Promise<void> {
     const nextStatus = task.status === "completed" ? "open" : "completed";
     try {
-      await taskMutation.mutateAsync({
-        activityId: activity.id,
-        task: {
+      await runTaskMutation(
+        activity.id,
+        {
           ...task,
           status: nextStatus,
         },
-        updatedAt: activity.updatedAt,
-      });
+        activity.updatedAt,
+      );
+      clearIssueTargets([{ activityId: activity.id, action: "task" }]);
       toast({
         title: nextStatus === "completed" ? "Task completed" : "Task reopened",
         description:
@@ -850,9 +1118,17 @@ export function CrmActivitiesPage() {
             : "The task is back in the active queue.",
       });
     } catch (error) {
+      updateIssueLedger([
+        {
+          activityId: activity.id,
+          action: "task",
+          label: activityIssueLabel(activity),
+          message: errorMessage(error, "The task could not be updated."),
+        },
+      ], [{ activityId: activity.id, action: "task" }]);
       toast({
         title: "Could not update task",
-        description: error instanceof Error ? error.message : "The task could not be updated.",
+        description: errorMessage(error, "The task could not be updated."),
         variant: "destructive",
       });
     }
@@ -1020,10 +1296,10 @@ export function CrmActivitiesPage() {
                   type="button"
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("completed")}
-                  disabled={taskMutation.isPending}
+                  disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
                   className="border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
                 >
-                  {taskMutation.isPending ? "Updating..." : `Complete tasks (${selectedOpenTasks.length})`}
+                  {bulkTaskAction === "completed" ? "Updating..." : `Complete tasks (${selectedOpenTasks.length})`}
                 </Button>
               )}
               {selectedCompletedTasks.length > 0 && (
@@ -1031,10 +1307,10 @@ export function CrmActivitiesPage() {
                   type="button"
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("open")}
-                  disabled={taskMutation.isPending}
+                  disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
                   className="border-[#BBF7D0] bg-white text-[#166534] hover:bg-[#F0FDF4]"
                 >
-                  {taskMutation.isPending ? "Updating..." : `Reopen tasks (${selectedCompletedTasks.length})`}
+                  {bulkTaskAction === "open" ? "Updating..." : `Reopen tasks (${selectedCompletedTasks.length})`}
                 </Button>
               )}
               {selectedCommunications.length > 0 && (
@@ -1049,6 +1325,48 @@ export function CrmActivitiesPage() {
               )}
             </div>
           </div>
+        )}
+
+        {operationIssues.length > 0 && (
+          <Card className="rounded-2xl border border-[#FECACA] bg-[#FFF1F2] p-4 shadow-none">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[#9F1239]">Queue issues still need attention</p>
+                <p className="mt-1 text-xs text-[#9F1239]">
+                  Failed inbox actions stay listed here so operators know exactly what still needs follow-through.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOperationIssues([])}
+                className="border-[#FBCFE8] bg-white text-[#9F1239] hover:bg-[#FFF1F2]"
+              >
+                Clear list
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {operationIssues.map((issue) => (
+                <div
+                  key={`${issue.activityId}-${issue.action}`}
+                  className="rounded-xl border border-[#FBCFE8] bg-white px-3 py-2"
+                >
+                  <p className="text-sm font-semibold text-[#881337]">{issue.label}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[#BE123C]">
+                    {issue.action === "send"
+                      ? "Send issue"
+                      : issue.action === "save"
+                      ? "Draft save issue"
+                      : issue.action === "archive"
+                      ? "Archive issue"
+                      : "Task issue"}
+                  </p>
+                  <p className="mt-2 text-sm text-[#4C0519]">{issue.message}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
       </Card>
 
@@ -1082,6 +1400,9 @@ export function CrmActivitiesPage() {
             const targetHref = activityTargetHref(activity);
             const targetLabel = activityTargetLabel(activity);
             const isEditingTask = editingTaskId === activity.id;
+            const taskPending = isPending(pendingTaskIds, activity.id);
+            const archivePending = isPending(pendingArchiveIds, activity.id);
+            const deliveryPending = isPending(pendingDeliveryIds, activity.id);
 
             return (
               <Card key={activity.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
@@ -1152,7 +1473,7 @@ export function CrmActivitiesPage() {
                               setTaskDueError(null);
                             }
                           }}
-                          disabled={taskMutation.isPending}
+                          disabled={taskPending}
                           className="h-11 w-full rounded-md border border-[#FCD34D] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
                         />
                         {taskDueError && (
@@ -1163,17 +1484,17 @@ export function CrmActivitiesPage() {
                             type="button"
                             size="sm"
                             onClick={() => void saveTask(activity, task)}
-                            disabled={taskMutation.isPending}
+                            disabled={taskPending}
                             className="min-h-[40px] bg-[#E87722] text-white hover:bg-[#D46B1B]"
                           >
-                            {taskMutation.isPending ? "Saving..." : "Save due time"}
+                            {taskPending ? "Saving..." : "Save due time"}
                           </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() => void clearTaskDueAt(activity, task)}
-                            disabled={taskMutation.isPending}
+                            disabled={taskPending}
                             className="min-h-[40px] border-[#FCD34D] bg-white text-[#92400E] hover:bg-[#FFF7ED]"
                           >
                             Clear due time
@@ -1183,7 +1504,7 @@ export function CrmActivitiesPage() {
                             size="sm"
                             variant="outline"
                             onClick={stopTaskEditor}
-                            disabled={taskMutation.isPending}
+                            disabled={taskPending}
                             className="min-h-[40px] border-[#D6E0EA] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                           >
                             Cancel
@@ -1202,7 +1523,7 @@ export function CrmActivitiesPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => void toggleTaskStatus(activity, task)}
-                            disabled={taskMutation.isPending}
+                            disabled={taskPending}
                             className={cn(
                               "min-h-[44px] rounded-full px-4",
                               task.status === "completed"
@@ -1210,7 +1531,7 @@ export function CrmActivitiesPage() {
                                 : "border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
                             )}
                           >
-                            {taskMutation.isPending
+                            {taskPending
                               ? "Updating..."
                               : task.status === "completed"
                               ? "Reopen task"
@@ -1221,7 +1542,7 @@ export function CrmActivitiesPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => (isEditingTask ? stopTaskEditor() : beginTaskEditor(activity, task))}
-                            disabled={taskMutation.isPending}
+                            disabled={taskPending}
                             className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white px-4 text-[#334155] hover:bg-[#F8FAFC]"
                           >
                             {isEditingTask ? "Close due editor" : "Edit due time"}
@@ -1234,11 +1555,11 @@ export function CrmActivitiesPage() {
                           size="sm"
                           variant="outline"
                           onClick={() => void archiveActivity(activity)}
-                          disabled={archiveMutation.isPending || taskMutation.isPending}
+                          disabled={archivePending || taskPending}
                           className="min-h-[44px] rounded-full border-[#FBCFE8] bg-white px-4 text-[#9D174D] hover:bg-[#FDF2F8]"
                         >
                           <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
-                          {archiveMutation.isPending ? "Archiving..." : "Archive"}
+                          {archivePending ? "Archiving..." : "Archive"}
                         </Button>
                       )}
                       {canSendFromInbox(activity) && (
@@ -1246,11 +1567,11 @@ export function CrmActivitiesPage() {
                           type="button"
                           size="sm"
                           onClick={() => void sendSingleActivity(activity)}
-                          disabled={deliveryMutation.isPending || taskMutation.isPending}
+                          disabled={deliveryPending || taskPending}
                           className="min-h-[44px] rounded-full bg-[#E87722] px-4 text-white hover:bg-[#D46B1B]"
                         >
                           <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-                          {deliveryMutation.isPending ? "Sending..." : deliveryActionLabel(delivery)}
+                          {deliveryPending ? "Sending..." : deliveryActionLabel(delivery)}
                         </Button>
                       )}
                       <Link
@@ -1404,6 +1725,8 @@ export function CrmActivitiesPage() {
               const isArchivable = canArchiveFromInbox(activity);
               const dirty = draftBodyDirty(activity);
               const approved = approvedActivityIds.includes(activity.id);
+              const bodyPending = isPending(pendingBodyIds, activity.id);
+              const archivePending = isPending(pendingArchiveIds, activity.id);
               const approvable = canApproveCommunication({
                 ...activity,
                 body: readDraftBody(activity),
@@ -1464,7 +1787,7 @@ export function CrmActivitiesPage() {
                                   }));
                                 }
                               }
-                              disabled={!dirty || bodyMutation.isPending}
+                              disabled={!dirty || bodyPending}
                             >
                               Reset
                             </Button>
@@ -1472,10 +1795,10 @@ export function CrmActivitiesPage() {
                               type="button"
                               size="sm"
                               onClick={() => void handleSaveDraft(activity)}
-                              disabled={!dirty || bodyMutation.isPending}
+                              disabled={!dirty || bodyPending}
                               className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
                             >
-                              {bodyMutation.isPending ? "Saving..." : "Save draft"}
+                              {bodyPending ? "Saving..." : "Save draft"}
                             </Button>
                           </div>
                         </div>
@@ -1526,11 +1849,11 @@ export function CrmActivitiesPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => void archiveActivity(activity)}
-                        disabled={archiveMutation.isPending}
+                        disabled={archivePending}
                         className="border-[#FBCFE8] bg-white text-[#9D174D] hover:bg-[#FDF2F8]"
                       >
                         <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
-                        {archiveMutation.isPending ? "Archiving..." : "Archive instead"}
+                        {archivePending ? "Archiving..." : "Archive instead"}
                       </Button>
                     </div>
                   )}
@@ -1538,6 +1861,23 @@ export function CrmActivitiesPage() {
               );
             })}
           </div>
+
+          {selectedCommunicationIssues.length > 0 && (
+            <Card className="mt-4 rounded-xl border border-[#FECACA] bg-[#FFF1F2] p-4 shadow-none">
+              <p className="text-sm font-semibold text-[#9F1239]">Selected message issues</p>
+              <p className="mt-1 text-xs text-[#9F1239]">
+                These items failed during review, delivery, or archive handling. Fix them here before sending again.
+              </p>
+              <div className="mt-3 space-y-2">
+                {selectedCommunicationIssues.map((issue) => (
+                  <div key={`${issue.activityId}-${issue.action}`} className="rounded-xl border border-[#FBCFE8] bg-white px-3 py-2">
+                    <p className="text-sm font-semibold text-[#881337]">{issue.label}</p>
+                    <p className="mt-1 text-sm text-[#4C0519]">{issue.message}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <div className="mt-6 flex items-center justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>
@@ -1548,15 +1888,15 @@ export function CrmActivitiesPage() {
               onClick={() => void sendSelectedActivities()}
               disabled={
                 selectedCommunications.length === 0 ||
+                nonApprovableSelectedCommunications.length > 0 ||
                 !allSelectedCommunicationsApproved ||
-                deliveryMutation.isPending ||
-                bodyMutation.isPending ||
-                archiveMutation.isPending
+                bulkSendPending ||
+                selectedCommunicationHasPendingWork
               }
               className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
             >
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-              {deliveryMutation.isPending || bodyMutation.isPending || archiveMutation.isPending
+              {bulkSendPending
                 ? "Sending..."
                 : `Send selected (${selectedCommunications.length})`}
             </Button>
