@@ -191,6 +191,17 @@ function formatHubSpotRunCount(run: HubSpotImportRunSummary): string {
   return `${total.toLocaleString()} records`;
 }
 
+function formatHubSpotValidationDate(value: string): string {
+  if (!value) return "Not validated";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "Not validated";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(timestamp));
+}
+
 function readHubSpotCutoverConfig(config: Record<string, unknown> | undefined): HubSpotCutoverConfig {
   if (!config || typeof config !== "object") {
     return {};
@@ -302,6 +313,33 @@ export function IntegrationPanel({
   const topEntityErrorRows = Object.entries(errorCountByEntity)
     .map(([entityType, count]) => ({ entityType, count }))
     .sort((a, b) => b.count - a.count);
+  const latestFinishedRun = hubSpotImportRuns.find((run) =>
+    run.status === "completed" || run.status === "completed_with_errors" || run.status === "failed"
+  ) ?? null;
+  const cutoverBlockingCount = activeRunErrors.length;
+  const cutoverChecklist = [
+    {
+      label: "Parallel run",
+      value: hubspotParallelRunEnabled ? "Still active" : "Ready to disable",
+      tone: hubspotParallelRunEnabled ? "text-[#9A3412]" : "text-[#166534]",
+    },
+    {
+      label: "Validation date",
+      value: formatHubSpotValidationDate(hubspotValidatedAt),
+      tone: hubspotValidatedAt ? "text-[#166534]" : "text-[#9A3412]",
+    },
+    {
+      label: "Run issues",
+      value: cutoverBlockingCount === 0 ? "No open reconciliation rows" : `${cutoverBlockingCount.toLocaleString()} rows still need review`,
+      tone: cutoverBlockingCount === 0 ? "text-[#166534]" : "text-[#B91C1C]",
+    },
+    {
+      label: "Cutover flag",
+      value: hubspotCutoverReady ? "Ready for deploy gate" : "Still validating",
+      tone: hubspotCutoverReady ? "text-[#166534]" : "text-[#9A3412]",
+    },
+  ];
+  const cutoverSummaryReady = hubspotCutoverReady && !hubspotParallelRunEnabled && cutoverBlockingCount === 0 && hubspotValidatedAt.trim().length > 0;
 
   async function handleSave() {
     if (!integration) return;
@@ -760,6 +798,71 @@ export function IntegrationPanel({
                           {error.reasonCode}: {error.message ?? "No message provided."}
                         </p>
                       ))}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className={cn(
+                    "mt-3 rounded-lg border p-3",
+                    cutoverSummaryReady
+                      ? "border-[#BBF7D0] bg-[#F0FDF4]"
+                      : "border-[#FED7AA] bg-[#FFF7ED]",
+                  )}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Cutover summary</p>
+                      <p className="mt-1 text-xs text-[#64748B]">
+                        Keep the migration decision in one place before HubSpot becomes source-only.
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                        cutoverSummaryReady
+                          ? "bg-[#DCFCE7] text-[#166534]"
+                          : "bg-[#FFEDD5] text-[#9A3412]",
+                      )}
+                    >
+                      {cutoverSummaryReady ? "Cutover packet ready" : "Parallel-run review in progress"}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {cutoverChecklist.map((item) => (
+                      <div key={item.label} className="rounded border border-white/70 bg-white px-3 py-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                          {item.label}
+                        </p>
+                        <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(latestFinishedRun || hubspotCutoverNote.trim().length > 0) && (
+                    <div className="mt-3 space-y-2">
+                      {latestFinishedRun && (
+                        <div className="rounded border border-white/70 bg-white px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                            Latest finished run
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">
+                            {hubspotRunStatusLabel(latestFinishedRun.status)}
+                          </p>
+                          <p className="mt-1 text-xs text-[#475569]">
+                            {formatHubSpotRunCount(latestFinishedRun)} • {formatHubSpotRunTimestamp(latestFinishedRun.completedAt ?? latestFinishedRun.startedAt)}
+                          </p>
+                        </div>
+                      )}
+                      {hubspotCutoverNote.trim().length > 0 && (
+                        <div className="rounded border border-white/70 bg-white px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                            Validation note
+                          </p>
+                          <p className="mt-1 text-sm text-[#334155]">{hubspotCutoverNote.trim()}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
