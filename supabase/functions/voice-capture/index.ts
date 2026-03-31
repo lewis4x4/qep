@@ -6,13 +6,12 @@
  *   1. Validate auth (rep/manager/owner roles only)
  *   2. Upload audio to Supabase Storage
  *   3. Transcribe via OpenAI Whisper
- *   4. Extract structured deal data via Claude
+ *   4. Extract structured deal data via OpenAI
  *   5. Persist to voice_captures table
  *   6. If HubSpot is connected: create note engagement + schedule follow-up task
  *   7. Return capture record + extracted data
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 
@@ -183,12 +182,10 @@ Deno.serve(async (req) => {
       return jsonError("No speech detected in the recording. Please try again.", 422, ch);
     }
 
-    // ── Extract structured data via Claude ───────────────────────────────────
+    // ── Extract structured data via OpenAI ───────────────────────────────────
     let extracted: ExtractedDealData;
 
     try {
-      const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
-
       const extractionPrompt = `You are a CRM data extraction assistant for a heavy equipment dealership.
 A sales rep just recorded a field note. Extract structured deal information from their transcript.
 
@@ -213,13 +210,36 @@ Return ONLY valid JSON matching this exact structure:
   "follow_up_date": "ISO date string (YYYY-MM-DD) if a specific date was mentioned, or null"
 }`;
 
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 512,
-        messages: [{ role: "user", content: extractionPrompt }],
+      const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-5-mini",
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "Extract CRM-ready dealership field-note data. Return valid JSON only. Do not wrap the JSON in markdown fences.",
+            },
+            { role: "user", content: extractionPrompt },
+          ],
+        }),
       });
 
-      const rawJson = (response.content[0] as { type: string; text: string }).text.trim();
+      if (!extractionRes.ok) {
+        throw new Error(await extractionRes.text());
+      }
+
+      const extractionData = await extractionRes.json();
+      const rawJson = extractionData.choices?.[0]?.message?.content?.trim();
+      if (!rawJson) {
+        throw new Error("OpenAI extraction returned no content");
+      }
       // Strip markdown code fences if present
       const cleaned = rawJson.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
       extracted = JSON.parse(cleaned) as ExtractedDealData;
