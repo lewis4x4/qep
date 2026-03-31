@@ -14,6 +14,10 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
+import {
+  writeVoiceCaptureToLocalCrm,
+  type VoiceCaptureExtractedDealData,
+} from "../_shared/voice-capture-crm.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -28,18 +32,7 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-interface ExtractedDealData {
-  customer_name: string | null;
-  company_name: string | null;
-  machine_interest: string | null;
-  attachments_discussed: string | null;
-  deal_stage: string | null;
-  budget_range: string | null;
-  key_concerns: string | null;
-  action_items: string[];
-  next_step: string | null;
-  follow_up_date: string | null;
-}
+type ExtractedDealData = VoiceCaptureExtractedDealData;
 
 Deno.serve(async (req) => {
   const ch = corsHeaders(req.headers.get("origin"));
@@ -259,13 +252,29 @@ Return ONLY valid JSON matching this exact structure:
     }
 
     // ── Persist transcript + extracted data ───────────────────────────────────
+    const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
+      workspaceId: "default",
+      actorUserId: user.id,
+      captureId,
+      dealId: crmDealId,
+      occurredAtIso: captureRecord.created_at as string,
+      transcript,
+      extracted,
+    });
+
     await supabaseAdmin
       .from("voice_captures")
       .update({
         transcript,
         duration_seconds: durationSeconds,
         extracted_data: extracted,
-        sync_status: "pending",
+        sync_status: localCrmSync.saved ? "synced" : "pending",
+        sync_error: null,
+        hubspot_deal_id: localCrmSync.dealId ?? hubspotDealId,
+        hubspot_contact_id: localCrmSync.contactId,
+        hubspot_note_id: localCrmSync.noteActivityId,
+        hubspot_task_id: localCrmSync.taskActivityId,
+        hubspot_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
       })
       .eq("id", captureId);
 
@@ -424,16 +433,16 @@ Return ONLY valid JSON matching this exact structure:
 
     // ── Finalize capture record ───────────────────────────────────────────────
     const finalUpdate: Record<string, unknown> = {
-      sync_status: hubspotSynced ? "synced" : "pending",
+      sync_status: localCrmSync.saved || hubspotSynced ? "synced" : "pending",
+      sync_error: null,
+      hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
+      hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
+      hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
+      hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+      hubspot_synced_at: localCrmSync.saved || hubspotSynced
+        ? new Date().toISOString()
+        : null,
     };
-
-    if (hubspotSynced) {
-      finalUpdate.hubspot_deal_id = resolvedDealId;
-      finalUpdate.hubspot_contact_id = resolvedContactId;
-      finalUpdate.hubspot_note_id = noteId;
-      finalUpdate.hubspot_task_id = taskId;
-      finalUpdate.hubspot_synced_at = new Date().toISOString();
-    }
 
     await supabaseAdmin
       .from("voice_captures")
@@ -447,10 +456,13 @@ Return ONLY valid JSON matching this exact structure:
         transcript,
         duration_seconds: durationSeconds,
         extracted_data: extracted,
-        hubspot_synced: hubspotSynced,
-        hubspot_deal_id: resolvedDealId,
-        hubspot_note_id: noteId,
-        hubspot_task_id: taskId,
+        hubspot_synced: localCrmSync.saved || hubspotSynced,
+        hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
+        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
+        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+        local_crm_saved: localCrmSync.saved,
+        local_crm_note_id: localCrmSync.noteActivityId,
+        local_crm_task_id: localCrmSync.taskActivityId,
       }),
       {
         status: 200,

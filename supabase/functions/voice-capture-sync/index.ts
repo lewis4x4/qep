@@ -1,6 +1,10 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
+import {
+  writeVoiceCaptureToLocalCrm,
+  type VoiceCaptureExtractedDealData,
+} from "../_shared/voice-capture-crm.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -8,18 +12,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5173",
 ];
 
-interface ExtractedDealData {
-  customer_name: string | null;
-  company_name: string | null;
-  machine_interest: string | null;
-  attachments_discussed: string | null;
-  deal_stage: string | null;
-  budget_range: string | null;
-  key_concerns: string | null;
-  action_items: string[];
-  next_step: string | null;
-  follow_up_date: string | null;
-}
+type ExtractedDealData = VoiceCaptureExtractedDealData;
 
 interface CaptureRow {
   id: string;
@@ -216,6 +209,16 @@ Deno.serve(async (req) => {
     }
 
     const extracted = normalizeExtracted(capture.extracted_data);
+    const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
+      workspaceId: "default",
+      actorUserId: user.id,
+      captureId,
+      dealId: capture.hubspot_deal_id,
+      occurredAtIso: new Date().toISOString(),
+      transcript: capture.transcript,
+      extracted,
+    });
+
     let resolvedDealId = capture.hubspot_deal_id;
     let resolvedContactId = capture.hubspot_contact_id;
     let noteId: string | null = null;
@@ -237,6 +240,36 @@ Deno.serve(async (req) => {
     } | null;
 
     if (!connection) {
+      if (localCrmSync.saved) {
+        await supabaseAdmin
+          .from("voice_captures")
+          .update({
+            sync_status: "synced",
+            sync_error: null,
+            hubspot_deal_id: localCrmSync.dealId,
+            hubspot_contact_id: localCrmSync.contactId,
+            hubspot_note_id: localCrmSync.noteActivityId,
+            hubspot_task_id: localCrmSync.taskActivityId,
+            hubspot_synced_at: new Date().toISOString(),
+          })
+          .eq("id", captureId);
+
+        return new Response(
+          JSON.stringify({
+            id: captureId,
+            hubspot_synced: true,
+            hubspot_deal_id: localCrmSync.dealId,
+            hubspot_note_id: localCrmSync.noteActivityId,
+            hubspot_task_id: localCrmSync.taskActivityId,
+            local_crm_saved: true,
+          }),
+          {
+            status: 200,
+            headers: { ...headers, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       return jsonError("HubSpot is not connected for this user.", 409, headers);
     }
 
@@ -358,10 +391,10 @@ Deno.serve(async (req) => {
       .update({
         sync_status: "synced",
         sync_error: null,
-        hubspot_deal_id: resolvedDealId,
-        hubspot_contact_id: resolvedContactId,
-        hubspot_note_id: noteId,
-        hubspot_task_id: taskId,
+        hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
+        hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
+        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
+        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
         hubspot_synced_at: new Date().toISOString(),
       })
       .eq("id", captureId);
@@ -370,9 +403,12 @@ Deno.serve(async (req) => {
       JSON.stringify({
         id: captureId,
         hubspot_synced: true,
-        hubspot_deal_id: resolvedDealId,
-        hubspot_note_id: noteId,
-        hubspot_task_id: taskId,
+        hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
+        hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
+        hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+        local_crm_saved: localCrmSync.saved,
+        local_crm_note_id: localCrmSync.noteActivityId,
+        local_crm_task_id: localCrmSync.taskActivityId,
       }),
       {
         status: 200,

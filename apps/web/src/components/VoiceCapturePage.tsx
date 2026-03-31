@@ -71,9 +71,12 @@ interface CaptureResult {
   duration_seconds: number | null;
   extracted_data: ExtractedDealData;
   hubspot_synced: boolean;
+  local_crm_saved?: boolean;
   hubspot_deal_id: string | null;
   hubspot_note_id: string | null;
   hubspot_task_id: string | null;
+  local_crm_note_id?: string | null;
+  local_crm_task_id?: string | null;
 }
 
 interface DealLookupOption {
@@ -180,8 +183,8 @@ function getVoiceCaptureStatusMeta(
       return {
         badgeLabel: "Ready to push",
         badgeVariant: "secondary",
-        heading: "Saved locally",
-        summary: "The note is saved locally. Push to CRM will attach it to the linked deal.",
+        heading: "Captured locally",
+        summary: "The note is captured, but it is not attached to the CRM timeline yet.",
       };
     case "failed":
     default:
@@ -625,9 +628,23 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         throw new Error((err as { error?: string }).error ?? "Sync failed");
       }
 
-      setResult((prev) => prev ? { ...prev, hubspot_synced: true } : prev);
+      const payload = (await res.json()) as Partial<CaptureResult>;
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              hubspot_synced: payload.hubspot_synced ?? true,
+              local_crm_saved: payload.local_crm_saved ?? true,
+              hubspot_deal_id: payload.hubspot_deal_id ?? prev.hubspot_deal_id,
+              hubspot_note_id: payload.hubspot_note_id ?? prev.hubspot_note_id,
+              hubspot_task_id: payload.hubspot_task_id ?? prev.hubspot_task_id,
+              local_crm_note_id: payload.local_crm_note_id ?? prev.local_crm_note_id,
+              local_crm_task_id: payload.local_crm_task_id ?? prev.local_crm_task_id,
+            }
+          : prev,
+      );
       void loadRecentCaptures();
-      toast({ title: "Pushed to CRM", description: "Note and task were added to the deal." });
+      toast({ title: "Added to CRM", description: "Note and follow-up task are on the local deal timeline." });
     } catch (err) {
       toast({
         title: "CRM sync failed",
@@ -686,16 +703,15 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       setRecordingState("done");
       void loadRecentCaptures();
 
-      if (data.hubspot_synced) {
+      if (data.local_crm_saved || data.hubspot_synced) {
         toast({
           title: "Saved to CRM",
           description: "Note and follow-up task were attached to the deal.",
         });
       } else {
         toast({
-          title: "Saved locally",
-          description: "CRM sync will run once the live connection is available.",
-          variant: "destructive",
+          title: "Captured locally",
+          description: "The note is saved, but it still needs to be attached to a CRM deal.",
         });
       }
     } catch (err) {
@@ -1121,36 +1137,41 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               })()}
 
               {/* CRM sync status */}
+              {(() => {
+                const crmSaved = result.local_crm_saved || result.hubspot_synced;
+                return (
               <div className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3",
-                result.hubspot_synced
+                crmSaved
                   ? "border-green-200 bg-green-50"
                   : "border-amber-200 bg-amber-50"
               )}>
-                {result.hubspot_synced ? (
+                {crmSaved ? (
                   <>
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-green-800">Saved to CRM</p>
-                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task are attached to the deal.</p>
+                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task are attached to the local deal timeline.</p>
                     </div>
                     <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
-                      Synced
+                      On timeline
                     </Badge>
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-amber-800">Saved locally</p>
-                      <p className="text-xs text-amber-600 mt-0.5">Live CRM sync isn't connected yet — this note is safe and ready to sync later.</p>
+                      <p className="text-sm font-medium text-amber-800">Captured locally</p>
+                      <p className="text-xs text-amber-600 mt-0.5">This note is safe, but it still needs to be attached to a CRM deal timeline.</p>
                     </div>
                     <Badge variant="outline" className="text-amber-600 border-amber-300">
-                      Ready to push
+                      Attach to CRM
                     </Badge>
                   </>
                 )}
               </div>
+                );
+              })()}
 
               {/* Customer Info */}
               {(result.extracted_data.customer_name || result.extracted_data.company_name) && (
@@ -1281,7 +1302,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     </Link>
                   </Button>
                 )}
-                {!result.hubspot_synced && (
+                {!(result.local_crm_saved || result.hubspot_synced) && (
                   <Button
                     className="flex-1"
                     onClick={() => void pushToHubspot()}
@@ -1292,16 +1313,16 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     ) : (
                       <Send className="w-4 h-4 mr-2" />
                     )}
-                    Push to CRM
+                    Add to CRM
                   </Button>
                 )}
                 <Button
                   variant="ghost"
-                  className={cn("flex-1", result.hubspot_synced && "flex-none")}
+                  className={cn("flex-1", (result.local_crm_saved || result.hubspot_synced) && "flex-none")}
                   onClick={resetCapture}
                 >
                   <XCircle className="w-4 h-4 mr-2" />
-                  {result.hubspot_synced ? "Record Another" : "Discard"}
+                  {result.local_crm_saved || result.hubspot_synced ? "Record Another" : "Discard"}
                 </Button>
               </div>
             </div>
