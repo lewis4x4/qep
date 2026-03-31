@@ -11,6 +11,7 @@ import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmTerritoryConflictBadge } from "../components/CrmTerritoryConflictBadge";
+import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
   createCrmActivity,
   getCrmCompany,
@@ -19,7 +20,6 @@ import {
   listContactActivities,
   listContactTerritories,
   listRepSafeDealsForContact,
-  patchCrmActivityTask,
 } from "../lib/crm-api";
 import type { CrmActivityItem } from "../lib/types";
 
@@ -33,7 +33,6 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
-  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   if (!contactId) {
     return <Navigate to="/crm/contacts" replace />;
@@ -115,42 +114,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
     },
   });
 
-  const patchTaskMutation = useMutation({
-    mutationFn: async ({ activityId, status }: { activityId: string; status: "open" | "completed" }) =>
-      patchCrmActivityTask(activityId, { task: { status } }),
-    onMutate: async ({ activityId, status }) => {
-      setPendingTaskId(activityId);
-      await queryClient.cancelQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
-      const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "contact", contactId, "activities"]) ?? [];
-      queryClient.setQueryData<CrmActivityItem[]>(
-        ["crm", "contact", contactId, "activities"],
-        previous.map((activity) =>
-          activity.id === activityId
-            ? {
-                ...activity,
-                metadata: {
-                  ...activity.metadata,
-                  task: {
-                    ...((activity.metadata.task as Record<string, unknown> | undefined) ?? {}),
-                    status,
-                  },
-                },
-              }
-            : activity
-        )
-      );
-      return { previous };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(["crm", "contact", contactId, "activities"], context.previous);
-      }
-    },
-    onSettled: async () => {
-      setPendingTaskId(null);
-      await queryClient.invalidateQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
-    },
-  });
+  const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "contact", contactId, "activities"]);
 
   const conflict = useMemo(() => {
     if (!contactQuery.data?.assignedRepId || !territoriesQuery.data) {
@@ -343,8 +307,8 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 entityLabel={contactName}
                 showEntityLabel={false}
                 pendingTaskId={pendingTaskId}
-                onToggleTaskStatus={async (activity, nextStatus) => {
-                  await patchTaskMutation.mutateAsync({ activityId: activity.id, status: nextStatus });
+                onPatchTask={async (activity, task) => {
+                  await patchTask({ activityId: activity.id, task });
                 }}
               />
             )}

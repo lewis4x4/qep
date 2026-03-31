@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
+import { CRM_ACTIVITY_TEMPLATES, toRelativeDateTimeLocalValue } from "../lib/activity-templates";
 import type { CrmActivityType, CrmTaskMetadata, CrmTaskStatus } from "../lib/types";
 
 interface CrmActivityComposerProps {
@@ -52,6 +53,7 @@ export function CrmActivityComposer({
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskStatus, setTaskStatus] = useState<CrmTaskStatus>("open");
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [deliveryAvailability, setDeliveryAvailability] = useState<{
     loading: boolean;
     connected: boolean;
@@ -69,6 +71,7 @@ export function CrmActivityComposer({
     : null;
   const isCommunicationType = integrationKey !== null;
   const isTaskType = activityType === "task";
+  const activityTemplates = CRM_ACTIVITY_TEMPLATES[activityType] ?? [];
 
   const canSubmit = useMemo(() => body.trim().length > 0 && !isPending, [body, isPending]);
 
@@ -184,6 +187,27 @@ export function CrmActivityComposer({
     setSendNow(true);
     setTaskDueAt("");
     setTaskStatus("open");
+    setSelectedTemplateId(null);
+  }
+
+  function applyTemplate(templateId: string): void {
+    const template = activityTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setSelectedTemplateId(template.id);
+    setBody(template.body);
+    setTaskError(null);
+
+    if (activityType === "task") {
+      setTaskDueAt(
+        typeof template.taskDueMinutes === "number"
+          ? toRelativeDateTimeLocalValue(template.taskDueMinutes)
+          : ""
+      );
+      setTaskStatus(template.taskStatus ?? "open");
+    }
   }
 
   return (
@@ -207,7 +231,10 @@ export function CrmActivityComposer({
             <select
               id="crm-activity-type"
               value={activityType}
-              onChange={(event) => setActivityType(event.target.value as CrmActivityType)}
+              onChange={(event) => {
+                setActivityType(event.target.value as CrmActivityType);
+                setSelectedTemplateId(null);
+              }}
               className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
             >
               {ACTIVITY_OPTIONS.map((option) => (
@@ -216,6 +243,37 @@ export function CrmActivityComposer({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#475569]">Quick starts</p>
+                <p className="text-xs text-[#475569]">
+                  One tap loads dealership-ready language you can tweak before saving.
+                </p>
+              </div>
+              <p className="text-xs text-[#64748B]">
+                {isTaskType ? "Applies a task note and due default." : "Applies a clean starting draft."}
+              </p>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {activityTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => applyTemplate(template.id)}
+                  className={`rounded-lg border px-3 py-2 text-left transition ${
+                    selectedTemplateId === template.id
+                      ? "border-[#E87722] bg-[#FFF7ED]"
+                      : "border-[#CBD5E1] bg-white hover:border-[#E87722]/60 hover:bg-[#FFFBF5]"
+                  }`}
+                >
+                  <div className="text-sm font-medium text-[#0F172A]">{template.label}</div>
+                  <p className="mt-1 text-xs leading-5 text-[#475569]">{template.description}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {isCommunicationType && (
@@ -264,6 +322,7 @@ export function CrmActivityComposer({
                   onChange={(event) => {
                     setTaskDueAt(event.target.value);
                     setTaskError(null);
+                    setSelectedTemplateId(null);
                   }}
                   className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
                 />
@@ -275,7 +334,10 @@ export function CrmActivityComposer({
                 <select
                   id="crm-task-status"
                   value={taskStatus}
-                  onChange={(event) => setTaskStatus(event.target.value as CrmTaskStatus)}
+                  onChange={(event) => {
+                    setTaskStatus(event.target.value as CrmTaskStatus);
+                    setSelectedTemplateId(null);
+                  }}
                   className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
                 >
                   <option value="open">Open task</option>
@@ -294,7 +356,10 @@ export function CrmActivityComposer({
             <textarea
               id="crm-activity-body"
               value={body}
-              onChange={(event) => setBody(event.target.value)}
+              onChange={(event) => {
+                setBody(event.target.value);
+                setSelectedTemplateId(null);
+              }}
               rows={6}
               placeholder={
                 isCommunicationType

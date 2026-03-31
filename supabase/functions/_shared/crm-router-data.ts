@@ -295,11 +295,14 @@ export async function patchActivity(
     throw new Error("VALIDATION_ACTIVITY_PATCH_UNSUPPORTED");
   }
 
-  const dueAt = cleanText(payload.task.dueAt ?? null);
+  const hasDueAt = Object.prototype.hasOwnProperty.call(payload.task, "dueAt");
+  const dueAt = hasDueAt ? cleanText(payload.task.dueAt ?? null) : undefined;
   if (dueAt && Number.isNaN(Date.parse(dueAt))) {
     throw new Error("VALIDATION_INVALID_TASK_DUE_AT");
   }
-  const rawStatus = payload.task.status;
+  const rawStatus = Object.prototype.hasOwnProperty.call(payload.task, "status")
+    ? payload.task.status
+    : undefined;
   if (rawStatus !== undefined && rawStatus !== "open" && rawStatus !== "completed") {
     throw new Error("VALIDATION_INVALID_TASK_STATUS");
   }
@@ -312,7 +315,11 @@ export async function patchActivity(
   const nextMetadata = {
     ...activity.metadata,
     task: {
-      dueAt: dueAt ? new Date(dueAt).toISOString() : (existingTask.dueAt as string | null | undefined) ?? null,
+      dueAt: dueAt === undefined
+        ? (existingTask.dueAt as string | null | undefined) ?? null
+        : dueAt
+        ? new Date(dueAt).toISOString()
+        : null,
       status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
     },
   };

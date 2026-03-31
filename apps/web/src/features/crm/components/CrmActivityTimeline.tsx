@@ -9,6 +9,7 @@ interface CrmActivityTimelineProps {
   onLogActivity: () => void;
   entityLabel: string;
   showEntityLabel?: boolean;
+  onPatchTask?: (activity: CrmActivityItem, task: CrmTaskMetadata) => Promise<void>;
   onToggleTaskStatus?: (activity: CrmActivityItem, nextStatus: "open" | "completed") => Promise<void>;
   pendingTaskId?: string | null;
 }
@@ -110,6 +111,7 @@ export function CrmActivityTimeline({
   onLogActivity,
   entityLabel,
   showEntityLabel = true,
+  onPatchTask,
   onToggleTaskStatus,
   pendingTaskId = null,
 }: CrmActivityTimelineProps) {
@@ -136,6 +138,7 @@ export function CrmActivityTimeline({
         const Icon = typeMeta.icon;
         const delivery = readCommunicationDelivery(activity);
         const task = readTaskMetadata(activity);
+        const canPatchTask = Boolean(onPatchTask || onToggleTaskStatus);
 
         return (
           <article
@@ -169,14 +172,23 @@ export function CrmActivityTimeline({
                 <span className={cn(taskDueTone(task.dueAt, task.status))}>
                   {formatTaskDueLabel(task.dueAt)}
                 </span>
-                {onToggleTaskStatus && (
+                {canPatchTask && (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-8 px-2 text-xs"
                     disabled={pendingTaskId === activity.id}
-                    onClick={() => void onToggleTaskStatus(activity, task.status === "completed" ? "open" : "completed")}
+                    onClick={() => {
+                      const nextStatus = task.status === "completed" ? "open" : "completed";
+                      if (onPatchTask) {
+                        void onPatchTask(activity, { ...task, status: nextStatus });
+                        return;
+                      }
+                      if (onToggleTaskStatus) {
+                        void onToggleTaskStatus(activity, nextStatus);
+                      }
+                    }}
                   >
                     {pendingTaskId === activity.id
                       ? "Saving..."

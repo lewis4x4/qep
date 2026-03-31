@@ -20,9 +20,9 @@ import {
   requireElevated,
 } from "../_shared/crm-router-service.ts";
 import {
-    createActivity,
-    patchActivity,
-    createCustomFieldDefinition,
+  createActivity,
+  patchActivity,
+  createCustomFieldDefinition,
   createEquipment,
   dismissDuplicateCandidate,
   getRecordCustomFields,
@@ -34,8 +34,8 @@ import {
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
-    type ActivityPayload,
-    type ActivityPatchPayload,
+  type ActivityPayload,
+  type ActivityPatchPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
   type DealPatchPayload,
