@@ -117,6 +117,9 @@ interface HubSpotImportResult {
 interface HubSpotCutoverConfig {
   parallel_run_enabled?: boolean;
   cutover_ready?: boolean;
+  deploy_gate_ready?: boolean;
+  source_only_enabled?: boolean;
+  source_only_activated_at?: string | null;
   validated_at?: string | null;
   note?: string | null;
 }
@@ -291,6 +294,9 @@ export function IntegrationPanel({
   const [selectedReviewRunId, setSelectedReviewRunId] = useState<string | null>(null);
   const [hubspotParallelRunEnabled, setHubspotParallelRunEnabled] = useState(true);
   const [hubspotCutoverReady, setHubspotCutoverReady] = useState(false);
+  const [hubspotDeployGateReady, setHubspotDeployGateReady] = useState(false);
+  const [hubspotSourceOnlyEnabled, setHubspotSourceOnlyEnabled] = useState(false);
+  const [hubspotSourceOnlyActivatedAt, setHubspotSourceOnlyActivatedAt] = useState("");
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
   const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
 
@@ -315,6 +321,13 @@ export function IntegrationPanel({
     setSelectedReviewRunId(null);
     setHubspotParallelRunEnabled(cutover.parallel_run_enabled ?? true);
     setHubspotCutoverReady(cutover.cutover_ready ?? false);
+    setHubspotDeployGateReady(cutover.deploy_gate_ready ?? false);
+    setHubspotSourceOnlyEnabled(cutover.source_only_enabled ?? false);
+    setHubspotSourceOnlyActivatedAt(
+      typeof cutover.source_only_activated_at === "string" && cutover.source_only_activated_at.length >= 10
+        ? cutover.source_only_activated_at.slice(0, 10)
+        : "",
+    );
     setHubspotValidatedAt(
       typeof cutover.validated_at === "string" && cutover.validated_at.length >= 10
         ? cutover.validated_at.slice(0, 10)
@@ -407,22 +420,56 @@ export function IntegrationPanel({
       value: hubspotCutoverReady ? "Ready for deploy gate" : "Still validating",
       tone: hubspotCutoverReady ? "text-[#166534]" : "text-[#9A3412]",
     },
+    {
+      label: "Deploy gate",
+      value: hubspotDeployGateReady ? "Approved for handoff" : "Pending approval",
+      tone: hubspotDeployGateReady ? "text-[#166534]" : "text-[#9A3412]",
+    },
+    {
+      label: "HubSpot mode",
+      value: hubspotSourceOnlyEnabled
+        ? `Source-only since ${formatHubSpotValidationDate(hubspotSourceOnlyActivatedAt)}`
+        : "Still active for operators",
+      tone: hubspotSourceOnlyEnabled ? "text-[#166534]" : "text-[#9A3412]",
+    },
   ];
-  const cutoverSummaryReady =
+  const cutoverPacketReady =
     hubspotCutoverReady &&
     !hubspotParallelRunEnabled &&
     cutoverBlockingCount === 0 &&
     hubspotValidatedAt.trim().length > 0 &&
     hubspotCutoverNote.trim().length > 0;
+  const cutoverHandoffReady = cutoverPacketReady && hubspotDeployGateReady;
+  const cutoverStageLabel = hubspotSourceOnlyEnabled
+    ? "HubSpot source-only active"
+    : cutoverHandoffReady
+    ? "Ready for source-only switch"
+    : cutoverPacketReady
+    ? "Packet ready for deploy gate"
+    : "Parallel-run review in progress";
+  const cutoverStageTone = hubspotSourceOnlyEnabled
+    ? "bg-[#DCFCE7] text-[#166534]"
+    : cutoverHandoffReady
+    ? "bg-[#DBEAFE] text-[#1D4ED8]"
+    : cutoverPacketReady
+    ? "bg-[#FEF3C7] text-[#92400E]"
+    : "bg-[#FFEDD5] text-[#9A3412]";
   const cutoverMissingItems = [
     hubspotParallelRunEnabled ? "Disable parallel run after final validation." : null,
     hubspotValidatedAt.trim().length === 0 ? "Add a validation date." : null,
     cutoverBlockingCount > 0 ? `Resolve ${cutoverBlockingCount.toLocaleString()} reconciliation row${cutoverBlockingCount === 1 ? "" : "s"}.` : null,
     !hubspotCutoverReady ? "Flip the cutover-ready flag once the board approves." : null,
     hubspotCutoverNote.trim().length === 0 ? "Add a short validation note for the deploy gate." : null,
+    cutoverPacketReady && !hubspotDeployGateReady ? "Mark the deploy gate approved when handoff is cleared." : null,
+    hubspotSourceOnlyEnabled && hubspotSourceOnlyActivatedAt.trim().length === 0 ? "Record the HubSpot source-only transition date." : null,
+    cutoverHandoffReady && !hubspotSourceOnlyEnabled ? "Switch HubSpot into source-only mode after the deploy gate opens." : null,
   ].filter((value): value is string => Boolean(value));
-  const cutoverRecommendation = cutoverSummaryReady
-    ? "Ready to move HubSpot into source-only mode once the deploy gate is open."
+  const cutoverRecommendation = hubspotSourceOnlyEnabled
+    ? "HubSpot is in source-only mode. Keep the packet attached while post-cutover validation runs."
+    : cutoverHandoffReady
+    ? "Deploy gate is clear. Switch HubSpot into source-only mode and record the transition date."
+    : cutoverPacketReady
+    ? "The cutover packet is complete. Open the deploy gate and hand the switch plan to operations."
     : cutoverBlockingCount > 0
     ? "Do not cut over yet. Keep HubSpot in parallel run until the remaining reconciliation issues are resolved."
     : hubspotValidatedAt.trim().length === 0 || hubspotCutoverNote.trim().length === 0
@@ -438,8 +485,12 @@ export function IntegrationPanel({
 
     const packet = [
       `${integration.name} cutover packet`,
+      `Stage: ${cutoverStageLabel}`,
       `Recommendation: ${cutoverRecommendation}`,
-      `Packet status: ${cutoverSummaryReady ? "ready" : "not ready"}`,
+      `Packet status: ${cutoverPacketReady ? "ready" : "not ready"}`,
+      `Deploy gate approved: ${hubspotDeployGateReady ? "yes" : "no"}`,
+      `HubSpot source-only: ${hubspotSourceOnlyEnabled ? "yes" : "no"}`,
+      `Source-only date: ${hubspotSourceOnlyActivatedAt.trim() || "not set"}`,
       `Parallel run: ${hubspotParallelRunEnabled ? "active" : "disabled"}`,
       `Cutover ready flag: ${hubspotCutoverReady ? "yes" : "no"}`,
       `Validation date: ${hubspotValidatedAt.trim() || "not set"}`,
@@ -515,6 +566,9 @@ export function IntegrationPanel({
           hubspot_cutover: {
             parallel_run_enabled: hubspotParallelRunEnabled,
             cutover_ready: hubspotCutoverReady,
+            deploy_gate_ready: hubspotDeployGateReady,
+            source_only_enabled: hubspotSourceOnlyEnabled,
+            source_only_activated_at: hubspotSourceOnlyActivatedAt.trim() || null,
             validated_at: hubspotValidatedAt.trim() || null,
             note: hubspotCutoverNote.trim() || null,
           },
@@ -1022,7 +1076,7 @@ export function IntegrationPanel({
                 <div
                   className={cn(
                     "mt-3 rounded-lg border p-3",
-                    cutoverSummaryReady
+                    cutoverPacketReady
                       ? "border-[#BBF7D0] bg-[#F0FDF4]"
                       : "border-[#FED7AA] bg-[#FFF7ED]",
                   )}
@@ -1037,18 +1091,16 @@ export function IntegrationPanel({
                     <span
                       className={cn(
                         "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                        cutoverSummaryReady
-                          ? "bg-[#DCFCE7] text-[#166534]"
-                          : "bg-[#FFEDD5] text-[#9A3412]",
+                        cutoverStageTone,
                       )}
                     >
-                      {cutoverSummaryReady ? "Cutover packet ready" : "Parallel-run review in progress"}
+                      {cutoverStageLabel}
                     </span>
                   </div>
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {cutoverChecklist.map((item) => (
-                      <div key={item.label} className="rounded border border-white/70 bg-white px-3 py-2">
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {cutoverChecklist.map((item) => (
+                        <div key={item.label} className="rounded border border-white/70 bg-white px-3 py-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
                           {item.label}
                         </p>
@@ -1057,9 +1109,9 @@ export function IntegrationPanel({
                     ))}
                   </div>
 
-                  <div className="mt-3 rounded border border-white/70 bg-white px-3 py-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                    <div className="mt-3 rounded border border-white/70 bg-white px-3 py-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
                           Recommendation
                         </p>
@@ -1110,6 +1162,20 @@ export function IntegrationPanel({
                           </p>
                           <p className="mt-1 text-xs text-[#475569]">
                             {formatHubSpotRunCount(latestFinishedRun)} • {formatHubSpotRunTimestamp(latestFinishedRun.completedAt ?? latestFinishedRun.startedAt)}
+                          </p>
+                        </div>
+                      )}
+                      {(hubspotDeployGateReady || hubspotSourceOnlyEnabled) && (
+                        <div className="rounded border border-white/70 bg-white px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                            Handoff status
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverStageLabel}</p>
+                          <p className="mt-1 text-xs text-[#475569]">
+                            Deploy gate {hubspotDeployGateReady ? "approved" : "not approved"} • HubSpot{" "}
+                            {hubspotSourceOnlyEnabled
+                              ? `source-only since ${formatHubSpotValidationDate(hubspotSourceOnlyActivatedAt)}`
+                              : "still active for operators"}
                           </p>
                         </div>
                       )}
@@ -1209,6 +1275,91 @@ export function IntegrationPanel({
                       </button>
                     </label>
 
+                    <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
+                      <span className="text-xs text-[#334155]">Deploy gate approved</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hubspotDeployGateReady}
+                        aria-label="Toggle HubSpot deploy gate approval"
+                        onClick={() => {
+                          if (hubspotDeployGateReady && hubspotSourceOnlyEnabled) {
+                            toast({
+                              title: "Turn off source-only first",
+                              description: "HubSpot is already marked source-only. Disable that state before clearing deploy-gate approval.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setHubspotDeployGateReady((value) => !value);
+                        }}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          hubspotDeployGateReady ? "bg-qep-orange" : "bg-muted",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none block h-4 w-4 rounded-full bg-card shadow-sm transition-transform duration-200 mt-0.5",
+                            hubspotDeployGateReady ? "translate-x-[18px]" : "translate-x-0.5",
+                          )}
+                        />
+                      </button>
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 rounded border border-border px-2.5 py-2">
+                      <span className="text-xs text-[#334155]">HubSpot source-only</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={hubspotSourceOnlyEnabled}
+                        aria-label="Toggle HubSpot source-only mode"
+                        disabled={!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !hubspotDeployGateReady)}
+                        onClick={() => {
+                          if (!hubspotSourceOnlyEnabled && !cutoverPacketReady) {
+                            toast({
+                              title: "Finish the cutover packet first",
+                              description: "Parallel run, validation, and reconciliation must be complete before HubSpot can move to source-only.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          if (!hubspotSourceOnlyEnabled && !hubspotDeployGateReady) {
+                            toast({
+                              title: "Approve the deploy gate first",
+                              description: "Mark the deploy gate approved before switching HubSpot to source-only mode.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setHubspotSourceOnlyEnabled((value) => {
+                            const next = !value;
+                            if (next && hubspotSourceOnlyActivatedAt.trim().length === 0) {
+                              setHubspotSourceOnlyActivatedAt(new Date().toISOString().slice(0, 10));
+                            }
+                            if (!next) {
+                              setHubspotSourceOnlyActivatedAt("");
+                            }
+                            return next;
+                          });
+                        }}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          (!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !hubspotDeployGateReady)) && "cursor-not-allowed opacity-60",
+                          hubspotSourceOnlyEnabled ? "bg-qep-orange" : "bg-muted",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none block h-4 w-4 rounded-full bg-card shadow-sm transition-transform duration-200 mt-0.5",
+                            hubspotSourceOnlyEnabled ? "translate-x-[18px]" : "translate-x-0.5",
+                          )}
+                        />
+                      </button>
+                    </label>
+
                     <div className="space-y-1">
                       <Label htmlFor="hubspot-validated-at" className="text-xs font-medium text-[#374151]">
                         Validation Date
@@ -1218,6 +1369,19 @@ export function IntegrationPanel({
                         type="date"
                         value={hubspotValidatedAt}
                         onChange={(event) => setHubspotValidatedAt(event.target.value)}
+                        className="text-sm focus-visible:ring-qep-orange"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="hubspot-source-only-at" className="text-xs font-medium text-[#374151]">
+                        Source-Only Date
+                      </Label>
+                      <Input
+                        id="hubspot-source-only-at"
+                        type="date"
+                        value={hubspotSourceOnlyActivatedAt}
+                        onChange={(event) => setHubspotSourceOnlyActivatedAt(event.target.value)}
                         className="text-sm focus-visible:ring-qep-orange"
                       />
                     </div>
