@@ -23,7 +23,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { CrmPageHeader } from "../components/CrmPageHeader";
-import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, patchCrmActivity } from "../lib/crm-api";
+import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, patchCrmActivity, patchCrmActivityTask } from "../lib/crm-api";
 import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
@@ -87,6 +87,26 @@ function taskTone(task: CrmTaskMetadata | null): string {
   return "text-amber-700";
 }
 
+function toDateTimeLocalValue(value: string | null | undefined): string {
+  if (!value) return "";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "";
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toIsoOrNull(value: string): string | null {
+  if (!value.trim()) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toISOString();
+}
+
 function deliveryTone(delivery: Record<string, unknown> | null): string {
   const status = typeof delivery?.status === "string" ? delivery.status : null;
   if (status === "failed") return "bg-rose-100 text-rose-800";
@@ -141,6 +161,9 @@ export function CrmActivitiesPage() {
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>([]);
   const [draftBodies, setDraftBodies] = useState<Record<string, string>>({});
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [taskDueDraft, setTaskDueDraft] = useState("");
+  const [taskDueError, setTaskDueError] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
   const queryKey = ["crm", "activities", "feed"] as const;
@@ -217,6 +240,28 @@ export function CrmActivitiesPage() {
         delete next[archivedActivity.id];
         return next;
       });
+    },
+  });
+
+  const taskMutation = useMutation({
+    mutationFn: async (input: { activityId: string; task: CrmTaskMetadata; updatedAt: string }) =>
+      patchCrmActivityTask(input.activityId, {
+        task: input.task,
+        updatedAt: input.updatedAt,
+      }),
+    onSuccess: (updatedActivity) => {
+      queryClient.setQueryData<CrmActivityFeedItem[]>(
+        queryKey,
+        (current) =>
+          current?.map((item) =>
+            item.id === updatedActivity.id
+              ? {
+                  ...item,
+                  ...updatedActivity,
+                }
+              : item
+          ) ?? [],
+      );
     },
   });
 
@@ -322,6 +367,18 @@ export function CrmActivitiesPage() {
 
   function readDraftBody(activity: CrmActivityFeedItem): string {
     return draftBodies[activity.id] ?? activity.body ?? "";
+  }
+
+  function beginTaskEditor(activity: CrmActivityFeedItem, task: CrmTaskMetadata): void {
+    setEditingTaskId(activity.id);
+    setTaskDueDraft(toDateTimeLocalValue(task.dueAt));
+    setTaskDueError(null);
+  }
+
+  function stopTaskEditor(): void {
+    setEditingTaskId(null);
+    setTaskDueDraft("");
+    setTaskDueError(null);
   }
 
   function draftBodyDirty(activity: CrmActivityFeedItem): boolean {
@@ -439,6 +496,79 @@ export function CrmActivitiesPage() {
       toast({
         title: "Could not archive activity",
         description: error instanceof Error ? error.message : "The activity could not be archived.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function saveTask(activity: CrmActivityFeedItem, task: CrmTaskMetadata): Promise<void> {
+    const nextDueAt = toIsoOrNull(taskDueDraft);
+    if (taskDueDraft.trim().length > 0 && !nextDueAt) {
+      setTaskDueError("Enter a valid due time before saving.");
+      return;
+    }
+
+    try {
+      await taskMutation.mutateAsync({
+        activityId: activity.id,
+        task: {
+          ...task,
+          dueAt: nextDueAt,
+        },
+        updatedAt: activity.updatedAt,
+      });
+      stopTaskEditor();
+      toast({
+        title: "Task updated",
+        description: "The due time was updated from the activity inbox.",
+      });
+    } catch (error) {
+      setTaskDueError(error instanceof Error ? error.message : "Could not update the task.");
+    }
+  }
+
+  async function clearTaskDueAt(activity: CrmActivityFeedItem, task: CrmTaskMetadata): Promise<void> {
+    try {
+      await taskMutation.mutateAsync({
+        activityId: activity.id,
+        task: {
+          ...task,
+          dueAt: null,
+        },
+        updatedAt: activity.updatedAt,
+      });
+      stopTaskEditor();
+      toast({
+        title: "Due time cleared",
+        description: "The task stays open without a scheduled due time.",
+      });
+    } catch (error) {
+      setTaskDueError(error instanceof Error ? error.message : "Could not clear the due time.");
+    }
+  }
+
+  async function toggleTaskStatus(activity: CrmActivityFeedItem, task: CrmTaskMetadata): Promise<void> {
+    const nextStatus = task.status === "completed" ? "open" : "completed";
+    try {
+      await taskMutation.mutateAsync({
+        activityId: activity.id,
+        task: {
+          ...task,
+          status: nextStatus,
+        },
+        updatedAt: activity.updatedAt,
+      });
+      toast({
+        title: nextStatus === "completed" ? "Task completed" : "Task reopened",
+        description:
+          nextStatus === "completed"
+            ? "The task was closed from the activity inbox."
+            : "The task is back in the active queue.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not update task",
+        description: error instanceof Error ? error.message : "The task could not be updated.",
         variant: "destructive",
       });
     }
@@ -599,6 +729,7 @@ export function CrmActivitiesPage() {
             const delivery = readDeliveryMetadata(activity);
             const targetHref = activityTargetHref(activity);
             const targetLabel = activityTargetLabel(activity);
+            const isEditingTask = editingTaskId === activity.id;
 
             return (
               <Card key={activity.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
@@ -650,17 +781,108 @@ export function CrmActivitiesPage() {
                       {activity.companyName && <span>Company: {activity.companyName}</span>}
                       {activity.dealName && <span>Deal: {activity.dealName}</span>}
                     </div>
+
+                    {task && isEditingTask && (
+                      <div className="mt-4 rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-3">
+                        <label
+                          htmlFor={`crm-inbox-task-due-${activity.id}`}
+                          className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[#92400E]"
+                        >
+                          Task due time
+                        </label>
+                        <input
+                          id={`crm-inbox-task-due-${activity.id}`}
+                          type="datetime-local"
+                          value={taskDueDraft}
+                          onChange={(event) => {
+                            setTaskDueDraft(event.target.value);
+                            if (taskDueError) {
+                              setTaskDueError(null);
+                            }
+                          }}
+                          disabled={taskMutation.isPending}
+                          className="h-11 w-full rounded-md border border-[#FCD34D] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                        />
+                        {taskDueError && (
+                          <p className="mt-2 text-xs font-medium text-[#B91C1C]">{taskDueError}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void saveTask(activity, task)}
+                            disabled={taskMutation.isPending}
+                            className="min-h-[40px] bg-[#E87722] text-white hover:bg-[#D46B1B]"
+                          >
+                            {taskMutation.isPending ? "Saving..." : "Save due time"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void clearTaskDueAt(activity, task)}
+                            disabled={taskMutation.isPending}
+                            className="min-h-[40px] border-[#FCD34D] bg-white text-[#92400E] hover:bg-[#FFF7ED]"
+                          >
+                            Clear due time
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={stopTaskEditor}
+                            disabled={taskMutation.isPending}
+                            className="min-h-[40px] border-[#D6E0EA] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {targetHref && (
                     <div className="flex flex-wrap items-center gap-2 self-start">
+                      {task && (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleTaskStatus(activity, task)}
+                            disabled={taskMutation.isPending}
+                            className={cn(
+                              "min-h-[44px] rounded-full px-4",
+                              task.status === "completed"
+                                ? "border-[#BBF7D0] bg-white text-[#166534] hover:bg-[#F0FDF4]"
+                                : "border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
+                            )}
+                          >
+                            {taskMutation.isPending
+                              ? "Updating..."
+                              : task.status === "completed"
+                              ? "Reopen task"
+                              : "Complete task"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => (isEditingTask ? stopTaskEditor() : beginTaskEditor(activity, task))}
+                            disabled={taskMutation.isPending}
+                            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white px-4 text-[#334155] hover:bg-[#F8FAFC]"
+                          >
+                            {isEditingTask ? "Close due editor" : "Edit due time"}
+                          </Button>
+                        </>
+                      )}
                       {canArchiveFromInbox(activity) && (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
                           onClick={() => void archiveActivity(activity)}
-                          disabled={archiveMutation.isPending}
+                          disabled={archiveMutation.isPending || taskMutation.isPending}
                           className="min-h-[44px] rounded-full border-[#FBCFE8] bg-white px-4 text-[#9D174D] hover:bg-[#FDF2F8]"
                         >
                           <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -672,7 +894,7 @@ export function CrmActivitiesPage() {
                           type="button"
                           size="sm"
                           onClick={() => void sendSingleActivity(activity)}
-                          disabled={deliveryMutation.isPending}
+                          disabled={deliveryMutation.isPending || taskMutation.isPending}
                           className="min-h-[44px] rounded-full bg-[#E87722] px-4 text-white hover:bg-[#D46B1B]"
                         >
                           <Send className="mr-2 h-4 w-4" aria-hidden="true" />
