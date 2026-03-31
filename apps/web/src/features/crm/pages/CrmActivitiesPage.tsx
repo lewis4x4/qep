@@ -257,6 +257,18 @@ export function CrmActivitiesPage() {
     });
   }, [activities, deferredSearch, feedFilter, typeFilter]);
 
+  const filteredSendableActivityIds = useMemo(
+    () => filteredActivities.filter(canSendFromInbox).map((activity) => activity.id),
+    [filteredActivities],
+  );
+
+  const allFilteredSendableSelected = useMemo(
+    () =>
+      filteredSendableActivityIds.length > 0 &&
+      filteredSendableActivityIds.every((activityId) => selectedActivityIds.includes(activityId)),
+    [filteredSendableActivityIds, selectedActivityIds],
+  );
+
   const summary = useMemo(() => {
     const openTasks = activities.filter((activity) => {
       const task = readTaskMetadata(activity);
@@ -281,6 +293,30 @@ export function CrmActivitiesPage() {
       current.includes(activityId)
         ? current.filter((id) => id !== activityId)
         : [...current, activityId]
+    );
+  }
+
+  function selectFilteredEligible(): void {
+    if (filteredSendableActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) => {
+      const next = new Set(current);
+      for (const activityId of filteredSendableActivityIds) {
+        next.add(activityId);
+      }
+      return Array.from(next);
+    });
+  }
+
+  function clearFilteredEligible(): void {
+    if (filteredSendableActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) =>
+      current.filter((activityId) => !filteredSendableActivityIds.includes(activityId)),
     );
   }
 
@@ -482,6 +518,24 @@ export function CrmActivitiesPage() {
               {item.label}
             </Button>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#475569]">
+            Queue actions
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={allFilteredSendableSelected ? clearFilteredEligible : selectFilteredEligible}
+            disabled={filteredSendableActivityIds.length === 0}
+            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#FFF7ED] hover:text-[#B45309]"
+          >
+            {allFilteredSendableSelected ? "Clear eligible" : `Select eligible (${filteredSendableActivityIds.length})`}
+          </Button>
+          <span className="text-xs text-[#64748B]">
+            Uses the current filters to queue manual and failed email/SMS items for review.
+          </span>
         </div>
 
         {selectedActivities.length > 0 && (
