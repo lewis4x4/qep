@@ -407,7 +407,28 @@ export function IntegrationPanel({
       tone: hubspotCutoverReady ? "text-[#166534]" : "text-[#9A3412]",
     },
   ];
-  const cutoverSummaryReady = hubspotCutoverReady && !hubspotParallelRunEnabled && cutoverBlockingCount === 0 && hubspotValidatedAt.trim().length > 0;
+  const cutoverSummaryReady =
+    hubspotCutoverReady &&
+    !hubspotParallelRunEnabled &&
+    cutoverBlockingCount === 0 &&
+    hubspotValidatedAt.trim().length > 0 &&
+    hubspotCutoverNote.trim().length > 0;
+  const cutoverMissingItems = [
+    hubspotParallelRunEnabled ? "Disable parallel run after final validation." : null,
+    hubspotValidatedAt.trim().length === 0 ? "Add a validation date." : null,
+    cutoverBlockingCount > 0 ? `Resolve ${cutoverBlockingCount.toLocaleString()} reconciliation row${cutoverBlockingCount === 1 ? "" : "s"}.` : null,
+    !hubspotCutoverReady ? "Flip the cutover-ready flag once the board approves." : null,
+    hubspotCutoverNote.trim().length === 0 ? "Add a short validation note for the deploy gate." : null,
+  ].filter((value): value is string => Boolean(value));
+  const cutoverRecommendation = cutoverSummaryReady
+    ? "Ready to move HubSpot into source-only mode once the deploy gate is open."
+    : cutoverBlockingCount > 0
+    ? "Do not cut over yet. Keep HubSpot in parallel run until the remaining reconciliation issues are resolved."
+    : hubspotValidatedAt.trim().length === 0 || hubspotCutoverNote.trim().length === 0
+    ? "Validation evidence is incomplete. Add the validation date and board-facing note before cutover."
+    : hubspotParallelRunEnabled
+    ? "Validation looks close. Finish the parallel-run review, then disable it before cutover."
+    : "Validation is partially complete. Finish the remaining handoff items before cutover.";
 
   async function handleSave() {
     if (!integration) return;
@@ -990,6 +1011,32 @@ export function IntegrationPanel({
                         <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="mt-3 rounded border border-white/70 bg-white px-3 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                      Recommendation
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverRecommendation}</p>
+                    {cutoverMissingItems.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#64748B]">
+                          Remaining handoff items
+                        </p>
+                        <ul className="space-y-1 text-sm text-[#334155]">
+                          {cutoverMissingItems.map((item) => (
+                            <li key={item} className="flex gap-2">
+                              <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-[#E87722]" aria-hidden="true" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm text-[#166534]">
+                        No remaining handoff items are blocking the cutover package.
+                      </p>
+                    )}
                   </div>
 
                   {(latestFinishedRun || hubspotCutoverNote.trim().length > 0) && (
