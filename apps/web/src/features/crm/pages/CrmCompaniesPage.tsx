@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CrmCompanyEditorSheet } from "../components/CrmCompanyEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { CrmSubNav } from "../components/CrmSubNav";
 import { listCrmCompanies } from "../lib/crm-api";
 
 export function CrmCompaniesPage() {
@@ -46,6 +47,7 @@ export function CrmCompaniesPage() {
         title="CRM Companies"
         subtitle="Browse accounts and log activities by organization."
       />
+      <CrmSubNav />
 
       <div className="flex justify-end">
         <Button onClick={() => setEditorOpen(true)}>

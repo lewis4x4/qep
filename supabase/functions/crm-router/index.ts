@@ -60,6 +60,15 @@ function asRecordType(value: string | null): CustomRecordType | null {
 }
 
 function mapError(origin: string | null, error: unknown): Response {
+  if (error instanceof SyntaxError) {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "INVALID_JSON",
+      message: "Request body must be valid JSON.",
+    });
+  }
+
   const message = error instanceof Error ? error.message : String(error);
 
   if (message === "UNAUTHORIZED") {

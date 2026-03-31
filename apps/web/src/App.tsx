@@ -76,6 +76,9 @@ const CrmFollowUpSequencesPage = lazy(() =>
     default: m.CrmFollowUpSequencesPage,
   }))
 );
+const CrmHubPage = lazy(() =>
+  import("./features/crm/pages/CrmHubPage").then((m) => ({ default: m.CrmHubPage }))
+);
 
 function RouteFallback() {
   return (
@@ -373,6 +376,16 @@ function App() {
                     ) : (
                       <QuoteBuilderGate />
                     )
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmHubPage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

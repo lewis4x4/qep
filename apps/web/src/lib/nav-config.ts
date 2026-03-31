@@ -1,0 +1,100 @@
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Mic,
+  FileText,
+  Settings,
+  Plug,
+  LayoutGrid,
+} from "lucide-react";
+import type { UserRole } from "@/lib/database.types";
+
+export interface NavItemDefinition {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: UserRole[];
+  requiresIntelliDealer?: boolean;
+}
+
+export interface NavItem extends NavItemDefinition {
+  gated: boolean;
+}
+
+export const NAV_ITEMS: NavItemDefinition[] = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Knowledge",
+    href: "/chat",
+    icon: MessageSquare,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Field Note",
+    href: "/voice",
+    icon: Mic,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Quotes",
+    href: "/quote",
+    icon: FileText,
+    roles: ["rep", "manager", "owner"],
+    requiresIntelliDealer: true,
+  },
+  {
+    label: "CRM",
+    href: "/crm",
+    icon: LayoutGrid,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Admin",
+    href: "/admin",
+    icon: Settings,
+    roles: ["admin", "manager", "owner"],
+  },
+  {
+    label: "Integrations",
+    href: "/admin/integrations",
+    icon: Plug,
+    roles: ["admin", "owner"],
+  },
+];
+
+export const BOTTOM_TAB_HREFS = ["/dashboard", "/chat", "/voice", "/quote"];
+
+export function resolveNavItems(
+  quoteBuilderEnabled: boolean,
+  quoteBuilderLoading: boolean
+): NavItem[] {
+  return NAV_ITEMS.map((item) => ({
+    ...item,
+    gated: Boolean(
+      item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
+    ),
+  }));
+}
+
+export function getInitials(
+  name: string | null | undefined,
+  email: string | null | undefined
+): string {
+  if (name) {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  }
+  if (email) {
+    return email[0].toUpperCase();
+  }
+  return "?";
+}

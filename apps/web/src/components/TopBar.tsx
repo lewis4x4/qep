@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
+import { getInitials } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
 import { CrmGlobalSearchCommand } from "@/features/crm/components/CrmGlobalSearchCommand";
 
@@ -55,12 +56,14 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",
-  "/crm/activities": "CRM Activities",
-  "/crm/templates": "CRM Templates",
-  "/crm/deals": "CRM Deals",
-  "/crm/contacts": "CRM Contacts",
-  "/crm/companies": "CRM Companies",
-  "/crm/duplicates": "CRM Duplicates",
+  "/crm": "CRM",
+  "/crm/activities": "Activities",
+  "/crm/templates": "Templates",
+  "/crm/sequences": "Sequences",
+  "/crm/deals": "Deals",
+  "/crm/contacts": "Contacts",
+  "/crm/companies": "Companies",
+  "/crm/duplicates": "Duplicates",
   "/admin": "Admin",
 };
 
@@ -69,29 +72,16 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote" },
+  "/crm": { label: "CRM Hub", route: "/crm" },
   "/crm/activities": { label: "Activities", route: "/crm/activities" },
   "/crm/templates": { label: "Templates", route: "/crm/templates" },
+  "/crm/sequences": { label: "Sequences", route: "/crm/sequences" },
   "/crm/deals": { label: "Deals", route: "/crm/deals" },
   "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },
   "/crm/companies": { label: "Companies", route: "/crm/companies" },
   "/crm/duplicates": { label: "Duplicates", route: "/crm/duplicates" },
   "/admin": null,
 };
-
-function getInitials(name: string | null, email: string | null): string {
-  if (name) {
-    return name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
-  if (email) {
-    return email[0].toUpperCase();
-  }
-  return "?";
-}
 
 function useBadge(): [boolean, () => void] {
   const [hasBadge, setHasBadge] = useState(false);
@@ -148,6 +138,8 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
       ? `Theme: following system (${resolvedDark ? "dark" : "light"})`
       : `Theme: ${preference}`;
 
+  const isCrmSubPage =
+    location.pathname.startsWith("/crm/") && location.pathname !== "/crm";
   const breadcrumbLabel =
     BREADCRUMB_LABELS[location.pathname] ??
     (location.pathname.startsWith("/crm/deals/") ? "Deal Detail" : undefined) ??
@@ -201,8 +193,21 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
               aria-label="Breadcrumb"
               className="hidden lg:flex items-center gap-1.5 text-sm"
             >
-              <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-              <span className="text-white font-medium">{breadcrumbLabel}</span>
+              {isCrmSubPage ? (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
+                  <Link to="/crm" className="text-[#8A9BAE] hover:text-white transition-colors">
+                    CRM
+                  </Link>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
+                  <span className="text-white font-medium">{breadcrumbLabel}</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
+                  <span className="text-white font-medium">{breadcrumbLabel}</span>
+                </>
+              )}
             </nav>
           )}
         </div>

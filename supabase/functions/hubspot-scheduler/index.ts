@@ -206,51 +206,61 @@ interface HubSpotTokenRefreshResponse {
 }
 
 Deno.serve(async (req) => {
-  // Verify this is called from Supabase scheduler
-  // Prefer CRON_SECRET; fall back to SUPABASE_SERVICE_ROLE_KEY — strict equality only
   const authHeader = req.headers.get("Authorization");
   const cronSecret = Deno.env.get("CRON_SECRET") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (authHeader !== `Bearer ${cronSecret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const supabase = createClient<SchedulerDatabase>(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
+  try {
+    const supabase = createClient<SchedulerDatabase>(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-  const results = { processed: 0, errors: 0, stalledAlerts: 0 };
+    const results = { processed: 0, errors: 0, stalledAlerts: 0 };
 
-  // --- Process due sequence steps ---
-  const { data: dueEnrollmentRows } = await supabase
-    .from("sequence_enrollments")
-    .select(`
-      id, deal_id, deal_name, contact_id, contact_name, owner_id,
-      hub_id, current_step, sequence_id
-    `)
-    .eq("status", "active")
-    .lte("next_step_due_at", new Date().toISOString())
-    .limit(50);
-  const dueEnrollments: DueEnrollment[] = (dueEnrollmentRows ?? []) as DueEnrollment[];
+    const { data: dueEnrollmentRows } = await supabase
+      .from("sequence_enrollments")
+      .select(`
+        id, deal_id, deal_name, contact_id, contact_name, owner_id,
+        hub_id, current_step, sequence_id
+      `)
+      .eq("status", "active")
+      .lte("next_step_due_at", new Date().toISOString())
+      .limit(50);
+    const dueEnrollments: DueEnrollment[] = (dueEnrollmentRows ?? []) as DueEnrollment[];
 
-  for (const enrollment of dueEnrollments) {
-    try {
-      await processEnrollmentStep(supabase, enrollment);
-      results.processed++;
-    } catch (err) {
-      console.error(`Error processing enrollment ${enrollment.id}:`, err);
-      results.errors++;
+    for (const enrollment of dueEnrollments) {
+      try {
+        await processEnrollmentStep(supabase, enrollment);
+        results.processed++;
+      } catch (err) {
+        console.error(`Error processing enrollment ${enrollment.id}:`, err);
+        results.errors++;
+      }
     }
+
+    let stalledCount = 0;
+    try {
+      stalledCount = await detectStalledDeals(supabase);
+    } catch (stalledErr) {
+      console.error("detectStalledDeals failed:", stalledErr);
+    }
+    results.stalledAlerts = stalledCount;
+
+    console.log("Scheduler run complete:", results);
+    return new Response(JSON.stringify(results), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (fatalErr) {
+    console.error("Scheduler fatal error:", fatalErr);
+    const detail = fatalErr instanceof Error ? fatalErr.message : String(fatalErr);
+    return new Response(
+      JSON.stringify({ error: "SCHEDULER_FATAL", detail }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
   }
-
-  // --- Detect stalled deals ---
-  const stalledCount = await detectStalledDeals(supabase);
-  results.stalledAlerts = stalledCount;
-
-  console.log("Scheduler run complete:", results);
-  return new Response(JSON.stringify(results), {
-    headers: { "Content-Type": "application/json" },
-  });
 });
 
 async function processEnrollmentStep(

@@ -1,25 +1,10 @@
 import { useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Mic,
-  FileText,
-  Settings,
-  Menu,
-  HardHat,
-  Lock,
-  Plug,
-  UsersRound,
-  Building2,
-  LayoutGrid,
-  GitMerge,
-  MessageCircleMore,
-  NotebookPen,
-} from "lucide-react";
+import { Menu, HardHat, Lock } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
+import { resolveNavItems, BOTTOM_TAB_HREFS } from "@/lib/nav-config";
 import { NavRail } from "@/components/NavRail";
 import { TopBar } from "@/components/TopBar";
 
@@ -36,118 +21,6 @@ export interface AppLayoutProps {
   quoteBuilderEnabled: boolean;
   quoteBuilderLoading: boolean;
   children: React.ReactNode;
-}
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
-  gated?: boolean;
-}
-
-interface NavItemDefinition {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
-  requiresIntelliDealer?: boolean;
-}
-
-const NAV_ITEMS: NavItemDefinition[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Knowledge Chat",
-    href: "/chat",
-    icon: MessageSquare,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Field Note",
-    href: "/voice",
-    icon: Mic,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Quote Builder",
-    href: "/quote",
-    icon: FileText,
-    roles: ["rep", "manager", "owner"],
-    requiresIntelliDealer: true,
-  },
-  {
-    label: "CRM Activities",
-    href: "/crm/activities",
-    icon: MessageCircleMore,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Deals",
-    href: "/crm/deals",
-    icon: LayoutGrid,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Contacts",
-    href: "/crm/contacts",
-    icon: UsersRound,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Companies",
-    href: "/crm/companies",
-    icon: Building2,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Sequences",
-    href: "/crm/sequences",
-    icon: NotebookPen,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Templates",
-    href: "/crm/templates",
-    icon: NotebookPen,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Duplicates",
-    href: "/crm/duplicates",
-    icon: GitMerge,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Admin",
-    href: "/admin",
-    icon: Settings,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "Integrations",
-    href: "/admin/integrations",
-    icon: Plug,
-    roles: ["admin", "owner"],
-  },
-];
-
-const BOTTOM_TAB_HREFS = ["/dashboard", "/chat", "/voice", "/quote"];
-
-function resolveNavItems(
-  quoteBuilderEnabled: boolean,
-  quoteBuilderLoading: boolean
-): NavItem[] {
-  return NAV_ITEMS.map((item) => ({
-    ...item,
-    gated: Boolean(
-      item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
-    ),
-  }));
 }
 
 function MobileBottomTabBar({
@@ -251,16 +124,13 @@ function MobileBottomTabBar({
   );
 }
 
-/** Mobile nav drawer content (used inside Sheet) */
 function MobileNavContent({
   profile,
-  onLogout,
   onNavClick,
   quoteBuilderEnabled,
   quoteBuilderLoading,
 }: {
   profile: Profile;
-  onLogout: () => void;
   onNavClick: () => void;
   quoteBuilderEnabled: boolean;
   quoteBuilderLoading: boolean;
@@ -380,7 +250,6 @@ export function AppLayout({
         >
           <MobileNavContent
             profile={profile}
-            onLogout={onLogout}
             onNavClick={() => setMobileOpen(false)}
             quoteBuilderEnabled={quoteBuilderEnabled}
             quoteBuilderLoading={quoteBuilderLoading}

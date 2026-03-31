@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CrmContactEditorSheet } from "../components/CrmContactEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { CrmSubNav } from "../components/CrmSubNav";
 import { listCrmContacts } from "../lib/crm-api";
 
 export function CrmContactsPage() {
@@ -50,6 +51,7 @@ export function CrmContactsPage() {
         title="CRM Contacts"
         subtitle="Search and open contact timelines quickly from the field."
       />
+      <CrmSubNav />
 
       <div className="flex justify-end">
         <Button onClick={() => setEditorOpen(true)}>

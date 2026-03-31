@@ -9,6 +9,7 @@ import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
 import { getDealSignalState } from "../lib/deal-signals";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { CrmSubNav } from "../components/CrmSubNav";
 import {
   listCrmDealStages,
   listCrmOpenDealsForBoard,
@@ -482,6 +483,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         title="CRM Deals"
         subtitle="Table-first pipeline view with role-safe CRM reads and quote entry points."
       />
+      <CrmSubNav />
 
       <div className="flex justify-end">
         <Button onClick={() => setEditorOpen(true)}>

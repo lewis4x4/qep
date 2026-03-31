@@ -1,21 +1,6 @@
 import { useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Mic,
-  FileText,
-  Settings,
-  LogOut,
-  Lock,
-  Plug,
-  UsersRound,
-  Building2,
-  LayoutGrid,
-  GitMerge,
-  MessageCircleMore,
-  NotebookPen,
-} from "lucide-react";
+import { LogOut, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +28,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
+import { resolveNavItems, getInitials } from "@/lib/nav-config";
 
 interface Profile {
   id: string;
@@ -56,131 +42,6 @@ interface NavRailProps {
   onLogout: () => void;
   quoteBuilderEnabled: boolean;
   quoteBuilderLoading: boolean;
-}
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
-  gated?: boolean;
-}
-
-interface NavItemDefinition {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: UserRole[];
-  requiresIntelliDealer?: boolean;
-}
-
-const NAV_ITEMS: NavItemDefinition[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Knowledge",
-    href: "/chat",
-    icon: MessageSquare,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Field Note",
-    href: "/voice",
-    icon: Mic,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Quotes",
-    href: "/quote",
-    icon: FileText,
-    roles: ["rep", "manager", "owner"],
-    requiresIntelliDealer: true,
-  },
-  {
-    label: "CRM Activities",
-    href: "/crm/activities",
-    icon: MessageCircleMore,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Deals",
-    href: "/crm/deals",
-    icon: LayoutGrid,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Contacts",
-    href: "/crm/contacts",
-    icon: UsersRound,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Companies",
-    href: "/crm/companies",
-    icon: Building2,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Sequences",
-    href: "/crm/sequences",
-    icon: NotebookPen,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Templates",
-    href: "/crm/templates",
-    icon: NotebookPen,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "CRM Duplicates",
-    href: "/crm/duplicates",
-    icon: GitMerge,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Admin",
-    href: "/admin",
-    icon: Settings,
-    roles: ["admin", "manager", "owner"],
-  },
-  {
-    label: "Integrations",
-    href: "/admin/integrations",
-    icon: Plug,
-    roles: ["admin", "owner"],
-  },
-];
-
-function resolveNavItems(
-  quoteBuilderEnabled: boolean,
-  quoteBuilderLoading: boolean
-): NavItem[] {
-  return NAV_ITEMS.map((item) => ({
-    ...item,
-    gated: Boolean(
-      item.requiresIntelliDealer && !quoteBuilderEnabled && !quoteBuilderLoading
-    ),
-  }));
-}
-
-function getInitials(name: string | null, email: string | null): string {
-  if (name) {
-    return name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
-  if (email) {
-    return email[0].toUpperCase();
-  }
-  return "?";
 }
 
 export function NavRail({

@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { mergeActivityTemplates } from "../lib/activity-templates";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { CrmSubNav } from "../components/CrmSubNav";
 import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, listCrmActivityTemplates, patchCrmActivity, patchCrmActivityTask } from "../lib/crm-api";
 import type { CrmActivityFeedItem, CrmActivityItem, CrmActivityTemplate, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
@@ -1140,6 +1141,7 @@ export function CrmActivitiesPage() {
         title="CRM Activities"
         subtitle="Run calls, texts, emails, and task follow-through from one rep-safe activity feed."
       />
+      <CrmSubNav />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Activity summary">
         {[
