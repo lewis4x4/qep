@@ -39,6 +39,7 @@ export interface ActivityPayload {
 
 export interface ActivityPatchPayload {
   body?: string | null;
+  occurredAt?: string;
   updatedAt?: string;
   task?: {
     dueAt?: string | null;
@@ -305,10 +306,11 @@ export async function patchActivity(
 ): Promise<unknown> {
   const activity = await getActivityForPatch(ctx, activityId);
   const hasBody = Object.prototype.hasOwnProperty.call(payload, "body");
+  const hasOccurredAt = Object.prototype.hasOwnProperty.call(payload, "occurredAt");
   const hasTask = Object.prototype.hasOwnProperty.call(payload, "task");
   const expectedUpdatedAt = cleanText(payload.updatedAt ?? null);
 
-  if (!hasBody && !hasTask) {
+  if (!hasBody && !hasOccurredAt && !hasTask) {
     throw new Error("VALIDATION_ACTIVITY_PATCH_REQUIRED");
   }
   if (expectedUpdatedAt && expectedUpdatedAt !== activity.updatedAt) {
@@ -351,6 +353,27 @@ export async function patchActivity(
     }
 
     updates.body = body;
+  }
+
+  if (hasOccurredAt) {
+    if (!payload.occurredAt || Number.isNaN(Date.parse(payload.occurredAt))) {
+      throw new Error("VALIDATION_INVALID_OCCURRED_AT");
+    }
+
+    if (activity.activityType === "email" || activity.activityType === "sms") {
+      const communication =
+        activity.metadata.communication &&
+          typeof activity.metadata.communication === "object" &&
+          !Array.isArray(activity.metadata.communication)
+          ? (activity.metadata.communication as Record<string, unknown>)
+          : null;
+
+      if (communication?.status === "sent" || communication?.deliveryInProgress === true) {
+        throw new Error("VALIDATION_ACTIVITY_OCCURRED_AT_LOCKED");
+      }
+    }
+
+    updates.occurred_at = new Date(payload.occurredAt).toISOString();
   }
 
   if (hasTask) {

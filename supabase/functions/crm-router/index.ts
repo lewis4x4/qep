@@ -118,6 +118,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "VALIDATION_ACTIVITY_OCCURRED_AT_LOCKED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Delivered messages are locked. Log a follow-up instead.",
+    });
+  }
+
   if (message === "VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS") {
     return crmFail({
       origin,
@@ -142,6 +151,15 @@ function mapError(origin: string | null, error: unknown): Response {
       status: 409,
       code: "VALIDATION_ERROR",
       message: "This activity changed somewhere else. Refresh and try again.",
+    });
+  }
+
+  if (message === "VALIDATION_INVALID_OCCURRED_AT") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Enter a valid activity time.",
     });
   }
 

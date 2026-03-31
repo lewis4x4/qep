@@ -11,6 +11,7 @@ import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
+import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import {
@@ -131,6 +132,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   });
 
   const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "deal", dealId, "activities"]);
+  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(["crm", "deal", dealId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "deal", dealId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -292,10 +294,14 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 entityLabel={dealName}
                 showEntityLabel={false}
                 pendingBodyId={pendingBodyId}
+                pendingOccurredAtId={pendingOccurredAtId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
                 onPatchBody={async (activity, body, updatedAt) => {
                   await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
                 }}
                 onPatchTask={async (activity, task, updatedAt) => {
                   await patchTask({ activityId: activity.id, task, updatedAt });

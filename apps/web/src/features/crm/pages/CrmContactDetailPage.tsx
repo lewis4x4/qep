@@ -12,6 +12,7 @@ import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
+import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
 import { CrmTerritoryConflictBadge } from "../components/CrmTerritoryConflictBadge";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
@@ -117,6 +118,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   });
 
   const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "contact", contactId, "activities"]);
+  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(["crm", "contact", contactId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "contact", contactId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -316,10 +318,14 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 entityLabel={contactName}
                 showEntityLabel={false}
                 pendingBodyId={pendingBodyId}
+                pendingOccurredAtId={pendingOccurredAtId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
                 onPatchBody={async (activity, body, updatedAt) => {
                   await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
                 }}
                 onPatchTask={async (activity, task, updatedAt) => {
                   await patchTask({ activityId: activity.id, task, updatedAt });

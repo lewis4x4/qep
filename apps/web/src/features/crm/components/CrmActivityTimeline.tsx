@@ -13,6 +13,8 @@ interface CrmActivityTimelineProps {
   showEntityLabel?: boolean;
   onPatchBody?: (activity: CrmActivityItem, body: string, updatedAt: string) => Promise<void>;
   pendingBodyId?: string | null;
+  onPatchOccurredAt?: (activity: CrmActivityItem, occurredAt: string, updatedAt: string) => Promise<void>;
+  pendingOccurredAtId?: string | null;
   onPatchTask?: (activity: CrmActivityItem, task: CrmTaskMetadata, updatedAt: string) => Promise<void>;
   onToggleTaskStatus?: (activity: CrmActivityItem, nextStatus: "open" | "completed") => Promise<void>;
   pendingTaskId?: string | null;
@@ -112,6 +114,10 @@ function bodyActionLabel(activity: CrmActivityItem): string {
   return activity.body?.trim() ? "Edit details" : "Add details";
 }
 
+function timeActionLabel(activity: CrmActivityItem): string {
+  return activity.activityType === "meeting" ? "Adjust meeting time" : "Adjust time";
+}
+
 function hasFreshDeliveryLock(delivery: CommunicationDeliveryMetadata | null): boolean {
   if (!delivery || delivery.deliveryInProgress !== true) return false;
   const lockAt = typeof delivery.deliveryInProgressAt === "string"
@@ -129,6 +135,10 @@ function canEditBody(activity: CrmActivityItem, delivery: CommunicationDeliveryM
   if (delivery.status === "sent") return false;
   if (delivery.deliveryInProgress === true) return false;
   return true;
+}
+
+function canEditOccurredAt(activity: CrmActivityItem, delivery: CommunicationDeliveryMetadata | null): boolean {
+  return canEditBody(activity, delivery);
 }
 
 function bodyLockMessage(delivery: CommunicationDeliveryMetadata | null): string | null {
@@ -202,6 +212,8 @@ export function CrmActivityTimeline({
   showEntityLabel = true,
   onPatchBody,
   pendingBodyId = null,
+  onPatchOccurredAt,
+  pendingOccurredAtId = null,
   onPatchTask,
   onToggleTaskStatus,
   pendingTaskId = null,
@@ -214,6 +226,12 @@ export function CrmActivityTimeline({
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({});
   const [bodyInput, setBodyInput] = useState("");
   const [bodyError, setBodyError] = useState<string | null>(null);
+  const [editingOccurredAtId, setEditingOccurredAtId] = useState<string | null>(null);
+  const [editingOccurredAtUpdatedAt, setEditingOccurredAtUpdatedAt] = useState<string | null>(null);
+  const [occurredAtConflictId, setOccurredAtConflictId] = useState<string | null>(null);
+  const [occurredAtDrafts, setOccurredAtDrafts] = useState<Record<string, string>>({});
+  const [occurredAtInput, setOccurredAtInput] = useState("");
+  const [occurredAtError, setOccurredAtError] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskUpdatedAt, setEditingTaskUpdatedAt] = useState<string | null>(null);
   const [taskConflictId, setTaskConflictId] = useState<string | null>(null);
@@ -227,6 +245,14 @@ export function CrmActivityTimeline({
     setBodyConflictId(null);
     setBodyInput(bodyDrafts[activity.id] ?? activity.body ?? "");
     setBodyError(null);
+  }
+
+  function startOccurredAtEditor(activity: CrmActivityItem): void {
+    setEditingOccurredAtId(activity.id);
+    setEditingOccurredAtUpdatedAt(activity.updatedAt);
+    setOccurredAtConflictId(null);
+    setOccurredAtInput(occurredAtDrafts[activity.id] ?? toDateTimeLocalValue(activity.occurredAt));
+    setOccurredAtError(null);
   }
 
   function closeBodyEditor(options?: { preserveDraft?: boolean }): void {
@@ -243,6 +269,22 @@ export function CrmActivityTimeline({
     setBodyConflictId(null);
     setBodyInput("");
     setBodyError(null);
+  }
+
+  function closeOccurredAtEditor(options?: { preserveDraft?: boolean }): void {
+    const preserveDraft = options?.preserveDraft === true;
+    if (editingOccurredAtId && !preserveDraft) {
+      setOccurredAtDrafts((current) => {
+        const next = { ...current };
+        delete next[editingOccurredAtId];
+        return next;
+      });
+    }
+    setEditingOccurredAtId(null);
+    setEditingOccurredAtUpdatedAt(null);
+    setOccurredAtConflictId(null);
+    setOccurredAtInput("");
+    setOccurredAtError(null);
   }
 
   function startTaskEditor(activity: CrmActivityItem, task: CrmTaskMetadata): void {
@@ -289,6 +331,29 @@ export function CrmActivityTimeline({
         return;
       }
       setBodyError(message);
+    }
+  }
+
+  async function saveOccurredAt(activity: CrmActivityItem): Promise<void> {
+    if (!onPatchOccurredAt) return;
+
+    const nextOccurredAt = toIsoOrNull(occurredAtInput);
+    if (!nextOccurredAt) {
+      setOccurredAtError("Enter a valid activity time.");
+      return;
+    }
+
+    try {
+      await onPatchOccurredAt(activity, nextOccurredAt, editingOccurredAtUpdatedAt ?? activity.updatedAt);
+      closeOccurredAtEditor();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update the activity time.";
+      if (message.includes("changed somewhere else")) {
+        setOccurredAtConflictId(activity.id);
+        setOccurredAtError("This activity changed while you were editing. Cancel and reopen the editor to apply your draft.");
+        return;
+      }
+      setOccurredAtError(message);
     }
   }
 
@@ -360,10 +425,15 @@ export function CrmActivityTimeline({
         const delivery = readCommunicationDelivery(activity);
         const task = readTaskMetadata(activity);
         const canUpdateBody = Boolean(onPatchBody) && canEditBody(activity, delivery);
+        const canUpdateOccurredAt = Boolean(onPatchOccurredAt) && canEditOccurredAt(activity, delivery);
         const isEditingBody = editingBodyId === activity.id;
         const isAnotherBodyEditorOpen = editingBodyId !== null && editingBodyId !== activity.id;
         const isPendingBody = pendingBodyId === activity.id;
         const hasBodyConflict = bodyConflictId === activity.id;
+        const isEditingOccurredAt = editingOccurredAtId === activity.id;
+        const isAnotherOccurredAtEditorOpen = editingOccurredAtId !== null && editingOccurredAtId !== activity.id;
+        const isPendingOccurredAt = pendingOccurredAtId === activity.id;
+        const hasOccurredAtConflict = occurredAtConflictId === activity.id;
         const canPatchTask = Boolean(onPatchTask || onToggleTaskStatus);
         const isEditingTask = editingTaskId === activity.id;
         const isAnotherTaskEditorOpen = editingTaskId !== null && editingTaskId !== activity.id;
@@ -381,7 +451,7 @@ export function CrmActivityTimeline({
               activity.isOptimistic && "opacity-70"
             )}
           >
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold", typeMeta.badge)}>
                   <Icon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -389,10 +459,73 @@ export function CrmActivityTimeline({
                 </span>
                 {showEntityLabel && <span className="text-xs text-[#475569]">{entityLabel}</span>}
               </div>
-              <time className="text-xs text-[#475569]" dateTime={activity.occurredAt}>
-                {formatTimestamp(activity.occurredAt)}
-              </time>
+              <div className="flex flex-col items-end gap-1">
+                <time className="text-xs text-[#475569]" dateTime={activity.occurredAt}>
+                  {formatTimestamp(activity.occurredAt)}
+                </time>
+                {canUpdateOccurredAt && !isEditingOccurredAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs text-[#475569]"
+                    disabled={isPendingOccurredAt || isAnotherOccurredAtEditorOpen || editingBodyId !== null || editingTaskId !== null}
+                    onClick={() => startOccurredAtEditor(activity)}
+                  >
+                    {timeActionLabel(activity)}
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {isEditingOccurredAt && (
+              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <label
+                  htmlFor={`crm-activity-occurred-at-${activity.id}`}
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                >
+                  Activity time
+                </label>
+                <input
+                  id={`crm-activity-occurred-at-${activity.id}`}
+                  type="datetime-local"
+                  value={occurredAtInput}
+                  onChange={(event) => {
+                    setOccurredAtInput(event.target.value);
+                    setOccurredAtDrafts((current) => ({
+                      ...current,
+                      [activity.id]: event.target.value,
+                    }));
+                    setOccurredAtError(null);
+                    setOccurredAtConflictId(null);
+                  }}
+                  disabled={isPendingOccurredAt}
+                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                {occurredAtError && <p className="mt-2 text-xs text-[#B91C1C]">{occurredAtError}</p>}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingOccurredAt || hasOccurredAtConflict}
+                    onClick={() => void saveOccurredAt(activity)}
+                  >
+                    {isPendingOccurredAt ? "Saving..." : "Save time"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-3 text-xs"
+                    disabled={isPendingOccurredAt}
+                    onClick={() => closeOccurredAtEditor({ preserveDraft: hasOccurredAtConflict })}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {!isEditingBody ? (
               <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
@@ -453,7 +586,7 @@ export function CrmActivityTimeline({
                   size="sm"
                   variant="ghost"
                   className="h-8 px-2 text-xs text-[#475569]"
-                  disabled={isPendingBody || isAnotherBodyEditorOpen || editingTaskId !== null}
+                  disabled={isPendingBody || isAnotherBodyEditorOpen || editingTaskId !== null || editingOccurredAtId !== null}
                   onClick={() => startBodyEditor(activity)}
                 >
                   {bodyActionLabel(activity)}
@@ -474,7 +607,7 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="outline"
                     className="h-8 px-2 text-xs"
-                    disabled={isPendingTask || isEditingBody || isEditingTask}
+                    disabled={isPendingTask || isEditingBody || isEditingTask || isEditingOccurredAt}
                     onClick={() => {
                       const nextStatus = task.status === "completed" ? "open" : "completed";
                       if (onPatchTask) {
@@ -499,7 +632,7 @@ export function CrmActivityTimeline({
                     size="sm"
                     variant="ghost"
                     className="h-8 px-2 text-xs text-[#475569]"
-                    disabled={isPendingTask || isEditingBody || isAnotherTaskEditorOpen}
+                    disabled={isPendingTask || isEditingBody || isEditingOccurredAt || isAnotherTaskEditorOpen}
                     onClick={() => {
                       if (isEditingTask) {
                         closeTaskEditor({ preserveDraft: hasTaskConflict });
@@ -597,7 +730,7 @@ export function CrmActivityTimeline({
                       size="sm"
                       variant="outline"
                       className="h-8 px-3 text-xs"
-                      disabled={isPendingDelivery || isEditingBody || isPendingBody}
+                      disabled={isPendingDelivery || isEditingBody || isPendingBody || isEditingOccurredAt || isPendingOccurredAt}
                       onClick={() => void onDeliverCommunication(activity)}
                     >
                       {isPendingDelivery ? "Sending..." : deliveryActionLabel(delivery)}

@@ -181,6 +181,7 @@ export interface CrmActivityTaskPatchInput {
 
 export interface CrmActivityPatchInput {
   body?: string;
+  occurredAt?: string;
   updatedAt?: string;
   task?: CrmTaskMetadata;
 }

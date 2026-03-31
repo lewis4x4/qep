@@ -13,6 +13,7 @@ import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
+import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import {
   createCrmActivity,
@@ -119,6 +120,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   });
 
   const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "company", companyId, "activities"]);
+  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(["crm", "company", companyId, "activities"]);
   const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "company", companyId, "activities"]);
   const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
     "crm",
@@ -430,10 +432,14 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                 entityLabel={companyName}
                 showEntityLabel={false}
                 pendingBodyId={pendingBodyId}
+                pendingOccurredAtId={pendingOccurredAtId}
                 pendingTaskId={pendingTaskId}
                 pendingDeliveryId={pendingDeliveryId}
                 onPatchBody={async (activity, body, updatedAt) => {
                   await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
                 }}
                 onPatchTask={async (activity, task, updatedAt) => {
                   await patchTask({ activityId: activity.id, task, updatedAt });
