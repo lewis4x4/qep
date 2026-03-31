@@ -124,6 +124,16 @@ interface HubSpotCutoverConfig {
   note?: string | null;
 }
 
+interface HubSpotCutoverSnapshot {
+  parallelRunEnabled: boolean;
+  cutoverReady: boolean;
+  deployGateReady: boolean;
+  sourceOnlyEnabled: boolean;
+  sourceOnlyActivatedAt: string;
+  validatedAt: string;
+  note: string;
+}
+
 interface HubSpotReasonSummary {
   reasonCode: string;
   count: number;
@@ -377,6 +387,7 @@ export function IntegrationPanel({
   const [hubspotSourceOnlyActivatedAt, setHubspotSourceOnlyActivatedAt] = useState("");
   const [hubspotValidatedAt, setHubspotValidatedAt] = useState("");
   const [hubspotCutoverNote, setHubspotCutoverNote] = useState("");
+  const [hubspotCutoverSnapshot, setHubspotCutoverSnapshot] = useState<HubSpotCutoverSnapshot | null>(null);
   const [recentCredentialAuditEvents, setRecentCredentialAuditEvents] = useState<IntegrationCredentialAuditEventRow[]>([]);
   const [isLoadingCredentialAudit, setIsLoadingCredentialAudit] = useState(false);
   const [credentialAuditError, setCredentialAuditError] = useState<string | null>(null);
@@ -429,6 +440,23 @@ export function IntegrationPanel({
     setHubspotCutoverNote(
       typeof cutover.note === "string" ? cutover.note : "",
     );
+    setHubspotCutoverSnapshot({
+      parallelRunEnabled: normalizedParallelRunEnabled,
+      cutoverReady: normalizedCutoverReady,
+      deployGateReady: normalizedDeployGateReady,
+      sourceOnlyEnabled: normalizedSourceOnlyEnabled,
+      sourceOnlyActivatedAt:
+        normalizedSourceOnlyEnabled &&
+          typeof cutover.source_only_activated_at === "string" &&
+          cutover.source_only_activated_at.length >= 10
+          ? cutover.source_only_activated_at.slice(0, 10)
+          : "",
+      validatedAt:
+        typeof cutover.validated_at === "string" && cutover.validated_at.length >= 10
+          ? cutover.validated_at.slice(0, 10)
+          : "",
+      note: typeof cutover.note === "string" ? cutover.note : "",
+    });
   }, [integration?.key, integration?.config]);
 
   const isHubSpot = integration?.key === "hubspot";
@@ -592,6 +620,16 @@ export function IntegrationPanel({
     },
   ];
   const cutoverHandoffReady = cutoverPacketReady && effectiveDeployGateReady;
+  const hubspotCutoverDirty =
+    hubspotCutoverSnapshot !== null && (
+      hubspotCutoverSnapshot.parallelRunEnabled !== hubspotParallelRunEnabled ||
+      hubspotCutoverSnapshot.cutoverReady !== hubspotCutoverReady ||
+      hubspotCutoverSnapshot.deployGateReady !== hubspotDeployGateReady ||
+      hubspotCutoverSnapshot.sourceOnlyEnabled !== hubspotSourceOnlyEnabled ||
+      hubspotCutoverSnapshot.sourceOnlyActivatedAt !== hubspotSourceOnlyActivatedAt.trim() ||
+      hubspotCutoverSnapshot.validatedAt !== hubspotValidatedAt.trim() ||
+      hubspotCutoverSnapshot.note !== hubspotCutoverNote.trim()
+    );
   const cutoverStageLabel = hubspotSourceOnlyEnabled
     ? "HubSpot source-only active"
     : cutoverHandoffReady
@@ -784,8 +822,9 @@ export function IntegrationPanel({
     });
   }
 
-  async function handleSave() {
+  async function handleSave(options?: { closeOnSuccess?: boolean }) {
     if (!integration) return;
+    const closeOnSuccess = options?.closeOnSuccess ?? true;
 
     setIsSaving(true);
     setSaveError(null);
@@ -855,8 +894,21 @@ export function IntegrationPanel({
       setHubspotClientId("");
       setHubspotClientSecret("");
       setHubspotAppId("");
+      if (isHubSpot) {
+        setHubspotCutoverSnapshot({
+          parallelRunEnabled: hubspotParallelRunEnabled,
+          cutoverReady: hubspotCutoverReady,
+          deployGateReady: hubspotDeployGateReady,
+          sourceOnlyEnabled: hubspotSourceOnlyEnabled,
+          sourceOnlyActivatedAt: hubspotSourceOnlyActivatedAt.trim(),
+          validatedAt: hubspotValidatedAt.trim(),
+          note: hubspotCutoverNote.trim(),
+        });
+      }
       onSaved();
-      onClose();
+      if (closeOnSuccess) {
+        onClose();
+      }
     } catch (err) {
       console.error("Save credentials error:", err);
       void trackIntegrationEvent("integration_credentials_save_failed", {
@@ -1347,14 +1399,21 @@ export function IntegrationPanel({
                         Keep the migration decision in one place before HubSpot becomes source-only.
                       </p>
                     </div>
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                        cutoverStageTone,
+                    <div className="flex flex-wrap items-center gap-2">
+                      {hubspotCutoverDirty && (
+                        <span className="inline-flex rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-semibold text-[#92400E]">
+                          Unsaved handoff changes
+                        </span>
                       )}
-                    >
-                      {cutoverStageLabel}
-                    </span>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                          cutoverStageTone,
+                        )}
+                      >
+                        {cutoverStageLabel}
+                      </span>
+                    </div>
                   </div>
 
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -1389,12 +1448,22 @@ export function IntegrationPanel({
                     </div>
                     <p className="mt-1 text-sm font-semibold text-[#0F172A]">{cutoverRecommendation}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void handleSave({ closeOnSuccess: false })}
+                        disabled={isSaving || !hubspotCutoverDirty}
+                        className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                      >
+                        {isSaving ? "Saving..." : "Save handoff changes"}
+                      </Button>
                       {!effectiveDeployGateReady && (
                         <Button
                           type="button"
                           size="sm"
                           onClick={handleApproveDeployGate}
-                          disabled={!cutoverPacketReady}
+                          disabled={isSaving || !cutoverPacketReady}
                           className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
                         >
                           Approve deploy gate
@@ -1405,6 +1474,7 @@ export function IntegrationPanel({
                           type="button"
                           size="sm"
                           onClick={handleEnableSourceOnly}
+                          disabled={isSaving}
                           className="bg-qep-orange text-white hover:bg-qep-orange/90"
                         >
                           Mark source-only
@@ -1416,6 +1486,7 @@ export function IntegrationPanel({
                           size="sm"
                           variant="outline"
                           onClick={handleReopenParallelRun}
+                          disabled={isSaving}
                           className="border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                         >
                           Reopen parallel run
@@ -1529,10 +1600,12 @@ export function IntegrationPanel({
                         role="switch"
                         aria-checked={hubspotParallelRunEnabled}
                         aria-label="Toggle HubSpot parallel run mode"
+                        disabled={isSaving}
                         onClick={() => setHubspotParallelRunEnabled((value) => !value)}
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          isSaving && "cursor-not-allowed opacity-60",
                           hubspotParallelRunEnabled ? "bg-qep-orange" : "bg-muted",
                         )}
                       >
@@ -1552,10 +1625,12 @@ export function IntegrationPanel({
                         role="switch"
                         aria-checked={hubspotCutoverReady}
                         aria-label="Toggle HubSpot cutover readiness"
+                        disabled={isSaving}
                         onClick={() => setHubspotCutoverReady((value) => !value)}
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          isSaving && "cursor-not-allowed opacity-60",
                           hubspotCutoverReady ? "bg-qep-orange" : "bg-muted",
                         )}
                       >
@@ -1575,7 +1650,11 @@ export function IntegrationPanel({
                         role="switch"
                         aria-checked={effectiveDeployGateReady}
                         aria-label="Toggle HubSpot deploy gate approval"
+                        disabled={isSaving}
                         onClick={() => {
+                          if (isSaving) {
+                            return;
+                          }
                           if (effectiveDeployGateReady && hubspotSourceOnlyEnabled) {
                             toast({
                               title: "Turn off source-only first",
@@ -1589,6 +1668,7 @@ export function IntegrationPanel({
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
+                          isSaving && "cursor-not-allowed opacity-60",
                           effectiveDeployGateReady ? "bg-qep-orange" : "bg-muted",
                         )}
                       >
@@ -1608,8 +1688,11 @@ export function IntegrationPanel({
                         role="switch"
                         aria-checked={hubspotSourceOnlyEnabled}
                         aria-label="Toggle HubSpot source-only mode"
-                        disabled={!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !effectiveDeployGateReady)}
+                        disabled={isSaving || (!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !effectiveDeployGateReady))}
                         onClick={() => {
+                          if (isSaving) {
+                            return;
+                          }
                           if (!hubspotSourceOnlyEnabled && !cutoverPacketReady) {
                             toast({
                               title: "Finish the cutover packet first",
@@ -1640,7 +1723,7 @@ export function IntegrationPanel({
                         className={cn(
                           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-1",
-                          (!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !effectiveDeployGateReady)) && "cursor-not-allowed opacity-60",
+                          (isSaving || (!hubspotSourceOnlyEnabled && (!cutoverPacketReady || !effectiveDeployGateReady))) && "cursor-not-allowed opacity-60",
                           hubspotSourceOnlyEnabled ? "bg-qep-orange" : "bg-muted",
                         )}
                       >
@@ -1662,6 +1745,7 @@ export function IntegrationPanel({
                         type="date"
                         value={hubspotValidatedAt}
                         onChange={(event) => setHubspotValidatedAt(event.target.value)}
+                        disabled={isSaving}
                         className="text-sm focus-visible:ring-qep-orange"
                       />
                     </div>
@@ -1675,6 +1759,7 @@ export function IntegrationPanel({
                         type="date"
                         value={hubspotSourceOnlyActivatedAt}
                         onChange={(event) => setHubspotSourceOnlyActivatedAt(event.target.value)}
+                        disabled={isSaving}
                         className="text-sm focus-visible:ring-qep-orange"
                       />
                     </div>
@@ -1689,6 +1774,7 @@ export function IntegrationPanel({
                         placeholder="Parallel-run summary for board/deploy gate"
                         value={hubspotCutoverNote}
                         onChange={(event) => setHubspotCutoverNote(event.target.value)}
+                        disabled={isSaving}
                         className="text-sm focus-visible:ring-qep-orange"
                       />
                     </div>
