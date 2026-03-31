@@ -170,6 +170,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [audioPreviewFailed, setAudioPreviewFailed] = useState(false);
   const [hubspotDealId, setHubspotDealId] = useState("");
   const [dealLookupQuery, setDealLookupQuery] = useState("");
   const [dealLookupOptions, setDealLookupOptions] = useState<DealLookupOption[]>([]);
@@ -399,6 +400,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const recorder = new MediaRecorder(stream, { mimeType: recordingFormat.mimeType });
     mediaRecorderRef.current = recorder;
     chunksRef.current = [];
+    setAudioPreviewFailed(false);
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -435,6 +437,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
     setAudioBlob(null);
     setAudioBlobUrl(null);
+    setAudioPreviewFailed(false);
     setElapsedSeconds(0);
     setHubspotDealId("");
     setDealLookupQuery("");
@@ -805,8 +808,18 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {audioBlobUrl && (
-                    <audio controls src={audioBlobUrl} className="w-full h-10" />
+                  {audioBlobUrl && !audioPreviewFailed && (
+                    <audio
+                      controls
+                      src={audioBlobUrl}
+                      className="w-full h-10"
+                      onError={() => setAudioPreviewFailed(true)}
+                    />
+                  )}
+                  {audioPreviewFailed && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      Recording preview is unavailable in this browser, but the note can still be processed.
+                    </div>
                   )}
                 </CardContent>
               </Card>
