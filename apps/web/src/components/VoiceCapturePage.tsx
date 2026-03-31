@@ -36,6 +36,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -83,8 +90,31 @@ interface RecordingFormat {
 
 type RecentCapture = Pick<
   Database["public"]["Tables"]["voice_captures"]["Row"],
-  "id" | "created_at" | "duration_seconds" | "sync_status" | "hubspot_deal_id" | "transcript"
->;
+  | "id"
+  | "created_at"
+  | "duration_seconds"
+  | "sync_status"
+  | "hubspot_deal_id"
+  | "transcript"
+  | "sync_error"
+  | "updated_at"
+  | "user_id"
+> & {
+  recorderName: string | null;
+  recorderEmail: string | null;
+};
+
+type RecentCaptureDetail = Database["public"]["Tables"]["voice_captures"]["Row"] & {
+  recorderName: string | null;
+  recorderEmail: string | null;
+};
+
+interface VoiceCaptureStatusMeta {
+  badgeLabel: string;
+  badgeVariant: "default" | "destructive" | "secondary";
+  heading: string;
+  summary: string;
+}
 
 const DEAL_STAGE_LABELS: Record<string, string> = {
   initial_contact: "Initial Contact",
@@ -127,16 +157,56 @@ function looksLikeCrmRecordId(value: string): boolean {
   );
 }
 
-function formatVoiceCaptureSyncStatus(status: RecentCapture["sync_status"]): string {
+function getVoiceCaptureStatusMeta(
+  status: RecentCapture["sync_status"],
+  syncError: string | null,
+): VoiceCaptureStatusMeta {
   switch (status) {
     case "synced":
-      return "Saved to CRM";
-    case "failed":
-      return "Needs attention";
+      return {
+        badgeLabel: "Saved to CRM",
+        badgeVariant: "default",
+        heading: "Saved to CRM",
+        summary: "This field note processed cleanly and the CRM sync completed.",
+      };
     case "processing":
-      return "Processing";
+      return {
+        badgeLabel: "Processing",
+        badgeVariant: "secondary",
+        heading: "Processing",
+        summary: "The note is still transcribing or extracting data.",
+      };
+    case "pending":
+      return {
+        badgeLabel: "Ready to sync",
+        badgeVariant: "secondary",
+        heading: "Ready to sync",
+        summary: "The note is saved and ready for the next CRM sync step.",
+      };
+    case "failed":
     default:
-      return "Queued";
+      if (syncError?.startsWith("Transcription failed")) {
+        return {
+          badgeLabel: "Transcription failed",
+          badgeVariant: "destructive",
+          heading: "Transcription failed",
+          summary: "We could not reliably turn this recording into text.",
+        };
+      }
+      if (syncError?.startsWith("Data extraction failed")) {
+        return {
+          badgeLabel: "Extraction failed",
+          badgeVariant: "destructive",
+          heading: "Extraction failed",
+          summary: "The transcript exists, but the structured CRM fields did not finish extracting.",
+        };
+      }
+      return {
+        badgeLabel: "Review needed",
+        badgeVariant: "destructive",
+        heading: "Review needed",
+        summary: "This note needs operator review before it can be trusted downstream.",
+      };
   }
 }
 
@@ -186,6 +256,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [pushingToHubspot, setPushingToHubspot] = useState(false);
   const [recentCaptures, setRecentCaptures] = useState<RecentCapture[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [recentCaptureSheetOpen, setRecentCaptureSheetOpen] = useState(false);
+  const [recentCaptureLoading, setRecentCaptureLoading] = useState(false);
+  const [selectedRecentCapture, setSelectedRecentCapture] = useState<RecentCaptureDetail | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   // Track viewport width for responsive tooltip positioning (QUA-75)
@@ -330,7 +403,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const isElevated = ["manager", "owner"].includes(_userRole);
     let query = supabase
       .from("voice_captures")
-      .select("id, created_at, duration_seconds, sync_status, hubspot_deal_id, transcript")
+      .select(
+        "id, created_at, duration_seconds, sync_status, hubspot_deal_id, transcript, sync_error, updated_at, user_id",
+      )
       .order("created_at", { ascending: false })
       .limit(5);
     // Defense-in-depth: scope to own rows for non-elevated roles (RLS also enforces this)
@@ -338,8 +413,79 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       query = query.eq("user_id", user.id);
     }
     const { data } = await query;
-    if (data) setRecentCaptures(data);
+    if (data) {
+      const userIds = Array.from(new Set(data.map((capture) => capture.user_id).filter(Boolean)));
+      let profileMap = new Map<string, { full_name: string | null; email: string | null }>();
+
+      if (userIds.length > 0) {
+        const profileResult = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        if (!profileResult.error && profileResult.data) {
+          profileMap = new Map(
+            profileResult.data.map((profile) => [
+              profile.id,
+              {
+                full_name: profile.full_name,
+                email: profile.email,
+              },
+            ]),
+          );
+        }
+      }
+
+      setRecentCaptures(
+        data.map((capture) => {
+          const recorder = profileMap.get(capture.user_id);
+          return {
+            ...capture,
+            recorderName: recorder?.full_name ?? null,
+            recorderEmail:
+              recorder?.email ?? (capture.user_id === user.id ? _userEmail ?? null : null),
+          };
+        }),
+      );
+    }
     setRecentLoading(false);
+  }
+
+  async function openRecentCapture(capture: RecentCapture): Promise<void> {
+    setRecentCaptureLoading(true);
+    setRecentCaptureSheetOpen(true);
+
+    const { data: captureRow, error: captureError } = await supabase
+      .from("voice_captures")
+      .select(
+        "id, user_id, audio_storage_path, duration_seconds, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id, hubspot_synced_at, sync_status, sync_error, created_at, updated_at",
+      )
+      .eq("id", capture.id)
+      .single();
+
+    if (captureError || !captureRow) {
+      setSelectedRecentCapture(null);
+      setRecentCaptureLoading(false);
+      toast({
+        title: "Could not open note",
+        description: "We couldn't load the full field note right now.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const profileResult = await supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", captureRow.user_id)
+      .maybeSingle();
+
+    setSelectedRecentCapture({
+      ...captureRow,
+      recorderName: profileResult.data?.full_name ?? capture.recorderName,
+      recorderEmail: profileResult.data?.email ?? capture.recorderEmail,
+    });
+    setRecentCaptureLoading(false);
   }
 
   // Clean up object URL on unmount
@@ -612,6 +758,23 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setSelectedDealLabel(null);
     setDealLookupQuery("");
     setDealLookupOptions([]);
+  }
+
+  function formatCaptureDateTime(value: string | null): string | null {
+    if (!value) return null;
+    return new Date(value).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function renderRecentCaptureActionLabel(capture: RecentCapture): string {
+    if (capture.sync_status === "failed") return "Review note";
+    if (capture.sync_status === "processing") return "Check progress";
+    if (capture.sync_status === "synced") return "Open note";
+    return "Open note";
   }
 
   function renderDealLookupField(inputId: string): React.JSX.Element {
@@ -1162,45 +1325,54 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               ) : (
                 <div className="space-y-2">
                   {recentCaptures.map((cap) => {
+                    const statusMeta = getVoiceCaptureStatusMeta(cap.sync_status, cap.sync_error);
                     const snippet = cap.transcript
                       ? cap.transcript.slice(0, 60) + (cap.transcript.length > 60 ? "…" : "")
                       : "No transcript";
                     return (
                       <Card key={cap.id}>
                         <CardContent className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-muted-foreground truncate">{snippet}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {new Date(cap.created_at).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
-                                {cap.duration_seconds != null && ` · ${formatTime(cap.duration_seconds)}`}
-                              </p>
+                          <button
+                            type="button"
+                            onClick={() => void openRecentCapture(cap)}
+                            className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-foreground truncate">{snippet}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {formatCaptureDateTime(cap.created_at)}
+                                  {cap.duration_seconds != null && ` · ${formatTime(cap.duration_seconds)}`}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                  {statusMeta.summary}
+                                </p>
+                              </div>
+                              <Badge variant={statusMeta.badgeVariant} className="text-xs shrink-0">
+                                {statusMeta.badgeLabel}
+                              </Badge>
                             </div>
-                            <Badge
-                              variant={
-                                cap.sync_status === "synced"
-                                  ? "default"
-                                  : cap.sync_status === "failed"
-                                ? "destructive"
-                                : "secondary"
-                              }
-                              className="text-xs shrink-0"
-                            >
-                              {formatVoiceCaptureSyncStatus(cap.sync_status)}
-                            </Badge>
-                          </div>
-                          {looksLikeCrmRecordId(cap.hubspot_deal_id ?? "") && (
-                            <div className="mt-3 flex justify-end">
-                              <Button asChild variant="ghost" size="sm">
-                                <Link to={`/crm/deals/${cap.hubspot_deal_id}`}>Open linked deal</Link>
+                          </button>
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs text-muted-foreground">
+                              {cap.recorderName ?? cap.recorderEmail ?? "Recorder unavailable"}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void openRecentCapture(cap)}
+                              >
+                                {renderRecentCaptureActionLabel(cap)}
                               </Button>
+                              {looksLikeCrmRecordId(cap.hubspot_deal_id ?? "") && (
+                                <Button asChild variant="ghost" size="sm">
+                                  <Link to={`/crm/deals/${cap.hubspot_deal_id}`}>Open linked deal</Link>
+                                </Button>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </CardContent>
                       </Card>
                     );
@@ -1256,6 +1428,200 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           </div>{/* end grid */}
         </div>
       </div>
+      <Sheet open={recentCaptureSheetOpen} onOpenChange={setRecentCaptureSheetOpen}>
+        <SheetContent className="sm:max-w-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Field note review</SheetTitle>
+            <SheetDescription>
+              {selectedRecentCapture
+                ? getVoiceCaptureStatusMeta(
+                    selectedRecentCapture.sync_status,
+                    selectedRecentCapture.sync_error,
+                  ).summary
+                : "Inspect the note, confirm the recorder context, and decide what to do next."}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-4">
+            {recentCaptureLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading note details...
+              </div>
+            ) : selectedRecentCapture ? (
+              <>
+                {(() => {
+                  const statusMeta = getVoiceCaptureStatusMeta(
+                    selectedRecentCapture.sync_status,
+                    selectedRecentCapture.sync_error,
+                  );
+                  const extracted = selectedRecentCapture.extracted_data as
+                    | ExtractedDealData
+                    | null;
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{statusMeta.heading}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{statusMeta.summary}</p>
+                        </div>
+                        <Badge variant={statusMeta.badgeVariant}>{statusMeta.badgeLabel}</Badge>
+                      </div>
+
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium">Capture context</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <ExtractedField
+                            label="Recorded by"
+                            value={
+                              selectedRecentCapture.recorderName ??
+                              selectedRecentCapture.recorderEmail ??
+                              "Unknown recorder"
+                            }
+                            icon={<User className="w-3.5 h-3.5" />}
+                          />
+                          <ExtractedField
+                            label="Email"
+                            value={selectedRecentCapture.recorderEmail}
+                            icon={<MessageSquare className="w-3.5 h-3.5" />}
+                          />
+                          <ExtractedField
+                            label="Recorded at"
+                            value={formatCaptureDateTime(selectedRecentCapture.created_at)}
+                            icon={<CalendarDays className="w-3.5 h-3.5" />}
+                          />
+                          <ExtractedField
+                            label="Updated"
+                            value={formatCaptureDateTime(selectedRecentCapture.updated_at)}
+                            icon={<RefreshCw className="w-3.5 h-3.5" />}
+                          />
+                          <ExtractedField
+                            label="Duration"
+                            value={
+                              selectedRecentCapture.duration_seconds != null
+                                ? formatTime(selectedRecentCapture.duration_seconds)
+                                : null
+                            }
+                            icon={<Clock className="w-3.5 h-3.5" />}
+                          />
+                          <ExtractedField
+                            label="Deal"
+                            value={selectedRecentCapture.hubspot_deal_id}
+                            icon={<Building2 className="w-3.5 h-3.5" />}
+                          />
+                        </CardContent>
+                      </Card>
+
+                      {selectedRecentCapture.sync_error && (
+                        <Card className="border-destructive/40 bg-destructive/5">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium text-destructive">
+                              What needs review
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-destructive/90">
+                              {selectedRecentCapture.sync_error}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium">Transcript</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <p className="text-sm leading-6 text-foreground whitespace-pre-wrap">
+                            {selectedRecentCapture.transcript?.trim() || "No transcript captured yet."}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedRecentCapture.transcript?.trim() && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(selectedRecentCapture.transcript ?? "");
+                                  toast({
+                                    title: "Transcript copied",
+                                    description: "The field note transcript is on your clipboard.",
+                                  });
+                                }}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy transcript
+                              </Button>
+                            )}
+                            {looksLikeCrmRecordId(selectedRecentCapture.hubspot_deal_id ?? "") && (
+                              <Button asChild size="sm">
+                                <Link to={`/crm/deals/${selectedRecentCapture.hubspot_deal_id}`}>
+                                  Open linked deal
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {extracted && (
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium">Extracted CRM signals</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <ExtractedField
+                              label="Customer"
+                              value={extracted.customer_name}
+                              icon={<User className="w-3.5 h-3.5" />}
+                            />
+                            <ExtractedField
+                              label="Company"
+                              value={extracted.company_name}
+                              icon={<Building2 className="w-3.5 h-3.5" />}
+                            />
+                            <ExtractedField
+                              label="Equipment"
+                              value={extracted.machine_interest}
+                              icon={<Tractor className="w-3.5 h-3.5" />}
+                            />
+                            <ExtractedField
+                              label="Stage"
+                              value={
+                                extracted.deal_stage
+                                  ? DEAL_STAGE_LABELS[extracted.deal_stage] ?? extracted.deal_stage
+                                  : null
+                              }
+                              icon={<TrendingUp className="w-3.5 h-3.5" />}
+                            />
+                            <ExtractedField
+                              label="Budget"
+                              value={extracted.budget_range}
+                              icon={<DollarSign className="w-3.5 h-3.5" />}
+                            />
+                            <ExtractedField
+                              label="Next step"
+                              value={extracted.next_step}
+                              icon={<ListTodo className="w-3.5 h-3.5" />}
+                            />
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                We couldn&apos;t load this note right now.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </TooltipProvider>
   );
 }
