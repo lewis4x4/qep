@@ -11,6 +11,7 @@ import { VoiceCapturePage } from "./components/VoiceCapturePage";
 import { QuoteBuilderPage } from "./components/QuoteBuilderPage";
 import { QuoteBuilderGate } from "./components/QuoteBuilderGate";
 import { IntegrationHub } from "./components/IntegrationHub";
+import { IntegrationCallbackPage } from "./components/IntegrationCallbackPage";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
@@ -240,6 +241,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <AdminPage userRole={profile.role} userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/auth/onedrive/callback"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <IntegrationCallbackPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
