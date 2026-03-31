@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { DataSourceBadge } from "@/components/DataSourceBadge";
+import { cn } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -9,7 +11,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
-import { CRM_ACTIVITY_TEMPLATES, toRelativeDateTimeLocalValue } from "../lib/activity-templates";
+import { mergeActivityTemplates, toRelativeDateTimeLocalValue } from "../lib/activity-templates";
+import { listCrmActivityTemplates } from "../lib/crm-api";
 import type { CrmActivityType, CrmTaskMetadata, CrmTaskStatus } from "../lib/types";
 
 interface CrmActivityComposerProps {
@@ -71,7 +74,15 @@ export function CrmActivityComposer({
     : null;
   const isCommunicationType = integrationKey !== null;
   const isTaskType = activityType === "task";
-  const activityTemplates = CRM_ACTIVITY_TEMPLATES[activityType] ?? [];
+  const templatesQuery = useQuery({
+    queryKey: ["crm", "activity-templates"],
+    queryFn: listCrmActivityTemplates,
+    staleTime: 60_000,
+  });
+  const activityTemplates = useMemo(
+    () => mergeActivityTemplates(activityType, templatesQuery.data ?? []),
+    [activityType, templatesQuery.data],
+  );
 
   const canSubmit = useMemo(() => body.trim().length > 0 && !isPending, [body, isPending]);
 
@@ -257,6 +268,11 @@ export function CrmActivityComposer({
                 {isTaskType ? "Applies a task note and due default." : "Applies a clean starting draft."}
               </p>
             </div>
+            {templatesQuery.isError && (
+              <p className="mt-2 text-xs text-[#B45309]">
+                Workspace templates could not be loaded. Built-in quick starts are still available.
+              </p>
+            )}
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {activityTemplates.map((template) => (
                 <button
@@ -269,7 +285,19 @@ export function CrmActivityComposer({
                       : "border-[#CBD5E1] bg-white hover:border-[#E87722]/60 hover:bg-[#FFFBF5]"
                   }`}
                 >
-                  <div className="text-sm font-medium text-[#0F172A]">{template.label}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium text-[#0F172A]">{template.label}</div>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                        template.source === "workspace"
+                          ? "bg-[#E0F2FE] text-[#075985]"
+                          : "bg-[#E2E8F0] text-[#334155]"
+                      )}
+                    >
+                      {template.source === "workspace" ? "Workspace" : "Built in"}
+                    </span>
+                  </div>
                   <p className="mt-1 text-xs leading-5 text-[#475569]">{template.description}</p>
                 </button>
               ))}

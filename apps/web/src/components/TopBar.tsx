@@ -56,6 +56,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/voice": "Field Note",
   "/quote": "Quotes",
   "/crm/activities": "CRM Activities",
+  "/crm/templates": "CRM Templates",
   "/crm/deals": "CRM Deals",
   "/crm/contacts": "CRM Contacts",
   "/crm/companies": "CRM Companies",
@@ -69,6 +70,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote" },
   "/crm/activities": { label: "Activities", route: "/crm/activities" },
+  "/crm/templates": { label: "Templates", route: "/crm/templates" },
   "/crm/deals": { label: "Deals", route: "/crm/deals" },
   "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },
   "/crm/companies": { label: "Companies", route: "/crm/companies" },
@@ -155,7 +157,8 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
     QUICK_ACTION_MAP[location.pathname] ??
     (location.pathname.startsWith("/crm/deals/") ? { label: "Deals", route: "/crm/deals" } : null) ??
     (location.pathname.startsWith("/crm/contacts/") ? { label: "Contacts", route: "/crm/contacts" } : null) ??
-    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null);
+    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null) ??
+    (location.pathname.startsWith("/crm/templates") ? { label: "Templates", route: "/crm/templates" } : null);
 
   // Clear search on route change
   useEffect(() => {

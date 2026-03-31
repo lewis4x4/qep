@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   GitMerge,
   MessageCircleMore,
+  NotebookPen,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,12 @@ const NAV_ITEMS: NavItemDefinition[] = [
     href: "/crm/companies",
     icon: Building2,
     roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "CRM Templates",
+    href: "/crm/templates",
+    icon: NotebookPen,
+    roles: ["admin", "manager", "owner"],
   },
   {
     label: "CRM Duplicates",

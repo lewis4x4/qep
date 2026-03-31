@@ -97,6 +97,22 @@ type CrmTables = BaseTables & {
     updated_at: string;
     deleted_at: string | null;
   }>;
+  crm_activity_templates: CrmTable<{
+    id: string;
+    workspace_id: string;
+    activity_type: "note" | "call" | "email" | "meeting" | "task" | "sms";
+    label: string;
+    description: string | null;
+    body: string;
+    task_due_minutes: number | null;
+    task_status: "open" | "completed" | null;
+    sort_order: number;
+    is_active: boolean;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at: string | null;
+  }>;
   crm_territories: CrmTable<{
     id: string;
     workspace_id: string;

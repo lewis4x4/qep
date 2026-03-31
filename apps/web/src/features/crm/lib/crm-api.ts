@@ -11,6 +11,7 @@ import type {
   CrmActivityItem,
   CrmActivityPatchInput,
   CrmActivityTaskPatchInput,
+  CrmActivityTemplate,
   CrmCompanySummary,
   CrmContactTerritory,
   CrmContactSummary,
@@ -24,6 +25,7 @@ const ACTIVITIES_PAGE_SIZE = 150;
 type CrmContactRow = CrmDatabase["public"]["Tables"]["crm_contacts"]["Row"];
 type CrmCompanyRow = CrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
 type CrmActivityRow = CrmDatabase["public"]["Tables"]["crm_activities"]["Row"];
+type CrmActivityTemplateRow = CrmDatabase["public"]["Tables"]["crm_activity_templates"]["Row"];
 
 function toContactSummary(row: CrmContactRow): CrmContactSummary {
   return {
@@ -73,6 +75,23 @@ function toActivityItem(row: CrmActivityRow): CrmActivityItem {
       row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
         ? (row.metadata as Record<string, unknown>)
         : {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toActivityTemplate(row: CrmActivityTemplateRow): CrmActivityTemplate {
+  return {
+    id: row.id,
+    activityType: row.activity_type,
+    label: row.label,
+    description: row.description ?? "",
+    body: row.body,
+    taskDueMinutes: row.task_due_minutes ?? undefined,
+    taskStatus: row.task_status ?? undefined,
+    sortOrder: row.sort_order,
+    source: "workspace",
+    isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -396,6 +415,130 @@ export async function listCrmActivityFeed(): Promise<CrmActivityFeedItem[]> {
     companyName: item.companyId ? companyNames.get(item.companyId) ?? null : null,
     dealName: item.dealId ? dealNames.get(item.dealId) ?? null : null,
   }));
+}
+
+export async function listCrmActivityTemplates(): Promise<CrmActivityTemplate[]> {
+  const { data, error } = await crmSupabase
+    .from("crm_activity_templates")
+    .select(
+      "id, workspace_id, activity_type, label, description, body, task_due_minutes, task_status, sort_order, is_active, created_by, created_at, updated_at, deleted_at"
+    )
+    .is("deleted_at", null)
+    .eq("is_active", true)
+    .order("activity_type", { ascending: true })
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as CrmActivityTemplateRow[]).map(toActivityTemplate);
+}
+
+export async function listManageableCrmActivityTemplates(): Promise<CrmActivityTemplate[]> {
+  const { data, error } = await crmSupabase
+    .from("crm_activity_templates")
+    .select(
+      "id, workspace_id, activity_type, label, description, body, task_due_minutes, task_status, sort_order, is_active, created_by, created_at, updated_at, deleted_at"
+    )
+    .is("deleted_at", null)
+    .order("activity_type", { ascending: true })
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as CrmActivityTemplateRow[]).map(toActivityTemplate);
+}
+
+export async function createCrmActivityTemplate(input: {
+  activityType: CrmActivityTemplate["activityType"];
+  label: string;
+  description: string;
+  body: string;
+  taskDueMinutes?: number | null;
+  taskStatus?: CrmActivityTemplate["taskStatus"];
+  sortOrder?: number;
+  createdBy: string;
+}): Promise<CrmActivityTemplate> {
+  const { data, error } = await crmSupabase
+    .from("crm_activity_templates")
+    .insert({
+      activity_type: input.activityType,
+      label: input.label,
+      description: input.description || null,
+      body: input.body,
+      task_due_minutes: input.taskDueMinutes ?? null,
+      task_status: input.taskStatus ?? null,
+      sort_order: input.sortOrder ?? 0,
+      created_by: input.createdBy,
+      is_active: true,
+    })
+    .select(
+      "id, workspace_id, activity_type, label, description, body, task_due_minutes, task_status, sort_order, is_active, created_by, created_at, updated_at, deleted_at"
+    )
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Could not create CRM activity template.");
+  }
+
+  return toActivityTemplate(data as CrmActivityTemplateRow);
+}
+
+export async function updateCrmActivityTemplate(
+  templateId: string,
+  input: {
+    activityType: CrmActivityTemplate["activityType"];
+    label: string;
+    description: string;
+    body: string;
+    taskDueMinutes?: number | null;
+    taskStatus?: CrmActivityTemplate["taskStatus"];
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+): Promise<CrmActivityTemplate> {
+  const { data, error } = await crmSupabase
+    .from("crm_activity_templates")
+    .update({
+      activity_type: input.activityType,
+      label: input.label,
+      description: input.description || null,
+      body: input.body,
+      task_due_minutes: input.taskDueMinutes ?? null,
+      task_status: input.taskStatus ?? null,
+      sort_order: input.sortOrder ?? 0,
+      is_active: input.isActive ?? true,
+    })
+    .eq("id", templateId)
+    .select(
+      "id, workspace_id, activity_type, label, description, body, task_due_minutes, task_status, sort_order, is_active, created_by, created_at, updated_at, deleted_at"
+    )
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Could not update CRM activity template.");
+  }
+
+  return toActivityTemplate(data as CrmActivityTemplateRow);
+}
+
+export async function archiveCrmActivityTemplate(templateId: string): Promise<void> {
+  const { error } = await crmSupabase
+    .from("crm_activity_templates")
+    .update({
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+    })
+    .eq("id", templateId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function createCrmActivity(

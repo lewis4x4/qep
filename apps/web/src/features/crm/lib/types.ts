@@ -2,6 +2,21 @@ export type CrmActivityType = "note" | "call" | "email" | "meeting" | "task" | "
 
 export type CrmTaskStatus = "open" | "completed";
 
+export interface CrmActivityTemplate {
+  id: string;
+  activityType: CrmActivityType;
+  label: string;
+  description: string;
+  body: string;
+  taskDueMinutes?: number;
+  taskStatus?: CrmTaskStatus;
+  sortOrder?: number;
+  source: "system" | "workspace";
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CrmTaskMetadata {
   dueAt?: string | null;
   status?: CrmTaskStatus;
