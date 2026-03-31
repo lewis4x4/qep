@@ -15,6 +15,10 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import {
+  buildVoiceCaptureNoteBody,
+  getVoiceCaptureContactName,
+  getVoiceCapturePrimaryActionItems,
+  normalizeVoiceCaptureExtractedDealData,
   writeVoiceCaptureToLocalCrm,
   type VoiceCaptureExtractedDealData,
 } from "../_shared/voice-capture-crm.ts";
@@ -180,27 +184,94 @@ Deno.serve(async (req) => {
 
     try {
       const extractionPrompt = `You are a CRM data extraction assistant for a heavy equipment dealership.
-A sales rep just recorded a field note. Extract structured deal information from their transcript.
+A sales rep just recorded a field note. Extract structured dealership CRM information from their transcript.
 
 Transcript:
 """
 ${transcript}
 """
 
-Extract the following fields. If a field is not mentioned, set it to null. For action_items, return an array of strings (can be empty).
+Rules:
+- Return ONLY valid JSON.
+- If something is not clearly stated or safely inferable, use null, unknown, false, or [].
+- Do not fabricate dates, prices, machine models, or stakeholder roles.
+- Keep evidence snippets short and quoted from the transcript.
+- Confidence must be one of: high, medium, low, unknown.
 
 Return ONLY valid JSON matching this exact structure:
 {
-  "customer_name": "first and last name of the customer, or null",
-  "company_name": "customer's business name, or null",
-  "machine_interest": "type/model of equipment discussed (e.g. 'CAT 320 excavator', 'John Deere 333G skid steer'), or null",
-  "attachments_discussed": "any attachments or implements mentioned, or null",
-  "deal_stage": "one of: initial_contact, follow_up, demo_scheduled, quote_sent, negotiation, closed_won, closed_lost — pick the most appropriate based on context, or null",
-  "budget_range": "any budget or price range mentioned, or null",
-  "key_concerns": "main objections or concerns the customer raised, or null",
-  "action_items": ["list of specific next actions mentioned"],
-  "next_step": "single most important next action, or null",
-  "follow_up_date": "ISO date string (YYYY-MM-DD) if a specific date was mentioned, or null"
+  "record": {
+    "contactName": "string or null",
+    "contactRole": "string or null",
+    "companyName": "string or null",
+    "companyType": "string or null",
+    "decisionMakerStatus": "decision_maker | influencer | operator | gatekeeper | unknown",
+    "preferredContactChannel": "call | text | email | in_person | unknown",
+    "locationContext": "string or null",
+    "additionalStakeholders": ["strings"]
+  },
+  "opportunity": {
+    "machineInterest": "string or null",
+    "equipmentCategory": "string or null",
+    "equipmentMake": "string or null",
+    "equipmentModel": "string or null",
+    "attachmentsDiscussed": ["strings"],
+    "applicationUseCase": "string or null",
+    "dealStage": "initial_contact | follow_up | demo_scheduled | quote_sent | negotiation | closed_won | closed_lost | null",
+    "intentLevel": "curious | evaluating | quote_ready | demo_ready | ready_to_buy | unknown",
+    "urgencyLevel": "low | medium | high | urgent | unknown",
+    "timelineToBuy": "string or null",
+    "financingInterest": "cash | finance | lease | rental | rent_to_own | unknown",
+    "newVsUsedPreference": "new | used | either | unknown",
+    "tradeInLikelihood": "none | possible | likely | confirmed | unknown",
+    "budgetRange": "string or null",
+    "budgetConfidence": "firm | soft | vague | unknown",
+    "competitorsMentioned": ["strings"],
+    "keyConcerns": "string or null",
+    "objections": ["strings"],
+    "quoteReadiness": "not_ready | partial | ready",
+    "nextStep": "string or null",
+    "nextStepDeadline": "YYYY-MM-DD or null",
+    "actionItems": ["strings"],
+    "followUpDate": "YYYY-MM-DD or null"
+  },
+  "operations": {
+    "branchRelevance": "string or null",
+    "territorySignal": "string or null",
+    "serviceOpportunity": false,
+    "partsOpportunity": false,
+    "rentalOpportunity": false,
+    "crossSellOpportunity": ["strings"],
+    "existingFleetContext": "string or null",
+    "replacementTrigger": "string or null",
+    "availabilitySensitivity": "must_have_now | soon | flexible | unknown",
+    "uptimeSensitivity": "low | medium | high | unknown",
+    "jobsiteConditions": ["strings"],
+    "operatorSkillLevel": "new | experienced | mixed | unknown"
+  },
+  "guidance": {
+    "customerSentiment": "positive | neutral | cautious | skeptical | frustrated | unknown",
+    "probabilitySignal": "low | medium | high | unknown",
+    "stalledRisk": "low | medium | high | unknown",
+    "buyerPersona": "price_first | uptime_first | growth_owner | spec_driven | rental_first | unknown",
+    "managerAttentionFlag": false,
+    "recommendedNextAction": "string or null",
+    "recommendedFollowUpMode": "call | text | email | visit | quote | demo | unknown",
+    "summaryForRep": "string or null",
+    "summaryForManager": "string or null"
+  },
+  "evidence": {
+    "snippets": [
+      {
+        "field": "field name",
+        "quote": "short supporting quote",
+        "confidence": "high | medium | low | unknown"
+      }
+    ],
+    "confidence": {
+      "fieldName": "high | medium | low | unknown"
+    }
+  }
 }`;
 
       const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -234,7 +305,7 @@ Return ONLY valid JSON matching this exact structure:
       }
       // Strip markdown code fences if present
       const cleaned = rawJson.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-      extracted = JSON.parse(cleaned) as ExtractedDealData;
+      extracted = normalizeVoiceCaptureExtractedDealData(JSON.parse(cleaned));
     } catch (extractErr) {
       const errMsg = extractErr instanceof Error ? extractErr.message : "Unknown error";
       console.error("Extraction failed:", errMsg);
@@ -274,7 +345,7 @@ Return ONLY valid JSON matching this exact structure:
         hubspot_contact_id: localCrmSync.contactId,
         hubspot_note_id: localCrmSync.noteActivityId,
         hubspot_task_id: localCrmSync.taskActivityId,
-        hubspot_synced_at: localCrmSync.saved ? new Date().toISOString() : null,
+        hubspot_synced_at: null,
       })
       .eq("id", captureId);
 
@@ -284,6 +355,7 @@ Return ONLY valid JSON matching this exact structure:
     let taskId: string | null = null;
     let resolvedContactId: string | null = null;
     let resolvedDealId = hubspotDealId;
+    const externalSyncErrors: string[] = [];
 
     try {
       // Find this user's active HubSpot connection
@@ -300,7 +372,7 @@ Return ONLY valid JSON matching this exact structure:
 
         if (token) {
           // If no deal ID provided, search for the contact by extracted name
-          if (!resolvedDealId && extracted.customer_name) {
+          if (!resolvedDealId && getVoiceCaptureContactName(extracted)) {
             const searchRes = await fetch(
               `https://api.hubapi.com/crm/v3/objects/contacts/search`,
               {
@@ -314,7 +386,7 @@ Return ONLY valid JSON matching this exact structure:
                     filters: [{
                       propertyName: "fullname",
                       operator: "CONTAINS_TOKEN",
-                      value: extracted.customer_name,
+                      value: getVoiceCaptureContactName(extracted),
                     }],
                   }],
                   properties: ["firstname", "lastname", "hs_object_id"],
@@ -342,7 +414,7 @@ Return ONLY valid JSON matching this exact structure:
 
           if (resolvedDealId) {
             // Create note engagement on the deal
-            const noteBody = buildNoteBody(transcript, extracted);
+            const noteBody = buildVoiceCaptureNoteBody(transcript, extracted);
             const noteRes = await fetch("https://api.hubapi.com/engagements/v1/engagements", {
               method: "POST",
               headers: {
@@ -367,16 +439,18 @@ Return ONLY valid JSON matching this exact structure:
             if (noteRes.ok) {
               const noteData = await noteRes.json();
               noteId = String(noteData.engagement?.id ?? "");
+            } else {
+              externalSyncErrors.push("HubSpot note creation failed.");
             }
 
             // Schedule follow-up task (due tomorrow, or on the extracted follow-up date)
-            const dueDate = extracted.follow_up_date
-              ? new Date(extracted.follow_up_date).getTime()
+            const dueDate = extracted.opportunity.followUpDate
+              ? new Date(extracted.opportunity.followUpDate).getTime()
               : Date.now() + 86400000; // 24 hours
 
-            const taskTitle = extracted.next_step
-              ? `Field note follow-up: ${extracted.next_step}`
-              : `Follow up with ${extracted.customer_name ?? "prospect"} — field visit`;
+            const taskTitle = extracted.opportunity.nextStep
+              ? `Field note follow-up: ${extracted.opportunity.nextStep}`
+              : `Follow up with ${getVoiceCaptureContactName(extracted) ?? "prospect"} — field visit`;
 
             const taskRes = await fetch("https://api.hubapi.com/crm/v3/objects/tasks", {
               method: "POST",
@@ -387,7 +461,7 @@ Return ONLY valid JSON matching this exact structure:
               body: JSON.stringify({
                 properties: {
                   hs_task_subject: taskTitle,
-                  hs_task_body: extracted.action_items.join("\n") || "Review field note and follow up.",
+                  hs_task_body: getVoiceCapturePrimaryActionItems(extracted).join("\n") || "Review field note and follow up.",
                   hs_task_status: "NOT_STARTED",
                   hs_task_priority: "HIGH",
                   hs_timestamp: dueDate.toString(),
@@ -403,10 +477,12 @@ Return ONLY valid JSON matching this exact structure:
             if (taskRes.ok) {
               const taskData = await taskRes.json();
               taskId = taskData.id ?? null;
+            } else {
+              externalSyncErrors.push("HubSpot task creation failed.");
             }
 
             // Update deal stage if we have one
-            if (extracted.deal_stage) {
+            if (extracted.opportunity.dealStage) {
               await fetch(`https://api.hubapi.com/crm/v3/objects/deals/${resolvedDealId}`, {
                 method: "PATCH",
                 headers: {
@@ -416,13 +492,13 @@ Return ONLY valid JSON matching this exact structure:
                 body: JSON.stringify({
                   properties: {
                     blackrock_last_field_note: new Date().toISOString().split("T")[0],
-                    blackrock_field_note_summary: extracted.next_step ?? "",
+                    blackrock_field_note_summary: extracted.opportunity.nextStep ?? "",
                   },
                 }),
               });
             }
 
-            hubspotSynced = true;
+            hubspotSynced = Boolean(noteId) && Boolean(taskId);
           }
         }
       }
@@ -434,12 +510,12 @@ Return ONLY valid JSON matching this exact structure:
     // ── Finalize capture record ───────────────────────────────────────────────
     const finalUpdate: Record<string, unknown> = {
       sync_status: localCrmSync.saved || hubspotSynced ? "synced" : "pending",
-      sync_error: null,
+      sync_error: externalSyncErrors.length > 0 ? externalSyncErrors.join(" ") : null,
       hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
       hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
       hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
       hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
-      hubspot_synced_at: localCrmSync.saved || hubspotSynced
+      hubspot_synced_at: hubspotSynced
         ? new Date().toISOString()
         : null,
     };
@@ -456,7 +532,7 @@ Return ONLY valid JSON matching this exact structure:
         transcript,
         duration_seconds: durationSeconds,
         extracted_data: extracted,
-        hubspot_synced: localCrmSync.saved || hubspotSynced,
+        hubspot_synced: hubspotSynced,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
         hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
@@ -539,28 +615,6 @@ function getAudioExtension(mimeType: string): string {
     "audio/x-m4a": "m4a",
   };
   return map[mimeType] ?? "webm";
-}
-
-function buildNoteBody(transcript: string, extracted: ExtractedDealData): string {
-  const lines: string[] = ["--- Field Note (QEP Voice Capture) ---", ""];
-
-  if (extracted.customer_name) lines.push(`Customer: ${extracted.customer_name}`);
-  if (extracted.company_name) lines.push(`Company: ${extracted.company_name}`);
-  if (extracted.machine_interest) lines.push(`Equipment interest: ${extracted.machine_interest}`);
-  if (extracted.attachments_discussed) lines.push(`Attachments: ${extracted.attachments_discussed}`);
-  if (extracted.deal_stage) lines.push(`Deal stage: ${extracted.deal_stage}`);
-  if (extracted.budget_range) lines.push(`Budget: ${extracted.budget_range}`);
-  if (extracted.key_concerns) lines.push(`Key concerns: ${extracted.key_concerns}`);
-
-  if (extracted.action_items.length > 0) {
-    lines.push("", "Action items:");
-    extracted.action_items.forEach((item) => lines.push(`  • ${item}`));
-  }
-
-  if (extracted.next_step) lines.push("", `Next step: ${extracted.next_step}`);
-
-  lines.push("", "--- Full Transcript ---", "", transcript);
-  return lines.join("\n");
 }
 
 async function getValidToken(

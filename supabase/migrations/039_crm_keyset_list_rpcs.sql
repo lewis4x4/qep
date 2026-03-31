@@ -30,19 +30,19 @@ as $$
     select nullif(trim(coalesce(p_search, '')), '') as search_term
   )
   select
-    c.id,
-    c.workspace_id,
-    c.dge_customer_profile_id,
-    c.first_name,
-    c.last_name,
-    c.email,
-    c.phone,
-    c.title,
-    c.primary_company_id,
-    c.assigned_rep_id,
-    c.merged_into_contact_id,
-    c.created_at,
-    c.updated_at
+    c.id::uuid,
+    c.workspace_id::uuid,
+    c.dge_customer_profile_id::uuid,
+    c.first_name::text,
+    c.last_name::text,
+    c.email::text,
+    c.phone::text,
+    c.title::text,
+    c.primary_company_id::uuid,
+    c.assigned_rep_id::uuid,
+    c.merged_into_contact_id::uuid,
+    c.created_at::timestamptz,
+    c.updated_at::timestamptz
   from public.crm_contacts c
   cross join normalized n
   where c.deleted_at is null
@@ -90,19 +90,19 @@ as $$
     select nullif(trim(coalesce(p_search, '')), '') as search_term
   )
   select
-    c.id,
-    c.workspace_id,
-    c.name,
-    c.parent_company_id,
-    c.assigned_rep_id,
-    c.address_line_1,
-    c.address_line_2,
-    c.city,
-    c.state,
-    c.postal_code,
-    c.country,
-    c.created_at,
-    c.updated_at
+    c.id::uuid,
+    c.workspace_id::uuid,
+    c.name::text,
+    c.parent_company_id::uuid,
+    c.assigned_rep_id::uuid,
+    c.address_line_1::text,
+    c.address_line_2::text,
+    c.city::text,
+    c.state::text,
+    c.postal_code::text,
+    c.country::text,
+    c.created_at::timestamptz,
+    c.updated_at::timestamptz
   from public.crm_companies c
   cross join normalized n
   where c.deleted_at is null

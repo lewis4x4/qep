@@ -21,18 +21,144 @@ export type DealStage =
   | "negotiation"
   | "closed_won"
   | "closed_lost";
+export type SignalConfidence = "high" | "medium" | "low" | "unknown";
+export type DecisionMakerStatus =
+  | "decision_maker"
+  | "influencer"
+  | "operator"
+  | "gatekeeper"
+  | "unknown";
+export type PreferredContactChannel =
+  | "call"
+  | "text"
+  | "email"
+  | "in_person"
+  | "unknown";
+export type IntentLevel =
+  | "curious"
+  | "evaluating"
+  | "quote_ready"
+  | "demo_ready"
+  | "ready_to_buy"
+  | "unknown";
+export type UrgencyLevel = "low" | "medium" | "high" | "urgent" | "unknown";
+export type FinancingInterest =
+  | "cash"
+  | "finance"
+  | "lease"
+  | "rental"
+  | "rent_to_own"
+  | "unknown";
+export type ConditionPreference = "new" | "used" | "either" | "unknown";
+export type TradeInLikelihood =
+  | "none"
+  | "possible"
+  | "likely"
+  | "confirmed"
+  | "unknown";
+export type BudgetConfidence = "firm" | "soft" | "vague" | "unknown";
+export type QuoteReadiness = "not_ready" | "partial" | "ready";
+export type AvailabilitySensitivity =
+  | "must_have_now"
+  | "soon"
+  | "flexible"
+  | "unknown";
+export type OperatorSkillLevel = "new" | "experienced" | "mixed" | "unknown";
+export type Sentiment =
+  | "positive"
+  | "neutral"
+  | "cautious"
+  | "skeptical"
+  | "frustrated"
+  | "unknown";
+export type ProbabilitySignal = "low" | "medium" | "high" | "unknown";
+export type BuyerPersona =
+  | "price_first"
+  | "uptime_first"
+  | "growth_owner"
+  | "spec_driven"
+  | "rental_first"
+  | "unknown";
+export type FollowUpMode =
+  | "call"
+  | "text"
+  | "email"
+  | "visit"
+  | "quote"
+  | "demo"
+  | "unknown";
+
+export interface ExtractedEvidenceSnippet {
+  field: string;
+  quote: string;
+  confidence?: SignalConfidence | null;
+}
 
 export interface ExtractedDealData {
-  customer_name: string | null;
-  company_name: string | null;
-  machine_interest: string | null;
-  attachments_discussed: string | null;
-  deal_stage: DealStage | null;
-  budget_range: string | null;
-  key_concerns: string | null;
-  action_items: string[];
-  next_step: string | null;
-  follow_up_date: string | null;
+  record: {
+    contactName: string | null;
+    contactRole: string | null;
+    companyName: string | null;
+    companyType: string | null;
+    decisionMakerStatus: DecisionMakerStatus;
+    preferredContactChannel: PreferredContactChannel;
+    locationContext: string | null;
+    additionalStakeholders: string[];
+  };
+  opportunity: {
+    machineInterest: string | null;
+    equipmentCategory: string | null;
+    equipmentMake: string | null;
+    equipmentModel: string | null;
+    attachmentsDiscussed: string[];
+    applicationUseCase: string | null;
+    dealStage: DealStage | null;
+    intentLevel: IntentLevel;
+    urgencyLevel: UrgencyLevel;
+    timelineToBuy: string | null;
+    financingInterest: FinancingInterest;
+    newVsUsedPreference: ConditionPreference;
+    tradeInLikelihood: TradeInLikelihood;
+    budgetRange: string | null;
+    budgetConfidence: BudgetConfidence;
+    competitorsMentioned: string[];
+    keyConcerns: string | null;
+    objections: string[];
+    quoteReadiness: QuoteReadiness;
+    nextStep: string | null;
+    nextStepDeadline: string | null;
+    actionItems: string[];
+    followUpDate: string | null;
+  };
+  operations: {
+    branchRelevance: string | null;
+    territorySignal: string | null;
+    serviceOpportunity: boolean;
+    partsOpportunity: boolean;
+    rentalOpportunity: boolean;
+    crossSellOpportunity: string[];
+    existingFleetContext: string | null;
+    replacementTrigger: string | null;
+    availabilitySensitivity: AvailabilitySensitivity;
+    uptimeSensitivity: ProbabilitySignal;
+    jobsiteConditions: string[];
+    operatorSkillLevel: OperatorSkillLevel;
+  };
+  guidance: {
+    customerSentiment: Sentiment;
+    probabilitySignal: ProbabilitySignal;
+    stalledRisk: ProbabilitySignal;
+    buyerPersona: BuyerPersona;
+    managerAttentionFlag: boolean;
+    recommendedNextAction: string | null;
+    recommendedFollowUpMode: FollowUpMode;
+    summaryForRep: string | null;
+    summaryForManager: string | null;
+  };
+  evidence: {
+    snippets: ExtractedEvidenceSnippet[];
+    confidence: Record<string, SignalConfidence>;
+  };
 }
 
 export type Database = {

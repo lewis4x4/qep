@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { FileText, Mic, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  getExtractedContactLabel,
+  normalizeExtractedDealData,
+} from "@/lib/voice-capture-extraction";
 
 interface ActivityItem {
   id: string;
@@ -48,9 +52,10 @@ export function RecentActivityFeed() {
       }));
 
       const voiceItems: ActivityItem[] = (voiceResult.data ?? []).map((v) => {
-        const extracted = v.extracted_data as { customer_name?: string } | null;
-        const label = extracted?.customer_name
-          ? `Voice capture: ${extracted.customer_name}`
+        const extracted = normalizeExtractedDealData(v.extracted_data);
+        const contactName = getExtractedContactLabel(extracted);
+        const label = contactName
+          ? `Voice capture: ${contactName}`
           : "Voice capture recorded";
         return { id: v.id, type: "voice_capture", title: label, timestamp: v.created_at };
       });

@@ -65,7 +65,7 @@ begin
   into v_contact
   from public.crm_contacts
   where id = p_contact_id
-    and deleted_at is null;
+    and deleted_at is null
   for update;
 
   if not found then
@@ -138,7 +138,7 @@ begin
   into v_company
   from public.crm_companies
   where id = p_company_id
-    and deleted_at is null;
+    and deleted_at is null
   for update;
 
   if not found then
@@ -231,7 +231,7 @@ begin
   into v_deal
   from public.crm_deals
   where id = p_deal_id
-    and deleted_at is null;
+    and deleted_at is null
   for update;
 
   if not found then
@@ -321,10 +321,16 @@ create trigger crm_equipment_company_active_reference
 before insert or update of company_id on public.crm_equipment
 for each row execute function public.crm_assert_active_reference('company', 'company_id');
 
-drop trigger if exists crm_quotes_deal_active_reference on public.crm_quotes;
-create trigger crm_quotes_deal_active_reference
-before insert or update of crm_deal_id on public.crm_quotes
-for each row execute function public.crm_assert_active_reference('deal', 'crm_deal_id');
+do $$
+begin
+  if to_regclass('public.crm_quotes') is not null then
+    execute 'drop trigger if exists crm_quotes_deal_active_reference on public.crm_quotes';
+    execute 'create trigger crm_quotes_deal_active_reference
+      before insert or update of crm_deal_id on public.crm_quotes
+      for each row execute function public.crm_assert_active_reference(''deal'', ''crm_deal_id'')';
+  end if;
+end;
+$$;
 
 drop trigger if exists sequence_enrollments_deal_active_reference on public.sequence_enrollments;
 create trigger sequence_enrollments_deal_active_reference

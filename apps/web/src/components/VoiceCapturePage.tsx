@@ -51,6 +51,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { crmSupabase } from "@/features/crm/lib/crm-supabase";
+import {
+  getEvidenceSnippet,
+  getExtractedMachineLabel,
+  normalizeExtractedDealData,
+} from "@/lib/voice-capture-extraction";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -154,6 +159,28 @@ const RECORDING_FORMATS: RecordingFormat[] = [
   },
 ];
 
+const CONFIDENCE_TONE: Record<
+  "high" | "medium" | "low" | "unknown",
+  { label: string; className: string }
+> = {
+  high: {
+    label: "High confidence",
+    className: "border-green-200 bg-green-50 text-green-700",
+  },
+  medium: {
+    label: "Medium confidence",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  low: {
+    label: "Low confidence",
+    className: "border-red-200 bg-red-50 text-red-700",
+  },
+  unknown: {
+    label: "Confidence unknown",
+    className: "border-border bg-muted text-muted-foreground",
+  },
+};
+
 function looksLikeCrmRecordId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value.trim(),
@@ -235,6 +262,29 @@ function chooseRecordingFormat(): RecordingFormat | null {
   );
 
   return supportedFormat ?? null;
+}
+
+function formatStageLabel(value: ExtractedDealData["opportunity"]["dealStage"]): string | null {
+  if (!value) return null;
+  return DEAL_STAGE_LABELS[value] ?? value;
+}
+
+function formatEnumLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function formatMaybeDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
@@ -1106,13 +1156,18 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {recordingState === "done" && result && (
             <div className="space-y-4">
               {(() => {
+                const extracted = normalizeExtractedDealData(result.extracted_data);
                 const linkedDealId = result.hubspot_deal_id ?? hubspotDealId ?? null;
                 const linkedDealTitle = resolvedDealOption
                   ? resolvedDealOption.companyName
                     ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
                     : resolvedDealOption.name
                   : selectedDealLabel;
+                const crmSaved = result.local_crm_saved || result.hubspot_synced;
 
+                return (
+                  <>
+              {(() => {
                 if (!linkedDealId) {
                   return null;
                 }
@@ -1137,9 +1192,6 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               })()}
 
               {/* CRM sync status */}
-              {(() => {
-                const crmSaved = result.local_crm_saved || result.hubspot_synced;
-                return (
               <div className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3",
                 crmSaved
@@ -1170,86 +1222,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   </>
                 )}
               </div>
-                );
-              })()}
-
-              {/* Customer Info */}
-              {(result.extracted_data.customer_name || result.extracted_data.company_name) && (
-                <ResultCard
-                  icon={<User className="w-4 h-4" />}
-                  title="Customer Info"
-                >
-                  <ExtractedField label="Name" value={result.extracted_data.customer_name} icon={<User className="w-3.5 h-3.5" />} />
-                  <ExtractedField label="Company" value={result.extracted_data.company_name} icon={<Building2 className="w-3.5 h-3.5" />} />
-                </ResultCard>
-              )}
-
-              {/* Equipment Interest */}
-              {(result.extracted_data.machine_interest || result.extracted_data.attachments_discussed) && (
-                <ResultCard
-                  icon={<Tractor className="w-4 h-4" />}
-                  title="Equipment Interest"
-                >
-                  <ExtractedField label="Equipment" value={result.extracted_data.machine_interest} icon={<Tractor className="w-3.5 h-3.5" />} />
-                  <ExtractedField label="Attachments" value={result.extracted_data.attachments_discussed} icon={<Wrench className="w-3.5 h-3.5" />} />
-                </ResultCard>
-              )}
-
-              {/* Deal Details */}
-              {(result.extracted_data.deal_stage || result.extracted_data.budget_range || result.extracted_data.key_concerns) && (
-                <ResultCard
-                  icon={<TrendingUp className="w-4 h-4" />}
-                  title="Deal Details"
-                >
-                  <ExtractedField
-                    label="Stage"
-                    value={
-                      result.extracted_data.deal_stage
-                        ? (DEAL_STAGE_LABELS[result.extracted_data.deal_stage] ?? result.extracted_data.deal_stage)
-                        : null
-                    }
-                    icon={<TrendingUp className="w-3.5 h-3.5" />}
-                  />
-                  <ExtractedField label="Budget" value={result.extracted_data.budget_range} icon={<DollarSign className="w-3.5 h-3.5" />} />
-                  <ExtractedField label="Concerns" value={result.extracted_data.key_concerns} icon={<MessageSquare className="w-3.5 h-3.5" />} />
-                </ResultCard>
-              )}
-
-              {/* Action Items */}
-              {(result.extracted_data.next_step || result.extracted_data.follow_up_date || result.extracted_data.action_items.length > 0) && (
-                <ResultCard
-                  icon={<ListTodo className="w-4 h-4" />}
-                  title="Action Items"
-                >
-                  <ExtractedField label="Next step" value={result.extracted_data.next_step} icon={<RefreshCw className="w-3.5 h-3.5" />} />
-                  <ExtractedField
-                    label="Follow-up"
-                    value={
-                      result.extracted_data.follow_up_date
-                        ? new Date(result.extracted_data.follow_up_date).toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          })
-                        : null
-                    }
-                    icon={<CalendarDays className="w-3.5 h-3.5" />}
-                  />
-                  {result.extracted_data.action_items.length > 0 && (
-                    <div className="space-y-1.5 pt-1">
-                      <p className="text-xs text-muted-foreground">Tasks</p>
-                      <ul className="space-y-1">
-                        {result.extracted_data.action_items.map((item, i) => (
-                          <li key={i} className="flex gap-2 text-sm">
-                            <span className="text-primary flex-shrink-0 mt-0.5">•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </ResultCard>
-              )}
+              <ExtractedSignalSummary extracted={extracted} />
 
               {/* Transcript (collapsible, editable) */}
               <Card>
@@ -1325,6 +1298,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   {result.local_crm_saved || result.hubspot_synced ? "Record Another" : "Discard"}
                 </Button>
               </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -1476,9 +1452,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     selectedRecentCapture.sync_status,
                     selectedRecentCapture.sync_error,
                   );
-                  const extracted = selectedRecentCapture.extracted_data as
-                    | ExtractedDealData
-                    | null;
+                  const extracted = normalizeExtractedDealData(
+                    selectedRecentCapture.extracted_data,
+                  );
 
                   return (
                     <>
@@ -1588,49 +1564,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         </CardContent>
                       </Card>
 
-                      {extracted && (
-                        <Card>
-                          <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-medium">Extracted CRM signals</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <ExtractedField
-                              label="Customer"
-                              value={extracted.customer_name}
-                              icon={<User className="w-3.5 h-3.5" />}
-                            />
-                            <ExtractedField
-                              label="Company"
-                              value={extracted.company_name}
-                              icon={<Building2 className="w-3.5 h-3.5" />}
-                            />
-                            <ExtractedField
-                              label="Equipment"
-                              value={extracted.machine_interest}
-                              icon={<Tractor className="w-3.5 h-3.5" />}
-                            />
-                            <ExtractedField
-                              label="Stage"
-                              value={
-                                extracted.deal_stage
-                                  ? DEAL_STAGE_LABELS[extracted.deal_stage] ?? extracted.deal_stage
-                                  : null
-                              }
-                              icon={<TrendingUp className="w-3.5 h-3.5" />}
-                            />
-                            <ExtractedField
-                              label="Budget"
-                              value={extracted.budget_range}
-                              icon={<DollarSign className="w-3.5 h-3.5" />}
-                            />
-                            <ExtractedField
-                              label="Next step"
-                              value={extracted.next_step}
-                              icon={<ListTodo className="w-3.5 h-3.5" />}
-                            />
-                          </CardContent>
-                        </Card>
-                      )}
+                      <ExtractedSignalSummary extracted={extracted} compact />
                     </>
                   );
                 })()}
@@ -1673,15 +1607,335 @@ interface ExtractedFieldProps {
   label: string;
   value: string | null | undefined;
   icon?: React.ReactNode;
+  placeholder?: string;
+  confidence?: "high" | "medium" | "low" | "unknown" | null;
+  snippet?: string | null;
 }
 
-function ExtractedField({ label, value, icon }: ExtractedFieldProps) {
-  if (!value) return null;
+function ExtractedSignalSummary({
+  extracted,
+  compact = false,
+}: {
+  extracted: ExtractedDealData;
+  compact?: boolean;
+}) {
+  const machineLabel = getExtractedMachineLabel(extracted);
+  const attachments = extracted.opportunity.attachmentsDiscussed.join(", ");
+  const competitors = extracted.opportunity.competitorsMentioned.join(", ");
+  const actionItems = extracted.opportunity.actionItems;
+  const opsSignals = [
+    extracted.operations.serviceOpportunity ? "Service follow-up" : null,
+    extracted.operations.partsOpportunity ? "Parts opportunity" : null,
+    extracted.operations.rentalOpportunity ? "Rental fit" : null,
+  ].filter(Boolean).join(" · ");
+
+  const hasOperations =
+    Boolean(opsSignals) ||
+    Boolean(extracted.operations.branchRelevance) ||
+    Boolean(extracted.operations.existingFleetContext) ||
+    Boolean(extracted.operations.replacementTrigger) ||
+    extracted.operations.crossSellOpportunity.length > 0;
+
+  return (
+    <>
+      <ResultCard icon={<User className="w-4 h-4" />} title="Facts captured">
+        <ExtractedField
+          label="Contact"
+          value={extracted.record.contactName}
+          icon={<User className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+          snippet={getEvidenceSnippet(extracted, "contactName")?.quote}
+        />
+        <ExtractedField
+          label="Role"
+          value={extracted.record.contactRole}
+          icon={<User className="w-3.5 h-3.5" />}
+          placeholder="Unclear"
+        />
+        <ExtractedField
+          label="Company"
+          value={extracted.record.companyName}
+          icon={<Building2 className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+        />
+        <ExtractedField
+          label="Type"
+          value={extracted.record.companyType}
+          icon={<Building2 className="w-3.5 h-3.5" />}
+          placeholder="Unclear"
+        />
+        <ExtractedField
+          label="Equipment"
+          value={machineLabel}
+          icon={<Tractor className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+          snippet={getEvidenceSnippet(extracted, "machineInterest")?.quote}
+        />
+        <ExtractedField
+          label="Attachments"
+          value={attachments || null}
+          icon={<Wrench className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+        />
+        <ExtractedField
+          label="Use case"
+          value={extracted.opportunity.applicationUseCase}
+          icon={<FileText className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+        />
+        <ExtractedField
+          label="Stage"
+          value={formatStageLabel(extracted.opportunity.dealStage)}
+          icon={<TrendingUp className="w-3.5 h-3.5" />}
+          placeholder="Unclear"
+        />
+      </ResultCard>
+
+      <ResultCard icon={<TrendingUp className="w-4 h-4" />} title="Opportunity read">
+        <ExtractedField
+          label="Intent"
+          value={formatEnumLabel(extracted.opportunity.intentLevel)}
+          icon={<TrendingUp className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.intentLevel}
+        />
+        <ExtractedField
+          label="Urgency"
+          value={formatEnumLabel(extracted.opportunity.urgencyLevel)}
+          icon={<Clock className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.urgencyLevel}
+        />
+        <ExtractedField
+          label="Timeline"
+          value={extracted.opportunity.timelineToBuy}
+          icon={<CalendarDays className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+          snippet={getEvidenceSnippet(extracted, "timelineToBuy")?.quote}
+        />
+        <ExtractedField
+          label="Financing"
+          value={formatEnumLabel(extracted.opportunity.financingInterest)}
+          icon={<DollarSign className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          snippet={getEvidenceSnippet(extracted, "financingInterest")?.quote}
+        />
+        <ExtractedField
+          label="New / used"
+          value={formatEnumLabel(extracted.opportunity.newVsUsedPreference)}
+          icon={<Tractor className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+        />
+        <ExtractedField
+          label="Trade-in"
+          value={formatEnumLabel(extracted.opportunity.tradeInLikelihood)}
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          snippet={getEvidenceSnippet(extracted, "tradeInLikelihood")?.quote}
+        />
+        <ExtractedField
+          label="Quote"
+          value={formatEnumLabel(extracted.opportunity.quoteReadiness)}
+          icon={<FileText className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+        />
+        <ExtractedField
+          label="Competitors"
+          value={competitors || null}
+          icon={<MessageSquare className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+          snippet={getEvidenceSnippet(extracted, "competitorsMentioned")?.quote}
+        />
+        <ExtractedField
+          label="Concerns"
+          value={extracted.opportunity.keyConcerns}
+          icon={<MessageSquare className="w-3.5 h-3.5" />}
+          placeholder="Not mentioned"
+        />
+        <ExtractedField
+          label="Next step"
+          value={extracted.opportunity.nextStep}
+          icon={<ListTodo className="w-3.5 h-3.5" />}
+          placeholder="Not captured"
+          snippet={getEvidenceSnippet(extracted, "nextStep")?.quote}
+        />
+        <ExtractedField
+          label="Follow-up"
+          value={formatMaybeDate(extracted.opportunity.followUpDate)}
+          icon={<CalendarDays className="w-3.5 h-3.5" />}
+          placeholder="No date captured"
+        />
+        {actionItems.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <p className="text-xs text-muted-foreground">Action items</p>
+            <ul className="space-y-1">
+              {actionItems.map((item, i) => (
+                <li key={`${item}-${i}`} className="flex gap-2 text-sm">
+                  <span className="text-primary mt-0.5 flex-shrink-0">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </ResultCard>
+
+      {hasOperations && !compact && (
+        <ResultCard icon={<Wrench className="w-4 h-4" />} title="Dealership ops read">
+          <ExtractedField
+            label="Ops signal"
+            value={opsSignals || null}
+            icon={<Wrench className="w-3.5 h-3.5" />}
+          />
+          <ExtractedField
+            label="Branch"
+            value={extracted.operations.branchRelevance}
+            icon={<Building2 className="w-3.5 h-3.5" />}
+          />
+          <ExtractedField
+            label="Fleet"
+            value={extracted.operations.existingFleetContext}
+            icon={<Tractor className="w-3.5 h-3.5" />}
+          />
+          <ExtractedField
+            label="Replacement"
+            value={extracted.operations.replacementTrigger}
+            icon={<RefreshCw className="w-3.5 h-3.5" />}
+          />
+          <ExtractedField
+            label="Cross-sell"
+            value={extracted.operations.crossSellOpportunity.join(", ") || null}
+            icon={<Sparkles className="w-3.5 h-3.5" />}
+          />
+        </ResultCard>
+      )}
+
+      <ResultCard icon={<Sparkles className="w-4 h-4" />} title="AI read">
+        <ExtractedField
+          label="Sentiment"
+          value={formatEnumLabel(extracted.guidance.customerSentiment)}
+          icon={<MessageSquare className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.customerSentiment}
+        />
+        <ExtractedField
+          label="Win odds"
+          value={formatEnumLabel(extracted.guidance.probabilitySignal)}
+          icon={<TrendingUp className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.probabilitySignal}
+        />
+        <ExtractedField
+          label="Stall risk"
+          value={formatEnumLabel(extracted.guidance.stalledRisk)}
+          icon={<AlertCircle className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.stalledRisk}
+        />
+        <ExtractedField
+          label="Persona"
+          value={formatEnumLabel(extracted.guidance.buyerPersona)}
+          icon={<Cpu className="w-3.5 h-3.5" />}
+          placeholder="Unknown"
+          confidence={extracted.evidence.confidence.buyerPersona}
+        />
+        <ExtractedField
+          label="Rep guidance"
+          value={extracted.guidance.recommendedNextAction}
+          icon={<Sparkles className="w-3.5 h-3.5" />}
+          placeholder="No recommendation yet"
+          confidence={extracted.evidence.confidence.recommendedNextAction}
+        />
+        {!compact && (
+          <>
+            <ExtractedField
+              label="Follow-up"
+              value={formatEnumLabel(extracted.guidance.recommendedFollowUpMode)}
+              icon={<Send className="w-3.5 h-3.5" />}
+              placeholder="Unknown"
+            />
+            <ExtractedField
+              label="Manager"
+              value={extracted.guidance.managerAttentionFlag ? "Manager review recommended" : "No manager escalation"}
+              icon={<AlertCircle className="w-3.5 h-3.5" />}
+            />
+            <ExtractedField
+              label="Rep summary"
+              value={extracted.guidance.summaryForRep}
+              icon={<FileText className="w-3.5 h-3.5" />}
+            />
+            <ExtractedField
+              label="Manager summary"
+              value={extracted.guidance.summaryForManager}
+              icon={<FileText className="w-3.5 h-3.5" />}
+            />
+          </>
+        )}
+      </ResultCard>
+
+      {extracted.evidence.snippets.length > 0 && (
+        <ResultCard icon={<Copy className="w-4 h-4" />} title="Supporting evidence">
+          <div className="space-y-2">
+            {extracted.evidence.snippets.map((snippet, index) => (
+              <div
+                key={`${snippet.field}-${index}`}
+                className="rounded-lg border border-border bg-muted/30 px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-foreground">
+                    {formatEnumLabel(snippet.field) ?? snippet.field}
+                  </span>
+                  {snippet.confidence && snippet.confidence !== "unknown" && (
+                    <ConfidenceBadge confidence={snippet.confidence} />
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">&ldquo;{snippet.quote}&rdquo;</p>
+              </div>
+            ))}
+          </div>
+        </ResultCard>
+      )}
+    </>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" | "unknown" }) {
+  const tone = CONFIDENCE_TONE[confidence];
+  return (
+    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium", tone.className)}>
+      {tone.label}
+    </span>
+  );
+}
+
+function ExtractedField({
+  label,
+  value,
+  icon,
+  placeholder,
+  confidence,
+  snippet,
+}: ExtractedFieldProps) {
+  const displayValue = value ?? placeholder ?? null;
+  if (!displayValue) return null;
+  const isPlaceholder = !value;
   return (
     <div className="flex gap-3 items-start">
       {icon && <span className="text-muted-foreground flex-shrink-0 mt-0.5">{icon}</span>}
       <span className="text-xs text-muted-foreground w-20 flex-shrink-0 pt-0.5">{label}</span>
-      <span className="text-sm text-foreground flex-1">{value}</span>
+      <div className="flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn("text-sm", isPlaceholder ? "text-muted-foreground" : "text-foreground")}>
+            {displayValue}
+          </span>
+          {confidence && confidence !== "unknown" && !isPlaceholder && (
+            <ConfidenceBadge confidence={confidence} />
+          )}
+        </div>
+        {snippet && !isPlaceholder && (
+          <p className="text-xs text-muted-foreground">&ldquo;{snippet}&rdquo;</p>
+        )}
+      </div>
     </div>
   );
 }

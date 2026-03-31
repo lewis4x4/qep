@@ -2,6 +2,10 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import {
+  buildVoiceCaptureNoteBody,
+  getVoiceCaptureContactName,
+  getVoiceCapturePrimaryActionItems,
+  normalizeVoiceCaptureExtractedDealData,
   writeVoiceCaptureToLocalCrm,
   type VoiceCaptureExtractedDealData,
 } from "../_shared/voice-capture-crm.ts";
@@ -21,6 +25,8 @@ interface CaptureRow {
   extracted_data: unknown;
   hubspot_deal_id: string | null;
   hubspot_contact_id: string | null;
+  hubspot_note_id: string | null;
+  hubspot_task_id: string | null;
 }
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -36,50 +42,6 @@ function jsonError(message: string, status: number, headers: Record<string, stri
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
-}
-
-function normalizeExtracted(raw: unknown): ExtractedDealData {
-  const source = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-  const str = (value: unknown): string | null =>
-    typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-  const list = Array.isArray(source.action_items)
-    ? source.action_items.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
-
-  return {
-    customer_name: str(source.customer_name),
-    company_name: str(source.company_name),
-    machine_interest: str(source.machine_interest),
-    attachments_discussed: str(source.attachments_discussed),
-    deal_stage: str(source.deal_stage),
-    budget_range: str(source.budget_range),
-    key_concerns: str(source.key_concerns),
-    action_items: list,
-    next_step: str(source.next_step),
-    follow_up_date: str(source.follow_up_date),
-  };
-}
-
-function buildNoteBody(transcript: string, extracted: ExtractedDealData): string {
-  const lines: string[] = ["--- Field Note (QEP Voice Capture) ---", ""];
-
-  if (extracted.customer_name) lines.push(`Customer: ${extracted.customer_name}`);
-  if (extracted.company_name) lines.push(`Company: ${extracted.company_name}`);
-  if (extracted.machine_interest) lines.push(`Equipment interest: ${extracted.machine_interest}`);
-  if (extracted.attachments_discussed) lines.push(`Attachments: ${extracted.attachments_discussed}`);
-  if (extracted.deal_stage) lines.push(`Deal stage: ${extracted.deal_stage}`);
-  if (extracted.budget_range) lines.push(`Budget: ${extracted.budget_range}`);
-  if (extracted.key_concerns) lines.push(`Key concerns: ${extracted.key_concerns}`);
-
-  if (extracted.action_items.length > 0) {
-    lines.push("", "Action items:");
-    extracted.action_items.forEach((item) => lines.push(`  - ${item}`));
-  }
-
-  if (extracted.next_step) lines.push("", `Next step: ${extracted.next_step}`);
-
-  lines.push("", "--- Full Transcript ---", "", transcript);
-  return lines.join("\n");
 }
 
 async function getValidToken(
@@ -190,7 +152,7 @@ Deno.serve(async (req) => {
 
     const { data: captureData, error: captureError } = await supabaseAdmin
       .from("voice_captures")
-      .select("id, user_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id")
+      .select("id, user_id, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id")
       .eq("id", captureId)
       .single();
 
@@ -208,7 +170,7 @@ Deno.serve(async (req) => {
       return jsonError("Capture transcript is empty; cannot sync.", 422, headers);
     }
 
-    const extracted = normalizeExtracted(capture.extracted_data);
+    const extracted = normalizeVoiceCaptureExtractedDealData(capture.extracted_data);
     const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
       workspaceId: "default",
       actorUserId: user.id,
@@ -221,8 +183,9 @@ Deno.serve(async (req) => {
 
     let resolvedDealId = capture.hubspot_deal_id;
     let resolvedContactId = capture.hubspot_contact_id;
-    let noteId: string | null = null;
-    let taskId: string | null = null;
+    let noteId: string | null = capture.hubspot_note_id;
+    let taskId: string | null = capture.hubspot_task_id;
+    const externalSyncErrors: string[] = [];
 
     const { data: connectionData } = await supabaseAdmin
       .from("hubspot_connections")
@@ -257,7 +220,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             id: captureId,
-            hubspot_synced: true,
+            hubspot_synced: false,
             hubspot_deal_id: localCrmSync.dealId,
             hubspot_note_id: localCrmSync.noteActivityId,
             hubspot_task_id: localCrmSync.taskActivityId,
@@ -278,7 +241,7 @@ Deno.serve(async (req) => {
       return jsonError("Failed to refresh HubSpot token.", 502, headers);
     }
 
-    if (!resolvedDealId && extracted.customer_name) {
+    if (!resolvedDealId && getVoiceCaptureContactName(extracted)) {
       const searchRes = await fetch("https://api.hubapi.com/crm/v3/objects/contacts/search", {
         method: "POST",
         headers: {
@@ -290,7 +253,7 @@ Deno.serve(async (req) => {
             filters: [{
               propertyName: "fullname",
               operator: "CONTAINS_TOKEN",
-              value: extracted.customer_name,
+              value: getVoiceCaptureContactName(extracted),
             }],
           }],
           properties: ["firstname", "lastname", "hs_object_id"],
@@ -326,83 +289,93 @@ Deno.serve(async (req) => {
       return jsonError("Could not resolve a HubSpot deal for this capture.", 409, headers);
     }
 
-    const noteRes = await fetch("https://api.hubapi.com/engagements/v1/engagements", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        engagement: {
-          active: true,
-          type: "NOTE",
-          timestamp: Date.now(),
+    if (!noteId) {
+      const noteRes = await fetch("https://api.hubapi.com/engagements/v1/engagements", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        associations: {
-          dealIds: [parseInt(resolvedDealId, 10)],
-          contactIds: resolvedContactId ? [parseInt(resolvedContactId, 10)] : [],
-          ownerIds: [],
-        },
-        metadata: { body: buildNoteBody(capture.transcript, extracted) },
-      }),
-    });
+        body: JSON.stringify({
+          engagement: {
+            active: true,
+            type: "NOTE",
+            timestamp: Date.now(),
+          },
+          associations: {
+            dealIds: [parseInt(resolvedDealId, 10)],
+            contactIds: resolvedContactId ? [parseInt(resolvedContactId, 10)] : [],
+            ownerIds: [],
+          },
+          metadata: { body: buildVoiceCaptureNoteBody(capture.transcript, extracted) },
+        }),
+      });
 
-    if (noteRes.ok) {
-      const noteData = await noteRes.json();
-      noteId = String(noteData.engagement?.id ?? "");
+      if (noteRes.ok) {
+        const noteData = await noteRes.json();
+        noteId = String(noteData.engagement?.id ?? "");
+      } else {
+        externalSyncErrors.push("HubSpot note creation failed.");
+      }
     }
 
-    const dueDate = extracted.follow_up_date
-      ? new Date(extracted.follow_up_date).getTime()
+    const dueDate = extracted.opportunity.followUpDate
+      ? new Date(extracted.opportunity.followUpDate).getTime()
       : Date.now() + 86400000;
-    const taskTitle = extracted.next_step
-      ? `Field note follow-up: ${extracted.next_step}`
-      : `Follow up with ${extracted.customer_name ?? "prospect"} - field visit`;
+    const taskTitle = extracted.opportunity.nextStep
+      ? `Field note follow-up: ${extracted.opportunity.nextStep}`
+      : `Follow up with ${getVoiceCaptureContactName(extracted) ?? "prospect"} - field visit`;
 
-    const taskRes = await fetch("https://api.hubapi.com/crm/v3/objects/tasks", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        properties: {
-          hs_task_subject: taskTitle,
-          hs_task_body: extracted.action_items.join("\n") || "Review field note and follow up.",
-          hs_task_status: "NOT_STARTED",
-          hs_task_priority: "HIGH",
-          hs_timestamp: dueDate.toString(),
-          hs_task_type: "CALL",
+    if (!taskId) {
+      const taskRes = await fetch("https://api.hubapi.com/crm/v3/objects/tasks", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        associations: [{
-          to: { id: resolvedDealId },
-          types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 216 }],
-        }],
-      }),
-    });
+        body: JSON.stringify({
+          properties: {
+            hs_task_subject: taskTitle,
+            hs_task_body: getVoiceCapturePrimaryActionItems(extracted).join("\n") || "Review field note and follow up.",
+            hs_task_status: "NOT_STARTED",
+            hs_task_priority: "HIGH",
+            hs_timestamp: dueDate.toString(),
+            hs_task_type: "CALL",
+          },
+          associations: [{
+            to: { id: resolvedDealId },
+            types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: 216 }],
+          }],
+        }),
+      });
 
-    if (taskRes.ok) {
-      const taskData = await taskRes.json();
-      taskId = typeof taskData.id === "string" ? taskData.id : null;
+      if (taskRes.ok) {
+        const taskData = await taskRes.json();
+        taskId = typeof taskData.id === "string" ? taskData.id : null;
+      } else {
+        externalSyncErrors.push("HubSpot task creation failed.");
+      }
     }
+
+    const hubspotSynced = Boolean(noteId) && Boolean(taskId);
 
     await supabaseAdmin
       .from("voice_captures")
       .update({
-        sync_status: "synced",
-        sync_error: null,
+        sync_status: localCrmSync.saved || hubspotSynced ? "synced" : "pending",
+        sync_error: externalSyncErrors.length > 0 ? externalSyncErrors.join(" ") : null,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_contact_id: localCrmSync.contactId ?? resolvedContactId,
         hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
         hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
-        hubspot_synced_at: new Date().toISOString(),
+        hubspot_synced_at: hubspotSynced ? new Date().toISOString() : null,
       })
       .eq("id", captureId);
 
     return new Response(
       JSON.stringify({
         id: captureId,
-        hubspot_synced: true,
+        hubspot_synced: hubspotSynced,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
         hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
