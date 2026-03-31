@@ -1,0 +1,1229 @@
+import { execFileSync } from "node:child_process";
+import { createClient } from "@supabase/supabase-js";
+
+const DEMO_BATCH_ID = "crm-demo-thursday-2026-04-02";
+const DEMO_WORKSPACE_ID = process.env.QEP_DEMO_WORKSPACE_ID ?? "default";
+const DEMO_PASSWORD = process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
+
+const DEMO_USERS = [
+  {
+    key: "owner",
+    email: "demo.owner@qep-demo.local",
+    fullName: "Alex Mercer",
+    role: "owner",
+  },
+  {
+    key: "manager",
+    email: "demo.manager@qep-demo.local",
+    fullName: "Riley Shaw",
+    role: "manager",
+  },
+  {
+    key: "rep_primary",
+    email: "demo.rep@qep-demo.local",
+    fullName: "Cole Bryant",
+    role: "rep",
+  },
+  {
+    key: "rep_secondary",
+    email: "demo.rep2@qep-demo.local",
+    fullName: "Maya Torres",
+    role: "rep",
+  },
+];
+
+const STAGE_DEFS = [
+  { id: "91000000-0000-4000-8000-000000000001", name: "Discovery", sortOrder: 10, probability: 15, isClosedWon: false, isClosedLost: false },
+  { id: "91000000-0000-4000-8000-000000000002", name: "Demo Scheduled", sortOrder: 20, probability: 35, isClosedWon: false, isClosedLost: false },
+  { id: "91000000-0000-4000-8000-000000000003", name: "Quote Working", sortOrder: 30, probability: 60, isClosedWon: false, isClosedLost: false },
+  { id: "91000000-0000-4000-8000-000000000004", name: "Negotiation", sortOrder: 40, probability: 80, isClosedWon: false, isClosedLost: false },
+  { id: "91000000-0000-4000-8000-000000000005", name: "Closed Won", sortOrder: 50, probability: 100, isClosedWon: true, isClosedLost: false },
+  { id: "91000000-0000-4000-8000-000000000006", name: "Closed Lost", sortOrder: 60, probability: 0, isClosedWon: false, isClosedLost: true },
+];
+
+const DEMO_IDS = {
+  customerProfiles: {
+    apex: "61000000-0000-4000-8000-000000000001",
+  },
+  companies: {
+    apexHoldings: "11000000-0000-4000-8000-000000000001",
+    apexLakeCity: "11000000-0000-4000-8000-000000000002",
+    gulfCoast: "11000000-0000-4000-8000-000000000003",
+    pineRiver: "11000000-0000-4000-8000-000000000004",
+  },
+  contacts: {
+    mason: "21000000-0000-4000-8000-000000000001",
+    hannah: "21000000-0000-4000-8000-000000000002",
+    jordan: "21000000-0000-4000-8000-000000000003",
+    jordon: "21000000-0000-4000-8000-000000000004",
+    elena: "21000000-0000-4000-8000-000000000005",
+    wes: "21000000-0000-4000-8000-000000000006",
+  },
+  contactCompanies: {
+    masonApex: "22000000-0000-4000-8000-000000000001",
+    hannahApex: "22000000-0000-4000-8000-000000000002",
+    jordanGulf: "22000000-0000-4000-8000-000000000003",
+    jordonGulf: "22000000-0000-4000-8000-000000000004",
+    elenaPine: "22000000-0000-4000-8000-000000000005",
+    wesApex: "22000000-0000-4000-8000-000000000006",
+  },
+  territories: {
+    northFlorida: "31000000-0000-4000-8000-000000000001",
+    gulfCoast: "31000000-0000-4000-8000-000000000002",
+  },
+  contactTerritories: {
+    masonNorth: "32000000-0000-4000-8000-000000000001",
+    hannahNorth: "32000000-0000-4000-8000-000000000002",
+    jordanGulf: "32000000-0000-4000-8000-000000000003",
+  },
+  equipment: {
+    apexDozer: "33000000-0000-4000-8000-000000000001",
+    apexMulcher: "33000000-0000-4000-8000-000000000002",
+    pineSkidSteer: "33000000-0000-4000-8000-000000000003",
+  },
+  customFieldDefinitions: {
+    contactDecisionWindow: "41000000-0000-4000-8000-000000000001",
+    contactPreferredChannel: "41000000-0000-4000-8000-000000000002",
+    companyFleetPriority: "41000000-0000-4000-8000-000000000003",
+    companyServiceRisk: "41000000-0000-4000-8000-000000000004",
+  },
+  customFieldValues: {
+    masonDecisionWindow: "42000000-0000-4000-8000-000000000001",
+    masonChannel: "42000000-0000-4000-8000-000000000002",
+    apexFleetPriority: "42000000-0000-4000-8000-000000000003",
+    pineServiceRisk: "42000000-0000-4000-8000-000000000004",
+  },
+  deals: {
+    barkoPackage: "51000000-0000-4000-8000-000000000001",
+    banditDemo: "51000000-0000-4000-8000-000000000002",
+    prinothRevision: "51000000-0000-4000-8000-000000000003",
+    yanmarRental: "51000000-0000-4000-8000-000000000004",
+  },
+  activities: {
+    barkoCall: "71000000-0000-4000-8000-000000000001",
+    barkoTaskOverdue: "71000000-0000-4000-8000-000000000002",
+    barkoEmailSent: "71000000-0000-4000-8000-000000000003",
+    apexNote: "71000000-0000-4000-8000-000000000004",
+    banditSmsFailed: "71000000-0000-4000-8000-000000000005",
+    banditMeeting: "71000000-0000-4000-8000-000000000006",
+    masonManualEmail: "71000000-0000-4000-8000-000000000007",
+    prinothTaskOpen: "71000000-0000-4000-8000-000000000008",
+    pineCall: "71000000-0000-4000-8000-000000000009",
+    gulfTaskDone: "71000000-0000-4000-8000-000000000010",
+    apexSmsManual: "71000000-0000-4000-8000-000000000011",
+  },
+  quotes: {
+    barkoQuote: "81000000-0000-4000-8000-000000000001",
+  },
+  duplicateCandidates: {
+    jordanLead: "91000000-0000-4000-8000-000000000010",
+  },
+  activityTemplates: {
+    demoRecap: "88000000-0000-4000-8000-000000000001",
+    branchCheckin: "88000000-0000-4000-8000-000000000002",
+    rentalTask: "88000000-0000-4000-8000-000000000003",
+  },
+};
+
+function usage() {
+  console.log(`QEP CRM demo data
+
+Commands:
+  bun run demo:plan
+  bun run demo:seed
+  bun run demo:reset
+  bun run demo:reseed
+
+Environment:
+  SUPABASE_URL / VITE_SUPABASE_URL
+  SUPABASE_SERVICE_ROLE_KEY
+Optional:
+  QEP_DEMO_WORKSPACE_ID   defaults to "default"
+  QEP_DEMO_PASSWORD       defaults to "${DEMO_PASSWORD}"
+
+Demo operator emails:
+${DEMO_USERS.map((user) => `  - ${user.email} (${user.role})`).join("\n")}
+`);
+}
+
+function readLocalSupabaseStatus() {
+  try {
+    const raw = execFileSync("supabase", ["status", "-o", "env"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const parsed = {};
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const index = trimmed.indexOf("=");
+      if (index === -1) continue;
+      const key = trimmed.slice(0, index);
+      const value = trimmed.slice(index + 1);
+      parsed[key] = value;
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function resolveCredentials() {
+  const local = readLocalSupabaseStatus();
+  const url =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    local.SUPABASE_URL ||
+    local.API_URL;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    local.SUPABASE_SERVICE_ROLE_KEY ||
+    local.SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "Missing Supabase credentials. Export SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or run against a local `supabase start` environment.",
+    );
+  }
+
+  return { url, serviceRoleKey };
+}
+
+function createAdminClient() {
+  const credentials = resolveCredentials();
+  return createClient(credentials.url, credentials.serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function buildTimestamp(offset) {
+  const value = new Date();
+  value.setSeconds(0, 0);
+  value.setDate(value.getDate() + (offset.days ?? 0));
+  value.setHours(
+    value.getHours() + (offset.hours ?? 0),
+    value.getMinutes() + (offset.minutes ?? 0),
+    0,
+    0,
+  );
+  return value.toISOString();
+}
+
+function buildDate(daysFromNow) {
+  const value = new Date();
+  value.setHours(0, 0, 0, 0);
+  value.setDate(value.getDate() + daysFromNow);
+  return value.toISOString().slice(0, 10);
+}
+
+function deliveryMetadata({ mode, provider, status, destination, attemptedAt, externalMessageId = null, reasonCode = null, message = null }) {
+  return {
+    attempted: true,
+    mode,
+    provider,
+    status,
+    attemptedAt,
+    destination,
+    externalMessageId,
+    reasonCode,
+    message,
+  };
+}
+
+async function listAuthUsers(admin) {
+  const users = [];
+  let page = 1;
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const batch = data.users ?? [];
+    users.push(...batch);
+    if (batch.length < 200) break;
+    page += 1;
+  }
+  return users;
+}
+
+async function ensureDemoUsers(admin) {
+  const users = await listAuthUsers(admin);
+  const byEmail = new Map(users.map((user) => [user.email?.toLowerCase(), user]));
+  const result = {};
+
+  for (const demoUser of DEMO_USERS) {
+    let authUser = byEmail.get(demoUser.email.toLowerCase()) ?? null;
+    if (!authUser) {
+      const created = await admin.auth.admin.createUser({
+        email: demoUser.email,
+        password: DEMO_PASSWORD,
+        email_confirm: true,
+        app_metadata: { workspace_id: DEMO_WORKSPACE_ID },
+        user_metadata: { full_name: demoUser.fullName, workspace_id: DEMO_WORKSPACE_ID },
+      });
+      if (created.error || !created.data.user) {
+        throw created.error ?? new Error(`Could not create auth user for ${demoUser.email}`);
+      }
+      authUser = created.data.user;
+    } else {
+      const updated = await admin.auth.admin.updateUserById(authUser.id, {
+        password: DEMO_PASSWORD,
+        email_confirm: true,
+        app_metadata: { ...(authUser.app_metadata ?? {}), workspace_id: DEMO_WORKSPACE_ID },
+        user_metadata: {
+          ...(authUser.user_metadata ?? {}),
+          full_name: demoUser.fullName,
+          workspace_id: DEMO_WORKSPACE_ID,
+        },
+      });
+      if (updated.error) {
+        throw updated.error;
+      }
+    }
+
+    const { error: profileError } = await admin.from("profiles").upsert(
+      {
+        id: authUser.id,
+        email: demoUser.email,
+        full_name: demoUser.fullName,
+        role: demoUser.role,
+      },
+      { onConflict: "id" },
+    );
+    if (profileError) throw profileError;
+    result[demoUser.key] = authUser.id;
+  }
+
+  return result;
+}
+
+async function deleteDemoUsers(admin) {
+  const users = await listAuthUsers(admin);
+  const demoEmails = new Set(DEMO_USERS.map((user) => user.email.toLowerCase()));
+  for (const user of users) {
+    if (!user.email || !demoEmails.has(user.email.toLowerCase())) continue;
+    const { error } = await admin.auth.admin.deleteUser(user.id);
+    if (error) throw error;
+  }
+}
+
+async function ensureDealStages(admin) {
+  const { data, error } = await admin
+    .from("crm_deal_stages")
+    .select("id, name")
+    .eq("workspace_id", DEMO_WORKSPACE_ID);
+  if (error) throw error;
+
+  const existingByName = new Map((data ?? []).map((row) => [row.name, row.id]));
+  const missing = STAGE_DEFS.filter((stage) => !existingByName.has(stage.name));
+
+  if (missing.length > 0) {
+    const { error: insertError } = await admin.from("crm_deal_stages").insert(
+      missing.map((stage) => ({
+        id: stage.id,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: stage.name,
+        sort_order: stage.sortOrder,
+        probability: stage.probability,
+        is_closed_won: stage.isClosedWon,
+        is_closed_lost: stage.isClosedLost,
+      })),
+    );
+    if (insertError) throw insertError;
+  }
+
+  const { data: refreshed, error: refreshedError } = await admin
+    .from("crm_deal_stages")
+    .select("id, name")
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
+    .in("name", STAGE_DEFS.map((stage) => stage.name));
+  if (refreshedError) throw refreshedError;
+
+  return Object.fromEntries((refreshed ?? []).map((row) => [row.name, row.id]));
+}
+
+function buildDemoDataset(userIds, stageIds) {
+  const timestamps = {
+    twoDaysAgo: buildTimestamp({ days: -2, hours: -1 }),
+    yesterdayMorning: buildTimestamp({ days: -1, hours: -4 }),
+    yesterdayAfternoon: buildTimestamp({ days: -1, hours: 1 }),
+    thisMorning: buildTimestamp({ hours: -4 }),
+    ninetyMinutesAgo: buildTimestamp({ hours: -1, minutes: -30 }),
+    oneHourAgo: buildTimestamp({ hours: -1 }),
+    thirtyMinutesAgo: buildTimestamp({ minutes: -30 }),
+    inThreeHours: buildTimestamp({ hours: 3 }),
+    tomorrowMidday: buildTimestamp({ days: 1, hours: 2 }),
+  };
+
+  return {
+    customerProfiles: [
+      {
+        id: DEMO_IDS.customerProfiles.apex,
+        customer_name: "Mason Reed",
+        company_name: "Apex Timber Operations",
+        industry: "Forestry",
+        region: "North Florida",
+        pricing_persona: "relationship_loyal",
+        persona_confidence: 0.86,
+        persona_model_version: "demo-v1",
+        lifetime_value: 1265000,
+        total_deals: 4,
+        avg_deal_size: 316250,
+        avg_discount_pct: 4.8,
+        avg_days_to_close: 29,
+        attachment_rate: 0.62,
+        service_contract_rate: 0.5,
+        fleet_size: 11,
+        seasonal_pattern: "Spring clearing and hurricane prep",
+        last_deal_at: timestamps.yesterdayAfternoon,
+        last_interaction_at: timestamps.ninetyMinutesAgo,
+        price_sensitivity_score: 0.31,
+        notes: "Prefers field demos with operator crew present and moves fastest when delivery timing is firm.",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          badges: ["DEMO"],
+        },
+      },
+    ],
+    companies: [
+      {
+        id: DEMO_IDS.companies.apexHoldings,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Apex Timber Operations",
+        parent_company_id: null,
+        assigned_rep_id: userIds.rep_primary,
+        city: "Lake City",
+        state: "FL",
+        country: "USA",
+        address_line_1: "1200 Forestry Way",
+        postal_code: "32025",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          segment: "Forestry contractor",
+          branch_count: 2,
+        },
+      },
+      {
+        id: DEMO_IDS.companies.apexLakeCity,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Apex Timber Operations - Lake City Branch",
+        parent_company_id: DEMO_IDS.companies.apexHoldings,
+        assigned_rep_id: userIds.rep_primary,
+        city: "Lake City",
+        state: "FL",
+        country: "USA",
+        address_line_1: "1415 County Road 252",
+        postal_code: "32024",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          branch_type: "Service and delivery yard",
+        },
+      },
+      {
+        id: DEMO_IDS.companies.gulfCoast,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Gulf Coast Land Clearing",
+        parent_company_id: null,
+        assigned_rep_id: userIds.rep_secondary,
+        city: "Pensacola",
+        state: "FL",
+        country: "USA",
+        address_line_1: "88 Industrial Loop",
+        postal_code: "32505",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          segment: "Municipal and utility clearing",
+        },
+      },
+      {
+        id: DEMO_IDS.companies.pineRiver,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Pine River Equipment Rental",
+        parent_company_id: null,
+        assigned_rep_id: userIds.rep_secondary,
+        city: "Valdosta",
+        state: "GA",
+        country: "USA",
+        address_line_1: "705 Commerce Park",
+        postal_code: "31601",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          segment: "Rental fleet operator",
+        },
+      },
+    ],
+    contacts: [
+      {
+        id: DEMO_IDS.contacts.mason,
+        workspace_id: DEMO_WORKSPACE_ID,
+        dge_customer_profile_id: DEMO_IDS.customerProfiles.apex,
+        first_name: "Mason",
+        last_name: "Reed",
+        email: "mason.reed@apextimber.demo",
+        phone: "(386) 555-0142",
+        title: "Operations Director",
+        primary_company_id: DEMO_IDS.companies.apexHoldings,
+        assigned_rep_id: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.contacts.hannah,
+        workspace_id: DEMO_WORKSPACE_ID,
+        first_name: "Hannah",
+        last_name: "Brooks",
+        email: "hannah.brooks@apextimber.demo",
+        phone: "(386) 555-0118",
+        title: "Fleet Manager",
+        primary_company_id: DEMO_IDS.companies.apexLakeCity,
+        assigned_rep_id: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.contacts.jordan,
+        workspace_id: DEMO_WORKSPACE_ID,
+        first_name: "Jordan",
+        last_name: "Blake",
+        email: "jordan.blake@gulfcoast.demo",
+        phone: "(850) 555-0131",
+        title: "General Superintendent",
+        primary_company_id: DEMO_IDS.companies.gulfCoast,
+        assigned_rep_id: userIds.rep_secondary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.contacts.jordon,
+        workspace_id: DEMO_WORKSPACE_ID,
+        first_name: "Jordon",
+        last_name: "Blake",
+        email: "j.blake@gulfcoast.demo",
+        phone: "(850) 555-0131",
+        title: "Field Ops Superintendent",
+        primary_company_id: DEMO_IDS.companies.gulfCoast,
+        assigned_rep_id: userIds.rep_secondary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, duplicateSeed: true },
+      },
+      {
+        id: DEMO_IDS.contacts.elena,
+        workspace_id: DEMO_WORKSPACE_ID,
+        first_name: "Elena",
+        last_name: "Cruz",
+        email: "elena.cruz@pineriver.demo",
+        phone: "(229) 555-0180",
+        title: "Rental Supervisor",
+        primary_company_id: DEMO_IDS.companies.pineRiver,
+        assigned_rep_id: userIds.rep_secondary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.contacts.wes,
+        workspace_id: DEMO_WORKSPACE_ID,
+        first_name: "Wes",
+        last_name: "Carver",
+        email: "wes.carver@apextimber.demo",
+        phone: "(386) 555-0156",
+        title: "Branch Superintendent",
+        primary_company_id: DEMO_IDS.companies.apexLakeCity,
+        assigned_rep_id: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+    ],
+    contactCompanies: [
+      { id: DEMO_IDS.contactCompanies.masonApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.mason, company_id: DEMO_IDS.companies.apexHoldings, is_primary: true },
+      { id: DEMO_IDS.contactCompanies.hannahApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.hannah, company_id: DEMO_IDS.companies.apexLakeCity, is_primary: true },
+      { id: DEMO_IDS.contactCompanies.jordanGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordan, company_id: DEMO_IDS.companies.gulfCoast, is_primary: true },
+      { id: DEMO_IDS.contactCompanies.jordonGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordon, company_id: DEMO_IDS.companies.gulfCoast, is_primary: true },
+      { id: DEMO_IDS.contactCompanies.elenaPine, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.elena, company_id: DEMO_IDS.companies.pineRiver, is_primary: true },
+      { id: DEMO_IDS.contactCompanies.wesApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.wes, company_id: DEMO_IDS.companies.apexLakeCity, is_primary: true },
+    ],
+    territories: [
+      {
+        id: DEMO_IDS.territories.northFlorida,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "North Florida Demo Territory",
+        description: "Lake City and surrounding forestry accounts.",
+        assigned_rep_id: userIds.rep_secondary,
+      },
+      {
+        id: DEMO_IDS.territories.gulfCoast,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Gulf Coast Demo Territory",
+        description: "Utility and municipal clearing accounts on the gulf route.",
+        assigned_rep_id: userIds.rep_secondary,
+      },
+    ],
+    contactTerritories: [
+      { id: DEMO_IDS.contactTerritories.masonNorth, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.mason, territory_id: DEMO_IDS.territories.northFlorida },
+      { id: DEMO_IDS.contactTerritories.hannahNorth, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.hannah, territory_id: DEMO_IDS.territories.northFlorida },
+      { id: DEMO_IDS.contactTerritories.jordanGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordan, territory_id: DEMO_IDS.territories.gulfCoast },
+    ],
+    equipment: [
+      {
+        id: DEMO_IDS.equipment.apexDozer,
+        workspace_id: DEMO_WORKSPACE_ID,
+        company_id: DEMO_IDS.companies.apexHoldings,
+        primary_contact_id: DEMO_IDS.contacts.mason,
+        name: "Barko 495B Track Loader",
+        asset_tag: "APX-495B-01",
+        serial_number: "BK495B-FL-001",
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, status: "active" },
+      },
+      {
+        id: DEMO_IDS.equipment.apexMulcher,
+        workspace_id: DEMO_WORKSPACE_ID,
+        company_id: DEMO_IDS.companies.apexLakeCity,
+        primary_contact_id: DEMO_IDS.contacts.hannah,
+        name: "Bandit 2460XP Drum Chipper",
+        asset_tag: "APX-2460XP-02",
+        serial_number: "BD2460-FL-002",
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, status: "demo_unit" },
+      },
+      {
+        id: DEMO_IDS.equipment.pineSkidSteer,
+        workspace_id: DEMO_WORKSPACE_ID,
+        company_id: DEMO_IDS.companies.pineRiver,
+        primary_contact_id: DEMO_IDS.contacts.elena,
+        name: "Yanmar TL100VS Compact Track Loader",
+        asset_tag: "PRR-TL100-03",
+        serial_number: "YNTL100-GA-003",
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, status: "rental_ready" },
+      },
+    ],
+    customFieldDefinitions: [
+      {
+        id: DEMO_IDS.customFieldDefinitions.contactDecisionWindow,
+        workspace_id: DEMO_WORKSPACE_ID,
+        object_type: "contact",
+        key: "demo_decision_window_days",
+        label: "Decision Window (days)",
+        data_type: "number",
+        constraints: {},
+        required: false,
+        visibility_roles: [],
+        sort_order: 10,
+      },
+      {
+        id: DEMO_IDS.customFieldDefinitions.contactPreferredChannel,
+        workspace_id: DEMO_WORKSPACE_ID,
+        object_type: "contact",
+        key: "demo_preferred_channel",
+        label: "Preferred Channel",
+        data_type: "text",
+        constraints: {},
+        required: false,
+        visibility_roles: [],
+        sort_order: 20,
+      },
+      {
+        id: DEMO_IDS.customFieldDefinitions.companyFleetPriority,
+        workspace_id: DEMO_WORKSPACE_ID,
+        object_type: "company",
+        key: "demo_fleet_priority",
+        label: "Fleet Priority",
+        data_type: "text",
+        constraints: {},
+        required: false,
+        visibility_roles: [],
+        sort_order: 10,
+      },
+      {
+        id: DEMO_IDS.customFieldDefinitions.companyServiceRisk,
+        workspace_id: DEMO_WORKSPACE_ID,
+        object_type: "company",
+        key: "demo_service_risk",
+        label: "Service Risk",
+        data_type: "text",
+        constraints: {},
+        required: false,
+        visibility_roles: ["admin", "manager", "owner"],
+        sort_order: 20,
+      },
+    ],
+    customFieldValues: [
+      {
+        id: DEMO_IDS.customFieldValues.masonDecisionWindow,
+        workspace_id: DEMO_WORKSPACE_ID,
+        definition_id: DEMO_IDS.customFieldDefinitions.contactDecisionWindow,
+        record_type: "contact",
+        record_id: DEMO_IDS.contacts.mason,
+        value: 14,
+      },
+      {
+        id: DEMO_IDS.customFieldValues.masonChannel,
+        workspace_id: DEMO_WORKSPACE_ID,
+        definition_id: DEMO_IDS.customFieldDefinitions.contactPreferredChannel,
+        record_type: "contact",
+        record_id: DEMO_IDS.contacts.mason,
+        value: "Call first, then text summary",
+      },
+      {
+        id: DEMO_IDS.customFieldValues.apexFleetPriority,
+        workspace_id: DEMO_WORKSPACE_ID,
+        definition_id: DEMO_IDS.customFieldDefinitions.companyFleetPriority,
+        record_type: "company",
+        record_id: DEMO_IDS.companies.apexHoldings,
+        value: "Replace two high-hour track loaders before storm season",
+      },
+      {
+        id: DEMO_IDS.customFieldValues.pineServiceRisk,
+        workspace_id: DEMO_WORKSPACE_ID,
+        definition_id: DEMO_IDS.customFieldDefinitions.companyServiceRisk,
+        record_type: "company",
+        record_id: DEMO_IDS.companies.pineRiver,
+        value: "Medium - rental utilization climbing with one backup unit left",
+      },
+    ],
+    deals: [
+      {
+        id: DEMO_IDS.deals.barkoPackage,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Barko 495B loader package",
+        stage_id: stageIds["Negotiation"],
+        primary_contact_id: DEMO_IDS.contacts.mason,
+        company_id: DEMO_IDS.companies.apexHoldings,
+        assigned_rep_id: userIds.rep_primary,
+        amount: 485000,
+        expected_close_on: buildDate(10),
+        next_follow_up_at: timestamps.inThreeHours,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, equipment_family: "Barko 495B" },
+      },
+      {
+        id: DEMO_IDS.deals.banditDemo,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Bandit chipper field demo",
+        stage_id: stageIds["Demo Scheduled"],
+        primary_contact_id: DEMO_IDS.contacts.hannah,
+        company_id: DEMO_IDS.companies.apexLakeCity,
+        assigned_rep_id: userIds.rep_primary,
+        amount: 128000,
+        expected_close_on: buildDate(18),
+        next_follow_up_at: timestamps.tomorrowMidday,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, demo_location: "Lake City branch yard" },
+      },
+      {
+        id: DEMO_IDS.deals.prinothRevision,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Prinoth Panther T14 quote revision",
+        stage_id: stageIds["Quote Working"],
+        primary_contact_id: DEMO_IDS.contacts.jordan,
+        company_id: DEMO_IDS.companies.gulfCoast,
+        assigned_rep_id: userIds.rep_secondary,
+        amount: 365000,
+        expected_close_on: buildDate(21),
+        next_follow_up_at: timestamps.inThreeHours,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, focus: "trade allowance and delivery timing" },
+      },
+      {
+        id: DEMO_IDS.deals.yanmarRental,
+        workspace_id: DEMO_WORKSPACE_ID,
+        name: "Yanmar compact fleet refresh",
+        stage_id: stageIds["Discovery"],
+        primary_contact_id: DEMO_IDS.contacts.elena,
+        company_id: DEMO_IDS.companies.pineRiver,
+        assigned_rep_id: userIds.rep_secondary,
+        amount: 92000,
+        expected_close_on: buildDate(30),
+        next_follow_up_at: timestamps.tomorrowMidday,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID, fleet_need: "rental utilization" },
+      },
+    ],
+    activities: [
+      {
+        id: DEMO_IDS.activities.barkoCall,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "call",
+        body: "Confirmed the loader spec, delivery window, and operator training needs. Customer wants final freight numbers before green light.",
+        occurred_at: timestamps.thisMorning,
+        deal_id: DEMO_IDS.deals.barkoPackage,
+        created_by: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.activities.barkoTaskOverdue,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "task",
+        body: "Send final freight breakdown and financing option comparison before lunch.",
+        occurred_at: timestamps.yesterdayAfternoon,
+        deal_id: DEMO_IDS.deals.barkoPackage,
+        created_by: userIds.rep_primary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          task: { dueAt: timestamps.oneHourAgo, status: "open" },
+        },
+      },
+      {
+        id: DEMO_IDS.activities.barkoEmailSent,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "email",
+        body: "Sending the updated loader package with freight, protection plan, and operator onboarding schedule attached.",
+        occurred_at: timestamps.yesterdayMorning,
+        deal_id: DEMO_IDS.deals.barkoPackage,
+        created_by: userIds.rep_primary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          communication: deliveryMetadata({
+            mode: "live",
+            provider: "sendgrid",
+            status: "sent",
+            destination: "mason.reed@apextimber.demo",
+            attemptedAt: timestamps.yesterdayMorning,
+            externalMessageId: "demo-sendgrid-barko-001",
+          }),
+          delivery: deliveryMetadata({
+            mode: "live",
+            provider: "sendgrid",
+            status: "sent",
+            destination: "mason.reed@apextimber.demo",
+            attemptedAt: timestamps.yesterdayMorning,
+            externalMessageId: "demo-sendgrid-barko-001",
+          }),
+        },
+      },
+      {
+        id: DEMO_IDS.activities.apexNote,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "note",
+        body: "Branch leadership is trying to consolidate loader replacements into one Q2 budget window.",
+        occurred_at: timestamps.yesterdayAfternoon,
+        company_id: DEMO_IDS.companies.apexHoldings,
+        created_by: userIds.manager,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.activities.banditSmsFailed,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "sms",
+        body: "Crew is ready Thursday morning. Reply with the exact chipper setup you want on site and we’ll stage it before you arrive.",
+        occurred_at: timestamps.ninetyMinutesAgo,
+        deal_id: DEMO_IDS.deals.banditDemo,
+        created_by: userIds.rep_primary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          communication: deliveryMetadata({
+            mode: "live",
+            provider: "twilio",
+            status: "failed",
+            destination: "(386) 555-0118",
+            attemptedAt: timestamps.ninetyMinutesAgo,
+            reasonCode: "twilio_request_failed",
+            message: "Demo failure for retry workflow.",
+          }),
+          delivery: deliveryMetadata({
+            mode: "live",
+            provider: "twilio",
+            status: "failed",
+            destination: "(386) 555-0118",
+            attemptedAt: timestamps.ninetyMinutesAgo,
+            reasonCode: "twilio_request_failed",
+            message: "Demo failure for retry workflow.",
+          }),
+        },
+      },
+      {
+        id: DEMO_IDS.activities.banditMeeting,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "meeting",
+        body: "Field demo locked for Thursday at 10:30 AM. Branch crew wants knife-change walkthrough included.",
+        occurred_at: timestamps.thisMorning,
+        deal_id: DEMO_IDS.deals.banditDemo,
+        created_by: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.activities.masonManualEmail,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "email",
+        body: "Logged the spec recap and branch pricing notes from the phone conversation. This one was sent outside the system and needs a clean resend if requested.",
+        occurred_at: timestamps.twoDaysAgo,
+        contact_id: DEMO_IDS.contacts.mason,
+        created_by: userIds.manager,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          communication: deliveryMetadata({
+            mode: "manual",
+            provider: "sendgrid",
+            status: "manual_logged",
+            destination: "mason.reed@apextimber.demo",
+            attemptedAt: timestamps.twoDaysAgo,
+          }),
+          delivery: deliveryMetadata({
+            mode: "manual",
+            provider: "sendgrid",
+            status: "manual_logged",
+            destination: "mason.reed@apextimber.demo",
+            attemptedAt: timestamps.twoDaysAgo,
+          }),
+        },
+      },
+      {
+        id: DEMO_IDS.activities.prinothTaskOpen,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "task",
+        body: "Get trade photos and revised freight lane before sending the Panther revision.",
+        occurred_at: timestamps.thirtyMinutesAgo,
+        deal_id: DEMO_IDS.deals.prinothRevision,
+        created_by: userIds.rep_secondary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          task: { dueAt: timestamps.tomorrowMidday, status: "open" },
+        },
+      },
+      {
+        id: DEMO_IDS.activities.pineCall,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "call",
+        body: "Rental supervisor wants a loader package that can rotate between land-clearing and compact fleet overflow work.",
+        occurred_at: timestamps.thirtyMinutesAgo,
+        company_id: DEMO_IDS.companies.pineRiver,
+        created_by: userIds.rep_secondary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: DEMO_IDS.activities.gulfTaskDone,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "task",
+        body: "Delivered trade allowance summary and competitor notes to the customer.",
+        occurred_at: timestamps.yesterdayMorning,
+        company_id: DEMO_IDS.companies.gulfCoast,
+        created_by: userIds.rep_secondary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          task: { dueAt: timestamps.yesterdayAfternoon, status: "completed" },
+        },
+      },
+      {
+        id: DEMO_IDS.activities.apexSmsManual,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "sms",
+        body: "We can stage the Bandit demo unit at the Lake City yard first thing Thursday. Reply with the crew count and we’ll handle the rest.",
+        occurred_at: timestamps.oneHourAgo,
+        company_id: DEMO_IDS.companies.apexLakeCity,
+        created_by: userIds.rep_primary,
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          communication: deliveryMetadata({
+            mode: "manual",
+            provider: "twilio",
+            status: "manual_logged",
+            destination: "(386) 555-0118",
+            attemptedAt: timestamps.oneHourAgo,
+          }),
+          delivery: deliveryMetadata({
+            mode: "manual",
+            provider: "twilio",
+            status: "manual_logged",
+            destination: "(386) 555-0118",
+            attemptedAt: timestamps.oneHourAgo,
+          }),
+        },
+      },
+    ],
+    quotes: [
+      {
+        id: DEMO_IDS.quotes.barkoQuote,
+        workspace_id: DEMO_WORKSPACE_ID,
+        created_by: userIds.rep_primary,
+        crm_contact_id: DEMO_IDS.contacts.mason,
+        crm_deal_id: DEMO_IDS.deals.barkoPackage,
+        status: "linked",
+        title: "Barko 495B package - Q2 refresh",
+        line_items: [
+          { sku: "BARKO-495B", description: "Barko 495B loader", quantity: 1, unitPrice: 452000 },
+          { sku: "TRAINING-OPS", description: "Operator onboarding package", quantity: 1, unitPrice: 3300 },
+          { sku: "FREIGHT-FL", description: "Freight to Lake City", quantity: 1, unitPrice: 4800 },
+        ],
+        customer_snapshot: {
+          contact_name: "Mason Reed",
+          company_name: "Apex Timber Operations",
+          email: "mason.reed@apextimber.demo",
+          phone: "(386) 555-0142",
+        },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          source: "crm_demo_seed",
+        },
+        linked_at: timestamps.thisMorning,
+      },
+    ],
+    duplicateCandidates: [
+      {
+        id: DEMO_IDS.duplicateCandidates.jordanLead,
+        workspace_id: DEMO_WORKSPACE_ID,
+        rule_id: "same_phone_and_name_similarity",
+        left_contact_id: DEMO_IDS.contacts.jordan,
+        right_contact_id: DEMO_IDS.contacts.jordon,
+        score: 0.94,
+        status: "open",
+      },
+    ],
+    activityTemplates: [
+      {
+        id: DEMO_IDS.activityTemplates.demoRecap,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "meeting",
+        label: "Demo recap",
+        description: "Capture what the crew liked, what they questioned, and the next move.",
+        body: "Recapped the field demo with the crew, captured objections, and locked the next decision date.",
+        sort_order: 10,
+        is_active: true,
+        created_by: userIds.manager,
+      },
+      {
+        id: DEMO_IDS.activityTemplates.branchCheckin,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "email",
+        label: "Branch check-in",
+        description: "Quick written recap to keep operations and ownership aligned.",
+        body: "Sharing the branch recap, current machine recommendation, and what still needs approval before we close this out.",
+        sort_order: 20,
+        is_active: true,
+        created_by: userIds.manager,
+      },
+      {
+        id: DEMO_IDS.activityTemplates.rentalTask,
+        workspace_id: DEMO_WORKSPACE_ID,
+        activity_type: "task",
+        label: "Rental fleet follow-up",
+        description: "Queue the next rental fleet check without retyping the task.",
+        body: "Confirm rental fleet utilization, machine availability, and whether the customer wants rent-to-own options.",
+        task_due_minutes: 1440,
+        task_status: "open",
+        sort_order: 30,
+        is_active: true,
+        created_by: userIds.manager,
+      },
+    ],
+    customerDealHistory: [
+      {
+        id: "62000000-0000-4000-8000-000000000001",
+        customer_profile_id: DEMO_IDS.customerProfiles.apex,
+        deal_date: timestamps.twoDaysAgo,
+        outcome: "won",
+        equipment_make: "Barko",
+        equipment_model: "595ML",
+        equipment_year: 2023,
+        equipment_category: "Loader",
+        list_price: 535000,
+        sold_price: 517500,
+        discount_pct: 3.27,
+        margin_pct: 14.6,
+        attachments_sold: 2,
+        service_contract_sold: true,
+        days_to_close: 32,
+        rep_id: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+      {
+        id: "62000000-0000-4000-8000-000000000002",
+        customer_profile_id: DEMO_IDS.customerProfiles.apex,
+        deal_date: timestamps.yesterdayMorning,
+        outcome: "won",
+        equipment_make: "Bandit",
+        equipment_model: "2460XP",
+        equipment_year: 2024,
+        equipment_category: "Chipper",
+        list_price: 139000,
+        sold_price: 133500,
+        discount_pct: 3.96,
+        margin_pct: 12.1,
+        attachments_sold: 1,
+        service_contract_sold: false,
+        days_to_close: 18,
+        rep_id: userIds.rep_primary,
+        metadata: { demoSeedBatchId: DEMO_BATCH_ID },
+      },
+    ],
+  };
+}
+
+async function deleteByIds(admin, table, ids) {
+  if (!ids.length) return;
+  const { error } = await admin.from(table).delete().in("id", ids);
+  if (error) throw error;
+}
+
+async function resetDemoData(admin) {
+  await deleteByIds(admin, "crm_activity_templates", Object.values(DEMO_IDS.activityTemplates));
+  await deleteByIds(admin, "crm_duplicate_candidates", Object.values(DEMO_IDS.duplicateCandidates));
+  await deleteByIds(admin, "quotes", Object.values(DEMO_IDS.quotes));
+  await deleteByIds(admin, "crm_activities", Object.values(DEMO_IDS.activities));
+  await deleteByIds(admin, "crm_custom_field_values", Object.values(DEMO_IDS.customFieldValues));
+  await deleteByIds(admin, "crm_custom_field_definitions", Object.values(DEMO_IDS.customFieldDefinitions));
+  await deleteByIds(admin, "crm_equipment", Object.values(DEMO_IDS.equipment));
+  await deleteByIds(admin, "crm_contact_territories", Object.values(DEMO_IDS.contactTerritories));
+  await deleteByIds(admin, "crm_territories", Object.values(DEMO_IDS.territories));
+  await deleteByIds(admin, "crm_contact_companies", Object.values(DEMO_IDS.contactCompanies));
+  await deleteByIds(admin, "crm_deals", Object.values(DEMO_IDS.deals));
+  await deleteByIds(admin, "crm_contacts", Object.values(DEMO_IDS.contacts));
+  await deleteByIds(admin, "crm_companies", Object.values(DEMO_IDS.companies));
+  await deleteByIds(admin, "customer_deal_history", [
+    "62000000-0000-4000-8000-000000000001",
+    "62000000-0000-4000-8000-000000000002",
+  ]);
+  await deleteByIds(admin, "customer_profiles_extended", Object.values(DEMO_IDS.customerProfiles));
+  await deleteByIds(
+    admin,
+    "crm_deal_stages",
+    STAGE_DEFS.map((stage) => stage.id),
+  );
+  await deleteDemoUsers(admin);
+}
+
+async function seedDemoData(admin) {
+  const userIds = await ensureDemoUsers(admin);
+  const stageIds = await ensureDealStages(admin);
+  const dataset = buildDemoDataset(userIds, stageIds);
+
+  const { error: customerProfileError } = await admin
+    .from("customer_profiles_extended")
+    .upsert(dataset.customerProfiles, { onConflict: "id" });
+  if (customerProfileError) throw customerProfileError;
+
+  const { error: companyError } = await admin
+    .from("crm_companies")
+    .upsert(dataset.companies, { onConflict: "id" });
+  if (companyError) throw companyError;
+
+  const { error: contactError } = await admin
+    .from("crm_contacts")
+    .upsert(dataset.contacts, { onConflict: "id" });
+  if (contactError) throw contactError;
+
+  const { error: contactCompanyError } = await admin
+    .from("crm_contact_companies")
+    .upsert(dataset.contactCompanies, { onConflict: "id" });
+  if (contactCompanyError) throw contactCompanyError;
+
+  const { error: territoryError } = await admin
+    .from("crm_territories")
+    .upsert(dataset.territories, { onConflict: "id" });
+  if (territoryError) throw territoryError;
+
+  const { error: contactTerritoryError } = await admin
+    .from("crm_contact_territories")
+    .upsert(dataset.contactTerritories, { onConflict: "id" });
+  if (contactTerritoryError) throw contactTerritoryError;
+
+  const { error: equipmentError } = await admin
+    .from("crm_equipment")
+    .upsert(dataset.equipment, { onConflict: "id" });
+  if (equipmentError) throw equipmentError;
+
+  const { error: customFieldDefinitionError } = await admin
+    .from("crm_custom_field_definitions")
+    .upsert(dataset.customFieldDefinitions, { onConflict: "id" });
+  if (customFieldDefinitionError) throw customFieldDefinitionError;
+
+  const { error: customFieldValueError } = await admin
+    .from("crm_custom_field_values")
+    .upsert(dataset.customFieldValues, { onConflict: "id" });
+  if (customFieldValueError) throw customFieldValueError;
+
+  const { error: dealError } = await admin
+    .from("crm_deals")
+    .upsert(dataset.deals, { onConflict: "id" });
+  if (dealError) throw dealError;
+
+  const { error: activityError } = await admin
+    .from("crm_activities")
+    .upsert(dataset.activities, { onConflict: "id" });
+  if (activityError) throw activityError;
+
+  const { error: quoteError } = await admin
+    .from("quotes")
+    .upsert(dataset.quotes, { onConflict: "id" });
+  if (quoteError) throw quoteError;
+
+  const { error: duplicateError } = await admin
+    .from("crm_duplicate_candidates")
+    .upsert(dataset.duplicateCandidates, { onConflict: "id" });
+  if (duplicateError) throw duplicateError;
+
+  const { error: templateError } = await admin
+    .from("crm_activity_templates")
+    .upsert(dataset.activityTemplates, { onConflict: "id" });
+  if (templateError) throw templateError;
+
+  const { error: dealHistoryError } = await admin
+    .from("customer_deal_history")
+    .upsert(dataset.customerDealHistory, { onConflict: "id" });
+  if (dealHistoryError) throw dealHistoryError;
+
+  console.log(`Seeded demo batch ${DEMO_BATCH_ID} into workspace "${DEMO_WORKSPACE_ID}".`);
+  console.log("Demo operator accounts:");
+  for (const user of DEMO_USERS) {
+    console.log(`  ${user.email} (${user.role})`);
+  }
+  console.log(`Demo password: ${DEMO_PASSWORD}`);
+}
+
+function printPlan() {
+  console.log(`QEP Thursday CRM demo plan
+
+Workspace:
+  ${DEMO_WORKSPACE_ID} (current app default)
+
+What this seed covers:
+  - 4 demo operator accounts (owner, manager, 2 reps)
+  - 4 companies with one parent/child hierarchy
+  - 6 contacts including one duplicate candidate pair
+  - 4 active deals across discovery, demo, quote, and negotiation
+  - 11 CRM activities with sent, failed, manual, overdue, and completed states
+  - 3 equipment assets
+  - 4 custom field definitions + seeded values
+  - 3 workspace activity templates
+  - 1 linked CRM quote
+  - 1 DGE-linked customer profile + 2 historical deals
+
+What this seed intentionally does not fake:
+  - HubSpot import runs
+  - Live integration credentials
+  - Phase 2+ department data (parts, service, rental ops, financial ops)
+  - Production client/customer PII
+
+Reset behavior:
+  - Removes all demo CRM rows by fixed id
+  - Removes demo auth users and their linked profiles
+  - Leaves non-demo records intact
+`);
+}
+
+async function main() {
+  const command = process.argv[2];
+
+  if (!command || command === "--help" || command === "-h") {
+    usage();
+    return;
+  }
+
+  if (command === "plan") {
+    printPlan();
+    return;
+  }
+
+  const admin = createAdminClient();
+
+  if (command === "reset") {
+    await resetDemoData(admin);
+    console.log(`Removed demo batch ${DEMO_BATCH_ID} from workspace "${DEMO_WORKSPACE_ID}".`);
+    return;
+  }
+
+  if (command === "seed") {
+    await resetDemoData(admin);
+    await seedDemoData(admin);
+    return;
+  }
+
+  if (command === "reseed") {
+    await resetDemoData(admin);
+    await seedDemoData(admin);
+    return;
+  }
+
+  usage();
+  process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

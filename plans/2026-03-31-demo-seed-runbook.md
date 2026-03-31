@@ -1,0 +1,94 @@
+# QEP Thursday demo seed runbook
+
+## Why this exists
+
+The Thursday, April 2, 2026 demo should not wait for full CRM completion. It needs realistic data on the surfaces that already exist and are stable enough to show well:
+
+- contacts and companies
+- hierarchy and equipment registry
+- duplicate review
+- pipeline and deal detail
+- activity timelines and unified inbox
+- communication templates
+- quote linkage
+- one DGE-linked customer profile
+
+This seed pack is intentionally scoped to those flows. It does not fake unfinished phases.
+
+## Data strategy
+
+- Workspace target: `default`
+- Seed type: deterministic and disposable
+- Cleanup mode: fixed-id reset plus demo auth-user deletion
+- Realism: believable heavy-equipment dealership records with no real client/customer PII
+
+## Commands
+
+```bash
+cd /Users/brianlewis/client-projects/qep
+bun run demo:plan
+```
+
+```bash
+cd /Users/brianlewis/client-projects/qep
+SUPABASE_URL="https://<project>.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+bun run demo:seed
+```
+
+```bash
+cd /Users/brianlewis/client-projects/qep
+SUPABASE_URL="https://<project>.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+bun run demo:reset
+```
+
+```bash
+cd /Users/brianlewis/client-projects/qep
+SUPABASE_URL="https://<project>.supabase.co" \
+SUPABASE_SERVICE_ROLE_KEY="<service-role-key>" \
+bun run demo:reseed
+```
+
+## Optional overrides
+
+```bash
+QEP_DEMO_WORKSPACE_ID="default"
+QEP_DEMO_PASSWORD="QepDemo!2026"
+```
+
+If `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are not exported, the script will try to use `supabase status -o env` from a running local Supabase environment.
+
+## Demo accounts created
+
+- `demo.owner@qep-demo.local`
+- `demo.manager@qep-demo.local`
+- `demo.rep@qep-demo.local`
+- `demo.rep2@qep-demo.local`
+
+Default password:
+
+```text
+QepDemo!2026
+```
+
+## Seeded story
+
+- A parent/child forestry account structure
+- A municipal/utility clearing account
+- A rental fleet account
+- One duplicate-contact queue item
+- One negotiation-stage loader deal
+- One demo-scheduled chipper deal
+- One quote-working tracked-machine deal
+- One discovery-stage rental/fleet deal
+- Failed, manual, sent, overdue, and completed activities in the timeline/inbox
+- A linked quote for CRM handoff
+- One DGE-linked customer profile to support the AI-native story
+
+## What is intentionally not seeded
+
+- HubSpot import/cutover state
+- production credentials or live communication sends
+- parts/service/rental ops phase data beyond what current CRM surfaces need
+- real customer names, real phones, or real emails
