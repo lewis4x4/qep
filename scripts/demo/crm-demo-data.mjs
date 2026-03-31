@@ -375,6 +375,8 @@ const DEMO_INTEGRATION_ROWS = [
         cutover_ready: false,
         validated_at: buildDate(0),
         note: "Demo validation window active. Daily reconciliation still required before final cutover.",
+        decision: "hold_parallel_run",
+        decision_note: "Keep HubSpot active for operators while the final reconciliation rows are cleared. No source-only switch should happen until the board reviews a clean packet.",
       },
     },
   },
@@ -842,8 +844,13 @@ async function resetDemoIntegrationStatuses(admin) {
       continue;
     }
 
-    delete config.demo_seed_batch_id;
-    if (config.hubspot_cutover?.note === "Demo validation window active. Daily reconciliation still required before final cutover.") {
+    const shouldPreserveDemoOwnership =
+      typeof row.credentials_encrypted === "string" && row.credentials_encrypted.trim().length > 0;
+    if (!shouldPreserveDemoOwnership) {
+      delete config.demo_seed_batch_id;
+    }
+
+    if (row.integration_key === "hubspot" && config.hubspot_cutover) {
       delete config.hubspot_cutover;
     }
 

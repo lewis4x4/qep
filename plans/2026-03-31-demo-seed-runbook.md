@@ -113,6 +113,7 @@ QepDemo!2026
 - One DGE-linked customer profile to support the AI-native story
 - Integration Hub cards spanning connected, demo, pending, and error states
 - Two HubSpot import runs plus reconciliation error rows
+- HubSpot cutover package state with a seeded final handoff call and owner-facing note
 
 ## What is intentionally not seeded
 
