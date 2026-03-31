@@ -124,6 +124,10 @@ function canSendFromInbox(activity: CrmActivityFeedItem): boolean {
   return status === "failed" || status === "manual_logged";
 }
 
+function canSelectTaskFromInbox(activity: CrmActivityFeedItem): boolean {
+  return activity.activityType === "task" && readTaskMetadata(activity) !== null;
+}
+
 function deliveryActionLabel(delivery: Record<string, unknown> | null): string {
   const status = typeof delivery?.status === "string" ? delivery.status : null;
   return status === "failed" ? "Retry send" : "Send now";
@@ -178,6 +182,24 @@ export function CrmActivitiesPage() {
   const selectedActivities = useMemo(
     () => activities.filter((activity) => selectedActivityIds.includes(activity.id)),
     [activities, selectedActivityIds],
+  );
+  const selectedCommunications = useMemo(
+    () => selectedActivities.filter(canSendFromInbox),
+    [selectedActivities],
+  );
+  const selectedTaskActivities = useMemo(
+    () => selectedActivities.filter(canSelectTaskFromInbox),
+    [selectedActivities],
+  );
+  const selectedOpenTasks = useMemo(
+    () =>
+      selectedTaskActivities.filter((activity) => readTaskMetadata(activity)?.status !== "completed"),
+    [selectedTaskActivities],
+  );
+  const selectedCompletedTasks = useMemo(
+    () =>
+      selectedTaskActivities.filter((activity) => readTaskMetadata(activity)?.status === "completed"),
+    [selectedTaskActivities],
   );
 
   const deliveryMutation = useMutation({
@@ -306,12 +328,41 @@ export function CrmActivitiesPage() {
     () => filteredActivities.filter(canSendFromInbox).map((activity) => activity.id),
     [filteredActivities],
   );
+  const filteredOpenTaskActivityIds = useMemo(
+    () =>
+      filteredActivities
+        .filter((activity) => {
+          const task = readTaskMetadata(activity);
+          return canSelectTaskFromInbox(activity) && task?.status !== "completed";
+        })
+        .map((activity) => activity.id),
+    [filteredActivities],
+  );
+  const filteredCompletedTaskActivityIds = useMemo(
+    () =>
+      filteredActivities
+        .filter((activity) => readTaskMetadata(activity)?.status === "completed")
+        .map((activity) => activity.id),
+    [filteredActivities],
+  );
 
   const allFilteredSendableSelected = useMemo(
     () =>
       filteredSendableActivityIds.length > 0 &&
       filteredSendableActivityIds.every((activityId) => selectedActivityIds.includes(activityId)),
     [filteredSendableActivityIds, selectedActivityIds],
+  );
+  const allFilteredOpenTasksSelected = useMemo(
+    () =>
+      filteredOpenTaskActivityIds.length > 0 &&
+      filteredOpenTaskActivityIds.every((activityId) => selectedActivityIds.includes(activityId)),
+    [filteredOpenTaskActivityIds, selectedActivityIds],
+  );
+  const allFilteredCompletedTasksSelected = useMemo(
+    () =>
+      filteredCompletedTaskActivityIds.length > 0 &&
+      filteredCompletedTaskActivityIds.every((activityId) => selectedActivityIds.includes(activityId)),
+    [filteredCompletedTaskActivityIds, selectedActivityIds],
   );
 
   const summary = useMemo(() => {
@@ -362,6 +413,54 @@ export function CrmActivitiesPage() {
 
     setSelectedActivityIds((current) =>
       current.filter((activityId) => !filteredSendableActivityIds.includes(activityId)),
+    );
+  }
+
+  function selectFilteredOpenTasks(): void {
+    if (filteredOpenTaskActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) => {
+      const next = new Set(current);
+      for (const activityId of filteredOpenTaskActivityIds) {
+        next.add(activityId);
+      }
+      return Array.from(next);
+    });
+  }
+
+  function clearFilteredOpenTasks(): void {
+    if (filteredOpenTaskActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) =>
+      current.filter((activityId) => !filteredOpenTaskActivityIds.includes(activityId)),
+    );
+  }
+
+  function selectFilteredCompletedTasks(): void {
+    if (filteredCompletedTaskActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) => {
+      const next = new Set(current);
+      for (const activityId of filteredCompletedTaskActivityIds) {
+        next.add(activityId);
+      }
+      return Array.from(next);
+    });
+  }
+
+  function clearFilteredCompletedTasks(): void {
+    if (filteredCompletedTaskActivityIds.length === 0) {
+      return;
+    }
+
+    setSelectedActivityIds((current) =>
+      current.filter((activityId) => !filteredCompletedTaskActivityIds.includes(activityId)),
     );
   }
 
@@ -440,7 +539,7 @@ export function CrmActivitiesPage() {
   }
 
   async function sendSelectedActivities(): Promise<void> {
-    const sendableActivities = selectedActivities.filter(canSendFromInbox);
+    const sendableActivities = selectedCommunications;
     if (sendableActivities.length === 0) {
       setReviewOpen(false);
       return;
@@ -478,6 +577,62 @@ export function CrmActivitiesPage() {
     toast({
       title: "Bulk send completed with issues",
       description: `${succeeded.length} sent, ${failed.length} still need review.`,
+      variant: "destructive",
+    });
+  }
+
+  async function applyTaskStatusToSelected(nextStatus: "open" | "completed"): Promise<void> {
+    const targetActivities =
+      nextStatus === "completed" ? selectedOpenTasks : selectedCompletedTasks;
+
+    if (targetActivities.length === 0) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      targetActivities.map(async (activity) => {
+        const task = readTaskMetadata(activity);
+        if (!task) {
+          return null;
+        }
+
+        await taskMutation.mutateAsync({
+          activityId: activity.id,
+          task: {
+            ...task,
+            status: nextStatus,
+          },
+          updatedAt: activity.updatedAt,
+        });
+
+        return activity.id;
+      }),
+    );
+
+    const succeeded = results
+      .filter((result): result is PromiseFulfilledResult<string | null> => result.status === "fulfilled")
+      .map((result) => result.value)
+      .filter((value): value is string => Boolean(value));
+    const failed = results.filter((result) => result.status === "rejected").length;
+
+    if (succeeded.length > 0) {
+      setSelectedActivityIds((current) => current.filter((id) => !succeeded.includes(id)));
+    }
+
+    if (failed === 0) {
+      toast({
+        title: nextStatus === "completed" ? "Tasks completed" : "Tasks reopened",
+        description:
+          nextStatus === "completed"
+            ? `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} moved out of the active queue.`
+            : `${succeeded.length} task${succeeded.length === 1 ? "" : "s"} returned to the active queue.`,
+      });
+      return;
+    }
+
+    toast({
+      title: nextStatus === "completed" ? "Bulk complete finished with issues" : "Bulk reopen finished with issues",
+      description: `${succeeded.length} updated, ${failed} still need attention.`,
       variant: "destructive",
     });
   }
@@ -668,14 +823,55 @@ export function CrmActivitiesPage() {
           </span>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#475569]">
+            Task queue
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={allFilteredOpenTasksSelected ? clearFilteredOpenTasks : selectFilteredOpenTasks}
+            disabled={filteredOpenTaskActivityIds.length === 0}
+            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#FFFBEB] hover:text-[#92400E]"
+          >
+            {allFilteredOpenTasksSelected
+              ? "Clear open tasks"
+              : `Select open tasks (${filteredOpenTaskActivityIds.length})`}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={allFilteredCompletedTasksSelected ? clearFilteredCompletedTasks : selectFilteredCompletedTasks}
+            disabled={filteredCompletedTaskActivityIds.length === 0}
+            className="min-h-[44px] rounded-full border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F0FDF4] hover:text-[#166534]"
+          >
+            {allFilteredCompletedTasksSelected
+              ? "Clear completed tasks"
+              : `Select completed tasks (${filteredCompletedTaskActivityIds.length})`}
+          </Button>
+          <span className="text-xs text-[#64748B]">
+            Use the same inbox filters to batch-close overdue work or reopen completed follow-through.
+          </span>
+        </div>
+
         {selectedActivities.length > 0 && (
           <div className="flex flex-col gap-3 rounded-2xl border border-[#FED7AA] bg-[#FFF7ED] p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-[#9A3412]">
-                {selectedActivities.length} communication{selectedActivities.length === 1 ? "" : "s"} selected
+                {selectedActivities.length} inbox item{selectedActivities.length === 1 ? "" : "s"} selected
               </p>
               <p className="mt-1 text-xs text-[#9A3412]">
-                Review manual and failed messages together, then send them as one operator action.
+                {selectedCommunications.length > 0 && (
+                  <>
+                    {selectedCommunications.length} communication{selectedCommunications.length === 1 ? "" : "s"} ready for review
+                    {selectedTaskActivities.length > 0 ? " and " : "."}
+                  </>
+                )}
+                {selectedTaskActivities.length > 0 && (
+                  <>
+                    {selectedTaskActivities.length} task{selectedTaskActivities.length === 1 ? "" : "s"} queued for bulk follow-through.
+                  </>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -687,14 +883,38 @@ export function CrmActivitiesPage() {
               >
                 Clear
               </Button>
-              <Button
-                type="button"
-                onClick={() => setReviewOpen(true)}
-                className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
-              >
-                <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
-                Review selected
-              </Button>
+              {selectedOpenTasks.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void applyTaskStatusToSelected("completed")}
+                  disabled={taskMutation.isPending}
+                  className="border-[#FDE68A] bg-white text-[#92400E] hover:bg-[#FFFBEB]"
+                >
+                  {taskMutation.isPending ? "Updating..." : `Complete tasks (${selectedOpenTasks.length})`}
+                </Button>
+              )}
+              {selectedCompletedTasks.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void applyTaskStatusToSelected("open")}
+                  disabled={taskMutation.isPending}
+                  className="border-[#BBF7D0] bg-white text-[#166534] hover:bg-[#F0FDF4]"
+                >
+                  {taskMutation.isPending ? "Updating..." : `Reopen tasks (${selectedCompletedTasks.length})`}
+                </Button>
+              )}
+              {selectedCommunications.length > 0 && (
+                <Button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
+                >
+                  <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Review selected
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -736,7 +956,7 @@ export function CrmActivitiesPage() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      {canSendFromInbox(activity) && (
+                      {(canSendFromInbox(activity) || canSelectTaskFromInbox(activity)) && (
                         <label className="inline-flex items-center gap-2 rounded-full border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-medium text-[#334155]">
                           <input
                             type="checkbox"
@@ -921,9 +1141,9 @@ export function CrmActivitiesPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-[#0F172A]">Next communication-hub closeout</p>
-            <p className="mt-1 text-sm text-[#475569]">
-              After this feed lands, the next remaining Sprint 4 gap is deeper operator controls around templates, bulk execution, and communication review workflows.
-            </p>
+              <p className="mt-1 text-sm text-[#475569]">
+              After bulk task handling lands, the next remaining Sprint 4 gap is deeper send governance and template execution control on top of the inbox workflow.
+              </p>
           </div>
           <span className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
@@ -942,13 +1162,13 @@ export function CrmActivitiesPage() {
           </SheetHeader>
 
           <div className="space-y-3">
-            {selectedActivities.length === 0 && (
+            {selectedCommunications.length === 0 && (
               <Card className="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-sm text-[#475569]">
                 No communications selected.
               </Card>
             )}
 
-            {selectedActivities.map((activity) => {
+            {selectedCommunications.map((activity) => {
               const delivery = readDeliveryMetadata(activity);
               const isEditable = canSendFromInbox(activity);
               const isArchivable = canArchiveFromInbox(activity);
@@ -1055,7 +1275,7 @@ export function CrmActivitiesPage() {
               type="button"
               onClick={() => void sendSelectedActivities()}
               disabled={
-                selectedActivities.length === 0 ||
+                selectedCommunications.length === 0 ||
                 deliveryMutation.isPending ||
                 bodyMutation.isPending ||
                 archiveMutation.isPending
@@ -1065,7 +1285,7 @@ export function CrmActivitiesPage() {
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
               {deliveryMutation.isPending || bodyMutation.isPending || archiveMutation.isPending
                 ? "Sending..."
-                : `Send selected (${selectedActivities.length})`}
+                : `Send selected (${selectedCommunications.length})`}
             </Button>
           </div>
         </SheetContent>
