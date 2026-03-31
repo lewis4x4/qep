@@ -827,6 +827,7 @@ async function seedDemoIntegrationStatuses(admin) {
 
 async function resetDemoIntegrationStatuses(admin) {
   const keys = DEMO_INTEGRATION_ROWS.map((row) => row.integration_key);
+  const demoRowsByKey = new Map(DEMO_INTEGRATION_ROWS.map((row) => [row.integration_key, row]));
   const { data, error } = await admin
     .from("integration_status")
     .select("workspace_id, integration_key, credentials_encrypted, config")
@@ -857,7 +858,10 @@ async function resetDemoIntegrationStatuses(admin) {
     resets.push({
       workspace_id: row.workspace_id,
       integration_key: row.integration_key,
+      display_name: demoRowsByKey.get(row.integration_key)?.display_name ?? row.integration_key,
       status: row.credentials_encrypted ? "connected" : "pending_credentials",
+      auth_type: demoRowsByKey.get(row.integration_key)?.auth_type ?? "api_key",
+      sync_frequency: demoRowsByKey.get(row.integration_key)?.sync_frequency ?? "manual",
       endpoint_url: null,
       last_sync_at: null,
       last_sync_records: 0,
