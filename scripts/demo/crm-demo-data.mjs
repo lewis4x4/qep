@@ -1,5 +1,56 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+
+function parseDotEnvFile(filePath) {
+  const raw = readFileSync(filePath, "utf8");
+  const parsed = {};
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) continue;
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (!key) continue;
+    parsed[key] = value;
+  }
+
+  return parsed;
+}
+
+function normalizeEnvValue(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function loadLocalDemoEnv() {
+  const cwd = process.cwd();
+  const envFiles = [
+    `${cwd}/.env.demo.local`,
+    `${cwd}/.env.local`,
+    `${cwd}/.env`,
+  ];
+
+  for (const filePath of envFiles) {
+    if (!existsSync(filePath)) continue;
+    const entries = parseDotEnvFile(filePath);
+    for (const [key, rawValue] of Object.entries(entries)) {
+      if (process.env[key]) continue;
+      process.env[key] = normalizeEnvValue(rawValue);
+    }
+  }
+}
+
+loadLocalDemoEnv();
 
 const DEMO_BATCH_ID = "crm-demo-thursday-2026-04-02";
 const DEMO_WORKSPACE_ID = process.env.QEP_DEMO_WORKSPACE_ID ?? "default";
@@ -158,18 +209,6 @@ Optional:
 Demo operator emails:
 ${DEMO_USERS.map((user) => `  - ${user.email} (${user.role})`).join("\n")}
 `);
-}
-
-function normalizeEnvValue(value) {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
 }
 
 function isPlaceholderValue(value) {

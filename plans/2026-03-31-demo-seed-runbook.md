@@ -36,6 +36,15 @@ cd /Users/brianlewis/client-projects/qep
 bun run demo:plan
 ```
 
+Recommended for the Netlify demo target:
+
+```bash
+cd /Users/brianlewis/client-projects/qep
+cp .env.demo.example .env.demo.local
+# fill in the real staging SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+bun run demo:reseed
+```
+
 ```bash
 cd /Users/brianlewis/client-projects/qep
 SUPABASE_URL="https://<project>.supabase.co" \
@@ -64,7 +73,15 @@ QEP_DEMO_WORKSPACE_ID="default"
 QEP_DEMO_PASSWORD="QepDemo!2026"
 ```
 
-If `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are not exported, the script will try to use `supabase status -o env` from a running local Supabase environment.
+Credential resolution order:
+
+1. shell exports
+2. `.env.demo.local`
+3. `.env.local`
+4. `.env`
+5. `supabase status -o env` from a running local Supabase environment
+
+For the Netlify demo, use `.env.demo.local` with the staging Supabase project credentials. The Netlify URL itself is not enough; the seed script writes directly to the backing Supabase database.
 
 ## Demo accounts created
 
