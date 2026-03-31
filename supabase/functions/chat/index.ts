@@ -7,6 +7,9 @@ import {
 } from "../_shared/dge-auth.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 
+/** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
+const CHAT_EDGE_REVISION = "20260331-rlfb2";
+
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
@@ -138,6 +141,7 @@ function jsonError(
         ...headers,
         "Content-Type": "application/json",
         "X-Trace-Id": traceId,
+        "X-QEP-Chat-Revision": CHAT_EDGE_REVISION,
       },
     },
   );
@@ -618,12 +622,18 @@ Deno.serve(async (req) => {
 
     const callerClient = createCallerClient(caller.authHeader);
 
-    const rateOk = await enforceRateLimitWithFallback(adminClient, {
-      userId: caller.userId,
-      endpoint: "chat",
-      maxRequests: 10,
-      windowSeconds: 60,
-    });
+    let rateOk = true;
+    try {
+      rateOk = await enforceRateLimitWithFallback(adminClient, {
+        userId: caller.userId,
+        endpoint: "chat",
+        maxRequests: 10,
+        windowSeconds: 60,
+      });
+    } catch (rateLimitThrown) {
+      console.error(`[chat:${traceId}] rate limit enforcement threw`, rateLimitThrown);
+      rateOk = true;
+    }
 
     if (!rateOk) {
       return jsonError(
@@ -815,6 +825,7 @@ Rules:
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "X-Trace-Id": traceId,
+        "X-QEP-Chat-Revision": CHAT_EDGE_REVISION,
       },
     });
   } catch (error) {

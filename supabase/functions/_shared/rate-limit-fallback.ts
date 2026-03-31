@@ -24,8 +24,10 @@ export async function enforceRateLimitWithFallback(
     p_window_seconds: p.windowSeconds,
   });
 
+  // Match voice-capture: only explicit `false` denies. `null`/undefined from PostgREST
+  // must not lock everyone out as "rate limited".
   if (!rpcResult.error) {
-    return rpcResult.data === true;
+    return rpcResult.data !== false;
   }
 
   console.warn(

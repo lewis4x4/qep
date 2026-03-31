@@ -312,7 +312,9 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         } else if (code === "RATE_LIMITED") {
           message = "You are sending messages too quickly. Please wait a minute and try again.";
         } else if (code === "RATE_LIMIT_CHECK_FAILED") {
-          message = "Chat is temporarily unavailable. Please try again shortly.";
+          // Legacy edge build: 503 when check_rate_limit RPC failed (no table fallback). Fix = deploy current chat function.
+          message =
+            "Chat could not verify usage limits. Please try again in a minute. If this keeps happening, the chat service needs redeploying.";
         } else if (code === "EMBEDDING_FAILED") {
           message = "The embedding service is temporarily unavailable.";
         } else if (code === "DOCUMENT_RETRIEVAL_FAILED") {
