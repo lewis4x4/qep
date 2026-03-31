@@ -1,4 +1,3 @@
-import Anthropic from "npm:@anthropic-ai/sdk@0.39";
 import {
   createAdminClient,
   createCallerClient,
@@ -8,7 +7,8 @@ import {
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260331-rlfb2";
+const CHAT_EDGE_REVISION = "20260331-openai-nano-retrieval2";
+const CHAT_MODEL = "gpt-5.4-nano";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -43,6 +43,27 @@ interface SourcePayload {
   confidence: number;
   kind: "document" | "crm";
 }
+
+type DocumentAudience =
+  | "company_wide"
+  | "finance"
+  | "leadership"
+  | "admin_owner"
+  | "owner_only";
+
+type DocumentFallbackRow = {
+  id: string;
+  title: string;
+  raw_text: string | null;
+  audience: DocumentAudience;
+  updated_at: string;
+};
+
+type ChunkFallbackRow = {
+  document_id: string;
+  chunk_index: number;
+  content: string;
+};
 
 type CustomerProfileRow = {
   id: string;
@@ -159,6 +180,113 @@ function truncateText(text: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
+const QUERY_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "can",
+  "do",
+  "does",
+  "for",
+  "how",
+  "i",
+  "in",
+  "is",
+  "it",
+  "me",
+  "of",
+  "on",
+  "or",
+  "our",
+  "please",
+  "qep",
+  "show",
+  "tell",
+  "the",
+  "to",
+  "us",
+  "we",
+  "what",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+]);
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function simplifyQuestion(message: string): string {
+  const simplified = message
+    .trim()
+    .replace(/^[^a-z0-9]+/i, "")
+    .replace(/\?+$/g, "")
+    .replace(
+      /^(what|where|which|who|why|how)\s+(is|are|was|were|do|does|did|can|could|should|would|were)\s+/i,
+      "",
+    )
+    .replace(/^(tell me about|show me|explain|summarize|describe|find|give me)\s+/i, "")
+    .replace(/^(the|our)\s+/i, "")
+    .trim();
+  return simplified;
+}
+
+function extractSearchTokens(message: string): string[] {
+  const normalized = normalizeSearchText(message);
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const token of normalized.split(" ")) {
+    if (token.length < 3 || QUERY_STOP_WORDS.has(token) || seen.has(token)) continue;
+    seen.add(token);
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+function buildKeywordCandidates(message: string): string[] {
+  const candidates: string[] = [];
+  const raw = message.trim();
+  const simplified = simplifyQuestion(raw);
+  const tokenPhrase = extractSearchTokens(raw).slice(0, 6).join(" ");
+  for (const candidate of [raw, simplified, tokenPhrase]) {
+    if (!candidate) continue;
+    const normalized = candidate.trim();
+    if (!normalized || candidates.includes(normalized)) continue;
+    candidates.push(normalized);
+  }
+  return candidates;
+}
+
+function allowedAudiencesForRole(role: UserRole): DocumentAudience[] {
+  if (role === "owner") {
+    return ["company_wide", "finance", "leadership", "admin_owner", "owner_only"];
+  }
+  if (role === "manager") {
+    return ["company_wide", "finance", "leadership"];
+  }
+  if (role === "admin") {
+    return ["company_wide", "finance", "admin_owner"];
+  }
+  return ["company_wide"];
+}
+
+function excerptAroundToken(text: string, token: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const lower = normalized.toLowerCase();
+  const index = lower.indexOf(token.toLowerCase());
+  if (index < 0) return truncateText(normalized, 420);
+  const start = Math.max(0, index - 120);
+  return truncateText(normalized.slice(start, start + 420), 420);
+}
+
 function formatCurrency(value: number | null): string {
   if (typeof value !== "number") return "unknown";
   return new Intl.NumberFormat("en-US", {
@@ -224,6 +352,24 @@ function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
 
 type EmbedQueryResult = { ok: true; vector: number[] } | { ok: false; reason: string };
 
+type OpenAIChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?:
+        | string
+        | Array<{
+            type?: string;
+            text?: string;
+          }>;
+    };
+  }>;
+  error?: {
+    message?: string;
+    type?: string;
+    code?: string;
+  };
+};
+
 async function embedQuery(message: string, traceId: string): Promise<EmbedQueryResult> {
   try {
     const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
@@ -260,6 +406,59 @@ async function embedQuery(message: string, traceId: string): Promise<EmbedQueryR
   }
 }
 
+function extractOpenAIText(payload: OpenAIChatCompletionResponse): string | null {
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content === "string") {
+    return content.trim() || null;
+  }
+  if (Array.isArray(content)) {
+    const text = content
+      .filter((item) => item?.type === "text" || item?.type === "output_text")
+      .map((item) => item.text ?? "")
+      .join("")
+      .trim();
+    return text || null;
+  }
+  return null;
+}
+
+async function generateAnswerWithOpenAI(input: {
+  traceId: string;
+  systemPrompt: string;
+  history: ChatMessage[];
+  message: string;
+}): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [
+        { role: "system", content: input.systemPrompt },
+        ...input.history,
+        { role: "user", content: input.message },
+      ],
+      max_completion_tokens: 1024,
+    }),
+  });
+
+  const payload = await response.json() as OpenAIChatCompletionResponse;
+  if (!response.ok) {
+    const detail = payload.error?.message ?? `openai_http_${response.status}`;
+    console.error(`[chat:${input.traceId}] openai_generation_failed`, payload);
+    throw new Error(detail);
+  }
+
+  const text = extractOpenAIText(payload);
+  if (!text) {
+    throw new Error("empty_model_output");
+  }
+  return text;
+}
+
 async function retrieveDocumentEvidence(
   adminClient: ReturnType<typeof createAdminClient>,
   input: {
@@ -269,34 +468,203 @@ async function retrieveDocumentEvidence(
     embedding: number[] | null;
   },
 ): Promise<EvidenceItem[]> {
-  const { data, error } = await adminClient.rpc("retrieve_document_evidence", {
-    query_embedding: input.embedding ? `[${input.embedding.join(",")}]` : null,
-    keyword_query: input.message,
-    user_role: input.role,
-    match_count: 6,
-    semantic_match_threshold: 0.58,
-  });
-
-  if (error) {
-    console.error(`[chat:${input.traceId}] document retrieval failed`, error);
-    throw new Error("DOCUMENT_RETRIEVAL_FAILED");
-  }
-
-  return ((data ?? []) as Array<{
+  const mapEvidence = (rows: Array<{
     source_type: string;
     source_id: string;
     source_title: string;
     excerpt: string;
     confidence: number;
     access_class: string | null;
-  }>).map((item) => ({
-    sourceType: "document",
-    sourceId: item.source_id,
-    sourceTitle: item.source_title,
-    excerpt: truncateText(item.excerpt ?? "", 500),
-    confidence: Math.max(0, Math.min(1, item.confidence ?? 0)),
-    accessClass: item.access_class,
+  }>) =>
+    rows.map((item) => ({
+      sourceType: "document" as const,
+      sourceId: item.source_id,
+      sourceTitle: item.source_title,
+      excerpt: truncateText(item.excerpt ?? "", 500),
+      confidence: Math.max(0, Math.min(1, item.confidence ?? 0)),
+      accessClass: item.access_class,
+    }));
+
+  const keywordCandidates = buildKeywordCandidates(input.message);
+  for (const keywordQuery of keywordCandidates) {
+    const { data, error } = await adminClient.rpc("retrieve_document_evidence", {
+      query_embedding: input.embedding ? `[${input.embedding.join(",")}]` : null,
+      keyword_query: keywordQuery,
+      user_role: input.role,
+      match_count: 6,
+      semantic_match_threshold: 0.58,
+    });
+
+    if (error) {
+      console.error(
+        `[chat:${input.traceId}] document retrieval failed keyword_query=${keywordQuery}`,
+        error,
+      );
+      throw new Error("DOCUMENT_RETRIEVAL_FAILED");
+    }
+
+    const mapped = mapEvidence((data ?? []) as Array<{
+      source_type: string;
+      source_id: string;
+      source_title: string;
+      excerpt: string;
+      confidence: number;
+      access_class: string | null;
+    }>);
+    if (mapped.length > 0) {
+      const hitDocIds = mapped.map((item) => item.sourceId);
+      const { data: hitDocs, error: hitDocsError } = await adminClient
+        .from("documents")
+        .select("id, title, raw_text, audience, updated_at")
+        .in("id", hitDocIds);
+      if (hitDocsError) {
+        console.error(`[chat:${input.traceId}] document hit hydration failed`, hitDocsError);
+      } else {
+        const hydratedById = new Map(
+          ((hitDocs ?? []) as DocumentFallbackRow[]).map((doc) => [doc.id, doc]),
+        );
+        const useFullDocForSingleHit = mapped.length === 1;
+        const tokens = extractSearchTokens(input.message);
+        for (const item of mapped) {
+          const doc = hydratedById.get(item.sourceId);
+          if (!doc?.raw_text?.trim()) continue;
+          if (useFullDocForSingleHit) {
+            item.excerpt = truncateText(doc.raw_text, 50000);
+            item.confidence = Math.max(item.confidence, 0.8);
+            item.accessClass = doc.audience;
+            continue;
+          }
+          const matchingToken = tokens.find((token) => doc.raw_text?.toLowerCase().includes(token));
+          if (matchingToken) {
+            item.excerpt = excerptAroundToken(doc.raw_text, matchingToken);
+            item.accessClass = doc.audience;
+          }
+        }
+      }
+      if (keywordQuery !== input.message) {
+        console.info(
+          `[chat:${input.traceId}] document retrieval recovered with simplified query="${keywordQuery}" count=${mapped.length}`,
+        );
+      }
+      return mapped;
+    }
+  }
+
+  const searchTokens = extractSearchTokens(input.message);
+  if (searchTokens.length === 0) {
+    return [];
+  }
+
+  const { data: docs, error: docsError } = await adminClient
+    .from("documents")
+    .select("id, title, raw_text, audience, updated_at")
+    .eq("status", "published")
+    .in("audience", allowedAudiencesForRole(input.role))
+    .order("updated_at", { ascending: false })
+    .limit(150);
+
+  if (docsError) {
+    console.error(`[chat:${input.traceId}] document lexical fallback failed`, docsError);
+    throw new Error("DOCUMENT_RETRIEVAL_FAILED");
+  }
+
+  const scored = ((docs ?? []) as DocumentFallbackRow[])
+    .map((doc) => {
+      const title = doc.title ?? "";
+      const raw = doc.raw_text ?? "";
+      const titleLower = title.toLowerCase();
+      const rawLower = raw.toLowerCase();
+      let score = 0;
+      let matched = 0;
+      for (const token of searchTokens) {
+        if (titleLower.includes(token)) {
+          score += 3;
+          matched += 1;
+        } else if (rawLower.includes(token)) {
+          score += 1;
+          matched += 1;
+        }
+      }
+      if (matched === 0) return null;
+      const excerptSource = raw || title;
+      const excerptToken = searchTokens.find((token) => rawLower.includes(token) || titleLower.includes(token)) ?? searchTokens[0];
+      return {
+        doc,
+        matched,
+        score,
+        excerpt: excerptAroundToken(excerptSource, excerptToken),
+      };
+    })
+    .filter((item): item is { doc: DocumentFallbackRow; matched: number; score: number; excerpt: string } => item !== null)
+    .sort((a, b) => b.score - a.score || b.matched - a.matched || b.doc.updated_at.localeCompare(a.doc.updated_at))
+    .slice(0, 3);
+
+  if (scored.length > 0) {
+    console.info(
+      `[chat:${input.traceId}] document lexical fallback matched count=${scored.length} tokens=${searchTokens.join(",")}`,
+    );
+  }
+
+  const lexicalResults = scored.map(({ doc, matched, score, excerpt }) => ({
+    sourceType: "document" as const,
+    sourceId: doc.id,
+    sourceTitle: doc.title,
+    excerpt,
+    confidence: Math.min(0.92, 0.62 + matched * 0.08 + Math.min(score, 6) * 0.02),
+    accessClass: doc.audience,
   }));
+  if (lexicalResults.length > 0) {
+    return lexicalResults;
+  }
+
+  const visibleDocs = ((docs ?? []) as DocumentFallbackRow[]).filter(
+    (doc) => (doc.raw_text?.trim().length ?? 0) > 0,
+  );
+  if (visibleDocs.length === 0 || visibleDocs.length > 3) {
+    return [];
+  }
+
+  const visibleDocIds = visibleDocs.map((doc) => doc.id);
+  const useFullVisibleDoc = visibleDocs.length === 1;
+  let chunksByDoc = new Map<string, string[]>();
+  if (!useFullVisibleDoc) {
+    const { data: fallbackChunks, error: fallbackChunksError } = await adminClient
+      .from("chunks")
+      .select("document_id, chunk_index, content")
+      .in("document_id", visibleDocIds)
+      .order("chunk_index", { ascending: true })
+      .limit(24);
+
+    if (fallbackChunksError) {
+      console.error(`[chat:${input.traceId}] document tiny-corpus chunk fallback failed`, fallbackChunksError);
+    }
+
+    chunksByDoc = new Map<string, string[]>();
+    for (const row of ((fallbackChunks ?? []) as ChunkFallbackRow[])) {
+      const current = chunksByDoc.get(row.document_id) ?? [];
+      if (current.join(" ").length >= 7000) continue;
+      current.push(row.content);
+      chunksByDoc.set(row.document_id, current);
+    }
+  }
+
+  console.info(
+    `[chat:${input.traceId}] document tiny-corpus fallback used visible_docs=${visibleDocs.length}`,
+  );
+
+  return visibleDocs.slice(0, 3).map((doc, index) => {
+    const chunkText = (chunksByDoc.get(doc.id) ?? []).join("\n\n");
+    const excerptSource = useFullVisibleDoc ? (doc.raw_text || chunkText) : (chunkText || doc.raw_text || "");
+    const excerpt = truncateText(excerptSource, useFullVisibleDoc ? 50000 : 2400);
+    return {
+      sourceType: "document" as const,
+      sourceId: doc.id,
+      sourceTitle: doc.title,
+      excerpt,
+      confidence: Math.max(0.35, (useFullVisibleDoc ? 0.74 : 0.5) - index * 0.05),
+      accessClass: doc.audience,
+    };
+  });
 }
 
 async function buildCustomerContextEvidence(
@@ -549,7 +917,7 @@ async function buildCustomerContextEvidence(
         .eq("contact_id", context.contactId)
         .is("deleted_at", null)
         .order("occurred_at", { ascending: false })
-        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+        .limit(3) as unknown as Promise<{ data: ActivityRow[] | null }>,
     );
   }
   if (context.dealId) {
@@ -560,7 +928,7 @@ async function buildCustomerContextEvidence(
         .eq("deal_id", context.dealId)
         .is("deleted_at", null)
         .order("occurred_at", { ascending: false })
-        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+        .limit(3) as unknown as Promise<{ data: ActivityRow[] | null }>,
     );
   }
   if (context.companyId) {
@@ -571,7 +939,7 @@ async function buildCustomerContextEvidence(
         .eq("company_id", context.companyId)
         .is("deleted_at", null)
         .order("occurred_at", { ascending: false })
-        .limit(3) as Promise<{ data: ActivityRow[] | null }>,
+        .limit(3) as unknown as Promise<{ data: ActivityRow[] | null }>,
     );
   }
 
@@ -741,7 +1109,6 @@ Deno.serve(async (req) => {
       `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
     );
 
-    const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
     const systemPrompt = contextBlock
       ? `You are the QEP USA internal knowledge assistant. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
@@ -755,19 +1122,16 @@ Rules:
 - If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
       : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
 
-    let stream: ReturnType<Anthropic["messages"]["stream"]>;
+    let answerText: string;
     try {
-      stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [
-          ...validatedHistory,
-          { role: "user", content: rawMessage },
-        ],
+      answerText = await generateAnswerWithOpenAI({
+        traceId,
+        systemPrompt,
+        history: validatedHistory,
+        message: rawMessage,
       });
     } catch (error) {
-      console.error(`[chat:${traceId}] model stream init failed`, error);
+      console.error(`[chat:${traceId}] model generation failed model=${CHAT_MODEL}`, error);
       return jsonError(
         traceId,
         503,
@@ -795,21 +1159,23 @@ Rules:
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ meta: streamMeta })}\n\n`),
           );
-          for await (const event of stream) {
-            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`),
-              );
-            }
+          if (answerText) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text: answerText })}\n\n`),
+            );
           }
           if (sources.length > 0) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
           }
         } catch (streamError) {
-          console.error(`[chat:${traceId}] stream error`, streamError);
+          const errDetail =
+            streamError instanceof Error
+              ? `${streamError.name}: ${streamError.message}`
+              : String(streamError);
+          console.error(`[chat:${traceId}] stream error`, errDetail, streamError);
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}.` })}\n\n`,
+              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}. Detail: ${errDetail}` })}\n\n`,
             ),
           );
         }
