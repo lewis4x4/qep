@@ -9,7 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
-import type { CrmActivityType } from "../lib/types";
+import type { CrmActivityType, CrmTaskMetadata, CrmTaskStatus } from "../lib/types";
 
 interface CrmActivityComposerProps {
   open: boolean;
@@ -19,6 +19,7 @@ interface CrmActivityComposerProps {
     body: string;
     occurredAt: string;
     sendNow?: boolean;
+    task?: CrmTaskMetadata;
   }) => Promise<void>;
   isPending: boolean;
   subjectLabel: string;
@@ -48,6 +49,9 @@ export function CrmActivityComposer({
   const [activityType, setActivityType] = useState<CrmActivityType>("call");
   const [body, setBody] = useState("");
   const [sendNow, setSendNow] = useState(true);
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskStatus, setTaskStatus] = useState<CrmTaskStatus>("open");
+  const [taskError, setTaskError] = useState<string | null>(null);
   const [deliveryAvailability, setDeliveryAvailability] = useState<{
     loading: boolean;
     connected: boolean;
@@ -64,6 +68,7 @@ export function CrmActivityComposer({
     ? "twilio"
     : null;
   const isCommunicationType = integrationKey !== null;
+  const isTaskType = activityType === "task";
 
   const canSubmit = useMemo(() => body.trim().length > 0 && !isPending, [body, isPending]);
 
@@ -74,6 +79,12 @@ export function CrmActivityComposer({
     }
     setSendNow(deliveryAvailability.connected);
   }, [isCommunicationType, deliveryAvailability.connected, activityType]);
+
+  useEffect(() => {
+    if (!isTaskType) {
+      setTaskError(null);
+    }
+  }, [isTaskType]);
 
   useEffect(() => {
     if (!open || !integrationKey) {
@@ -138,16 +149,41 @@ export function CrmActivityComposer({
       return;
     }
 
+    let normalizedTask: CrmTaskMetadata | undefined;
+    if (isTaskType) {
+      if (taskDueAt) {
+        const dueAtMs = Date.parse(taskDueAt);
+        if (Number.isNaN(dueAtMs)) {
+          setTaskError("Enter a valid due date.");
+          return;
+        }
+        normalizedTask = {
+          dueAt: new Date(dueAtMs).toISOString(),
+          status: taskStatus,
+        };
+      } else {
+        normalizedTask = {
+          dueAt: null,
+          status: taskStatus,
+        };
+      }
+    }
+
+    setTaskError(null);
+
     await onSubmit({
       activityType,
       body: body.trim(),
       occurredAt: new Date().toISOString(),
       sendNow: isCommunicationType ? sendNow && deliveryAvailability.connected : undefined,
+      task: normalizedTask,
     });
 
     setBody("");
     setActivityType("call");
     setSendNow(true);
+    setTaskDueAt("");
+    setTaskStatus("open");
   }
 
   return (
@@ -214,6 +250,42 @@ export function CrmActivityComposer({
               )}
             </div>
           )}
+
+          {isTaskType && (
+            <div className="grid gap-4 rounded-md border border-[#E2E8F0] bg-[#F8FAFC] p-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="crm-task-due-at" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                  Due date
+                </label>
+                <input
+                  id="crm-task-due-at"
+                  type="datetime-local"
+                  value={taskDueAt}
+                  onChange={(event) => {
+                    setTaskDueAt(event.target.value);
+                    setTaskError(null);
+                  }}
+                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="crm-task-status" className="mb-1.5 block text-sm font-medium text-[#0F172A]">
+                  Task status
+                </label>
+                <select
+                  id="crm-task-status"
+                  value={taskStatus}
+                  onChange={(event) => setTaskStatus(event.target.value as CrmTaskStatus)}
+                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                >
+                  <option value="open">Open task</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {taskError && <p className="text-sm text-[#B91C1C]">{taskError}</p>}
 
           <div>
             <label htmlFor="crm-activity-body" className="mb-1.5 block text-sm font-medium text-[#0F172A]">

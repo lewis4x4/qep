@@ -2,7 +2,7 @@ import { CalendarClock, Mail, MessageSquareText, Phone, StickyNote, ClipboardLis
 import type { ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { CrmActivityItem, CrmActivityType } from "../lib/types";
+import type { CrmActivityItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 interface CrmActivityTimelineProps {
   activities: CrmActivityItem[];
@@ -57,6 +57,15 @@ function deliveryLabel(delivery: CommunicationDeliveryMetadata): string {
   return "Delivery status unavailable.";
 }
 
+function readTaskMetadata(activity: CrmActivityItem): CrmTaskMetadata | null {
+  if (activity.activityType !== "task") return null;
+  const metadata = activity.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const task = (metadata as Record<string, unknown>).task;
+  if (!task || typeof task !== "object") return null;
+  return task as CrmTaskMetadata;
+}
+
 function formatTimestamp(value: string): string {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -64,6 +73,34 @@ function formatTimestamp(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatTaskDueLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "Due not scheduled";
+  }
+
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "Due date needs review";
+  }
+
+  return `Due ${formatTimestamp(new Date(timestamp).toISOString())}`;
+}
+
+function taskStatusTone(status: CrmTaskMetadata["status"]): string {
+  return status === "completed"
+    ? "bg-emerald-100 text-emerald-900"
+    : "bg-amber-100 text-amber-900";
+}
+
+function taskDueTone(dueAt: string | null | undefined, status: CrmTaskMetadata["status"]): string {
+  if (status === "completed") return "text-[#475569]";
+  if (!dueAt) return "text-[#475569]";
+  const dueTime = Date.parse(dueAt);
+  if (!Number.isFinite(dueTime)) return "text-[#B91C1C]";
+  if (dueTime < Date.now()) return "text-[#B91C1C]";
+  return "text-[#475569]";
 }
 
 export function CrmActivityTimeline({
@@ -94,6 +131,7 @@ export function CrmActivityTimeline({
         const typeMeta = TYPE_STYLE[activity.activityType];
         const Icon = typeMeta.icon;
         const delivery = readCommunicationDelivery(activity);
+        const task = readTaskMetadata(activity);
 
         return (
           <article
@@ -119,6 +157,16 @@ export function CrmActivityTimeline({
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
               {activity.body ?? "No details provided."}
             </p>
+            {task && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className={cn("inline-flex items-center rounded-full px-2 py-1 font-semibold", taskStatusTone(task.status))}>
+                  {task.status === "completed" ? "Completed" : "Open task"}
+                </span>
+                <span className={cn(taskDueTone(task.dueAt, task.status))}>
+                  {formatTaskDueLabel(task.dueAt)}
+                </span>
+              </div>
+            )}
             {delivery && (
               <p className={cn("mt-2 text-xs", deliveryTone(delivery.status))}>
                 {deliveryLabel(delivery)}

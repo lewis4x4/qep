@@ -1,5 +1,12 @@
 export type CrmActivityType = "note" | "call" | "email" | "meeting" | "task" | "sms";
 
+export type CrmTaskStatus = "open" | "completed";
+
+export interface CrmTaskMetadata {
+  dueAt?: string | null;
+  status?: CrmTaskStatus;
+}
+
 export interface CrmContactSummary {
   id: string;
   workspaceId: string;
@@ -161,6 +168,7 @@ export interface CrmActivityCreateInput {
   body: string;
   occurredAt: string;
   sendNow?: boolean;
+  task?: CrmTaskMetadata;
   contactId?: string;
   companyId?: string;
   dealId?: string;

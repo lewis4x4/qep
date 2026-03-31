@@ -77,6 +77,10 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
       body: string;
       occurredAt: string;
       sendNow?: boolean;
+      task?: {
+        dueAt?: string | null;
+        status?: "open" | "completed";
+      };
     }) => createCrmActivity({ ...input, companyId }, userId),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: ["crm", "company", companyId, "activities"] });
@@ -91,7 +95,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         companyId,
         dealId: null,
         createdBy: userId,
-        metadata: {},
+        metadata: input.task ? { task: input.task } : {},
         createdAt: input.occurredAt,
         updatedAt: input.occurredAt,
         isOptimistic: true,

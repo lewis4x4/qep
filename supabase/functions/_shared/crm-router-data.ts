@@ -27,6 +27,10 @@ export interface ActivityPayload {
   activityType: "note" | "call" | "email" | "meeting" | "task" | "sms";
   body?: string | null;
   occurredAt: string;
+  task?: {
+    dueAt?: string | null;
+    status?: "open" | "completed";
+  };
   contactId?: string | null;
   companyId?: string | null;
   dealId?: string | null;
@@ -188,6 +192,21 @@ export async function createActivity(
       companyId,
       dealId,
     });
+  }
+  if (activityType === "task") {
+    const dueAt = cleanText(payload.task?.dueAt ?? null);
+    if (dueAt && Number.isNaN(Date.parse(dueAt))) {
+      throw new Error("VALIDATION_INVALID_TASK_DUE_AT");
+    }
+    const rawStatus = payload.task?.status;
+    if (rawStatus !== undefined && rawStatus !== "open" && rawStatus !== "completed") {
+      throw new Error("VALIDATION_INVALID_TASK_STATUS");
+    }
+    const status = rawStatus ?? "open";
+    metadata.task = {
+      dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+      status,
+    };
   }
 
   const { data, error } = await ctx.callerDb
