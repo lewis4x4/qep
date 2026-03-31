@@ -307,12 +307,16 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         const traceId = payload?.error?.trace_id;
         let message = payload?.error?.message ?? "Chat request failed.";
 
+        // Old chat edge returns this exact body for RATE_LIMIT_CHECK_FAILED; some proxies strip `code`.
+        const legacyRateLimitCheckBody =
+          message.trim() === "Chat is temporarily unavailable. Please try again shortly.";
+
         if (code === "AUTH_REQUIRED") {
           message = "Your session expired. Sign in again and retry.";
         } else if (code === "RATE_LIMITED") {
           message = "You are sending messages too quickly. Please wait a minute and try again.";
-        } else if (code === "RATE_LIMIT_CHECK_FAILED") {
-          // Legacy edge build: 503 when check_rate_limit RPC failed (no table fallback). Fix = deploy current chat function.
+        } else if (code === "RATE_LIMIT_CHECK_FAILED" || legacyRateLimitCheckBody) {
+          // Legacy edge: 503 when check_rate_limit RPC failed (no table fallback). Fix = deploy current chat function.
           message =
             "Chat could not verify usage limits. Please try again in a minute. If this keeps happening, the chat service needs redeploying.";
         } else if (code === "EMBEDDING_FAILED") {
