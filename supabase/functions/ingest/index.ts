@@ -3,6 +3,7 @@
  * Handles: PDF upload (multipart) + OneDrive delta sync trigger
  * Chunks text, generates embeddings, upserts to pgvector
  */
+import { Buffer } from "node:buffer";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import pdfParse from "npm:pdf-parse@1.1.1";
 import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
@@ -58,6 +59,11 @@ function chunkText(text: string): string[] {
   return chunks;
 }
 
+async function extractPdfText(fileBuffer: ArrayBuffer): Promise<string> {
+  const parsed = await pdfParse(Buffer.from(fileBuffer));
+  return parsed.text ?? "";
+}
+
 async function generateEmbedding(text: string): Promise<number[]> {
   const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -76,7 +82,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 async function ingestDocument(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   documentId: string,
   rawText: string,
   title: string
@@ -117,6 +123,17 @@ async function ingestDocument(
   return textChunks.length;
 }
 
+function jsonResponse(
+  payload: Record<string, unknown>,
+  status: number,
+  headers: Record<string, string>
+) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...headers, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
@@ -138,10 +155,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...ch, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401, ch);
     }
 
     const { data: profile } = await supabaseAdmin
@@ -151,10 +165,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
-      return new Response(JSON.stringify({ error: "Forbidden: insufficient role" }), {
-        status: 403,
-        headers: { ...ch, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Forbidden: insufficient role" }, 403, ch);
     }
 
     const contentType = req.headers.get("content-type") || "";
@@ -166,10 +177,7 @@ Deno.serve(async (req) => {
       const title = formData.get("title") as string || file?.name || "Untitled";
 
       if (!file) {
-        return new Response(JSON.stringify({ error: "No file provided" }), {
-          status: 400,
-          headers: { ...ch, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "No file provided" }, 400, ch);
       }
 
       // SEC-QEP-008: Server-side file type + size validation
@@ -181,17 +189,15 @@ Deno.serve(async (req) => {
       const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
       if (!file.type || !ALLOWED_MIME_TYPES.has(file.type)) {
-        return new Response(
-          JSON.stringify({ error: `File type not allowed: ${file.type || "unknown"}` }),
-          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        return jsonResponse(
+          { error: `File type not allowed: ${file.type || "unknown"}` },
+          415,
+          ch
         );
       }
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        return new Response(
-          JSON.stringify({ error: "File exceeds 50 MB limit" }),
-          { status: 413, headers: { ...ch, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "File exceeds 50 MB limit" }, 413, ch);
       }
 
       // Magic byte verification — confirm actual content matches declared MIME type
@@ -202,18 +208,20 @@ Deno.serve(async (req) => {
                     headerBuffer[2] === 0x03 && headerBuffer[3] === 0x04; // PK\x03\x04 (DOCX/ZIP)
 
       if (file.type === "application/pdf" && !isPdf) {
-        return new Response(
-          JSON.stringify({ error: "File content does not match declared type (expected PDF)" }),
-          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        return jsonResponse(
+          { error: "File content does not match declared type (expected PDF)" },
+          415,
+          ch
         );
       }
       if (
         file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" &&
         !isZip
       ) {
-        return new Response(
-          JSON.stringify({ error: "File content does not match declared type (expected DOCX)" }),
-          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        return jsonResponse(
+          { error: "File content does not match declared type (expected DOCX)" },
+          415,
+          ch
         );
       }
 
@@ -221,26 +229,36 @@ Deno.serve(async (req) => {
       let rawText: string;
       if (file.type === "application/pdf") {
         try {
-          const buffer = Buffer.from(await file.arrayBuffer());
-          const parsed = await pdfParse(buffer);
-          rawText = parsed.text ?? "";
+          rawText = await extractPdfText(await file.arrayBuffer());
           if (!rawText.trim()) {
-            return new Response(
-              JSON.stringify({ error: "PDF contained no extractable text. It may be a scanned image — please use a text-based PDF." }),
-              { status: 422, headers: { ...ch, "Content-Type": "application/json" } }
+            return jsonResponse(
+              {
+                error:
+                  "PDF contained no extractable text. It may be a scanned image — please use a text-based PDF.",
+              },
+              422,
+              ch
             );
           }
         } catch (pdfErr) {
           console.error("PDF parse error:", pdfErr);
-          return new Response(
-            JSON.stringify({ error: "Failed to extract text from PDF. Ensure the file is not password-protected." }),
-            { status: 422, headers: { ...ch, "Content-Type": "application/json" } }
+          return jsonResponse(
+            {
+              error:
+                "Failed to extract text from PDF. Ensure the file is not password-protected.",
+            },
+            422,
+            ch
           );
         }
       } else if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        return new Response(
-          JSON.stringify({ error: "DOCX upload is not yet supported. Please convert to PDF or plain text before uploading." }),
-          { status: 415, headers: { ...ch, "Content-Type": "application/json" } }
+        return jsonResponse(
+          {
+            error:
+              "DOCX upload is not yet supported. Please convert to PDF or plain text before uploading.",
+          },
+          415,
+          ch
         );
       } else {
         rawText = await file.text();
@@ -263,24 +281,58 @@ Deno.serve(async (req) => {
         .single();
 
       if (docError || !doc) {
-        return new Response(JSON.stringify({ error: docError?.message }), {
-          status: 500,
-          headers: { ...ch, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: docError?.message }, 500, ch);
       }
 
       const chunkCount = await ingestDocument(supabaseAdmin, doc.id, rawText, title);
 
-      return new Response(
-        JSON.stringify({ success: true, documentId: doc.id, chunks: chunkCount }),
-        { headers: { ...ch, "Content-Type": "application/json" } }
+      return jsonResponse(
+        { success: true, documentId: doc.id, chunks: chunkCount },
+        200,
+        ch
+      );
+    }
+
+    const body = await req.json();
+    if (typeof body.document_id === "string" && body.document_id.trim().length > 0) {
+      const { data: document, error: documentError } = await supabaseAdmin
+        .from("documents")
+        .select("id, title, raw_text")
+        .eq("id", body.document_id)
+        .single();
+
+      if (documentError || !document) {
+        return jsonResponse({ error: "Document not found" }, 404, ch);
+      }
+
+      if (!document.raw_text?.trim()) {
+        return jsonResponse(
+          { error: "Document has no stored raw text to re-index" },
+          422,
+          ch
+        );
+      }
+
+      const chunkCount = await ingestDocument(
+        supabaseAdmin,
+        document.id,
+        document.raw_text,
+        document.title
+      );
+
+      return jsonResponse(
+        { success: true, documentId: document.id, chunks: chunkCount },
+        200,
+        ch
       );
     }
 
     // --- ONEDRIVE DELTA SYNC ---
-    const body = await req.json();
     if (body.action === "onedrive_sync") {
       const { syncStateId } = body;
+      if (typeof syncStateId !== "string" || syncStateId.trim().length === 0) {
+        return jsonResponse({ error: "syncStateId is required" }, 400, ch);
+      }
 
       const { data: syncState } = await supabaseAdmin
         .from("onedrive_sync_state")
@@ -289,10 +341,11 @@ Deno.serve(async (req) => {
         .single();
 
       if (!syncState) {
-        return new Response(JSON.stringify({ error: "Sync state not found" }), {
-          status: 404,
-          headers: { ...ch, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "Sync state not found" }, 404, ch);
+      }
+
+      if (syncState.user_id !== user.id && profile.role !== "owner") {
+        return jsonResponse({ error: "Forbidden: sync state not accessible" }, 403, ch);
       }
 
       // SEC-QEP-101: Decrypt OneDrive access token before use
@@ -319,12 +372,19 @@ Deno.serve(async (req) => {
       const deltaRes = await fetch(deltaUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
+      if (!deltaRes.ok) {
+        return jsonResponse(
+          { error: "Failed to fetch OneDrive delta" },
+          deltaRes.status,
+          ch
+        );
+      }
       const delta = await deltaRes.json();
 
       const processed = [];
       for (const item of (delta.value || [])) {
         if (item.deleted || item.folder) continue;
-        if (!["application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+        if (!["application/pdf", "text/plain"]
           .includes(item.file?.mimeType)) continue;
 
         // Download file content
@@ -332,7 +392,26 @@ Deno.serve(async (req) => {
           `https://graph.microsoft.com/v1.0/me/drive/items/${item.id}/content`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        const rawText = await contentRes.text();
+        if (!contentRes.ok) {
+          console.error(`[ingest] Failed to download OneDrive item ${item.id}: ${contentRes.status}`);
+          continue;
+        }
+
+        let rawText: string;
+        if (item.file?.mimeType === "application/pdf") {
+          try {
+            rawText = await extractPdfText(await contentRes.arrayBuffer());
+          } catch (pdfErr) {
+            console.error(`[ingest] Failed to parse OneDrive PDF ${item.id}:`, pdfErr);
+            continue;
+          }
+        } else {
+          rawText = await contentRes.text();
+        }
+
+        if (!rawText.trim()) {
+          continue;
+        }
 
         // Upsert document
         const { data: doc } = await supabaseAdmin
@@ -346,6 +425,7 @@ Deno.serve(async (req) => {
             raw_text: rawText,
             word_count: rawText.split(/\s+/).length,
             is_active: false,
+            uploaded_by: syncState.user_id,
           }, { onConflict: "source_id" })
           .select()
           .single();
@@ -365,21 +445,12 @@ Deno.serve(async (req) => {
         })
         .eq("id", syncStateId);
 
-      return new Response(
-        JSON.stringify({ success: true, processed }),
-        { headers: { ...ch, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: true, processed }, 200, ch);
     }
 
-    return new Response(JSON.stringify({ error: "Unknown action" }), {
-      status: 400,
-      headers: { ...ch, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Unknown action" }, 400, ch);
   } catch (error) {
     console.error("Ingest error:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...ch, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Internal server error" }, 500, ch);
   }
 });
