@@ -22,7 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { CrmPageHeader } from "../components/CrmPageHeader";
-import { deliverCrmActivity, listCrmActivityFeed } from "../lib/crm-api";
+import { deliverCrmActivity, listCrmActivityFeed, patchCrmActivity } from "../lib/crm-api";
 import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
@@ -129,6 +129,7 @@ export function CrmActivitiesPage() {
   const [typeFilter, setTypeFilter] = useState<CrmActivityType | "all">("all");
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [selectedActivityIds, setSelectedActivityIds] = useState<string[]>([]);
+  const [draftBodies, setDraftBodies] = useState<Record<string, string>>({});
   const [reviewOpen, setReviewOpen] = useState(false);
   const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
   const queryKey = ["crm", "activities", "feed"] as const;
@@ -161,6 +162,33 @@ export function CrmActivitiesPage() {
               : item
           ) ?? [],
       );
+    },
+  });
+
+  const bodyMutation = useMutation({
+    mutationFn: async (input: { activityId: string; body: string; updatedAt: string }) =>
+      patchCrmActivity(input.activityId, {
+        body: input.body,
+        updatedAt: input.updatedAt,
+      }),
+    onSuccess: (updatedActivity) => {
+      queryClient.setQueryData<CrmActivityFeedItem[]>(
+        queryKey,
+        (current) =>
+          current?.map((item) =>
+            item.id === updatedActivity.id
+              ? {
+                  ...item,
+                  ...updatedActivity,
+                }
+              : item
+          ) ?? [],
+      );
+      setDraftBodies((current) => {
+        const next = { ...current };
+        delete next[updatedActivity.id];
+        return next;
+      });
     },
   });
 
@@ -228,6 +256,48 @@ export function CrmActivitiesPage() {
     );
   }
 
+  function readDraftBody(activity: CrmActivityFeedItem): string {
+    return draftBodies[activity.id] ?? activity.body ?? "";
+  }
+
+  function draftBodyDirty(activity: CrmActivityFeedItem): boolean {
+    return readDraftBody(activity) !== (activity.body ?? "");
+  }
+
+  async function saveActivityDraft(activity: CrmActivityFeedItem): Promise<CrmActivityFeedItem> {
+    const nextBody = readDraftBody(activity);
+    if (!draftBodyDirty(activity)) {
+      return activity;
+    }
+
+    const updatedActivity = await bodyMutation.mutateAsync({
+      activityId: activity.id,
+      body: nextBody,
+      updatedAt: activity.updatedAt,
+    });
+
+    return {
+      ...activity,
+      ...updatedActivity,
+    };
+  }
+
+  async function handleSaveDraft(activity: CrmActivityFeedItem): Promise<void> {
+    try {
+      await saveActivityDraft(activity);
+      toast({
+        title: "Draft saved",
+        description: `${activity.activityType === "sms" ? "SMS" : "Email"} content was updated in review.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Could not save draft",
+        description: error instanceof Error ? error.message : "Review changes were not saved.",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function sendSingleActivity(activity: CrmActivityFeedItem): Promise<void> {
     try {
       await deliveryMutation.mutateAsync({
@@ -256,12 +326,14 @@ export function CrmActivitiesPage() {
     }
 
     const results = await Promise.allSettled(
-      sendableActivities.map((activity) =>
-        deliveryMutation.mutateAsync({
-          activityId: activity.id,
-          updatedAt: activity.updatedAt,
-        }).then(() => activity.id)
-      ),
+      sendableActivities.map(async (activity) => {
+        const preparedActivity = await saveActivityDraft(activity);
+        await deliveryMutation.mutateAsync({
+          activityId: preparedActivity.id,
+          updatedAt: preparedActivity.updatedAt,
+        });
+        return activity.id;
+      }),
     );
 
     const succeeded = results
@@ -542,6 +614,8 @@ export function CrmActivitiesPage() {
 
             {selectedActivities.map((activity) => {
               const delivery = readDeliveryMetadata(activity);
+              const isEditable = canSendFromInbox(activity);
+              const dirty = draftBodyDirty(activity);
               return (
                 <Card key={activity.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
@@ -551,10 +625,57 @@ export function CrmActivitiesPage() {
                           {deliveryActionLabel(delivery)}
                         </span>
                         <span className="text-xs text-[#64748B]">{formatTimeLabel(activity.occurredAt)}</span>
+                        {dirty && (
+                          <span className="inline-flex rounded-full bg-[#FFF1E6] px-2.5 py-1 text-xs font-semibold text-[#B45309]">
+                            Unsaved edits
+                          </span>
+                        )}
                       </div>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
-                        {activity.body || "No message body available."}
-                      </p>
+                      {isEditable ? (
+                        <div className="mt-3 space-y-3">
+                          <textarea
+                            value={readDraftBody(activity)}
+                            onChange={(event) =>
+                              setDraftBodies((current) => ({
+                                ...current,
+                                [activity.id]: event.target.value,
+                              }))
+                            }
+                            rows={6}
+                            className="min-h-[144px] w-full rounded-xl border border-[#CBD5E1] bg-white px-3 py-2 text-sm leading-6 text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                            aria-label={`Edit ${activity.activityType} body`}
+                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setDraftBodies((current) => ({
+                                  ...current,
+                                  [activity.id]: activity.body ?? "",
+                                }))
+                              }
+                              disabled={!dirty || bodyMutation.isPending}
+                            >
+                              Reset
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => void handleSaveDraft(activity)}
+                              disabled={!dirty || bodyMutation.isPending}
+                              className="bg-[#0F172A] text-white hover:bg-[#1E293B]"
+                            >
+                              {bodyMutation.isPending ? "Saving..." : "Save draft"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                          {activity.body || "No message body available."}
+                        </p>
+                      )}
                       <p className="mt-3 text-xs text-[#475569]">
                         {activity.contactName || activity.companyName || activity.dealName || "Unlinked record"}
                       </p>
@@ -581,11 +702,13 @@ export function CrmActivitiesPage() {
             <Button
               type="button"
               onClick={() => void sendSelectedActivities()}
-              disabled={selectedActivities.length === 0 || deliveryMutation.isPending}
+              disabled={selectedActivities.length === 0 || deliveryMutation.isPending || bodyMutation.isPending}
               className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
             >
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-              {deliveryMutation.isPending ? "Sending..." : `Send selected (${selectedActivities.length})`}
+              {deliveryMutation.isPending || bodyMutation.isPending
+                ? "Sending..."
+                : `Send selected (${selectedActivities.length})`}
             </Button>
           </div>
         </SheetContent>

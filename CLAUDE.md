@@ -75,3 +75,13 @@ Required before closing a delivery slice:
 - Preserve existing in-flight changes unless explicitly directed otherwise.
 - Do not introduce breaking API shape changes without documenting them in sprint tickets.
 - Keep implementation and ticket state aligned (QUA sprint parents and children).
+
+## Execution Cadence
+
+- After every green delivery slice, continue directly into the next highest-value roadmap item without waiting for another user prompt.
+- The default operating mode is autonomous execution, not status-only reporting.
+- Only pause for user input when blocked by:
+  - a real external dependency,
+  - an irreversible or destructive decision,
+  - or a product ambiguity that cannot be resolved from repo context.
+- Status updates are not stopping points. Commit, push, report, and continue unless one of the blockers above is present.
