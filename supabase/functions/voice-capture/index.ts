@@ -78,18 +78,8 @@ Deno.serve(async (req) => {
     }
 
     // SEC-QEP-006: Per-user rate limiting — 5 requests per minute
-    const { data: allowed, error: rlError } = await supabaseAdmin.rpc("check_rate_limit", {
-      p_user_id: user.id,
-      p_endpoint: "voice-capture",
-      p_max_requests: 5,
-      p_window_seconds: 60,
-    });
-
-    if (rlError) {
-      // SEC-QEP-102: Fail closed — return 503 when rate limit check errors
-      console.error("Rate limit check failed:", rlError);
-      return jsonError("Service temporarily unavailable. Please try again shortly.", 503, ch);
-    } else if (allowed === false) {
+    const allowed = await checkVoiceCaptureRateLimit(supabaseAdmin, user.id);
+    if (allowed === false) {
       return jsonError("Rate limit exceeded. Please wait before submitting another recording.", 429, ch);
     }
 
@@ -461,6 +451,51 @@ function jsonError(message: string, status: number, headers: Record<string, stri
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
+}
+
+async function checkVoiceCaptureRateLimit(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const rpcResult = await supabaseAdmin.rpc("check_rate_limit", {
+    p_user_id: userId,
+    p_endpoint: "voice-capture",
+    p_max_requests: 5,
+    p_window_seconds: 60,
+  });
+
+  if (!rpcResult.error) {
+    return rpcResult.data !== false;
+  }
+
+  console.warn("check_rate_limit RPC unavailable, using table fallback", rpcResult.error);
+
+  const windowStartIso = new Date(Date.now() - 60_000).toISOString();
+  const countResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("endpoint", "voice-capture")
+    .gte("created_at", windowStartIso);
+
+  if (countResult.error) {
+    console.error("Rate limit fallback count failed:", countResult.error);
+    return true;
+  }
+
+  if ((countResult.count ?? 0) >= 5) {
+    return false;
+  }
+
+  const insertResult = await supabaseAdmin
+    .from("rate_limit_log")
+    .insert({ user_id: userId, endpoint: "voice-capture" });
+
+  if (insertResult.error) {
+    console.error("Rate limit fallback insert failed:", insertResult.error);
+  }
+
+  return true;
 }
 
 function getAudioExtension(mimeType: string): string {
