@@ -178,10 +178,10 @@ function getVoiceCaptureStatusMeta(
       };
     case "pending":
       return {
-        badgeLabel: "Ready to sync",
+        badgeLabel: "Ready to push",
         badgeVariant: "secondary",
-        heading: "Ready to sync",
-        summary: "The note is saved and ready for the next CRM sync step.",
+        heading: "Saved locally",
+        summary: "The note is saved locally. Push to CRM will attach it to the linked deal.",
       };
     case "failed":
     default:
@@ -1146,7 +1146,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                       <p className="text-xs text-amber-600 mt-0.5">Live CRM sync isn't connected yet — this note is safe and ready to sync later.</p>
                     </div>
                     <Badge variant="outline" className="text-amber-600 border-amber-300">
-                      Pending
+                      Ready to push
                     </Badge>
                   </>
                 )}
