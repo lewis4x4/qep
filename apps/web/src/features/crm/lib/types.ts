@@ -206,6 +206,7 @@ export interface CrmActivityPatchInput {
   occurredAt?: string;
   updatedAt?: string;
   task?: CrmTaskMetadata;
+  archive?: boolean;
 }
 
 export type CrmRecordType = "contact" | "company" | "equipment";

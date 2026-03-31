@@ -562,6 +562,16 @@ export async function patchCrmActivity(
   return patchCrmActivityViaRouter(activityId, input);
 }
 
+export async function archiveCrmActivity(
+  activityId: string,
+  updatedAt?: string,
+): Promise<CrmActivityItem> {
+  return patchCrmActivityViaRouter(activityId, {
+    archive: true,
+    updatedAt,
+  });
+}
+
 export async function deliverCrmActivity(
   activityId: string,
   updatedAt?: string,

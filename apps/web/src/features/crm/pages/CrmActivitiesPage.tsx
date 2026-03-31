@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
+  Archive,
   ArrowUpRight,
   Building2,
   CheckCircle2,
@@ -22,7 +23,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { CrmPageHeader } from "../components/CrmPageHeader";
-import { deliverCrmActivity, listCrmActivityFeed, patchCrmActivity } from "../lib/crm-api";
+import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, patchCrmActivity } from "../lib/crm-api";
 import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
 
 type FeedFilter = "all" | "communication" | "tasks" | "overdue";
@@ -108,6 +109,16 @@ function deliveryActionLabel(delivery: Record<string, unknown> | null): string {
   return status === "failed" ? "Retry send" : "Send now";
 }
 
+function canArchiveFromInbox(activity: CrmActivityFeedItem): boolean {
+  if (activity.activityType !== "email" && activity.activityType !== "sms") {
+    return true;
+  }
+
+  const delivery = readDeliveryMetadata(activity);
+  const status = typeof delivery?.status === "string" ? delivery.status : null;
+  return status !== "sent" && delivery?.deliveryInProgress !== true;
+}
+
 function activityTargetHref(activity: CrmActivityFeedItem): string | null {
   if (activity.dealId) return `/crm/deals/${activity.dealId}`;
   if (activity.contactId) return `/crm/contacts/${activity.contactId}`;
@@ -187,6 +198,23 @@ export function CrmActivitiesPage() {
       setDraftBodies((current) => {
         const next = { ...current };
         delete next[updatedActivity.id];
+        return next;
+      });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (input: { activityId: string; updatedAt: string }) =>
+      archiveCrmActivity(input.activityId, input.updatedAt),
+    onSuccess: (archivedActivity) => {
+      queryClient.setQueryData<CrmActivityFeedItem[]>(
+        queryKey,
+        (current) => current?.filter((item) => item.id !== archivedActivity.id) ?? [],
+      );
+      setSelectedActivityIds((current) => current.filter((id) => id !== archivedActivity.id));
+      setDraftBodies((current) => {
+        const next = { ...current };
+        delete next[archivedActivity.id];
         return next;
       });
     },
@@ -359,6 +387,25 @@ export function CrmActivitiesPage() {
       description: `${succeeded.length} sent, ${failed.length} still need review.`,
       variant: "destructive",
     });
+  }
+
+  async function archiveActivity(activity: CrmActivityFeedItem): Promise<void> {
+    try {
+      await archiveMutation.mutateAsync({
+        activityId: activity.id,
+        updatedAt: activity.updatedAt,
+      });
+      toast({
+        title: "Activity archived",
+        description: "The entry was removed from the active inbox without touching delivered history.",
+      });
+    } catch (error) {
+      toast({
+        title: "Could not archive activity",
+        description: error instanceof Error ? error.message : "The activity could not be archived.",
+        variant: "destructive",
+      });
+    }
   }
 
   return (
@@ -553,6 +600,19 @@ export function CrmActivitiesPage() {
 
                   {targetHref && (
                     <div className="flex flex-wrap items-center gap-2 self-start">
+                      {canArchiveFromInbox(activity) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void archiveActivity(activity)}
+                          disabled={archiveMutation.isPending}
+                          className="min-h-[44px] rounded-full border-[#FBCFE8] bg-white px-4 text-[#9D174D] hover:bg-[#FDF2F8]"
+                        >
+                          <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+                          {archiveMutation.isPending ? "Archiving..." : "Archive"}
+                        </Button>
+                      )}
                       {canSendFromInbox(activity) && (
                         <Button
                           type="button"
@@ -615,6 +675,7 @@ export function CrmActivitiesPage() {
             {selectedActivities.map((activity) => {
               const delivery = readDeliveryMetadata(activity);
               const isEditable = canSendFromInbox(activity);
+              const isArchivable = canArchiveFromInbox(activity);
               const dirty = draftBodyDirty(activity);
               return (
                 <Card key={activity.id} className="rounded-xl border border-[#E2E8F0] p-4 shadow-sm">
@@ -690,6 +751,21 @@ export function CrmActivitiesPage() {
                       Remove
                     </Button>
                   </div>
+                  {isArchivable && (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void archiveActivity(activity)}
+                        disabled={archiveMutation.isPending}
+                        className="border-[#FBCFE8] bg-white text-[#9D174D] hover:bg-[#FDF2F8]"
+                      >
+                        <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
+                        {archiveMutation.isPending ? "Archiving..." : "Archive instead"}
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })}
@@ -702,11 +778,16 @@ export function CrmActivitiesPage() {
             <Button
               type="button"
               onClick={() => void sendSelectedActivities()}
-              disabled={selectedActivities.length === 0 || deliveryMutation.isPending || bodyMutation.isPending}
+              disabled={
+                selectedActivities.length === 0 ||
+                deliveryMutation.isPending ||
+                bodyMutation.isPending ||
+                archiveMutation.isPending
+              }
               className="bg-[#E87722] text-white hover:bg-[#D46B1B]"
             >
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-              {deliveryMutation.isPending || bodyMutation.isPending
+              {deliveryMutation.isPending || bodyMutation.isPending || archiveMutation.isPending
                 ? "Sending..."
                 : `Send selected (${selectedActivities.length})`}
             </Button>

@@ -45,6 +45,7 @@ export interface ActivityPatchPayload {
     dueAt?: string | null;
     status?: "open" | "completed";
   };
+  archive?: boolean;
 }
 
 export interface ActivityDeliverPayload {
@@ -308,9 +309,10 @@ export async function patchActivity(
   const hasBody = Object.prototype.hasOwnProperty.call(payload, "body");
   const hasOccurredAt = Object.prototype.hasOwnProperty.call(payload, "occurredAt");
   const hasTask = Object.prototype.hasOwnProperty.call(payload, "task");
+  const hasArchive = payload.archive === true;
   const expectedUpdatedAt = cleanText(payload.updatedAt ?? null);
 
-  if (!hasBody && !hasOccurredAt && !hasTask) {
+  if (!hasBody && !hasOccurredAt && !hasTask && !hasArchive) {
     throw new Error("VALIDATION_ACTIVITY_PATCH_REQUIRED");
   }
   if (expectedUpdatedAt && expectedUpdatedAt !== activity.updatedAt) {
@@ -409,6 +411,32 @@ export async function patchActivity(
         status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
       },
     };
+  }
+
+  if (hasArchive) {
+    if (activity.activityType === "email" || activity.activityType === "sms") {
+      const communication =
+        activity.metadata.communication &&
+          typeof activity.metadata.communication === "object" &&
+          !Array.isArray(activity.metadata.communication)
+          ? (activity.metadata.communication as Record<string, unknown>)
+          : null;
+
+      const status = typeof communication?.status === "string" ? communication.status : null;
+      const inProgressAt = typeof communication?.deliveryInProgressAt === "string"
+        ? Date.parse(communication.deliveryInProgressAt)
+        : Number.NaN;
+      const hasFreshDeliveryLock =
+        communication?.deliveryInProgress === true &&
+        Number.isFinite(inProgressAt) &&
+        Date.now() - inProgressAt < 2 * 60 * 1000;
+
+      if (status === "sent" || hasFreshDeliveryLock || communication?.deliveryInProgress === true) {
+        throw new Error("VALIDATION_ACTIVITY_ARCHIVE_LOCKED");
+      }
+    }
+
+    updates.deleted_at = new Date().toISOString();
   }
 
   const { data, error } = await ctx.callerDb

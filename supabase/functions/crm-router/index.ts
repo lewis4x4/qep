@@ -127,6 +127,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "VALIDATION_ACTIVITY_ARCHIVE_LOCKED") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "VALIDATION_ERROR",
+      message: "Delivered messages stay on the record. Archive only manual or failed entries.",
+    });
+  }
+
   if (message === "VALIDATION_ACTIVITY_DELIVERY_IN_PROGRESS") {
     return crmFail({
       origin,
