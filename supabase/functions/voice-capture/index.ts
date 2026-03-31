@@ -218,7 +218,6 @@ Return ONLY valid JSON matching this exact structure:
         },
         body: JSON.stringify({
           model: "gpt-5-mini",
-          temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
             {
