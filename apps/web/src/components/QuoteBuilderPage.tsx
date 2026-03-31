@@ -650,7 +650,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>Double-check the email — the proposal will reference this address when printed.</p>
                   <p>Include the company address if delivery or job-site pricing applies.</p>
-                  <p>Phone number is required for follow-up task creation in HubSpot.</p>
+                  <p>Phone number is required for follow-up task creation in CRM.</p>
                 </CardContent>
               </Card>
               <Card>
@@ -1178,7 +1178,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
               <Card>
                 <CardContent className="pt-4 text-sm text-muted-foreground space-y-2">
                   <p>Pricing valid for 30 days. Print or download PDF to send to the customer.</p>
-                  <p>After printing, consider creating a follow-up in HubSpot to track next steps.</p>
+                  <p>After printing, create a CRM follow-up so the next step stays attached to the deal.</p>
                 </CardContent>
               </Card>
             </aside>
