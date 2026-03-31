@@ -60,19 +60,19 @@ export function CrmContactsPage() {
         </Button>
       </div>
 
-      <Card className="p-3 sm:p-4">
+      <Card className="border-border bg-card p-3 sm:p-4">
         <label htmlFor="crm-contacts-search" className="sr-only">
           Search contacts
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#475569]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             id="crm-contacts-search"
             ref={searchRef}
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Search by name, email, or phone"
-            className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white pl-9 pr-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+            className="h-11 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>
       </Card>
@@ -80,20 +80,25 @@ export function CrmContactsPage() {
       {contactsQuery.isLoading && (
         <div className="space-y-3" role="status" aria-label="Loading contacts">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-24 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+            <div
+              key={index}
+              className="h-24 animate-pulse rounded-xl border border-border bg-muted/40"
+            />
           ))}
         </div>
       )}
 
       {contactsQuery.isError && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Failed to load contacts. Please refresh and try again.</p>
+        <Card className="border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Failed to load contacts. Please refresh and try again.
+          </p>
         </Card>
       )}
 
       {!contactsQuery.isLoading && !contactsQuery.isError && contacts.length === 0 && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">
+        <Card className="border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">
             No contacts found. Try a different search term.
           </p>
         </Card>
@@ -106,18 +111,20 @@ export function CrmContactsPage() {
               <Link
                 key={contact.id}
                 to={`/crm/contacts/${contact.id}`}
-                className="block min-h-[44px] rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm transition hover:border-[#E87722]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E87722]"
+                className="block min-h-[44px] rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFF1E6] text-[#B45309]">
+                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <UserRound className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#0F172A]">
+                    <p className="truncate text-sm font-semibold text-foreground">
                       {contact.firstName} {contact.lastName}
                     </p>
-                    <p className="truncate text-sm text-[#334155]">{contact.title || "Sales contact"}</p>
-                    <p className="mt-1 truncate text-xs text-[#475569]">
+                    <p className="truncate text-sm text-muted-foreground">
+                      {contact.title || "Sales contact"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground/90">
                       {contact.email || contact.phone || "No contact details"}
                     </p>
                   </div>
@@ -127,7 +134,7 @@ export function CrmContactsPage() {
           </div>
 
           <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-[#475569]">{contacts.length} contacts loaded</p>
+            <p className="text-sm text-muted-foreground">{contacts.length} contacts loaded</p>
             {hasNextPage ? (
               <Button
                 type="button"
@@ -138,7 +145,9 @@ export function CrmContactsPage() {
                 {isFetchingNextPage ? "Loading more..." : "Load more contacts"}
               </Button>
             ) : (
-              <p className="text-xs text-[#64748B]">You&apos;re at the end of the contact list.</p>
+              <p className="text-xs text-muted-foreground/80">
+                You&apos;re at the end of the contact list.
+              </p>
             )}
           </div>
         </div>
