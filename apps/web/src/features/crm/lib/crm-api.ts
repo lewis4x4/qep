@@ -7,6 +7,7 @@ import {
 } from "./crm-router-api";
 import type {
   CrmActivityCreateInput,
+  CrmActivityFeedItem,
   CrmActivityItem,
   CrmActivityPatchInput,
   CrmActivityTaskPatchInput,
@@ -18,6 +19,7 @@ import type {
 
 const CONTACTS_PAGE_SIZE = 25;
 const COMPANIES_PAGE_SIZE = 25;
+const ACTIVITIES_PAGE_SIZE = 150;
 
 type CrmContactRow = CrmDatabase["public"]["Tables"]["crm_contacts"]["Row"];
 type CrmCompanyRow = CrmDatabase["public"]["Tables"]["crm_companies"]["Row"];
@@ -74,6 +76,87 @@ function toActivityItem(row: CrmActivityRow): CrmActivityItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function listProfileDisplayNames(profileIds: string[]): Promise<Map<string, string>> {
+  if (profileIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await crmSupabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", profileIds);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const output = new Map<string, string>();
+  for (const row of data ?? []) {
+    output.set(row.id, row.full_name || row.email || "Unknown user");
+  }
+
+  return output;
+}
+
+async function listContactNames(contactIds: string[]): Promise<Map<string, string>> {
+  if (contactIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await crmSupabase
+    .from("crm_contacts")
+    .select("id, first_name, last_name")
+    .in("id", contactIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const output = new Map<string, string>();
+  for (const row of data ?? []) {
+    output.set(row.id, `${row.first_name} ${row.last_name}`.trim());
+  }
+
+  return output;
+}
+
+async function listCompanyNames(companyIds: string[]): Promise<Map<string, string>> {
+  if (companyIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await crmSupabase
+    .from("crm_companies")
+    .select("id, name")
+    .in("id", companyIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Map((data ?? []).map((row) => [row.id, row.name]));
+}
+
+async function listDealNames(dealIds: string[]): Promise<Map<string, string>> {
+  if (dealIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await crmSupabase
+    .from("crm_deals")
+    .select("id, name")
+    .in("id", dealIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Map((data ?? []).map((row) => [row.id, row.name]));
 }
 
 export {
@@ -277,6 +360,42 @@ export async function listDealActivities(dealId: string): Promise<CrmActivityIte
   }
 
   return ((data ?? []) as CrmActivityRow[]).map(toActivityItem);
+}
+
+export async function listCrmActivityFeed(): Promise<CrmActivityFeedItem[]> {
+  const { data, error } = await crmSupabase
+    .from("crm_activities")
+    .select(
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at"
+    )
+    .is("deleted_at", null)
+    .order("occurred_at", { ascending: false })
+    .limit(ACTIVITIES_PAGE_SIZE);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const items = ((data ?? []) as CrmActivityRow[]).map(toActivityItem);
+  const createdByIds = Array.from(new Set(items.map((item) => item.createdBy).filter(Boolean))) as string[];
+  const contactIds = Array.from(new Set(items.map((item) => item.contactId).filter(Boolean))) as string[];
+  const companyIds = Array.from(new Set(items.map((item) => item.companyId).filter(Boolean))) as string[];
+  const dealIds = Array.from(new Set(items.map((item) => item.dealId).filter(Boolean))) as string[];
+
+  const [actorNames, contactNames, companyNames, dealNames] = await Promise.all([
+    listProfileDisplayNames(createdByIds),
+    listContactNames(contactIds),
+    listCompanyNames(companyIds),
+    listDealNames(dealIds),
+  ]);
+
+  return items.map((item) => ({
+    ...item,
+    actorName: item.createdBy ? actorNames.get(item.createdBy) ?? null : null,
+    contactName: item.contactId ? contactNames.get(item.contactId) ?? null : null,
+    companyName: item.companyId ? companyNames.get(item.companyId) ?? null : null,
+    dealName: item.dealId ? dealNames.get(item.dealId) ?? null : null,
+  }));
 }
 
 export async function createCrmActivity(

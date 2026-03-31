@@ -52,6 +52,13 @@ export interface CrmActivityItem {
   isOptimistic?: boolean;
 }
 
+export interface CrmActivityFeedItem extends CrmActivityItem {
+  actorName: string | null;
+  contactName: string | null;
+  companyName: string | null;
+  dealName: string | null;
+}
+
 export interface CrmContactTerritory {
   id: string;
   name: string;

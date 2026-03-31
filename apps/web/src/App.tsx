@@ -22,6 +22,7 @@ import { CrmCompanyDetailPage } from "./features/crm/pages/CrmCompanyDetailPage"
 import { CrmDealDetailPage } from "./features/crm/pages/CrmDealDetailPage";
 import { CrmPipelinePage } from "./features/crm/pages/CrmPipelinePage";
 import { CrmDuplicatesPage } from "./features/crm/pages/CrmDuplicatesPage";
+import { CrmActivitiesPage } from "./features/crm/pages/CrmActivitiesPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 
@@ -284,6 +285,16 @@ function App() {
                     ) : (
                       <QuoteBuilderGate />
                     )
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/crm/activities"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmActivitiesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

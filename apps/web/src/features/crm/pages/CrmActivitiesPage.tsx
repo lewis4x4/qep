@@ -1,0 +1,355 @@
+import { useDeferredValue, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import {
+  ArrowUpRight,
+  Building2,
+  CheckCircle2,
+  ClipboardList,
+  Filter,
+  Mail,
+  MessageSquareText,
+  Phone,
+  Search,
+  UserRound,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { CrmPageHeader } from "../components/CrmPageHeader";
+import { listCrmActivityFeed } from "../lib/crm-api";
+import type { CrmActivityFeedItem, CrmActivityType, CrmTaskMetadata } from "../lib/types";
+
+type FeedFilter = "all" | "communication" | "tasks" | "overdue";
+
+const ACTIVITY_META: Record<
+  CrmActivityType,
+  {
+    label: string;
+    icon: typeof Phone;
+    badgeClassName: string;
+  }
+> = {
+  call: { label: "Call", icon: Phone, badgeClassName: "bg-green-100 text-green-900" },
+  email: { label: "Email", icon: Mail, badgeClassName: "bg-blue-100 text-blue-900" },
+  meeting: { label: "Meeting", icon: UserRound, badgeClassName: "bg-violet-100 text-violet-900" },
+  note: { label: "Note", icon: MessageSquareText, badgeClassName: "bg-slate-200 text-slate-900" },
+  sms: { label: "SMS", icon: MessageSquareText, badgeClassName: "bg-cyan-100 text-cyan-900" },
+  task: { label: "Task", icon: ClipboardList, badgeClassName: "bg-amber-100 text-amber-900" },
+};
+
+function readTaskMetadata(activity: CrmActivityFeedItem): CrmTaskMetadata | null {
+  if (activity.activityType !== "task") return null;
+  const task = activity.metadata.task;
+  if (!task || typeof task !== "object" || Array.isArray(task)) return null;
+  return task as CrmTaskMetadata;
+}
+
+function readDeliveryMetadata(activity: CrmActivityFeedItem): Record<string, unknown> | null {
+  if (activity.activityType !== "email" && activity.activityType !== "sms") return null;
+  const delivery = activity.metadata.delivery;
+  if (!delivery || typeof delivery !== "object" || Array.isArray(delivery)) return null;
+  return delivery as Record<string, unknown>;
+}
+
+function formatTimeLabel(value: string): string {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatTaskDueLabel(value: string | null | undefined): string {
+  if (!value) return "No due time";
+  return `Due ${formatTimeLabel(value)}`;
+}
+
+function isOverdueTask(activity: CrmActivityFeedItem): boolean {
+  const task = readTaskMetadata(activity);
+  if (!task?.dueAt) return false;
+  if (task.status === "completed") return false;
+  return new Date(task.dueAt).getTime() < Date.now();
+}
+
+function taskTone(task: CrmTaskMetadata | null): string {
+  if (!task) return "text-[#475569]";
+  if (task.status === "completed") return "text-emerald-700";
+  if (task.dueAt && new Date(task.dueAt).getTime() < Date.now()) return "text-rose-700";
+  return "text-amber-700";
+}
+
+function deliveryTone(delivery: Record<string, unknown> | null): string {
+  const status = typeof delivery?.status === "string" ? delivery.status : null;
+  if (status === "failed") return "bg-rose-100 text-rose-800";
+  if (status === "manual_logged") return "bg-amber-100 text-amber-900";
+  if (status === "sent") return "bg-emerald-100 text-emerald-800";
+  return "bg-slate-100 text-slate-700";
+}
+
+function activityTargetHref(activity: CrmActivityFeedItem): string | null {
+  if (activity.dealId) return `/crm/deals/${activity.dealId}`;
+  if (activity.contactId) return `/crm/contacts/${activity.contactId}`;
+  if (activity.companyId) return `/crm/companies/${activity.companyId}`;
+  return null;
+}
+
+function activityTargetLabel(activity: CrmActivityFeedItem): string {
+  if (activity.dealName) return activity.dealName;
+  if (activity.contactName) return activity.contactName;
+  if (activity.companyName) return activity.companyName;
+  return "Open record";
+}
+
+export function CrmActivitiesPage() {
+  const [searchInput, setSearchInput] = useState("");
+  const [typeFilter, setTypeFilter] = useState<CrmActivityType | "all">("all");
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const deferredSearch = useDeferredValue(searchInput.trim().toLowerCase());
+
+  const activitiesQuery = useQuery({
+    queryKey: ["crm", "activities", "feed"],
+    queryFn: listCrmActivityFeed,
+    staleTime: 30_000,
+  });
+
+  const activities = activitiesQuery.data ?? [];
+
+  const filteredActivities = useMemo(() => {
+    return activities.filter((activity) => {
+      if (typeFilter !== "all" && activity.activityType !== typeFilter) {
+        return false;
+      }
+
+      if (feedFilter === "communication" && activity.activityType !== "email" && activity.activityType !== "sms" && activity.activityType !== "call") {
+        return false;
+      }
+
+      if (feedFilter === "tasks" && activity.activityType !== "task") {
+        return false;
+      }
+
+      if (feedFilter === "overdue" && !isOverdueTask(activity)) {
+        return false;
+      }
+
+      if (!deferredSearch) {
+        return true;
+      }
+
+      const haystack = [
+        activity.body ?? "",
+        activity.actorName ?? "",
+        activity.contactName ?? "",
+        activity.companyName ?? "",
+        activity.dealName ?? "",
+        ACTIVITY_META[activity.activityType].label,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(deferredSearch);
+    });
+  }, [activities, deferredSearch, feedFilter, typeFilter]);
+
+  const summary = useMemo(() => {
+    const openTasks = activities.filter((activity) => {
+      const task = readTaskMetadata(activity);
+      return activity.activityType === "task" && task?.status !== "completed";
+    }).length;
+    const overdueTasks = activities.filter(isOverdueTask).length;
+    const failedDeliveries = activities.filter((activity) => {
+      const delivery = readDeliveryMetadata(activity);
+      return delivery?.status === "failed";
+    }).length;
+    const todayTouches = activities.filter((activity) => {
+      const occurredAt = new Date(activity.occurredAt);
+      const now = new Date();
+      return occurredAt.toDateString() === now.toDateString();
+    }).length;
+
+    return { openTasks, overdueTasks, failedDeliveries, todayTouches };
+  }, [activities]);
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+      <CrmPageHeader
+        title="CRM Activities"
+        subtitle="Run calls, texts, emails, and task follow-through from one rep-safe activity feed."
+      />
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Activity summary">
+        {[
+          { label: "Open tasks", value: summary.openTasks, tone: "text-amber-700 bg-amber-50 border-amber-200" },
+          { label: "Overdue tasks", value: summary.overdueTasks, tone: "text-rose-700 bg-rose-50 border-rose-200" },
+          { label: "Failed deliveries", value: summary.failedDeliveries, tone: "text-blue-800 bg-blue-50 border-blue-200" },
+          { label: "Touches today", value: summary.todayTouches, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+        ].map((item) => (
+          <Card key={item.label} className={cn("border p-4 shadow-sm", item.tone)}>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em]">{item.label}</p>
+            <p className="mt-2 text-3xl font-bold">{item.value}</p>
+          </Card>
+        ))}
+      </section>
+
+      <Card className="space-y-4 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#475569]" />
+            <input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search activity body, rep, contact, company, or deal"
+              className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white pl-9 pr-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-[#64748B]" aria-hidden="true" />
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value as CrmActivityType | "all")}
+              className="h-11 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+              aria-label="Filter by activity type"
+            >
+              <option value="all">All types</option>
+              <option value="call">Calls</option>
+              <option value="email">Emails</option>
+              <option value="meeting">Meetings</option>
+              <option value="note">Notes</option>
+              <option value="task">Tasks</option>
+              <option value="sms">SMS</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: "all", label: "All activity" },
+            { key: "communication", label: "Communication" },
+            { key: "tasks", label: "Tasks" },
+            { key: "overdue", label: "Overdue tasks" },
+          ].map((item) => (
+            <Button
+              key={item.key}
+              type="button"
+              variant="outline"
+              onClick={() => setFeedFilter(item.key as FeedFilter)}
+              className={cn(
+                "min-h-[44px] rounded-full px-4",
+                feedFilter === item.key
+                  ? "border-[#E87722] bg-[#FFF1E6] text-[#B45309] hover:bg-[#FFF1E6]"
+                  : "border-[#CBD5E1] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+              )}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      </Card>
+
+      {activitiesQuery.isLoading && (
+        <div className="space-y-3" role="status" aria-label="Loading activities">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+          ))}
+        </div>
+      )}
+
+      {activitiesQuery.isError && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-[#334155]">Failed to load the CRM activity feed. Refresh and try again.</p>
+        </Card>
+      )}
+
+      {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length === 0 && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-[#334155]">No activity matches the current filters.</p>
+        </Card>
+      )}
+
+      {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length > 0 && (
+        <div className="space-y-3" aria-label="CRM activity feed">
+          {filteredActivities.map((activity) => {
+            const meta = ACTIVITY_META[activity.activityType];
+            const Icon = meta.icon;
+            const task = readTaskMetadata(activity);
+            const delivery = readDeliveryMetadata(activity);
+            const targetHref = activityTargetHref(activity);
+            const targetLabel = activityTargetLabel(activity);
+
+            return (
+              <Card key={activity.id} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold", meta.badgeClassName)}>
+                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                        {meta.label}
+                      </span>
+                      <span className="text-xs font-medium text-[#64748B]">
+                        {formatTimeLabel(activity.occurredAt)}
+                      </span>
+                      {delivery && typeof delivery.status === "string" && (
+                        <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", deliveryTone(delivery))}>
+                          {delivery.status === "manual_logged"
+                            ? "Logged manually"
+                            : delivery.status === "failed"
+                            ? "Delivery failed"
+                            : "Sent live"}
+                        </span>
+                      )}
+                      {task && (
+                        <span className={cn("text-xs font-semibold", taskTone(task))}>
+                          {task.status === "completed" ? "Completed" : formatTaskDueLabel(task.dueAt)}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+                      {activity.body || "No activity details logged."}
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[#475569]">
+                      <span>Logged by {activity.actorName || "Unknown user"}</span>
+                      {activity.contactName && <span>Contact: {activity.contactName}</span>}
+                      {activity.companyName && <span>Company: {activity.companyName}</span>}
+                      {activity.dealName && <span>Deal: {activity.dealName}</span>}
+                    </div>
+                  </div>
+
+                  {targetHref && (
+                    <Link
+                      to={targetHref}
+                      className="inline-flex min-h-[44px] items-center gap-2 self-start rounded-full border border-[#D6E0EA] bg-[#F8FAFC] px-4 py-2 text-sm font-medium text-[#0F172A] transition hover:border-[#E87722]/50 hover:text-[#B45309]"
+                    >
+                      {targetLabel}
+                      <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <Card className="rounded-2xl border border-[#D6E0EA] bg-[#F8FAFC] p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-[#0F172A]">Next communication-hub closeout</p>
+            <p className="mt-1 text-sm text-[#475569]">
+              After this feed lands, the next remaining Sprint 4 gap is deeper operator controls around templates, bulk execution, and communication review workflows.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700">
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            Unified inbox slice active
+          </span>
+        </div>
+      </Card>
+    </div>
+  );
+}

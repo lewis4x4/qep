@@ -13,6 +13,7 @@ import {
   Building2,
   LayoutGrid,
   GitMerge,
+  MessageCircleMore,
 } from "lucide-react";
 import {
   Dialog,
@@ -97,6 +98,12 @@ const NAV_ITEMS: NavItemDefinition[] = [
     icon: FileText,
     roles: ["rep", "manager", "owner"],
     requiresIntelliDealer: true,
+  },
+  {
+    label: "CRM Activities",
+    href: "/crm/activities",
+    icon: MessageCircleMore,
+    roles: ["rep", "admin", "manager", "owner"],
   },
   {
     label: "CRM Deals",
