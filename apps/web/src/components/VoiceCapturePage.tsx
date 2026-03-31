@@ -1119,14 +1119,21 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                                 cap.sync_status === "synced"
                                   ? "default"
                                   : cap.sync_status === "failed"
-                                  ? "destructive"
-                                  : "secondary"
+                                ? "destructive"
+                                : "secondary"
                               }
                               className="text-xs shrink-0"
                             >
                               {formatVoiceCaptureSyncStatus(cap.sync_status)}
                             </Badge>
                           </div>
+                          {looksLikeCrmRecordId(cap.hubspot_deal_id ?? "") && (
+                            <div className="mt-3 flex justify-end">
+                              <Button asChild variant="ghost" size="sm">
+                                <Link to={`/crm/deals/${cap.hubspot_deal_id}`}>Open linked deal</Link>
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     );
