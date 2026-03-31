@@ -20,8 +20,9 @@ import {
   requireElevated,
 } from "../_shared/crm-router-service.ts";
 import {
-  createActivity,
-  createCustomFieldDefinition,
+    createActivity,
+    patchActivity,
+    createCustomFieldDefinition,
   createEquipment,
   dismissDuplicateCandidate,
   getRecordCustomFields,
@@ -33,7 +34,8 @@ import {
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
-  type ActivityPayload,
+    type ActivityPayload,
+    type ActivityPatchPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
   type DealPatchPayload,
@@ -184,6 +186,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = await readJsonBody<ActivityPayload>(req);
       const activity = await createActivity(ctx, body);
       return crmOk({ activity }, { origin, status: 201 });
+    }
+
+    if (segments[1] === "activities" && req.method === "PATCH" && segments.length === 3) {
+      requireCaller(ctx);
+      const body = await readJsonBody<ActivityPatchPayload>(req);
+      const activity = await patchActivity(ctx, segments[2], body);
+      return crmOk({ activity }, { origin });
     }
 
     if (

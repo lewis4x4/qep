@@ -18,9 +18,10 @@ import {
   getCrmDealLossFields,
   listCrmDealStages,
   listDealActivities,
+  patchCrmActivityTask,
   patchCrmDeal,
 } from "../lib/crm-api";
-import type { CrmDealPatchInput } from "../lib/types";
+import type { CrmActivityItem, CrmDealPatchInput } from "../lib/types";
 
 interface CrmDealDetailPageProps {
   userId: string;
@@ -38,6 +39,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   const [lossReason, setLossReason] = useState("");
   const [competitor, setCompetitor] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   if (!dealId) {
     return <Navigate to="/crm/contacts" replace />;
@@ -123,6 +125,43 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
       createCrmActivity({ ...input, dealId }, userId),
     onSuccess: async () => {
       setComposerOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId, "activities"] });
+    },
+  });
+
+  const patchTaskMutation = useMutation({
+    mutationFn: async ({ activityId, status }: { activityId: string; status: "open" | "completed" }) =>
+      patchCrmActivityTask(activityId, { task: { status } }),
+    onMutate: async ({ activityId, status }) => {
+      setPendingTaskId(activityId);
+      await queryClient.cancelQueries({ queryKey: ["crm", "deal", dealId, "activities"] });
+      const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "deal", dealId, "activities"]) ?? [];
+      queryClient.setQueryData<CrmActivityItem[]>(
+        ["crm", "deal", dealId, "activities"],
+        previous.map((activity) =>
+          activity.id === activityId
+            ? {
+                ...activity,
+                metadata: {
+                  ...activity.metadata,
+                  task: {
+                    ...((activity.metadata.task as Record<string, unknown> | undefined) ?? {}),
+                    status,
+                  },
+                },
+              }
+            : activity
+        )
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["crm", "deal", dealId, "activities"], context.previous);
+      }
+    },
+    onSettled: async () => {
+      setPendingTaskId(null);
       await queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId, "activities"] });
     },
   });
@@ -279,6 +318,10 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 onLogActivity={() => setComposerOpen(true)}
                 entityLabel={dealName}
                 showEntityLabel={false}
+                pendingTaskId={pendingTaskId}
+                onToggleTaskStatus={async (activity, nextStatus) => {
+                  await patchTaskMutation.mutateAsync({ activityId: activity.id, status: nextStatus });
+                }}
               />
             )}
           </section>

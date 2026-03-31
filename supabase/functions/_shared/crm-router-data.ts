@@ -37,6 +37,13 @@ export interface ActivityPayload {
   sendNow?: boolean;
 }
 
+export interface ActivityPatchPayload {
+  task?: {
+    dueAt?: string | null;
+    status?: "open" | "completed";
+  };
+}
+
 export interface DealPatchPayload {
   stageId?: string;
   expectedCloseOn?: string | null;
@@ -112,6 +119,35 @@ async function ensureDealVisible(
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
+}
+
+async function getActivityForPatch(
+  ctx: RouterCtx,
+  activityId: string,
+): Promise<{
+  id: string;
+  activityType: string;
+  metadata: Record<string, unknown>;
+}> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, metadata")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", activityId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+
+  return {
+    id: data.id,
+    activityType: data.activity_type,
+    metadata:
+      data.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+        ? (data.metadata as Record<string, unknown>)
+        : {},
+  };
 }
 
 export async function listEquipment(
@@ -222,6 +258,72 @@ export async function createActivity(
       created_by: ctx.caller.userId,
       metadata,
     })
+    .select(
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
+    )
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    activityType: data.activity_type,
+    body: data.body,
+    occurredAt: data.occurred_at,
+    contactId: data.contact_id,
+    companyId: data.company_id,
+    dealId: data.deal_id,
+    createdBy: data.created_by,
+    metadata: (data.metadata as Record<string, unknown> | null) ?? {},
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function patchActivity(
+  ctx: RouterCtx,
+  activityId: string,
+  payload: ActivityPatchPayload,
+): Promise<unknown> {
+  const activity = await getActivityForPatch(ctx, activityId);
+
+  if (!payload.task) {
+    throw new Error("VALIDATION_ACTIVITY_PATCH_REQUIRED");
+  }
+  if (activity.activityType !== "task") {
+    throw new Error("VALIDATION_ACTIVITY_PATCH_UNSUPPORTED");
+  }
+
+  const dueAt = cleanText(payload.task.dueAt ?? null);
+  if (dueAt && Number.isNaN(Date.parse(dueAt))) {
+    throw new Error("VALIDATION_INVALID_TASK_DUE_AT");
+  }
+  const rawStatus = payload.task.status;
+  if (rawStatus !== undefined && rawStatus !== "open" && rawStatus !== "completed") {
+    throw new Error("VALIDATION_INVALID_TASK_STATUS");
+  }
+
+  const existingTask =
+    activity.metadata.task && typeof activity.metadata.task === "object" && !Array.isArray(activity.metadata.task)
+      ? (activity.metadata.task as Record<string, unknown>)
+      : {};
+
+  const nextMetadata = {
+    ...activity.metadata,
+    task: {
+      dueAt: dueAt ? new Date(dueAt).toISOString() : (existingTask.dueAt as string | null | undefined) ?? null,
+      status: rawStatus ?? (existingTask.status === "completed" ? "completed" : "open"),
+    },
+  };
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_activities")
+    .update({
+      metadata: nextMetadata,
+    })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", activityId)
     .select(
       "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
     )

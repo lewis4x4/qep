@@ -174,6 +174,10 @@ export interface CrmActivityCreateInput {
   dealId?: string;
 }
 
+export interface CrmActivityTaskPatchInput {
+  task: CrmTaskMetadata;
+}
+
 export type CrmRecordType = "contact" | "company" | "equipment";
 
 export interface CrmSearchItem {

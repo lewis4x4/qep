@@ -17,6 +17,7 @@ import {
   getProfileDisplayName,
   listCrmCompanies,
   listCompanyActivities,
+  patchCrmActivityTask,
 } from "../lib/crm-api";
 import { fetchCompanyHierarchy, updateCompanyParent } from "../lib/crm-router-api";
 import type { CrmActivityItem } from "../lib/types";
@@ -30,6 +31,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   const { companyId } = useParams<{ companyId: string }>();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [hierarchyEditorOpen, setHierarchyEditorOpen] = useState(false);
   const [parentSearchInput, setParentSearchInput] = useState("");
   const [parentSearch, setParentSearch] = useState("");
@@ -111,6 +113,43 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
     },
     onSuccess: () => setComposerOpen(false),
     onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["crm", "company", companyId, "activities"] });
+    },
+  });
+
+  const patchTaskMutation = useMutation({
+    mutationFn: async ({ activityId, status }: { activityId: string; status: "open" | "completed" }) =>
+      patchCrmActivityTask(activityId, { task: { status } }),
+    onMutate: async ({ activityId, status }) => {
+      setPendingTaskId(activityId);
+      await queryClient.cancelQueries({ queryKey: ["crm", "company", companyId, "activities"] });
+      const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "company", companyId, "activities"]) ?? [];
+      queryClient.setQueryData<CrmActivityItem[]>(
+        ["crm", "company", companyId, "activities"],
+        previous.map((activity) =>
+          activity.id === activityId
+            ? {
+                ...activity,
+                metadata: {
+                  ...activity.metadata,
+                  task: {
+                    ...((activity.metadata.task as Record<string, unknown> | undefined) ?? {}),
+                    status,
+                  },
+                },
+              }
+            : activity
+        )
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["crm", "company", companyId, "activities"], context.previous);
+      }
+    },
+    onSettled: async () => {
+      setPendingTaskId(null);
       await queryClient.invalidateQueries({ queryKey: ["crm", "company", companyId, "activities"] });
     },
   });
@@ -417,6 +456,10 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                 onLogActivity={() => setComposerOpen(true)}
                 entityLabel={companyName}
                 showEntityLabel={false}
+                pendingTaskId={pendingTaskId}
+                onToggleTaskStatus={async (activity, nextStatus) => {
+                  await patchTaskMutation.mutateAsync({ activityId: activity.id, status: nextStatus });
+                }}
               />
             )}
           </section>

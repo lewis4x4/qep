@@ -9,6 +9,8 @@ interface CrmActivityTimelineProps {
   onLogActivity: () => void;
   entityLabel: string;
   showEntityLabel?: boolean;
+  onToggleTaskStatus?: (activity: CrmActivityItem, nextStatus: "open" | "completed") => Promise<void>;
+  pendingTaskId?: string | null;
 }
 
 const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: string }>; badge: string; label: string }> = {
@@ -108,6 +110,8 @@ export function CrmActivityTimeline({
   onLogActivity,
   entityLabel,
   showEntityLabel = true,
+  onToggleTaskStatus,
+  pendingTaskId = null,
 }: CrmActivityTimelineProps) {
   if (activities.length === 0) {
     return (
@@ -165,6 +169,22 @@ export function CrmActivityTimeline({
                 <span className={cn(taskDueTone(task.dueAt, task.status))}>
                   {formatTaskDueLabel(task.dueAt)}
                 </span>
+                {onToggleTaskStatus && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2 text-xs"
+                    disabled={pendingTaskId === activity.id}
+                    onClick={() => void onToggleTaskStatus(activity, task.status === "completed" ? "open" : "completed")}
+                  >
+                    {pendingTaskId === activity.id
+                      ? "Saving..."
+                      : task.status === "completed"
+                      ? "Reopen"
+                      : "Mark complete"}
+                  </Button>
+                )}
               </div>
             )}
             {delivery && (
