@@ -8,6 +8,7 @@ import type { UserRole } from "@/lib/database.types";
 import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
+import { CrmContactEditorSheet } from "../components/CrmContactEditorSheet";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
@@ -36,6 +37,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   if (!contactId) {
     return <Navigate to="/crm/contacts" replace />;
@@ -169,14 +171,17 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
           <ArrowLeft className="h-4 w-4" />
           Back to contacts
         </Link>
-        <div className="hidden items-center gap-2 sm:flex">
-          <Button asChild variant="outline">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+            Edit Contact
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/quote?crm_contact_id=${contactId}`}>
               <FileText className="mr-2 h-4 w-4" />
               New Quote
             </Link>
           </Button>
-          <Button onClick={() => setComposerOpen(true)}>
+          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Log Activity
           </Button>
@@ -355,6 +360,11 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         onSubmit={async (input) => {
           await createActivityMutation.mutateAsync(input);
         }}
+      />
+      <CrmContactEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        contact={contactQuery.data}
       />
     </div>
   );

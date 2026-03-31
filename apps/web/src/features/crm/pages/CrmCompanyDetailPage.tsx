@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
+import { CrmCompanyEditorSheet } from "../components/CrmCompanyEditorSheet";
 import { CrmCompanyEquipmentSection } from "../components/CrmCompanyEquipmentSection";
 import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
@@ -35,6 +36,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   const queryClient = useQueryClient();
   const [composerOpen, setComposerOpen] = useState(false);
   const [hierarchyEditorOpen, setHierarchyEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [parentSearchInput, setParentSearchInput] = useState("");
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
@@ -186,8 +188,11 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         name: currentParentNode.name,
         parentCompanyId: null,
         assignedRepId: null,
+        addressLine1: null,
+        addressLine2: null,
         city: null,
         state: null,
+        postalCode: null,
         country: null,
         createdAt: new Date(0).toISOString(),
         updatedAt: new Date(0).toISOString(),
@@ -226,6 +231,9 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
           Back to companies
         </Link>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+            Edit Company
+          </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to="/crm/duplicates">
               <GitMerge className="mr-2 h-4 w-4" />
@@ -469,6 +477,11 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         onSubmit={async (input) => {
           await createActivityMutation.mutateAsync(input);
         }}
+      />
+      <CrmCompanyEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        company={companyQuery.data}
       />
     </div>
   );

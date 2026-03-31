@@ -4,8 +4,13 @@ import type {
   CrmActivityPatchInput,
   CrmActivityTaskPatchInput,
   CrmActivityItem,
+  CrmCompanySummary,
   CrmCompanyHierarchy,
+  CrmCompanyUpsertInput,
+  CrmContactSummary,
+  CrmContactUpsertInput,
   CrmCustomField,
+  CrmDealCreateInput,
   CrmDealPatchInput,
   CrmRepSafeDeal,
   CrmDuplicateCandidate,
@@ -121,6 +126,58 @@ export async function patchCrmDealViaRouter(
 ): Promise<CrmRepSafeDeal> {
   const payload = await requestRouter<{ deal: CrmRepSafeDeal }>(`/crm/deals/${dealId}`, {
     method: "PATCH",
+    body: input,
+  });
+  return payload.deal;
+}
+
+export async function createCrmContactViaRouter(
+  input: CrmContactUpsertInput,
+): Promise<CrmContactSummary> {
+  const payload = await requestRouter<{ contact: CrmContactSummary }>("/crm/contacts", {
+    method: "POST",
+    body: input,
+  });
+  return payload.contact;
+}
+
+export async function patchCrmContactViaRouter(
+  contactId: string,
+  input: Partial<CrmContactUpsertInput>,
+): Promise<CrmContactSummary> {
+  const payload = await requestRouter<{ contact: CrmContactSummary }>(`/crm/contacts/${contactId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.contact;
+}
+
+export async function createCrmCompanyViaRouter(
+  input: CrmCompanyUpsertInput,
+): Promise<CrmCompanySummary> {
+  const payload = await requestRouter<{ company: CrmCompanySummary }>("/crm/companies", {
+    method: "POST",
+    body: input,
+  });
+  return payload.company;
+}
+
+export async function patchCrmCompanyViaRouter(
+  companyId: string,
+  input: Partial<CrmCompanyUpsertInput>,
+): Promise<CrmCompanySummary> {
+  const payload = await requestRouter<{ company: CrmCompanySummary }>(`/crm/companies/${companyId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.company;
+}
+
+export async function createCrmDealViaRouter(
+  input: CrmDealCreateInput,
+): Promise<CrmRepSafeDeal> {
+  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>("/crm/deals", {
+    method: "POST",
     body: input,
   });
   return payload.deal;

@@ -21,15 +21,20 @@ import {
 } from "../_shared/crm-router-service.ts";
 import {
   createActivity,
+  createCompany,
+  createContact,
   deliverActivity,
   patchActivity,
+  patchCompany,
   createCustomFieldDefinition,
+  createDeal,
   createEquipment,
   dismissDuplicateCandidate,
   getRecordCustomFields,
   listCustomFieldDefinitions,
   listDuplicateCandidates,
   listEquipment,
+  patchContact,
   patchDeal,
   patchCompanyParent,
   patchCustomFieldDefinition,
@@ -38,8 +43,11 @@ import {
   type ActivityDeliverPayload,
   type ActivityPayload,
   type ActivityPatchPayload,
+  type CompanyUpsertPayload,
+  type ContactUpsertPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
+  type DealCreatePayload,
   type DealPatchPayload,
   type EquipmentPayload,
 } from "../_shared/crm-router-data.ts";
@@ -172,6 +180,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "VALIDATION_STAGE_CREATE_OPEN_ONLY") {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Start new deals in an open stage, then close them from the deal record.",
+    });
+  }
+
   if (
     message.startsWith("VALIDATION_") ||
     message.startsWith("UNKNOWN_CUSTOM_FIELD:") ||
@@ -279,6 +296,61 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = await readJsonBody<ActivityDeliverPayload>(req);
       const activity = await deliverActivity(ctx, segments[2], body);
       return crmOk({ activity }, { origin });
+    }
+
+    if (
+      segments[1] === "contacts" &&
+      req.method === "POST" &&
+      segments.length === 2
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<ContactUpsertPayload>(req);
+      const contact = await createContact(ctx, body);
+      return crmOk({ contact }, { origin, status: 201 });
+    }
+
+    if (
+      segments[1] === "contacts" &&
+      req.method === "PATCH" &&
+      segments.length === 3
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<ContactUpsertPayload>(req);
+      const contact = await patchContact(ctx, segments[2], body);
+      return crmOk({ contact }, { origin });
+    }
+
+    if (
+      segments[1] === "companies" &&
+      req.method === "POST" &&
+      segments.length === 2
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<CompanyUpsertPayload>(req);
+      const company = await createCompany(ctx, body);
+      return crmOk({ company }, { origin, status: 201 });
+    }
+
+    if (
+      segments[1] === "companies" &&
+      req.method === "PATCH" &&
+      segments.length === 3
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<CompanyUpsertPayload>(req);
+      const company = await patchCompany(ctx, segments[2], body);
+      return crmOk({ company }, { origin });
+    }
+
+    if (
+      segments[1] === "deals" &&
+      req.method === "POST" &&
+      segments.length === 2
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<DealCreatePayload>(req);
+      const deal = await createDeal(ctx, body);
+      return crmOk({ deal }, { origin, status: 201 });
     }
 
     if (

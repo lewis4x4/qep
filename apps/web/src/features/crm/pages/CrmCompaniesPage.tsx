@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Search } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Building2, Plus, Search } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CrmCompanyEditorSheet } from "../components/CrmCompanyEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { listCrmCompanies } from "../lib/crm-api";
 
 export function CrmCompaniesPage() {
+  const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,6 +42,13 @@ export function CrmCompaniesPage() {
         title="CRM Companies"
         subtitle="Browse accounts and log activities by organization."
       />
+
+      <div className="flex justify-end">
+        <Button onClick={() => setEditorOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New company
+        </Button>
+      </div>
 
       <Card className="p-3 sm:p-4">
         <label htmlFor="crm-companies-search" className="sr-only">
@@ -100,6 +111,12 @@ export function CrmCompaniesPage() {
           ))}
         </div>
       )}
+
+      <CrmCompanyEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        onSaved={(company) => navigate(`/crm/companies/${company.id}`)}
+      />
     </div>
   );
 }

@@ -44,8 +44,11 @@ export interface CrmCompanySummary {
   name: string;
   parentCompanyId: string | null;
   assignedRepId: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
   city: string | null;
   state: string | null;
+  postalCode: string | null;
   country: string | null;
   createdAt: string;
   updatedAt: string;
@@ -172,12 +175,45 @@ export interface CrmDealBoardListInput {
 }
 
 export interface CrmDealPatchInput {
+  name?: string;
   stageId?: string;
+  primaryContactId?: string | null;
+  companyId?: string | null;
+  amount?: number | null;
   expectedCloseOn?: string | null;
   nextFollowUpAt?: string | null;
   closedAt?: string | null;
   lossReason?: string | null;
   competitor?: string | null;
+}
+
+export interface CrmContactUpsertInput {
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  primaryCompanyId?: string | null;
+}
+
+export interface CrmCompanyUpsertInput {
+  name: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+}
+
+export interface CrmDealCreateInput {
+  name: string;
+  stageId: string;
+  primaryContactId?: string | null;
+  companyId?: string | null;
+  amount?: number | null;
+  expectedCloseOn?: string | null;
+  nextFollowUpAt?: string | null;
 }
 
 export interface CrmPageResult<T> {

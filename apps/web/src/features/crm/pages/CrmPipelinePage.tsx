@@ -1,10 +1,11 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
-import { Link } from "react-router-dom";
+import { FileText, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
+import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
 import { getDealSignalState } from "../lib/deal-signals";
 import { CrmPageHeader } from "../components/CrmPageHeader";
@@ -155,10 +156,12 @@ async function fetchOpenDealsFirstPage(): Promise<OpenDealsFirstPageResult> {
 }
 
 export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
+  const [editorOpen, setEditorOpen] = useState(false);
   const [hydratedDeals, setHydratedDeals] = useState<CrmRepSafeDeal[] | null>(null);
   const [isHydratingRemainingDeals, setIsHydratingRemainingDeals] = useState(false);
   const [dealHydrationWarning, setDealHydrationWarning] = useState<string | null>(null);
@@ -480,6 +483,13 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         subtitle="Table-first pipeline view with role-safe CRM reads and quote entry points."
       />
 
+      <div className="flex justify-end">
+        <Button onClick={() => setEditorOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New deal
+        </Button>
+      </div>
+
       {isElevated && !weightedDealsQuery.isLoading && (
         <section
           className="grid grid-cols-3 gap-3 rounded-xl border border-[#E2E8F0] bg-white p-4"
@@ -698,6 +708,12 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
           </div>
         </Card>
       )}
+
+      <CrmDealEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        onSaved={(deal) => navigate(`/crm/deals/${deal.id}`)}
+      />
     </div>
   );
 }

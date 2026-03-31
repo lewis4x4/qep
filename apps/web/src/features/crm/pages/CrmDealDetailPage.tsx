@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmActivityComposer } from "../components/CrmActivityComposer";
 import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
+import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
@@ -41,6 +42,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   const [nextFollowUpInput, setNextFollowUpInput] = useState("");
   const [lossReason, setLossReason] = useState("");
   const [competitor, setCompetitor] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   if (!dealId) {
@@ -194,8 +196,11 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           <ArrowLeft className="h-4 w-4" />
           Back to deals
         </Link>
-        <div className="hidden items-center gap-2 sm:flex">
-          <Button asChild variant="outline">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+            Edit Deal
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
               to={`/quote?crm_deal_id=${dealId}${
                 dealQuery.data?.primaryContactId ? `&crm_contact_id=${dealQuery.data.primaryContactId}` : ""
@@ -205,7 +210,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
               New Quote
             </Link>
           </Button>
-          <Button onClick={() => setComposerOpen(true)}>
+          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Log Activity
           </Button>
@@ -331,6 +336,11 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
         onSubmit={async (input) => {
           await createActivityMutation.mutateAsync(input);
         }}
+      />
+      <CrmDealEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        deal={dealQuery.data}
       />
     </div>
   );

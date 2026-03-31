@@ -54,12 +54,45 @@ export interface ActivityDeliverPayload {
 }
 
 export interface DealPatchPayload {
+  name?: string;
   stageId?: string;
+  primaryContactId?: string | null;
+  companyId?: string | null;
+  amount?: number | null;
   expectedCloseOn?: string | null;
   nextFollowUpAt?: string | null;
   closedAt?: string | null;
   lossReason?: string | null;
   competitor?: string | null;
+}
+
+export interface ContactUpsertPayload {
+  firstName?: string;
+  lastName?: string;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  primaryCompanyId?: string | null;
+}
+
+export interface CompanyUpsertPayload {
+  name?: string;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+}
+
+export interface DealCreatePayload {
+  name?: string;
+  stageId?: string;
+  primaryContactId?: string | null;
+  companyId?: string | null;
+  amount?: number | null;
+  expectedCloseOn?: string | null;
+  nextFollowUpAt?: string | null;
 }
 
 function cleanText(value: string | null | undefined): string | null {
@@ -619,21 +652,299 @@ async function resolveStage(
   };
 }
 
-async function fetchRepSafeDeal(
+export async function createContact(
   ctx: RouterCtx,
-  dealId: string,
+  payload: ContactUpsertPayload,
 ): Promise<unknown> {
+  const firstName = cleanText(payload.firstName);
+  const lastName = cleanText(payload.lastName);
+  if (!firstName) throw new Error("VALIDATION_FIRST_NAME_REQUIRED");
+  if (!lastName) throw new Error("VALIDATION_LAST_NAME_REQUIRED");
+
+  const primaryCompanyId = cleanText(payload.primaryCompanyId ?? null);
+  if (primaryCompanyId) {
+    await ensureRecordVisible(ctx, "company", primaryCompanyId);
+  }
+
   const { data, error } = await ctx.callerDb
-    .from("crm_deals_rep_safe")
+    .from("crm_contacts")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      first_name: firstName,
+      last_name: lastName,
+      email: cleanText(payload.email ?? null),
+      phone: cleanText(payload.phone ?? null),
+      title: cleanText(payload.title ?? null),
+      primary_company_id: primaryCompanyId,
+      assigned_rep_id: ctx.caller.userId,
+    })
     .select(
-      "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at",
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at",
     )
-    .eq("id", dealId)
+    .single();
+
+  if (error) throw error;
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    dgeCustomerProfileId: data.dge_customer_profile_id,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    email: data.email,
+    phone: data.phone,
+    title: data.title,
+    primaryCompanyId: data.primary_company_id,
+    assignedRepId: data.assigned_rep_id,
+    mergedIntoContactId: data.merged_into_contact_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function patchContact(
+  ctx: RouterCtx,
+  contactId: string,
+  payload: ContactUpsertPayload,
+): Promise<unknown> {
+  const updates: Record<string, unknown> = {};
+
+  if (payload.firstName !== undefined) {
+    const firstName = cleanText(payload.firstName);
+    if (!firstName) throw new Error("VALIDATION_FIRST_NAME_REQUIRED");
+    updates.first_name = firstName;
+  }
+
+  if (payload.lastName !== undefined) {
+    const lastName = cleanText(payload.lastName);
+    if (!lastName) throw new Error("VALIDATION_LAST_NAME_REQUIRED");
+    updates.last_name = lastName;
+  }
+
+  if (payload.email !== undefined) {
+    updates.email = cleanText(payload.email ?? null);
+  }
+
+  if (payload.phone !== undefined) {
+    updates.phone = cleanText(payload.phone ?? null);
+  }
+
+  if (payload.title !== undefined) {
+    updates.title = cleanText(payload.title ?? null);
+  }
+
+  let nextPrimaryCompanyId: string | null | undefined;
+  if (payload.primaryCompanyId !== undefined) {
+    nextPrimaryCompanyId = cleanText(payload.primaryCompanyId ?? null);
+    if (nextPrimaryCompanyId) {
+      await ensureRecordVisible(ctx, "company", nextPrimaryCompanyId);
+    }
+    updates.primary_company_id = nextPrimaryCompanyId;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_contacts")
+    .update(updates)
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", contactId)
+    .is("deleted_at", null)
+    .select(
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at",
+    )
     .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    dgeCustomerProfileId: data.dge_customer_profile_id,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    email: data.email,
+    phone: data.phone,
+    title: data.title,
+    primaryCompanyId: data.primary_company_id,
+    assignedRepId: data.assigned_rep_id,
+    mergedIntoContactId: data.merged_into_contact_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
 
+export async function createCompany(
+  ctx: RouterCtx,
+  payload: CompanyUpsertPayload,
+): Promise<unknown> {
+  const name = cleanText(payload.name);
+  if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_companies")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      name,
+      assigned_rep_id: ctx.caller.userId,
+      address_line_1: cleanText(payload.addressLine1 ?? null),
+      address_line_2: cleanText(payload.addressLine2 ?? null),
+      city: cleanText(payload.city ?? null),
+      state: cleanText(payload.state ?? null),
+      postal_code: cleanText(payload.postalCode ?? null),
+      country: cleanText(payload.country ?? null),
+    })
+    .select(
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+    )
+    .single();
+
+  if (error) throw error;
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    name: data.name,
+    parentCompanyId: data.parent_company_id,
+    assignedRepId: data.assigned_rep_id,
+    addressLine1: data.address_line_1,
+    addressLine2: data.address_line_2,
+    city: data.city,
+    state: data.state,
+    postalCode: data.postal_code,
+    country: data.country,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function patchCompany(
+  ctx: RouterCtx,
+  companyId: string,
+  payload: CompanyUpsertPayload,
+): Promise<unknown> {
+  const updates: Record<string, unknown> = {};
+
+  if (payload.name !== undefined) {
+    const name = cleanText(payload.name);
+    if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+    updates.name = name;
+  }
+
+  if (payload.addressLine1 !== undefined) {
+    updates.address_line_1 = cleanText(payload.addressLine1 ?? null);
+  }
+  if (payload.addressLine2 !== undefined) {
+    updates.address_line_2 = cleanText(payload.addressLine2 ?? null);
+  }
+  if (payload.city !== undefined) {
+    updates.city = cleanText(payload.city ?? null);
+  }
+  if (payload.state !== undefined) {
+    updates.state = cleanText(payload.state ?? null);
+  }
+  if (payload.postalCode !== undefined) {
+    updates.postal_code = cleanText(payload.postalCode ?? null);
+  }
+  if (payload.country !== undefined) {
+    updates.country = cleanText(payload.country ?? null);
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_companies")
+    .update(updates)
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .select(
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+    )
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    name: data.name,
+    parentCompanyId: data.parent_company_id,
+    assignedRepId: data.assigned_rep_id,
+    addressLine1: data.address_line_1,
+    addressLine2: data.address_line_2,
+    city: data.city,
+    state: data.state,
+    postalCode: data.postal_code,
+    country: data.country,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function createDeal(
+  ctx: RouterCtx,
+  payload: DealCreatePayload,
+): Promise<unknown> {
+  const name = cleanText(payload.name);
+  if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+
+  const stageId = cleanText(payload.stageId);
+  if (!stageId) throw new Error("VALIDATION_STAGE_REQUIRED");
+
+  const stage = await resolveStage(ctx, stageId);
+  if (!stage) throw new Error("VALIDATION_STAGE_NOT_FOUND");
+  if (stage.isClosedWon || stage.isClosedLost) {
+    throw new Error("VALIDATION_STAGE_CREATE_OPEN_ONLY");
+  }
+
+  const primaryContactId = cleanText(payload.primaryContactId ?? null);
+  if (primaryContactId) {
+    await ensureRecordVisible(ctx, "contact", primaryContactId);
+  }
+
+  const companyId = cleanText(payload.companyId ?? null);
+  if (companyId) {
+    await ensureRecordVisible(ctx, "company", companyId);
+  }
+
+  if (payload.amount !== undefined && payload.amount !== null) {
+    if (typeof payload.amount !== "number" || !Number.isFinite(payload.amount)) {
+      throw new Error("VALIDATION_INVALID_AMOUNT");
+    }
+  }
+
+  const expectedCloseOn = cleanText(payload.expectedCloseOn ?? null);
+  if (expectedCloseOn && Number.isNaN(Date.parse(expectedCloseOn))) {
+    throw new Error("VALIDATION_INVALID_EXPECTED_CLOSE");
+  }
+
+  const nextFollowUpAt = cleanText(payload.nextFollowUpAt ?? null);
+  if (nextFollowUpAt && Number.isNaN(Date.parse(nextFollowUpAt))) {
+    throw new Error("VALIDATION_INVALID_FOLLOW_UP");
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_deals")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      name,
+      stage_id: stage.id,
+      primary_contact_id: primaryContactId,
+      company_id: companyId,
+      assigned_rep_id: ctx.caller.userId,
+      amount: payload.amount ?? null,
+      expected_close_on: expectedCloseOn,
+      next_follow_up_at: nextFollowUpAt,
+    })
+    .select(
+      "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at",
+    )
+    .single();
+
+  if (error) throw error;
   return {
     id: data.id,
     workspaceId: data.workspace_id,
@@ -659,6 +970,37 @@ export async function patchDeal(
   payload: DealPatchPayload,
 ): Promise<unknown> {
   const updates: Record<string, unknown> = {};
+
+  if (payload.name !== undefined) {
+    const name = cleanText(payload.name);
+    if (!name) {
+      throw new Error("VALIDATION_NAME_REQUIRED");
+    }
+    updates.name = name;
+  }
+
+  if (payload.primaryContactId !== undefined) {
+    const primaryContactId = cleanText(payload.primaryContactId ?? null);
+    if (primaryContactId) {
+      await ensureRecordVisible(ctx, "contact", primaryContactId);
+    }
+    updates.primary_contact_id = primaryContactId;
+  }
+
+  if (payload.companyId !== undefined) {
+    const companyId = cleanText(payload.companyId ?? null);
+    if (companyId) {
+      await ensureRecordVisible(ctx, "company", companyId);
+    }
+    updates.company_id = companyId;
+  }
+
+  if (payload.amount !== undefined) {
+    if (payload.amount !== null && (typeof payload.amount !== "number" || !Number.isFinite(payload.amount))) {
+      throw new Error("VALIDATION_INVALID_AMOUNT");
+    }
+    updates.amount = payload.amount;
+  }
 
   if (payload.stageId !== undefined) {
     const stageId = cleanText(payload.stageId);
@@ -739,13 +1081,30 @@ export async function patchDeal(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", dealId)
     .is("deleted_at", null)
-    .select("id")
+    .select(
+      "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at",
+    )
     .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
-
-  return fetchRepSafeDeal(ctx, dealId);
+  return {
+    id: data.id,
+    workspaceId: data.workspace_id,
+    name: data.name,
+    stageId: data.stage_id,
+    primaryContactId: data.primary_contact_id,
+    companyId: data.company_id,
+    assignedRepId: data.assigned_rep_id,
+    amount: data.amount,
+    expectedCloseOn: data.expected_close_on,
+    nextFollowUpAt: data.next_follow_up_at,
+    lastActivityAt: data.last_activity_at,
+    closedAt: data.closed_at,
+    hubspotDealId: data.hubspot_deal_id,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
 }
 
 export async function createEquipment(
