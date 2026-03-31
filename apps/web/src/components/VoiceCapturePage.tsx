@@ -102,6 +102,19 @@ function looksLikeCrmRecordId(value: string): boolean {
   );
 }
 
+function formatVoiceCaptureSyncStatus(status: RecentCapture["sync_status"]): string {
+  switch (status) {
+    case "synced":
+      return "Saved to CRM";
+    case "failed":
+      return "Needs attention";
+    case "processing":
+      return "Processing";
+    default:
+      return "Queued";
+  }
+}
+
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
   const { toast } = useToast();
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -113,6 +126,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [dealLookupOptions, setDealLookupOptions] = useState<DealLookupOption[]>([]);
   const [dealLookupLoading, setDealLookupLoading] = useState(false);
   const [selectedDealLabel, setSelectedDealLabel] = useState<string | null>(null);
+  const [resolvedDealOption, setResolvedDealOption] = useState<DealLookupOption | null>(null);
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [editedTranscript, setEditedTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -205,6 +219,56 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       window.clearTimeout(timer);
     };
   }, [dealLookupQuery]);
+
+  useEffect(() => {
+    const activeDealId = result?.hubspot_deal_id?.trim() || hubspotDealId.trim();
+    if (!activeDealId || !looksLikeCrmRecordId(activeDealId)) {
+      setResolvedDealOption(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const { data: deal, error: dealError } = await crmSupabase
+        .from("crm_deals_rep_safe")
+        .select("id, name, company_id")
+        .eq("id", activeDealId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (dealError || !deal) {
+        setResolvedDealOption(null);
+        return;
+      }
+
+      let companyName: string | null = null;
+      if (deal.company_id) {
+        const companyResult = await crmSupabase
+          .from("crm_companies")
+          .select("name")
+          .eq("id", deal.company_id)
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (!cancelled && !companyResult.error) {
+          companyName = companyResult.data?.name ?? null;
+        }
+      }
+
+      if (cancelled) return;
+      setResolvedDealOption({
+        id: deal.id,
+        name: deal.name,
+        companyName,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hubspotDealId, result?.hubspot_deal_id]);
 
   async function loadRecentCaptures(): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -322,6 +386,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setDealLookupQuery("");
     setDealLookupOptions([]);
     setSelectedDealLabel(null);
+    setResolvedDealOption(null);
     setResult(null);
     setEditedTranscript("");
     setErrorMessage(null);
@@ -793,6 +858,37 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── DONE ──────────────────────────────────────────────────────────── */}
           {recordingState === "done" && result && (
             <div className="space-y-4">
+              {(() => {
+                const linkedDealId = result.hubspot_deal_id ?? hubspotDealId ?? null;
+                const linkedDealTitle = resolvedDealOption
+                  ? resolvedDealOption.companyName
+                    ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
+                    : resolvedDealOption.name
+                  : selectedDealLabel;
+
+                if (!linkedDealId) {
+                  return null;
+                }
+
+                return (
+                  <ResultCard
+                    icon={<Building2 className="w-4 h-4" />}
+                    title="CRM Link"
+                  >
+                    <ExtractedField
+                      label="Linked deal"
+                      value={linkedDealTitle ?? "CRM deal linked"}
+                      icon={<Building2 className="w-3.5 h-3.5" />}
+                    />
+                    <ExtractedField
+                      label="Deal ID"
+                      value={linkedDealId}
+                      icon={<FileText className="w-3.5 h-3.5" />}
+                    />
+                  </ResultCard>
+                );
+              })()}
+
               {/* CRM sync status */}
               <div className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3",
@@ -1020,13 +1116,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                               }
                               className="text-xs shrink-0"
                             >
-                              {cap.sync_status === "synced"
-                                ? "Synced"
-                                : cap.sync_status === "failed"
-                                ? "Failed"
-                                : cap.sync_status === "processing"
-                                ? "Processing"
-                                : "Pending"}
+                              {formatVoiceCaptureSyncStatus(cap.sync_status)}
                             </Badge>
                           </div>
                         </CardContent>
