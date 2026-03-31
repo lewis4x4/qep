@@ -101,7 +101,10 @@ Deno.serve(async (req) => {
 
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;
-    const hubspotDealId = (formData.get("hubspot_deal_id") as string | null) ?? null;
+    const crmDealId = (formData.get("crm_deal_id") as string | null) ?? null;
+    const hubspotDealId =
+      crmDealId ??
+      ((formData.get("hubspot_deal_id") as string | null) ?? null);
 
     if (!audioFile || audioFile.size === 0) {
       return jsonError("audio field is required", 400, ch);

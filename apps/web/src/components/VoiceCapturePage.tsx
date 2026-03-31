@@ -276,10 +276,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
       setResult((prev) => prev ? { ...prev, hubspot_synced: true } : prev);
       void loadRecentCaptures();
-      toast({ title: "Pushed to HubSpot", description: "Note and task added to the deal." });
+      toast({ title: "Pushed to CRM", description: "Note and task were added to the deal." });
     } catch (err) {
       toast({
-        title: "HubSpot sync failed",
+        title: "CRM sync failed",
         description: err instanceof Error ? err.message : "Sync failed",
         variant: "destructive",
       });
@@ -303,7 +303,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       const form = new FormData();
       form.append("audio", audioBlob, "recording");
       if (hubspotDealId.trim()) {
-        form.append("hubspot_deal_id", hubspotDealId.trim());
+        form.append("crm_deal_id", hubspotDealId.trim());
       }
 
       const res = await fetch(
@@ -336,13 +336,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
       if (data.hubspot_synced) {
         toast({
-          title: "Saved to HubSpot",
-          description: "Note and follow-up task added to the deal.",
+          title: "Saved to CRM",
+          description: "Note and follow-up task were attached to the deal.",
         });
       } else {
         toast({
           title: "Saved locally",
-          description: "Will sync to HubSpot once connected.",
+          description: "CRM sync will run once the live connection is available.",
           variant: "destructive",
         });
       }
@@ -380,7 +380,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground">Field Note</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Record a quick summary after your visit — we'll pull out the key details and push them to HubSpot.
+              Record a quick summary after your visit — we'll pull out the key details and push them into CRM.
             </p>
           </div>
 
@@ -392,23 +392,23 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── IDLE ──────────────────────────────────────────────────────────── */}
           {recordingState === "idle" && (
             <div className="space-y-6">
-              {/* HubSpot Deal ID input */}
+              {/* CRM Deal ID input */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="deal-id">HubSpot Deal ID</Label>
+                  <Label htmlFor="deal-id">CRM Deal ID</Label>
                   <span className="text-xs text-muted-foreground">(optional)</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="What is a HubSpot deal ID?"
+                        aria-label="What is a CRM deal ID?"
                         className="h-11 w-11 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2"
                       >
                         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side={isMobile ? "bottom" : "right"} align={isMobile ? "start" : "center"} className="max-w-[200px]">
-                      Paste the HubSpot deal ID to link this note directly. Don't know it? We'll match by customer name automatically.
+                      Paste the CRM deal ID to link this note directly. Don't know it? We'll match by customer name automatically.
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -417,7 +417,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   type="text"
                   value={hubspotDealId}
                   onChange={(e) => setHubspotDealId(e.target.value)}
-                  placeholder="Paste the deal ID if you know it"
+                  placeholder="Paste the CRM deal ID if you know it"
                 />
                 <p className="text-xs text-muted-foreground">
                   Don't know it? We'll try to match by customer name automatically.
@@ -504,13 +504,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
               {/* Deal ID (editable) */}
               <div className="space-y-1.5">
-                <Label htmlFor="deal-id-review">HubSpot Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label htmlFor="deal-id-review">CRM Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
                   id="deal-id-review"
                   type="text"
                   value={hubspotDealId}
                   onChange={(e) => setHubspotDealId(e.target.value)}
-                  placeholder="Paste deal ID if known"
+                  placeholder="Paste CRM deal ID if known"
                 />
               </div>
 
@@ -610,7 +610,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── DONE ──────────────────────────────────────────────────────────── */}
           {recordingState === "done" && result && (
             <div className="space-y-4">
-              {/* HubSpot sync status */}
+              {/* CRM sync status */}
               <div className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3",
                 result.hubspot_synced
@@ -621,8 +621,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <>
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-800">Saved to HubSpot</p>
-                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task added to the deal.</p>
+                      <p className="text-sm font-medium text-green-800">Saved to CRM</p>
+                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task are attached to the deal.</p>
                     </div>
                     <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
                       Synced
@@ -633,7 +633,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-amber-800">Saved locally</p>
-                      <p className="text-xs text-amber-600 mt-0.5">HubSpot isn't connected — will sync once configured.</p>
+                      <p className="text-xs text-amber-600 mt-0.5">Live CRM sync isn't connected yet — this note is safe and ready to sync later.</p>
                     </div>
                     <Badge variant="outline" className="text-amber-600 border-amber-300">
                       Pending
@@ -775,7 +775,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     ) : (
                       <Send className="w-4 h-4 mr-2" />
                     )}
-                    Push to HubSpot
+                    Push to CRM
                   </Button>
                 )}
                 <Button
@@ -893,7 +893,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
                 <p>Record immediately after the visit while details are fresh.</p>
-                <p>If you know the HubSpot deal ID, paste it before recording to link the note automatically.</p>
+                <p>If you know the CRM deal ID, paste it before recording to link the note automatically.</p>
               </CardContent>
             </Card>
           </aside>
