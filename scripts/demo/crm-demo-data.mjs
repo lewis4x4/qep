@@ -8,24 +8,28 @@ const DEMO_PASSWORD = process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
 const DEMO_USERS = [
   {
     key: "owner",
+    id: "10000000-0000-4000-8000-000000000001",
     email: "demo.owner@qep-demo.local",
     fullName: "Alex Mercer",
     role: "owner",
   },
   {
     key: "manager",
+    id: "10000000-0000-4000-8000-000000000002",
     email: "demo.manager@qep-demo.local",
     fullName: "Riley Shaw",
     role: "manager",
   },
   {
     key: "rep_primary",
+    id: "10000000-0000-4000-8000-000000000003",
     email: "demo.rep@qep-demo.local",
     fullName: "Cole Bryant",
     role: "rep",
   },
   {
     key: "rep_secondary",
+    id: "10000000-0000-4000-8000-000000000004",
     email: "demo.rep2@qep-demo.local",
     fullName: "Maya Torres",
     role: "rep",
@@ -146,6 +150,38 @@ ${DEMO_USERS.map((user) => `  - ${user.email} (${user.role})`).join("\n")}
 `);
 }
 
+function normalizeEnvValue(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function isPlaceholderValue(value) {
+  return typeof value === "string" && /<[^>]+>/.test(value);
+}
+
+function isUsableSupabaseUrl(value) {
+  if (!value || isPlaceholderValue(value)) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isUsableServiceRoleKey(value) {
+  return typeof value === "string" && value.length > 20 && !isPlaceholderValue(value);
+}
+
+let resolvedRuntime = null;
+
 function readLocalSupabaseStatus() {
   try {
     const raw = execFileSync("supabase", ["status", "-o", "env"], {
@@ -160,7 +196,7 @@ function readLocalSupabaseStatus() {
       const index = trimmed.indexOf("=");
       if (index === -1) continue;
       const key = trimmed.slice(0, index);
-      const value = trimmed.slice(index + 1);
+      const value = normalizeEnvValue(trimmed.slice(index + 1));
       parsed[key] = value;
     }
     return parsed;
@@ -170,30 +206,70 @@ function readLocalSupabaseStatus() {
 }
 
 function resolveCredentials() {
-  const local = readLocalSupabaseStatus();
-  const url =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    local.SUPABASE_URL ||
-    local.API_URL;
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    local.SUPABASE_SERVICE_ROLE_KEY ||
-    local.SERVICE_ROLE_KEY;
+  if (resolvedRuntime) {
+    return resolvedRuntime;
+  }
 
-  if (!url || !serviceRoleKey) {
+  const local = readLocalSupabaseStatus();
+  const urlCandidates = [
+    process.env.SUPABASE_URL,
+    process.env.VITE_SUPABASE_URL,
+    local.SUPABASE_URL,
+    local.API_URL,
+  ].map(normalizeEnvValue);
+  const adminKeyCandidates = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.SUPABASE_SECRET_KEY,
+    local.SECRET_KEY,
+    local.SUPABASE_SERVICE_ROLE_KEY,
+    local.SERVICE_ROLE_KEY,
+  ].map(normalizeEnvValue);
+  const dbUrlCandidates = [
+    process.env.SUPABASE_DB_URL,
+    local.DB_URL,
+  ].map(normalizeEnvValue);
+
+  const url = urlCandidates.find(isUsableSupabaseUrl) ?? "";
+  const adminKey = adminKeyCandidates.find(isUsableServiceRoleKey) ?? "";
+  const dbUrl = dbUrlCandidates.find((value) => value.startsWith("postgresql://")) ?? "";
+  const isLocal = url.includes("127.0.0.1") || url.includes("localhost");
+
+  if (!url || !adminKey) {
     throw new Error(
-      "Missing Supabase credentials. Export SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or run against a local `supabase start` environment.",
+      "Missing valid Supabase credentials. Export real SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY values, or run against a local `supabase start` environment.",
     );
   }
 
-  return { url, serviceRoleKey };
+  resolvedRuntime = { url, adminKey, dbUrl, isLocal };
+  return resolvedRuntime;
 }
 
 function createAdminClient() {
   const credentials = resolveCredentials();
-  return createClient(credentials.url, credentials.serviceRoleKey, {
+  return createClient(credentials.url, credentials.adminKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function sqlLiteral(value) {
+  if (value === null || value === undefined) return "null";
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function sqlJson(value) {
+  return `${sqlLiteral(JSON.stringify(value))}::jsonb`;
+}
+
+function execLocalSql(sql) {
+  const { dbUrl } = resolveCredentials();
+  if (!dbUrl) {
+    throw new Error("Missing local DB_URL for direct SQL demo user bootstrap.");
+  }
+
+  return execFileSync("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-c", sql], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -245,7 +321,113 @@ async function listAuthUsers(admin) {
   return users;
 }
 
+function ensureLocalDemoUsers() {
+  const sql = DEMO_USERS.map((demoUser) => {
+    const appMeta = sqlJson({ provider: "email", providers: ["email"], workspace_id: DEMO_WORKSPACE_ID });
+    const userMeta = sqlJson({
+      full_name: demoUser.fullName,
+      email: demoUser.email,
+      email_verified: true,
+      workspace_id: DEMO_WORKSPACE_ID,
+    });
+
+    return `
+do $$
+declare
+  v_user_id uuid := ${sqlLiteral(demoUser.id)}::uuid;
+  v_email text := ${sqlLiteral(demoUser.email)};
+  v_instance_id uuid;
+begin
+  select instance_id into v_instance_id
+  from auth.users
+  where instance_id != '00000000-0000-0000-0000-000000000000'::uuid
+  limit 1;
+
+  if v_instance_id is null then
+    select instance_id into v_instance_id from auth.users limit 1;
+  end if;
+
+  if v_instance_id is null then
+    v_instance_id := '00000000-0000-0000-0000-000000000000'::uuid;
+  end if;
+
+  insert into auth.users (
+    id, instance_id, aud, role, email,
+    encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data,
+    created_at, updated_at,
+    confirmation_token, recovery_token,
+    email_change, email_change_token_new,
+    email_change_token_current, phone_change,
+    phone_change_token, reauthentication_token,
+    is_sso_user
+  ) values (
+    v_user_id, v_instance_id, 'authenticated', 'authenticated', v_email,
+    extensions.crypt(${sqlLiteral(DEMO_PASSWORD)}, extensions.gen_salt('bf')),
+    now(),
+    ${appMeta},
+    ${userMeta},
+    now(), now(),
+    '', '',
+    '', '',
+    '', '',
+    '', '',
+    false
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    encrypted_password = excluded.encrypted_password,
+    email_confirmed_at = excluded.email_confirmed_at,
+    raw_app_meta_data = excluded.raw_app_meta_data,
+    raw_user_meta_data = excluded.raw_user_meta_data,
+    updated_at = now();
+
+  insert into auth.identities (
+    id, user_id, provider_id, identity_data, provider,
+    last_sign_in_at, created_at, updated_at
+  ) values (
+    v_user_id,
+    v_user_id,
+    v_email,
+    jsonb_build_object(
+      'sub', v_user_id::text,
+      'email', v_email,
+      'email_verified', true,
+      'phone_verified', false
+    ),
+    'email',
+    now(), now(), now()
+  )
+  on conflict (id) do update set
+    provider_id = excluded.provider_id,
+    identity_data = excluded.identity_data,
+    updated_at = now();
+
+  insert into public.profiles (id, email, full_name, role)
+  values (
+    v_user_id,
+    v_email,
+    ${sqlLiteral(demoUser.fullName)},
+    ${sqlLiteral(demoUser.role)}
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    role = excluded.role,
+    updated_at = now();
+end;
+$$;`;
+  }).join("\n");
+
+  execLocalSql(sql);
+  return Object.fromEntries(DEMO_USERS.map((demoUser) => [demoUser.key, demoUser.id]));
+}
+
 async function ensureDemoUsers(admin) {
+  if (resolveCredentials().isLocal) {
+    return ensureLocalDemoUsers();
+  }
+
   const users = await listAuthUsers(admin);
   const byEmail = new Map(users.map((user) => [user.email?.toLowerCase(), user]));
   const result = {};
@@ -297,6 +479,22 @@ async function ensureDemoUsers(admin) {
 }
 
 async function deleteDemoUsers(admin) {
+  if (resolveCredentials().isLocal) {
+    const emails = DEMO_USERS.map((user) => sqlLiteral(user.email.toLowerCase())).join(", ");
+    execLocalSql(`
+delete from public.profiles
+where lower(email) in (${emails});
+
+delete from auth.identities
+where lower(provider) = 'email'
+  and lower(provider_id) in (${emails});
+
+delete from auth.users
+where lower(email) in (${emails});
+`);
+    return;
+  }
+
   const users = await listAuthUsers(admin);
   const demoEmails = new Set(DEMO_USERS.map((user) => user.email.toLowerCase()));
   for (const user of users) {

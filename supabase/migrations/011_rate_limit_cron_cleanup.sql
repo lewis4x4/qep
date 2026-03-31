@@ -54,11 +54,23 @@ $$;
 -- Requires pg_cron extension (enabled by default on Supabase).
 -- The 5-minute window matches the longest rate-limit window in the app (voice-capture).
 -- Adjust if longer windows are added.
-SELECT cron.schedule(
-  'clean-rate-limits',
-  '*/5 * * * *',
-  $$
-    DELETE FROM public.rate_limit_log
-    WHERE created_at < now() - interval '5 minutes';
-  $$
-);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_namespace
+    WHERE nspname = 'cron'
+  ) THEN
+    PERFORM cron.schedule(
+      'clean-rate-limits',
+      '*/5 * * * *',
+      $sql$
+        DELETE FROM public.rate_limit_log
+        WHERE created_at < now() - interval '5 minutes';
+      $sql$
+    );
+  ELSE
+    RAISE NOTICE 'Skipping clean-rate-limits cron job because pg_cron is not available in this environment.';
+  END IF;
+END;
+$$;
