@@ -64,11 +64,11 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
   });
 
   return (
-    <Card className="space-y-3 p-4 sm:p-5">
+    <Card className="space-y-3 border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-[#0F172A]">Equipment Registry</h2>
-          <p className="text-sm text-[#475569]">Track customer assets linked to this company.</p>
+          <h2 className="text-base font-semibold text-foreground">Equipment Registry</h2>
+          <p className="text-sm text-muted-foreground">Track customer assets linked to this company.</p>
         </div>
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus className="mr-1 h-4 w-4" />
@@ -76,20 +76,20 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
         </Button>
       </div>
 
-      {equipmentQuery.isLoading && <div className="h-12 animate-pulse rounded bg-[#F8FAFC]" />}
+      {equipmentQuery.isLoading && <div className="h-12 animate-pulse rounded bg-muted/40" />}
       {equipmentQuery.isError && (
         <p className="text-sm text-destructive">Couldn&apos;t load equipment records.</p>
       )}
 
       {!equipmentQuery.isLoading && !equipmentQuery.isError && (equipmentQuery.data?.length ?? 0) === 0 && (
-        <p className="text-sm text-[#475569]">No equipment linked yet.</p>
+        <p className="text-sm text-muted-foreground">No equipment linked yet.</p>
       )}
 
       {!equipmentQuery.isLoading && !equipmentQuery.isError && (equipmentQuery.data?.length ?? 0) > 0 && (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b border-[#E2E8F0] text-left text-xs uppercase tracking-wide text-[#475569]">
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="py-2 pr-4">Name</th>
                 <th className="py-2 pr-4">Asset Tag</th>
                 <th className="py-2 pr-4">Serial Number</th>
@@ -98,11 +98,13 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
             </thead>
             <tbody>
               {equipmentQuery.data?.map((equipment) => (
-                <tr key={equipment.id} className="border-b border-[#F1F5F9]">
-                  <td className="py-2 pr-4 font-medium text-[#0F172A]">{equipment.name}</td>
-                  <td className="py-2 pr-4 text-[#334155]">{equipment.assetTag || "-"}</td>
-                  <td className="py-2 pr-4 font-mono text-xs text-[#334155]">{equipment.serialNumber || "-"}</td>
-                  <td className="py-2 pr-2 text-[#475569]">
+                <tr key={equipment.id} className="border-b border-border/60">
+                  <td className="py-2 pr-4 font-medium text-foreground">{equipment.name}</td>
+                  <td className="py-2 pr-4 text-muted-foreground">{equipment.assetTag || "-"}</td>
+                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">
+                    {equipment.serialNumber || "-"}
+                  </td>
+                  <td className="py-2 pr-2 text-muted-foreground">
                     {new Date(equipment.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </td>
                 </tr>
@@ -123,7 +125,7 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
 
           <div className="mt-4 space-y-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#0F172A]" htmlFor="equipment-name">
+              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-name">
                 Name
               </label>
               <Input
@@ -134,7 +136,7 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#0F172A]" htmlFor="equipment-asset-tag">
+              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-asset-tag">
                 Asset tag
               </label>
               <Input
@@ -145,7 +147,7 @@ export function CrmCompanyEquipmentSection({ companyId }: CrmCompanyEquipmentSec
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-[#0F172A]" htmlFor="equipment-serial">
+              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="equipment-serial">
                 Serial number
               </label>
               <Input

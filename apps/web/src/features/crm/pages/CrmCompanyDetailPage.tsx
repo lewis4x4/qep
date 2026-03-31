@@ -224,13 +224,12 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <div className="flex items-center justify-between gap-3">
-        <Link
-          to="/crm/companies"
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to companies
-        </Link>
+        <Button asChild variant="outline" className="min-h-[44px] gap-2">
+          <Link to="/crm/companies">
+            <ArrowLeft className="h-4 w-4" />
+            Back to companies
+          </Link>
+        </Button>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             Edit Company
@@ -253,17 +252,23 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         </div>
       </div>
 
-      {companyQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+      {companyQuery.isLoading && (
+        <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+      )}
 
       {companyQuery.isError && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">Unable to load this company. Refresh the page or go back to your companies list.</p>
+        <Card className="border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Unable to load this company. Refresh the page or go back to your companies list.
+          </p>
         </Card>
       )}
 
       {!companyQuery.isLoading && !companyQuery.isError && !companyQuery.data && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-[#334155]">This company isn&apos;t available. It may have been removed or you might not have access.</p>
+        <Card className="border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            This company isn&apos;t available. It may have been removed or you might not have access.
+          </p>
         </Card>
       )}
 
@@ -271,17 +276,17 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         <>
           <CrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
 
-          <Card className="p-4 sm:p-5">
+          <Card className="border-border bg-card p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-[#475569]">Assigned rep</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Assigned rep</dt>
+                <dd className="font-medium text-foreground">
                   {assignedRepQuery.data || (companyQuery.data.assignedRepId ? "Assigned representative" : "Unassigned")}
                 </dd>
               </div>
               <div>
-                <dt className="text-[#475569]">Last updated</dt>
-                <dd className="font-medium text-[#0F172A]">
+                <dt className="text-muted-foreground">Last updated</dt>
+                <dd className="font-medium text-foreground">
                   {new Date(companyQuery.data.updatedAt).toLocaleString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -293,17 +298,19 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
             </dl>
           </Card>
 
-          {hierarchyQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />}
+          {hierarchyQuery.isLoading && (
+            <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+          )}
           {!hierarchyQuery.isLoading && hierarchyQuery.data && (
             <div className="space-y-3">
               <CrmCompanyHierarchyCard hierarchy={hierarchyQuery.data} />
 
               {canManageHierarchy && (
-                <Card className="space-y-3 p-4 sm:p-5">
+                <Card className="space-y-3 border-border bg-card p-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-[#0F172A]">Hierarchy controls</h3>
-                      <p className="text-sm text-[#475569]">
+                      <h3 className="text-sm font-semibold text-foreground">Hierarchy controls</h3>
+                      <p className="text-sm text-muted-foreground">
                         Set the direct parent company for this account.
                       </p>
                     </div>
@@ -319,15 +326,18 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                   </div>
 
                   {!hierarchyEditorOpen ? (
-                    <p className="text-sm text-[#334155]">
+                    <p className="text-sm text-muted-foreground">
                       Current parent:{" "}
-                      <span className="font-medium text-[#0F172A]">
+                      <span className="font-medium text-foreground">
                         {currentParentNode?.name ?? "Top-level company"}
                       </span>
                     </p>
                   ) : (
                     <div className="space-y-3">
-                      <label className="block text-sm font-medium text-[#0F172A]" htmlFor="crm-parent-company-search">
+                      <label
+                        className="block text-sm font-medium text-foreground"
+                        htmlFor="crm-parent-company-search"
+                      >
                         Search parent company
                       </label>
                       <input
@@ -335,7 +345,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                         value={parentSearchInput}
                         onChange={(event) => setParentSearchInput(event.target.value)}
                         placeholder="Search companies by name, city, or state"
-                        className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none"
+                        className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
                       />
 
                       <div className="space-y-2">
@@ -344,17 +354,19 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                           onClick={() => setSelectedParentId(null)}
                           className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
                             selectedParentId === null
-                              ? "border-[#E87722] bg-[#FFF7ED] text-[#9A3412]"
-                              : "border-[#E2E8F0] bg-white text-[#0F172A] hover:border-[#E87722]/60"
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent/30"
                           }`}
                         >
                           Top-level company (no parent)
                         </button>
 
                         {parentOptionsQuery.isLoading ? (
-                          <div className="h-12 animate-pulse rounded-md border border-[#E2E8F0] bg-[#F8FAFC]" />
+                          <div className="h-12 animate-pulse rounded-md border border-border bg-muted/40" />
                         ) : availableParentOptions.length === 0 ? (
-                          <p className="text-sm text-[#475569]">No eligible parent companies found for this search.</p>
+                          <p className="text-sm text-muted-foreground">
+                            No eligible parent companies found for this search.
+                          </p>
                         ) : (
                           <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                             {availableParentOptions.map((option) => (
@@ -364,12 +376,12 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                                 onClick={() => setSelectedParentId(option.id)}
                                 className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
                                   selectedParentId === option.id
-                                    ? "border-[#E87722] bg-[#FFF7ED] text-[#9A3412]"
-                                    : "border-[#E2E8F0] bg-white text-[#0F172A] hover:border-[#E87722]/60"
+                                    ? "border-primary bg-primary/15 text-primary"
+                                    : "border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent/30"
                                 }`}
                               >
                                 <span className="font-medium">{option.name}</span>
-                                <span className="ml-2 text-xs text-[#64748B]">
+                                <span className="ml-2 text-xs text-muted-foreground">
                                   {[option.city, option.state].filter(Boolean).join(", ") || "No location"}
                                 </span>
                               </button>
@@ -378,7 +390,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
                         )}
                       </div>
 
-                      {hierarchyError && <p className="text-sm text-[#DC2626]">{hierarchyError}</p>}
+                      {hierarchyError && <p className="text-sm text-destructive">{hierarchyError}</p>}
 
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button
@@ -427,18 +439,23 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-[#334155]" />
-              <h2 className="text-base font-semibold text-[#0F172A]">Activity Timeline</h2>
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
             </div>
 
             {activitiesQuery.isLoading ? (
               <div className="space-y-3" role="status" aria-label="Loading activities">
                 {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-24 animate-pulse rounded-xl border border-[#E2E8F0] bg-white" />
+                  <div
+                    key={index}
+                    className="h-24 animate-pulse rounded-xl border border-border bg-muted/40"
+                  />
                 ))}
               </div>
             ) : activitiesQuery.isError ? (
-              <Card className="p-4 text-sm text-[#334155]">Couldn&apos;t load activities. Try refreshing the page.</Card>
+              <Card className="border-border bg-card p-4 text-sm text-muted-foreground">
+                Couldn&apos;t load activities. Try refreshing the page.
+              </Card>
             ) : (
               <CrmActivityTimeline
                 activities={activitiesQuery.data ?? []}

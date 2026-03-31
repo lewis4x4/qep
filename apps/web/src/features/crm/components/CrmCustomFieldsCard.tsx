@@ -160,18 +160,18 @@ export function CrmCustomFieldsCard({
   const fields = useMemo(() => fieldsQuery.data ?? [], [fieldsQuery.data]);
 
   return (
-    <Card className="space-y-4 p-4 sm:p-5">
+    <Card className="space-y-4 border-border bg-card p-4 sm:p-5">
       <div>
-        <h2 className="text-base font-semibold text-[#0F172A]">Custom Fields</h2>
-        <p className="text-sm text-[#475569]">Inline edits save each field independently.</p>
+        <h2 className="text-base font-semibold text-foreground">Custom Fields</h2>
+        <p className="text-sm text-muted-foreground">Inline edits save each field independently.</p>
       </div>
 
-      {fieldsQuery.isLoading && <div className="h-10 animate-pulse rounded bg-[#F8FAFC]" />}
+      {fieldsQuery.isLoading && <div className="h-10 animate-pulse rounded bg-muted/40" />}
       {fieldsQuery.isError && (
         <p className="text-sm text-destructive">Couldn&apos;t load custom fields.</p>
       )}
       {!fieldsQuery.isLoading && !fieldsQuery.isError && fields.length === 0 && (
-        <p className="text-sm text-[#475569]">No custom fields defined for this record type.</p>
+        <p className="text-sm text-muted-foreground">No custom fields defined for this record type.</p>
       )}
 
       {!fieldsQuery.isLoading && !fieldsQuery.isError && fields.length > 0 && (
@@ -179,14 +179,14 @@ export function CrmCustomFieldsCard({
           {fields.map((field) => {
             const isPending = saveMutation.isPending && pendingKey === field.key;
             return (
-              <div key={field.definitionId} className="rounded-lg border border-[#E2E8F0] p-3">
+              <div key={field.definitionId} className="rounded-lg border border-border bg-muted/10 p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <label htmlFor={`custom-field-${field.key}`} className="text-sm font-medium text-[#0F172A]">
+                  <label htmlFor={`custom-field-${field.key}`} className="text-sm font-medium text-foreground">
                     {field.label}
-                    {field.required && <span className="ml-1 text-[#B45309]">*</span>}
+                    {field.required && <span className="ml-1 text-primary">*</span>}
                   </label>
                   {isPending && (
-                    <span className="inline-flex items-center gap-1 text-xs text-[#475569]">
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       Saving...
                     </span>
@@ -194,7 +194,7 @@ export function CrmCustomFieldsCard({
                 </div>
 
                 {field.dataType === "boolean" ? (
-                  <label className="inline-flex items-center gap-2 text-sm text-[#334155]">
+                  <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
                     <input
                       id={`custom-field-${field.key}`}
                       type="checkbox"
@@ -234,8 +234,8 @@ export function CrmCustomFieldsCard({
       )}
 
       {canManageDefinitions && (
-        <div className="rounded-lg border border-dashed border-[#CBD5E1] p-3">
-          <h3 className="text-sm font-semibold text-[#0F172A]">Add field definition</h3>
+        <div className="rounded-lg border border-dashed border-border bg-muted/10 p-3">
+          <h3 className="text-sm font-semibold text-foreground">Add field definition</h3>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Input
               placeholder="Field key"
@@ -248,7 +248,7 @@ export function CrmCustomFieldsCard({
               onChange={(event) => setNewField((prev) => ({ ...prev, label: event.target.value }))}
             />
             <select
-              className="h-10 rounded-md border border-[#CBD5E1] px-2 text-sm"
+              className="h-10 rounded-md border border-input bg-background px-2 text-sm text-foreground"
               value={newField.dataType}
               onChange={(event) => {
                 const value = event.target.value as NewFieldDraft["dataType"];
@@ -262,7 +262,7 @@ export function CrmCustomFieldsCard({
               <option value="json">JSON</option>
             </select>
             <select
-              className="h-10 rounded-md border border-[#CBD5E1] px-2 text-sm"
+              className="h-10 rounded-md border border-input bg-background px-2 text-sm text-foreground"
               value={newField.visibility}
               onChange={(event) => {
                 const value = event.target.value as NewFieldDraft["visibility"];
@@ -275,7 +275,7 @@ export function CrmCustomFieldsCard({
             </select>
           </div>
 
-          <label className="mt-2 inline-flex items-center gap-2 text-sm text-[#334155]">
+          <label className="mt-2 inline-flex items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={newField.required}

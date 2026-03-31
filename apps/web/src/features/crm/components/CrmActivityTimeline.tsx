@@ -61,9 +61,9 @@ function readCommunicationDelivery(activity: CrmActivityItem): CommunicationDeli
 }
 
 function deliveryTone(status: string | undefined): string {
-  if (status === "sent") return "text-[#166534]";
-  if (status === "failed") return "text-[#B91C1C]";
-  return "text-[#475569]";
+  if (status === "sent") return "text-green-700 dark:text-green-400";
+  if (status === "failed") return "text-destructive";
+  return "text-muted-foreground";
 }
 
 function deliveryLabel(delivery: CommunicationDeliveryMetadata): string {
@@ -203,12 +203,12 @@ function taskStatusTone(status: CrmTaskMetadata["status"]): string {
 }
 
 function taskDueTone(dueAt: string | null | undefined, status: CrmTaskMetadata["status"]): string {
-  if (status === "completed") return "text-[#475569]";
-  if (!dueAt) return "text-[#475569]";
+  if (status === "completed") return "text-muted-foreground";
+  if (!dueAt) return "text-muted-foreground";
   const dueTime = Date.parse(dueAt);
-  if (!Number.isFinite(dueTime)) return "text-[#B91C1C]";
-  if (dueTime < Date.now()) return "text-[#B91C1C]";
-  return "text-[#475569]";
+  if (!Number.isFinite(dueTime)) return "text-destructive";
+  if (dueTime < Date.now()) return "text-destructive";
+  return "text-muted-foreground";
 }
 
 export function CrmActivityTimeline({
@@ -409,8 +409,10 @@ export function CrmActivityTimeline({
 
   if (activities.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-6 text-center">
-        <p className="text-sm text-[#334155]">No activities yet. Keep momentum and capture the first touchpoint.</p>
+      <div className="rounded-xl border border-dashed border-border bg-card/80 p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          No activities yet. Keep momentum and capture the first touchpoint.
+        </p>
         <div className="mt-4 flex items-center justify-center gap-2">
           <Button size="sm" onClick={onLogActivity}>
             Log a call
@@ -457,7 +459,7 @@ export function CrmActivityTimeline({
           <article
             key={activity.id}
             className={cn(
-              "rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm",
+              "rounded-xl border border-border bg-card p-4 shadow-sm",
               activity.isOptimistic && "opacity-70"
             )}
           >
@@ -476,10 +478,10 @@ export function CrmActivityTimeline({
                     </>
                   )}
                 </span>
-                {showEntityLabel && <span className="text-xs text-[#475569]">{entityLabel}</span>}
+                {showEntityLabel && <span className="text-xs text-muted-foreground">{entityLabel}</span>}
               </div>
               <div className="flex flex-col items-end gap-1">
-                <time className="text-xs text-[#475569]" dateTime={activity.occurredAt}>
+                <time className="text-xs text-muted-foreground" dateTime={activity.occurredAt}>
                   {formatTimestamp(activity.occurredAt)}
                 </time>
                 {canUpdateOccurredAt && !isEditingOccurredAt && (
@@ -487,7 +489,7 @@ export function CrmActivityTimeline({
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-8 px-2 text-xs text-[#475569]"
+                    className="h-8 px-2 text-xs text-muted-foreground"
                     disabled={isPendingOccurredAt || isAnotherOccurredAtEditorOpen || editingBodyId !== null || editingTaskId !== null}
                     onClick={() => startOccurredAtEditor(activity)}
                   >
@@ -499,17 +501,17 @@ export function CrmActivityTimeline({
 
             {showVoiceSignalBlock && voiceSignals && <CrmVoiceCaptureSignalBlock signals={voiceSignals} />}
             {showVoiceCaptureFallback && (
-              <p className="mt-2 flex items-center gap-2 text-xs text-[#64748B]">
-                <Mic className="h-3.5 w-3.5 shrink-0 text-[#E87722]" aria-hidden="true" />
+              <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Mic className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
                 Field note activity — open the Field Note screen for the full extracted summary, or re-sync from a new capture.
               </p>
             )}
 
             {isEditingOccurredAt && (
-              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                 <label
                   htmlFor={`crm-activity-occurred-at-${activity.id}`}
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   Activity time
                 </label>
@@ -527,9 +529,9 @@ export function CrmActivityTimeline({
                     setOccurredAtConflictId(null);
                   }}
                   disabled={isPendingOccurredAt}
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70"
                 />
-                {occurredAtError && <p className="mt-2 text-xs text-[#B91C1C]">{occurredAtError}</p>}
+                {occurredAtError && <p className="mt-2 text-xs text-destructive">{occurredAtError}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -555,14 +557,14 @@ export function CrmActivityTimeline({
             )}
 
             {!isEditingBody ? (
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#0F172A]">
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {activity.body ?? "No details provided."}
               </p>
             ) : (
-              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                 <label
                   htmlFor={`crm-activity-body-${activity.id}`}
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   Activity details
                 </label>
@@ -580,9 +582,9 @@ export function CrmActivityTimeline({
                   }}
                   disabled={isPendingBody}
                   rows={4}
-                  className="min-h-[120px] w-full rounded-md border border-[#CBD5E1] bg-white px-3 py-2 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                  className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70"
                 />
-                {bodyError && <p className="mt-2 text-xs text-[#B91C1C]">{bodyError}</p>}
+                {bodyError && <p className="mt-2 text-xs text-destructive">{bodyError}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -612,7 +614,7 @@ export function CrmActivityTimeline({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-8 px-2 text-xs text-[#475569]"
+                  className="h-8 px-2 text-xs text-muted-foreground"
                   disabled={isPendingBody || isAnotherBodyEditorOpen || editingTaskId !== null || editingOccurredAtId !== null}
                   onClick={() => startBodyEditor(activity)}
                 >
@@ -658,7 +660,7 @@ export function CrmActivityTimeline({
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="h-8 px-2 text-xs text-[#475569]"
+                    className="h-8 px-2 text-xs text-muted-foreground"
                     disabled={isPendingTask || isEditingBody || isEditingOccurredAt || isAnotherTaskEditorOpen}
                     onClick={() => {
                       if (isEditingTask) {
@@ -674,10 +676,10 @@ export function CrmActivityTimeline({
               </div>
             )}
             {task && onPatchTask && isEditingTask && (
-              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                 <label
                   htmlFor={`crm-task-due-at-${activity.id}`}
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#475569]"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   Task due date
                 </label>
@@ -695,9 +697,9 @@ export function CrmActivityTimeline({
                     setTaskConflictId(null);
                   }}
                   disabled={isPendingTask}
-                  className="h-11 w-full rounded-md border border-[#CBD5E1] bg-white px-3 text-sm text-[#0F172A] shadow-sm focus:border-[#E87722] focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-70"
                 />
-                {dueAtError && <p className="mt-2 text-xs text-[#B91C1C]">{dueAtError}</p>}
+                {dueAtError && <p className="mt-2 text-xs text-destructive">{dueAtError}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -722,14 +724,14 @@ export function CrmActivityTimeline({
               </div>
             )}
             {delivery && (
-              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <DataSourceBadge state={deliveryBadgeState(delivery)} />
-                  <span className="text-xs font-medium text-[#0F172A]">
+                  <span className="text-xs font-medium text-foreground">
                     {deliveryModeLabel(delivery)}
                   </span>
                   {delivery.destination && (
-                    <span className="text-xs text-[#475569]">
+                    <span className="text-xs text-muted-foreground">
                       {delivery.destination}
                     </span>
                   )}
@@ -738,10 +740,10 @@ export function CrmActivityTimeline({
                   {deliveryLabel(delivery)}
                 </p>
                 {lockMessage && (
-                  <p className="mt-2 text-[11px] text-[#64748B]">{lockMessage}</p>
+                  <p className="mt-2 text-[11px] text-muted-foreground">{lockMessage}</p>
                 )}
                 {(attemptedLabel || delivery.externalMessageId) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#64748B]">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                     {attemptedLabel && (
                       <span>{attemptedLabel}</span>
                     )}

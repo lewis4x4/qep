@@ -80,7 +80,7 @@ export function CrmPageHeader({ title, subtitle }: CrmPageHeaderProps) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-[28px] font-bold leading-8 text-foreground">{title}</h1>
-          <p className="mt-1 text-sm text-[#334155]">{subtitle}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <div className="self-start sm:self-auto">
           <DataSourceBadge state={dataSourceState} />
