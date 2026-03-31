@@ -1,5 +1,6 @@
 import { CalendarClock, Mail, MessageSquareText, Phone, StickyNote, ClipboardList } from "lucide-react";
 import { useState, type ComponentType } from "react";
+import { DataSourceBadge } from "@/components/DataSourceBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
@@ -25,12 +26,15 @@ const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: st
 };
 
 interface CommunicationDeliveryMetadata {
+  attempted?: boolean;
   status?: string;
   mode?: string;
   provider?: string;
   reasonCode?: string;
   message?: string;
   destination?: string;
+  attemptedAt?: string;
+  externalMessageId?: string;
 }
 
 function readCommunicationDelivery(activity: CrmActivityItem): CommunicationDeliveryMetadata | null {
@@ -59,6 +63,39 @@ function deliveryLabel(delivery: CommunicationDeliveryMetadata): string {
     return delivery.message || "Saved as manual log only.";
   }
   return "Delivery status unavailable.";
+}
+
+function deliveryBadgeState(delivery: CommunicationDeliveryMetadata): "Live" | "Manual" | "Error" {
+  if (delivery.status === "sent") return "Live";
+  if (delivery.status === "failed") return "Error";
+  return "Manual";
+}
+
+function deliveryModeLabel(delivery: CommunicationDeliveryMetadata): string {
+  if (delivery.provider === "twilio") return "SMS";
+  if (delivery.provider === "sendgrid") return "Email";
+  return "Communication";
+}
+
+function formatAttemptedAt(value: string | undefined): string | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function deliveryAttemptLabel(delivery: CommunicationDeliveryMetadata): string | null {
+  const formatted = formatAttemptedAt(delivery.attemptedAt);
+  if (!formatted) return null;
+  if (delivery.attempted === false || delivery.mode === "manual") {
+    return `Logged ${formatted}`;
+  }
+  return `Attempted ${formatted}`;
 }
 
 function readTaskMetadata(activity: CrmActivityItem): CrmTaskMetadata | null {
@@ -186,6 +223,7 @@ export function CrmActivityTimeline({
         const canPatchTask = Boolean(onPatchTask || onToggleTaskStatus);
         const isEditingTask = editingTaskId === activity.id;
         const isPendingTask = pendingTaskId === activity.id;
+        const attemptedLabel = delivery ? deliveryAttemptLabel(delivery) : null;
 
         return (
           <article
@@ -308,10 +346,32 @@ export function CrmActivityTimeline({
               </div>
             )}
             {delivery && (
-              <p className={cn("mt-2 text-xs", deliveryTone(delivery.status))}>
-                {deliveryLabel(delivery)}
-                {delivery.destination ? ` (${delivery.destination})` : ""}
-              </p>
+              <div className="mt-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <DataSourceBadge state={deliveryBadgeState(delivery)} />
+                  <span className="text-xs font-medium text-[#0F172A]">
+                    {deliveryModeLabel(delivery)}
+                  </span>
+                  {delivery.destination && (
+                    <span className="text-xs text-[#475569]">
+                      {delivery.destination}
+                    </span>
+                  )}
+                </div>
+                <p className={cn("mt-2 text-xs", deliveryTone(delivery.status))}>
+                  {deliveryLabel(delivery)}
+                </p>
+                {(attemptedLabel || delivery.externalMessageId) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#64748B]">
+                    {attemptedLabel && (
+                      <span>{attemptedLabel}</span>
+                    )}
+                    {delivery.externalMessageId && (
+                      <span className="font-mono">Ref {delivery.externalMessageId}</span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </article>
         );
