@@ -73,6 +73,9 @@ verify_jwt = false
 [functions.crm-router]
 verify_jwt = false
 
+[functions.demo-admin]
+verify_jwt = false
+
 # DGE routes validate JWT + roles in _shared/dge-auth.ts (resolveCallerContext).
 # Gateway verify_jwt is off so local/CLI tests can reach the function when the Edge
 # gateway JWT check disagrees with supabase-js session tokens (401 Invalid JWT).

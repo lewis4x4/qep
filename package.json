@@ -12,6 +12,8 @@
     "demo:seed": "bun ./scripts/demo/crm-demo-data.mjs seed",
     "demo:reset": "bun ./scripts/demo/crm-demo-data.mjs reset",
     "demo:reseed": "bun ./scripts/demo/crm-demo-data.mjs reseed",
+    "demo:admin:seed": "bun ./scripts/demo/demo-admin.mjs seed",
+    "demo:admin:reset": "bun ./scripts/demo/demo-admin.mjs reset",
     "demo:baseline:local": "QEP_DEMO_PREFER_LOCAL=1 bun ./scripts/demo/crm-demo-data.mjs baseline-local",
     "design:review": "node ./scripts/design-review-runner.js",
     "stress:test": "bun ./.agents/stress-test/run.ts",

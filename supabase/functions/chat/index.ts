@@ -295,6 +295,42 @@ function excerptAroundToken(text: string, token: string): string {
   return truncateText(normalized.slice(start, start + 420), 420);
 }
 
+function normalizeIdentifier(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractIdentifierCandidates(message: string): string[] {
+  const seen = new Set<string>();
+  const matches = message.match(/\b[a-z0-9]{2,}(?:[-/][a-z0-9]{2,})+\b/gi) ?? [];
+  const identifiers: string[] = [];
+  for (const match of matches) {
+    const trimmed = match.trim();
+    const normalized = normalizeIdentifier(trimmed);
+    if (normalized.length < 5 || seen.has(normalized)) continue;
+    seen.add(normalized);
+    identifiers.push(trimmed);
+  }
+  return identifiers;
+}
+
+function excerptAroundIdentifier(text: string, identifier: string): string {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) return "";
+
+  const target = normalizeIdentifier(identifier);
+  const matchingIndex = lines.findIndex((line) => normalizeIdentifier(line).includes(target));
+  if (matchingIndex < 0) {
+    return excerptAroundToken(text, identifier);
+  }
+
+  const start = Math.max(0, matchingIndex - 1);
+  const end = Math.min(lines.length, matchingIndex + 2);
+  return truncateText(lines.slice(start, end).join("\n"), 700);
+}
+
 function formatCurrency(value: number | null): string {
   if (typeof value !== "number") return "unknown";
   return new Intl.NumberFormat("en-US", {
@@ -492,6 +528,74 @@ async function retrieveDocumentEvidence(
       confidence: Math.max(0, Math.min(1, item.confidence ?? 0)),
       accessClass: item.access_class,
     }));
+
+  const identifierCandidates = extractIdentifierCandidates(input.message);
+  if (identifierCandidates.length > 0) {
+    const { data: docs, error: docsError } = await adminClient
+      .from("documents")
+      .select("id, title, raw_text, audience, updated_at")
+      .eq("status", "published")
+      .in("audience", allowedAudiencesForRole(input.role))
+      .order("updated_at", { ascending: false })
+      .limit(500);
+
+    if (docsError) {
+      console.error(`[chat:${input.traceId}] identifier retrieval failed`, docsError);
+      throw new Error("DOCUMENT_RETRIEVAL_FAILED");
+    }
+
+    const identifierMatches = ((docs ?? []) as DocumentFallbackRow[])
+      .map((doc) => {
+        const title = doc.title ?? "";
+        const rawText = doc.raw_text ?? "";
+        const normalizedTitle = normalizeIdentifier(title);
+        const normalizedRaw = normalizeIdentifier(rawText);
+        let matchedIdentifier: string | null = null;
+        let score = 0;
+
+        for (const identifier of identifierCandidates) {
+          const normalizedIdentifier = normalizeIdentifier(identifier);
+          if (normalizedTitle.includes(normalizedIdentifier)) {
+            matchedIdentifier = identifier;
+            score = Math.max(score, 7);
+          }
+          if (normalizedRaw.includes(normalizedIdentifier)) {
+            matchedIdentifier = identifier;
+            score = Math.max(score, 10);
+          }
+        }
+
+        if (!matchedIdentifier || score === 0) return null;
+        return {
+          doc,
+          matchedIdentifier,
+          score,
+          excerpt: excerptAroundIdentifier(rawText || title, matchedIdentifier),
+        };
+      })
+      .filter((item): item is {
+        doc: DocumentFallbackRow;
+        matchedIdentifier: string;
+        score: number;
+        excerpt: string;
+      } => item !== null)
+      .sort((a, b) => b.score - a.score || b.doc.updated_at.localeCompare(a.doc.updated_at))
+      .slice(0, 3);
+
+    if (identifierMatches.length > 0) {
+      console.info(
+        `[chat:${input.traceId}] identifier retrieval matched count=${identifierMatches.length} identifiers=${identifierCandidates.join(",")}`,
+      );
+      return identifierMatches.map(({ doc, score, excerpt }) => ({
+        sourceType: "document" as const,
+        sourceId: doc.id,
+        sourceTitle: doc.title,
+        excerpt,
+        confidence: Math.min(0.99, 0.84 + score * 0.012),
+        accessClass: doc.audience,
+      }));
+    }
+  }
 
   const keywordCandidates = buildKeywordCandidates(input.message);
   for (const keywordQuery of keywordCandidates) {
