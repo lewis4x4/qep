@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import type { AuthError } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   ArrowRight,
@@ -26,11 +27,23 @@ interface LoginPageProps {
   authError?: string | null;
 }
 
-function friendlyAuthErrorMessage(raw: string): string {
-  if (isTransientAuthRecoveryError(raw)) {
-    return "We couldn't reach the server. Check your connection, try turning off VPN or iCloud Private Relay, then try again.";
+function signInErrorDescription(error: AuthError): ReactNode {
+  const raw = error.message ?? "";
+  if (!isTransientAuthRecoveryError(raw)) {
+    return raw;
   }
-  return raw;
+  return (
+    <div className="space-y-2 text-sm leading-snug">
+      <p>Your browser could not reach Supabase to sign you in. Check Wi‑Fi, VPN, or iCloud Private Relay.</p>
+      <p className="font-mono text-xs opacity-90 break-words">{raw}</p>
+      <p className="text-xs opacity-80">
+        If this keeps happening: in Netlify (or your host), confirm{" "}
+        <span className="font-mono">VITE_SUPABASE_URL</span> and{" "}
+        <span className="font-mono">VITE_SUPABASE_ANON_KEY</span> match your Supabase project, then redeploy so the
+        build picks them up.
+      </p>
+    </div>
+  );
 }
 
 const HERO_METRICS = [
@@ -57,7 +70,7 @@ export function LoginPage({ authError }: LoginPageProps) {
       toast({
         variant: "destructive",
         title: "Sign-in failed",
-        description: friendlyAuthErrorMessage(error.message),
+        description: signInErrorDescription(error),
       });
     }
     setLoading(false);
@@ -74,7 +87,7 @@ export function LoginPage({ authError }: LoginPageProps) {
       toast({
         variant: "destructive",
         title: "Couldn't send magic link",
-        description: friendlyAuthErrorMessage(error.message),
+        description: signInErrorDescription(error),
       });
     } else {
       toast({
