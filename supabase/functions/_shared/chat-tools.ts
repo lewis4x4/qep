@@ -174,6 +174,41 @@ export const CHAT_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "getCompetitiveIntelligence",
+      description: "Get competitive intelligence from voice note mentions. Shows which competitors are being mentioned by reps, how often, and in what sentiment context. Use when user asks about competitors, competitive landscape, or market positioning.",
+      parameters: {
+        type: "object",
+        properties: {
+          competitor_name: { type: "string", description: "Filter by specific competitor name (optional)" },
+          days: { type: "number", description: "Look back period in days (default 30, max 90)" },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "getVoiceNoteInsights",
+      description: "Get voice note intelligence — sentiment trends, manager-flagged notes, entity-linked captures. Use when user asks about field note trends, rep sentiment, or notes needing attention.",
+      parameters: {
+        type: "object",
+        properties: {
+          filter: {
+            type: "string",
+            enum: ["manager_attention", "negative_sentiment", "recent", "with_competitors"],
+            description: "Filter type for voice notes",
+          },
+          days: { type: "number", description: "Look back period in days (default 7, max 30)" },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+        required: ["filter"],
+      },
+    },
+  },
 ] as const;
 
 // ── Tool executors ─────────────────────────────────────────────────────
@@ -725,6 +760,99 @@ async function execGetEntityBriefing(
   return { error: `Unknown entity_type: ${args.entity_type}` };
 }
 
+async function execGetCompetitiveIntelligence(
+  db: SupabaseClient,
+  args: { competitor_name?: string; days?: number; limit?: number },
+): Promise<unknown> {
+  const days = clamp(args.days ?? 30, 1, 90);
+  const limit = clamp(args.limit ?? 10, 1, 25);
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+  let query = db
+    .from("competitive_mentions")
+    .select("id, competitor_name, context, sentiment, user_id, created_at")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (args.competitor_name) {
+    query = query.ilike("competitor_name", `%${args.competitor_name}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) return { error: error.message };
+
+  const competitors = (data ?? []).map((m: Record<string, unknown>) => ({
+    competitor: m.competitor_name,
+    sentiment: m.sentiment ?? "unknown",
+    context: typeof m.context === "string" ? m.context.slice(0, 200) : null,
+    date: m.created_at,
+  }));
+
+  // Aggregate by competitor
+  const summary: Record<string, { count: number; sentiments: string[] }> = {};
+  for (const c of competitors) {
+    if (!summary[c.competitor as string]) {
+      summary[c.competitor as string] = { count: 0, sentiments: [] };
+    }
+    summary[c.competitor as string].count++;
+    if (c.sentiment) summary[c.competitor as string].sentiments.push(c.sentiment as string);
+  }
+
+  return { mentions: competitors, summary, period_days: days };
+}
+
+async function execGetVoiceNoteInsights(
+  db: SupabaseClient,
+  args: { filter: string; days?: number; limit?: number },
+): Promise<unknown> {
+  const days = clamp(args.days ?? 7, 1, 30);
+  const limit = clamp(args.limit ?? 10, 1, 20);
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+  let query = db
+    .from("voice_captures")
+    .select("id, transcript, sentiment, competitor_mentions, manager_attention, linked_contact_id, linked_company_id, linked_deal_id, created_at, user_id")
+    .gte("created_at", since)
+    .not("transcript", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  switch (args.filter) {
+    case "manager_attention":
+      query = query.eq("manager_attention", true);
+      break;
+    case "negative_sentiment":
+      query = query.in("sentiment", ["frustrated", "skeptical", "cautious"]);
+      break;
+    case "with_competitors":
+      query = query.not("competitor_mentions", "eq", "{}");
+      break;
+    case "recent":
+    default:
+      break;
+  }
+
+  const { data, error } = await query;
+  if (error) return { error: error.message };
+
+  return {
+    filter: args.filter,
+    period_days: days,
+    notes: (data ?? []).map((n: Record<string, unknown>) => ({
+      id: n.id,
+      excerpt: typeof n.transcript === "string" ? (n.transcript as string).slice(0, 250) : null,
+      sentiment: n.sentiment,
+      competitors: n.competitor_mentions,
+      manager_attention: n.manager_attention,
+      has_contact_link: !!n.linked_contact_id,
+      has_company_link: !!n.linked_company_id,
+      has_deal_link: !!n.linked_deal_id,
+      date: n.created_at,
+    })),
+  };
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────
 
 type ToolExecutor = (db: SupabaseClient, args: Record<string, unknown>) => Promise<unknown>;
@@ -740,6 +868,8 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getRecentActivities: (db, args) => execGetRecentActivities(db, args as Parameters<typeof execGetRecentActivities>[1]),
   getManufacturerIncentives: (db, args) => execGetManufacturerIncentives(db, args as Parameters<typeof execGetManufacturerIncentives>[1]),
   getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
+  getCompetitiveIntelligence: (db, args) => execGetCompetitiveIntelligence(db, args as Parameters<typeof execGetCompetitiveIntelligence>[1]),
+  getVoiceNoteInsights: (db, args) => execGetVoiceNoteInsights(db, args as Parameters<typeof execGetVoiceNoteInsights>[1]),
 };
 
 export interface ToolCall {

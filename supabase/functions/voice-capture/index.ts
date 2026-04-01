@@ -22,6 +22,7 @@ import {
   writeVoiceCaptureToLocalCrm,
   type VoiceCaptureExtractedDealData,
 } from "../_shared/voice-capture-crm.ts";
+import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -421,6 +422,19 @@ Return ONLY valid JSON matching this exact structure:
           ch,
         );
       }
+    }
+
+    // ── Voice note intelligence (best-effort — non-fatal) ──────────────────────
+    try {
+      await processVoiceNoteIntelligence(supabaseAdmin, {
+        captureId,
+        userId: user.id,
+        transcript,
+        extracted,
+        existingDealId: crmDealId,
+      });
+    } catch (intelErr) {
+      console.error("voice-capture: intelligence processing failed (non-fatal)", intelErr);
     }
 
     // ── HubSpot push (best-effort — non-fatal if not connected) ───────────────
