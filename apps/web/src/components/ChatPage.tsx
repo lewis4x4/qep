@@ -149,6 +149,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     emptyEvidence: boolean;
   } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyPanelRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>(messages);
@@ -156,6 +157,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const chatAbortRef = useRef<AbortController | null>(null);
   const initialQueryFiredRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
+  const userScrolledUpRef = useRef(false);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -193,8 +195,17 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   }, [chatContext]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    userScrolledUpRef.current = distanceFromBottom > 120;
+  }, []);
 
   // Handle global search handoff: initialQuery from TopBar
   useEffect(() => {
@@ -243,7 +254,9 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
 
   function startNewChat() {
     chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
     conversationIdRef.current = null;
+    userScrolledUpRef.current = false;
     setMessages([]);
     setInput("");
     setStreaming(false);
@@ -301,6 +314,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
       timestamp: new Date(),
     };
 
+    userScrolledUpRef.current = false;
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setChatDiagnostics(null);
@@ -552,7 +566,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const userInitials = getInitials(userEmail);
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-7.5rem)] lg:h-[calc(100dvh-3rem)]">
+    <div className="flex flex-col h-[calc(100dvh-7.5rem)] lg:h-[calc(100dvh-3.5rem)]">
       {/* Page header */}
       <div className="border-b bg-card px-6 py-4 shrink-0 flex items-center justify-between">
         <div>
@@ -663,7 +677,11 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto px-4 py-6"
+      >
         {messages.length === 0 ? (
           <ChatEmptyState userRole={userRole} onSuggestionClick={handleSuggestion} />
         ) : (
