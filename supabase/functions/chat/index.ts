@@ -175,6 +175,13 @@ function cleanString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function cleanUuid(value: unknown): string | null {
+  const s = cleanString(value);
+  return s && UUID_RE.test(s) ? s : null;
+}
+
 function truncateText(text: string, maxLength: number): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
@@ -301,10 +308,10 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
   if (!raw || typeof raw !== "object") return null;
   const context = raw as Record<string, unknown>;
   const parsed: ChatContextPayload = {
-    customerProfileId: cleanString(context.customerProfileId) ?? undefined,
-    contactId: cleanString(context.contactId) ?? undefined,
-    companyId: cleanString(context.companyId) ?? undefined,
-    dealId: cleanString(context.dealId) ?? undefined,
+    customerProfileId: cleanUuid(context.customerProfileId) ?? undefined,
+    contactId: cleanUuid(context.contactId) ?? undefined,
+    companyId: cleanUuid(context.companyId) ?? undefined,
+    dealId: cleanUuid(context.dealId) ?? undefined,
   };
 
   if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId) {
@@ -1177,7 +1184,7 @@ Rules:
           console.error(`[chat:${traceId}] stream error`, errDetail, streamError);
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}. Detail: ${errDetail}` })}\n\n`,
+              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}` })}\n\n`,
             ),
           );
         }

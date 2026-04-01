@@ -462,7 +462,8 @@ Deno.serve(async (req) => {
         .single();
 
       if (docError || !doc) {
-        return jsonResponse({ error: docError?.message }, 500, ch);
+        console.error("[ingest] document insert failed:", docError?.message);
+        return jsonResponse({ error: "Document record creation failed." }, 500, ch);
       }
 
       await logDocumentAuditEvent(supabaseAdmin, {
@@ -525,9 +526,13 @@ Deno.serve(async (req) => {
     if (typeof body.document_id === "string" && body.document_id.trim().length > 0) {
       const { data: document, error: documentError } = await supabaseAdmin
         .from("documents")
-        .select("id, title, raw_text")
+        .select("id, title, raw_text, uploaded_by")
         .eq("id", body.document_id)
         .single();
+
+      if (!documentError && document && document.uploaded_by !== user.id && !["admin", "owner"].includes(profile.role)) {
+        return jsonResponse({ error: "You do not have access to this document." }, 403, ch);
+      }
 
       if (documentError || !document) {
         return jsonResponse({ error: "Document not found" }, 404, ch);

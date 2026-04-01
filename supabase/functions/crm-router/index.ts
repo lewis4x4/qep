@@ -327,12 +327,12 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  console.error("[crm-router] unexpected error:", message);
   return crmFail({
     origin,
     status: 500,
     code: "UNEXPECTED_ERROR",
     message: "CRM router request failed.",
-    details: { reason: message },
   });
 }
 

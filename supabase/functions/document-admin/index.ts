@@ -153,7 +153,8 @@ Deno.serve(async (req) => {
         .eq("id", document.id);
 
       if (deleteError) {
-        return jsonResponse({ error: deleteError.message }, 500, ch);
+        console.error("[document-admin] delete failed:", deleteError.message);
+        return jsonResponse({ error: "Document deletion failed." }, 500, ch);
       }
 
       return jsonResponse({ success: true }, 200, ch);
@@ -259,7 +260,8 @@ Deno.serve(async (req) => {
       .single();
 
     if (updateError || !updatedDocument) {
-      return jsonResponse({ error: updateError?.message ?? "Document update failed" }, 500, ch);
+      console.error("[document-admin] update failed:", updateError?.message);
+      return jsonResponse({ error: "Document update failed." }, 500, ch);
     }
 
     await Promise.all(auditEvents);

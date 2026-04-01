@@ -29,45 +29,54 @@ export function RecentActivityFeed() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchActivity() {
-      const [docsResult, voiceResult] = await Promise.all([
-        supabase
-          .from("documents")
-          .select("id, title, created_at")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("voice_captures")
-          .select("id, created_at, extracted_data")
-          .order("created_at", { ascending: false })
-          .limit(5),
-      ]);
+      try {
+        const [docsResult, voiceResult] = await Promise.all([
+          supabase
+            .from("documents")
+            .select("id, title, created_at")
+            .eq("is_active", true)
+            .order("created_at", { ascending: false })
+            .limit(5),
+          supabase
+            .from("voice_captures")
+            .select("id, created_at, extracted_data")
+            .order("created_at", { ascending: false })
+            .limit(5),
+        ]);
 
-      const docItems: ActivityItem[] = (docsResult.data ?? []).map((d) => ({
-        id: d.id,
-        type: "document",
-        title: `Document uploaded: ${d.title}`,
-        timestamp: d.created_at,
-      }));
+        if (cancelled) return;
 
-      const voiceItems: ActivityItem[] = (voiceResult.data ?? []).map((v) => {
-        const extracted = normalizeExtractedDealData(v.extracted_data);
-        const contactName = getExtractedContactLabel(extracted);
-        const label = contactName
-          ? `Voice capture: ${contactName}`
-          : "Voice capture recorded";
-        return { id: v.id, type: "voice_capture", title: label, timestamp: v.created_at };
-      });
+        const docItems: ActivityItem[] = (docsResult.data ?? []).map((d) => ({
+          id: d.id,
+          type: "document",
+          title: `Document uploaded: ${d.title}`,
+          timestamp: d.created_at,
+        }));
 
-      const merged = [...docItems, ...voiceItems]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 10);
+        const voiceItems: ActivityItem[] = (voiceResult.data ?? []).map((v) => {
+          const extracted = normalizeExtractedDealData(v.extracted_data);
+          const contactName = getExtractedContactLabel(extracted);
+          const label = contactName
+            ? `Voice capture: ${contactName}`
+            : "Voice capture recorded";
+          return { id: v.id, type: "voice_capture", title: label, timestamp: v.created_at };
+        });
 
-      setItems(merged);
-      setLoading(false);
+        const merged = [...docItems, ...voiceItems]
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 10);
+
+        setItems(merged);
+      } catch {
+        // Best-effort feed; degrade silently
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
     fetchActivity();
+    return () => { cancelled = true; };
   }, []);
 
   return (

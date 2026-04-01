@@ -98,6 +98,7 @@ function useTopBarBell(profileId: string) {
   const [crmUnread, setCrmUnread] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     async function checkDocVoiceUnread() {
       try {
         const lastClick = localStorage.getItem(BELL_STORAGE_KEY);
@@ -113,13 +114,15 @@ function useTopBarBell(profileId: string) {
             .select("id", { count: "exact", head: true })
             .gte("created_at", since),
         ]);
+        if (cancelled) return;
         const total = (docsResult.count ?? 0) + (voiceResult.count ?? 0);
         setDocVoiceBadge(total > 0);
       } catch {
-        setDocVoiceBadge(false);
+        if (!cancelled) setDocVoiceBadge(false);
       }
     }
     void checkDocVoiceUnread();
+    return () => { cancelled = true; };
   }, []);
 
   const refreshCrmNotifications = useCallback(async () => {

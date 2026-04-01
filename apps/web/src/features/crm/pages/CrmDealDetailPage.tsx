@@ -47,13 +47,10 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   const [editorOpen, setEditorOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  if (!dealId) {
-    return <Navigate to="/crm/contacts" replace />;
-  }
-
   const dealQuery = useQuery({
     queryKey: ["crm", "deal", dealId],
-    queryFn: () => getCrmDeal(dealId),
+    queryFn: () => getCrmDeal(dealId!),
+    enabled: Boolean(dealId),
   });
 
   const stagesQuery = useQuery({
@@ -64,14 +61,14 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
 
   const activitiesQuery = useQuery({
     queryKey: ["crm", "deal", dealId, "activities"],
-    queryFn: () => listDealActivities(dealId),
-    enabled: dealQuery.data !== null,
+    queryFn: () => listDealActivities(dealId!),
+    enabled: Boolean(dealId) && dealQuery.data !== null,
   });
 
   const lossFieldsQuery = useQuery({
     queryKey: ["crm", "deal", dealId, "loss-fields"],
-    queryFn: () => getCrmDealLossFields(dealId),
-    enabled: isElevatedRole && dealQuery.data !== null,
+    queryFn: () => getCrmDealLossFields(dealId!),
+    enabled: Boolean(dealId) && isElevatedRole && dealQuery.data !== null,
     staleTime: 60_000,
   });
 
@@ -106,7 +103,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   );
 
   const saveMutation = useMutation({
-    mutationFn: (input: CrmDealPatchInput) => patchCrmDeal(dealId, input),
+    mutationFn: (input: CrmDealPatchInput) => patchCrmDeal(dealId!, input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId] }),
@@ -144,6 +141,10 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     dealId,
     "activities",
   ]);
+
+  if (!dealId) {
+    return <Navigate to="/crm/contacts" replace />;
+  }
 
   async function handleSave(): Promise<void> {
     if (!dealQuery.data) return;

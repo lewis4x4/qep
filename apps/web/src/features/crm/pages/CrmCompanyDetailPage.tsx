@@ -45,25 +45,22 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
 
-  if (!companyId) {
-    return <Navigate to="/crm/companies" replace />;
-  }
-
   const companyQuery = useQuery({
     queryKey: ["crm", "company", companyId],
-    queryFn: () => getCrmCompany(companyId),
+    queryFn: () => getCrmCompany(companyId!),
+    enabled: Boolean(companyId),
   });
 
   const hierarchyQuery = useQuery({
     queryKey: ["crm", "company", companyId, "hierarchy"],
-    queryFn: () => fetchCompanyHierarchy(companyId),
-    enabled: Boolean(companyQuery.data),
+    queryFn: () => fetchCompanyHierarchy(companyId!),
+    enabled: Boolean(companyId) && Boolean(companyQuery.data),
   });
 
   const activitiesQuery = useQuery({
     queryKey: ["crm", "company", companyId, "activities"],
-    queryFn: () => listCompanyActivities(companyId),
-    enabled: companyQuery.data !== null,
+    queryFn: () => listCompanyActivities(companyId!),
+    enabled: Boolean(companyId) && companyQuery.data !== null,
   });
 
   const parentOptionsQuery = useQuery({
@@ -90,7 +87,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         dueAt?: string | null;
         status?: "open" | "completed";
       };
-    }) => createCrmActivity({ ...input, companyId }, userId),
+    }) => createCrmActivity({ ...input, companyId: companyId! }, userId),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: ["crm", "company", companyId, "activities"] });
       const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "company", companyId, "activities"]) ?? [];
@@ -101,7 +98,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         body: input.body,
         occurredAt: input.occurredAt,
         contactId: null,
-        companyId,
+        companyId: companyId!,
         dealId: null,
         createdBy: userId,
         metadata: input.task ? { task: input.task } : {},
@@ -135,7 +132,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   ]);
 
   const hierarchyMutation = useMutation({
-    mutationFn: (nextParentId: string | null) => updateCompanyParent(companyId, nextParentId),
+    mutationFn: (nextParentId: string | null) => updateCompanyParent(companyId!, nextParentId),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["crm", "company", companyId] }),
@@ -180,6 +177,10 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
     setParentSearch("");
     setHierarchyError(null);
   }, [hierarchyEditorOpen, companyQuery.data?.id, companyQuery.data?.parentCompanyId]);
+
+  if (!companyId) {
+    return <Navigate to="/crm/companies" replace />;
+  }
 
   const currentParentNode = useMemo(() => {
     const ancestors = hierarchyQuery.data?.ancestors ?? [];

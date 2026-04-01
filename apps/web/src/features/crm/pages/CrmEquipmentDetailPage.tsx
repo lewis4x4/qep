@@ -83,17 +83,16 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
   const { toast } = useToast();
   const [editorOpen, setEditorOpen] = useState(false);
 
-  if (!equipmentId) return <Navigate to="/crm/companies" replace />;
-
   const equipmentQuery = useQuery({
     queryKey: ["crm", "equipment", equipmentId],
-    queryFn: () => getEquipmentById(equipmentId),
+    queryFn: () => getEquipmentById(equipmentId!),
+    enabled: Boolean(equipmentId),
     staleTime: 15_000,
   });
 
   const patchMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof draftToPayload>) =>
-      patchEquipment(equipmentId, payload),
+      patchEquipment(equipmentId!, payload),
     onSuccess: async () => {
       setEditorOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["crm", "equipment", equipmentId] });
@@ -107,6 +106,8 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
       });
     },
   });
+
+  if (!equipmentId) return <Navigate to="/crm/companies" replace />;
 
   if (equipmentQuery.isLoading) {
     return (

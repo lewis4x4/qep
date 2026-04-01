@@ -124,26 +124,34 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
   const [loadingCounts, setLoadingCounts] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchCounts() {
-      const [docsResult, membersResult, voiceResult] = await Promise.all([
-        supabase
-          .from("documents")
-          .select("id", { count: "exact", head: true })
-          .eq("is_active", true),
-        supabase
-          .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .eq("is_active", true),
-        supabase.from("voice_captures").select("id", { count: "exact", head: true }),
-      ]);
-      setCounts({
-        documents: docsResult.count ?? 0,
-        teamMembers: membersResult.count ?? 0,
-        voiceCaptures: voiceResult.count ?? 0,
-      });
-      setLoadingCounts(false);
+      try {
+        const [docsResult, membersResult, voiceResult] = await Promise.all([
+          supabase
+            .from("documents")
+            .select("id", { count: "exact", head: true })
+            .eq("is_active", true),
+          supabase
+            .from("profiles")
+            .select("id", { count: "exact", head: true })
+            .eq("is_active", true),
+          supabase.from("voice_captures").select("id", { count: "exact", head: true }),
+        ]);
+        if (cancelled) return;
+        setCounts({
+          documents: docsResult.count ?? 0,
+          teamMembers: membersResult.count ?? 0,
+          voiceCaptures: voiceResult.count ?? 0,
+        });
+      } catch {
+        // Counts are best-effort; silently degrade
+      } finally {
+        if (!cancelled) setLoadingCounts(false);
+      }
     }
     fetchCounts();
+    return () => { cancelled = true; };
   }, []);
 
   const greeting = useMemo(() => getTimeGreeting(), []);

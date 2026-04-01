@@ -155,12 +155,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const message = error instanceof Error ? error.message : "Unexpected error";
+    console.error("[integration-availability] error:", error instanceof Error ? error.message : error);
     return fail({
       origin,
       status: 400,
       code: "INVALID_REQUEST",
-      message,
+      message: "Integration availability check failed.",
     });
   }
 });

@@ -39,19 +39,16 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   const [composerOpen, setComposerOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
-  if (!contactId) {
-    return <Navigate to="/crm/contacts" replace />;
-  }
-
   const contactQuery = useQuery({
     queryKey: ["crm", "contact", contactId],
-    queryFn: () => getCrmContact(contactId),
+    queryFn: () => getCrmContact(contactId!),
+    enabled: Boolean(contactId),
   });
 
   const activitiesQuery = useQuery({
     queryKey: ["crm", "contact", contactId, "activities"],
-    queryFn: () => listContactActivities(contactId),
-    enabled: contactQuery.data !== null,
+    queryFn: () => listContactActivities(contactId!),
+    enabled: Boolean(contactId) && contactQuery.data !== null,
   });
 
   const companyQuery = useQuery({
@@ -62,15 +59,15 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
 
   const territoriesQuery = useQuery({
     queryKey: ["crm", "contact", contactId, "territories"],
-    queryFn: () => listContactTerritories(contactId),
-    enabled: Boolean(contactQuery.data),
+    queryFn: () => listContactTerritories(contactId!),
+    enabled: Boolean(contactId) && Boolean(contactQuery.data),
     staleTime: 30_000,
   });
 
   const dealsQuery = useQuery({
     queryKey: ["crm", "contact", contactId, "rep-safe-deals"],
-    queryFn: () => listRepSafeDealsForContact(contactId),
-    enabled: contactQuery.data !== null,
+    queryFn: () => listRepSafeDealsForContact(contactId!),
+    enabled: Boolean(contactId) && contactQuery.data !== null,
   });
 
   const createActivityMutation = useMutation({
@@ -83,7 +80,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         dueAt?: string | null;
         status?: "open" | "completed";
       };
-    }) => createCrmActivity({ ...input, contactId }, userId),
+    }) => createCrmActivity({ ...input, contactId: contactId! }, userId),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
       const previous = queryClient.getQueryData<CrmActivityItem[]>(["crm", "contact", contactId, "activities"]) ?? [];
@@ -93,7 +90,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         activityType: input.activityType,
         body: input.body,
         occurredAt: input.occurredAt,
-        contactId,
+        contactId: contactId!,
         companyId: null,
         dealId: null,
         createdBy: userId,
@@ -157,6 +154,10 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
     }
     return `${contactQuery.data.firstName} ${contactQuery.data.lastName}`;
   }, [contactQuery.data]);
+
+  if (!contactId) {
+    return <Navigate to="/crm/contacts" replace />;
+  }
 
   const canResolveConflict = userRole === "admin" || userRole === "manager" || userRole === "owner";
   const canManageDefinitions = userRole === "admin" || userRole === "owner";
