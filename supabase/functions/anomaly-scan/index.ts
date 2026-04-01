@@ -50,35 +50,39 @@ async function detectStallingDeals(db: AdminClient): Promise<Alert[]> {
     .lt("updated_at", sevenDaysAgo)
     .limit(50);
 
-  if (!deals) return alerts;
+  if (!deals || deals.length === 0) return alerts;
 
-  // Check for any recent activity on each deal
+  const dealIds = (deals as Record<string, unknown>[]).map((d) => d.id as string);
+
+  // Batch: get deal_ids that DO have recent activity
+  const { data: activeRows } = await db
+    .from("crm_activities")
+    .select("deal_id")
+    .in("deal_id", dealIds)
+    .is("deleted_at", null)
+    .gte("occurred_at", sevenDaysAgo);
+
+  const activeDeals = new Set((activeRows ?? []).map((r: { deal_id: string }) => r.deal_id));
+
   for (const deal of deals as Record<string, unknown>[]) {
-    const { count } = await db
-      .from("crm_activities")
-      .select("id", { count: "exact", head: true })
-      .eq("deal_id", deal.id)
-      .is("deleted_at", null)
-      .gte("occurred_at", sevenDaysAgo);
+    if (activeDeals.has(deal.id as string)) continue;
 
-    if ((count ?? 0) === 0) {
-      const daysSinceUpdate = Math.floor(
-        (Date.now() - new Date(deal.updated_at as string).getTime()) / 86_400_000,
-      );
-      const severity = daysSinceUpdate > 14 ? "high" : "medium";
+    const daysSinceUpdate = Math.floor(
+      (Date.now() - new Date(deal.updated_at as string).getTime()) / 86_400_000,
+    );
+    const severity = daysSinceUpdate > 14 ? "high" : "medium";
 
-      alerts.push({
-        workspace_id: deal.workspace_id as string,
-        alert_type: "stalling_deal",
-        severity,
-        title: `Deal "${deal.name}" has stalled`,
-        description: `No activity for ${daysSinceUpdate} days. Last updated ${new Date(deal.updated_at as string).toLocaleDateString()}.${deal.amount ? ` Value: $${Number(deal.amount).toLocaleString()}.` : ""}`,
-        entity_type: "deal",
-        entity_id: deal.id as string,
-        assigned_to: deal.assigned_rep_id as string | null,
-        data: { days_stalled: daysSinceUpdate, amount: deal.amount },
-      });
-    }
+    alerts.push({
+      workspace_id: deal.workspace_id as string,
+      alert_type: "stalling_deal",
+      severity,
+      title: `Deal "${deal.name}" has stalled`,
+      description: `No activity for ${daysSinceUpdate} days. Last updated ${new Date(deal.updated_at as string).toLocaleDateString()}.${deal.amount ? ` Value: $${Number(deal.amount).toLocaleString()}.` : ""}`,
+      entity_type: "deal",
+      entity_id: deal.id as string,
+      assigned_to: deal.assigned_rep_id as string | null,
+      data: { days_stalled: daysSinceUpdate, amount: deal.amount },
+    });
   }
 
   return alerts;
@@ -129,38 +133,42 @@ async function detectActivityGaps(db: AdminClient): Promise<Alert[]> {
     .select("id, full_name")
     .in("role", ["rep"]);
 
-  if (!reps) return alerts;
+  if (!reps || reps.length === 0) return alerts;
+
+  const repIds = (reps as Record<string, unknown>[]).map((r) => r.id as string);
+
+  // Batch: get reps with recent CRM activity
+  const [{ data: activityRows }, { data: voiceRows }] = await Promise.all([
+    db.from("crm_activities")
+      .select("created_by")
+      .in("created_by", repIds)
+      .is("deleted_at", null)
+      .gte("occurred_at", threeDaysAgo),
+    db.from("voice_captures")
+      .select("user_id")
+      .in("user_id", repIds)
+      .gte("created_at", threeDaysAgo),
+  ]);
+
+  const activeReps = new Set([
+    ...((activityRows ?? []) as { created_by: string }[]).map((r) => r.created_by),
+    ...((voiceRows ?? []) as { user_id: string }[]).map((r) => r.user_id),
+  ]);
 
   for (const rep of reps as Record<string, unknown>[]) {
-    const { count } = await db
-      .from("crm_activities")
-      .select("id", { count: "exact", head: true })
-      .eq("created_by", rep.id)
-      .is("deleted_at", null)
-      .gte("occurred_at", threeDaysAgo);
+    if (activeReps.has(rep.id as string)) continue;
 
-    if ((count ?? 0) === 0) {
-      // Check for voice captures too
-      const { count: voiceCount } = await db
-        .from("voice_captures")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", rep.id)
-        .gte("created_at", threeDaysAgo);
-
-      if ((voiceCount ?? 0) === 0) {
-        alerts.push({
-          workspace_id: "default",
-          alert_type: "activity_gap",
-          severity: "medium",
-          title: `No activity from ${rep.full_name ?? "rep"} in 3+ days`,
-          description: `${rep.full_name ?? "A rep"} has not logged any CRM activities or voice notes in the last 3 days.`,
-          entity_type: null,
-          entity_id: null,
-          assigned_to: rep.id as string,
-          data: { rep_id: rep.id, rep_name: rep.full_name },
-        });
-      }
-    }
+    alerts.push({
+      workspace_id: "default",
+      alert_type: "activity_gap",
+      severity: "medium",
+      title: `No activity from ${rep.full_name ?? "rep"} in 3+ days`,
+      description: `${rep.full_name ?? "A rep"} has not logged any CRM activities or voice notes in the last 3 days.`,
+      entity_type: null,
+      entity_id: null,
+      assigned_to: rep.id as string,
+      data: { rep_id: rep.id, rep_name: rep.full_name },
+    });
   }
 
   return alerts;
@@ -225,6 +233,89 @@ async function detectPipelineRisk(db: AdminClient): Promise<Alert[]> {
   return alerts;
 }
 
+async function scoreDealsPredictively(db: AdminClient): Promise<number> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+  const { data: deals } = await db
+    .from("crm_deals")
+    .select("id, name, amount, stage_id, expected_close_on, assigned_rep_id, created_at, updated_at, workspace_id")
+    .is("deleted_at", null)
+    .limit(200);
+
+  if (!deals || deals.length === 0) return 0;
+
+  const dealIds = (deals as Record<string, unknown>[]).map((d) => d.id as string);
+
+  // Batch: get activity counts for all deals in one query
+  const { data: activityRows } = await db
+    .from("crm_activities")
+    .select("deal_id")
+    .in("deal_id", dealIds)
+    .is("deleted_at", null)
+    .gte("occurred_at", thirtyDaysAgo);
+
+  const activityCounts = new Map<string, number>();
+  for (const row of (activityRows ?? []) as { deal_id: string }[]) {
+    activityCounts.set(row.deal_id, (activityCounts.get(row.deal_id) ?? 0) + 1);
+  }
+
+  const stageScores: Record<string, number> = {
+    initial_contact: 0, follow_up: 5, demo_scheduled: 10,
+    quote_sent: 15, negotiation: 20, closed_won: 25, closed_lost: -25,
+  };
+
+  // Score all deals and batch updates
+  const updates: Array<{ id: string; deal_score: number; deal_score_factors: Record<string, number> }> = [];
+  for (const deal of deals as Record<string, unknown>[]) {
+    const factors: Record<string, number> = {};
+    let score = 50;
+    const activityCount = activityCounts.get(deal.id as string) ?? 0;
+
+    if (activityCount >= 5) { factors.activity_momentum = 15; score += 15; }
+    else if (activityCount >= 2) { factors.activity_momentum = 8; score += 8; }
+    else if (activityCount === 1) { factors.activity_momentum = 0; }
+    else { factors.activity_momentum = -10; score -= 10; }
+
+    const stageBonus = stageScores[deal.stage_id as string] ?? 0;
+    factors.stage_position = stageBonus;
+    score += stageBonus;
+
+    if (deal.expected_close_on) {
+      const daysToClose = Math.ceil(
+        (new Date(deal.expected_close_on as string).getTime() - Date.now()) / 86_400_000,
+      );
+      if (daysToClose < 0) { factors.overdue_close = -10; score -= 10; }
+      else if (daysToClose <= 7 && activityCount > 0) { factors.closing_soon = 10; score += 10; }
+      else if (daysToClose <= 14) { factors.closing_soon = 5; score += 5; }
+    }
+
+    const dealAge = Math.ceil(
+      (Date.now() - new Date(deal.created_at as string).getTime()) / 86_400_000,
+    );
+    if (dealAge > 90 && activityCount < 3) { factors.stale_deal = -10; score -= 10; }
+
+    score = Math.max(0, Math.min(100, score));
+    updates.push({ id: deal.id as string, deal_score: score, deal_score_factors: factors });
+  }
+
+  // Batch updates in groups of 20 to avoid payload limits
+  const now = new Date().toISOString();
+  for (let i = 0; i < updates.length; i += 20) {
+    const batch = updates.slice(i, i + 20);
+    await Promise.all(
+      batch.map((u) =>
+        db.from("crm_deals").update({
+          deal_score: u.deal_score,
+          deal_score_factors: u.deal_score_factors,
+          deal_score_updated_at: now,
+        }).eq("id", u.id),
+      ),
+    );
+  }
+
+  return updates.length;
+}
+
 Deno.serve(async (req) => {
   const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
@@ -248,13 +339,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Run all detectors in parallel
-    const [stallingDeals, overdueFollowUps, activityGaps, pipelineRisks] =
+    // Run all detectors and deal scoring in parallel
+    const [stallingDeals, overdueFollowUps, activityGaps, pipelineRisks, dealsScored] =
       await Promise.all([
         detectStallingDeals(adminClient),
         detectOverdueFollowUps(adminClient),
         detectActivityGaps(adminClient),
         detectPipelineRisk(adminClient),
+        scoreDealsPredictively(adminClient),
       ]);
 
     const allAlerts = [
@@ -288,7 +380,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(
-      `[anomaly-scan] detected=${allAlerts.length} new=${newAlerts.length} ` +
+      `[anomaly-scan] detected=${allAlerts.length} new=${newAlerts.length} scored=${dealsScored} ` +
       `(stalling=${stallingDeals.length} overdue=${overdueFollowUps.length} ` +
       `gaps=${activityGaps.length} pipeline=${pipelineRisks.length})`,
     );
@@ -296,6 +388,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       total_detected: allAlerts.length,
       new_alerts: newAlerts.length,
+      deals_scored: dealsScored,
       breakdown: {
         stalling_deals: stallingDeals.length,
         overdue_follow_ups: overdueFollowUps.length,

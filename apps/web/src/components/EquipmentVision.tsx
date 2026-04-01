@@ -51,10 +51,16 @@ interface MarketValuation {
 
 interface VisionResult {
   analysis: VisionAnalysis;
+  image_url: string | null;
   crm_matches: {
     inventory: InventoryMatch[];
     valuations: MarketValuation[];
   };
+}
+
+interface EquipmentVisionProps {
+  equipmentId?: string;
+  onAnalysisComplete?: () => void;
 }
 
 const conditionColors: Record<string, string> = {
@@ -71,11 +77,12 @@ const confidenceColors: Record<string, string> = {
   low: "text-red-400",
 };
 
-export function EquipmentVision() {
+export function EquipmentVision({ equipmentId, onAnalysisComplete }: EquipmentVisionProps) {
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<VisionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(async (file: File) => {
@@ -92,6 +99,7 @@ export function EquipmentVision() {
     setPreviewUrl(url);
     setError(null);
     setResult(null);
+    setSaved(false);
     setAnalyzing(true);
 
     try {
@@ -104,17 +112,19 @@ export function EquipmentVision() {
       const formData = new FormData();
       formData.append("image", file);
 
-      const res = await fetch(
+      const endpoint = new URL(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/equipment-vision`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: formData,
-        },
       );
+      if (equipmentId) endpoint.searchParams.set("equipmentId", equipmentId);
+
+      const res = await fetch(endpoint.toString(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: formData,
+      });
 
       const data = await res.json();
       if (!res.ok) {
@@ -122,13 +132,19 @@ export function EquipmentVision() {
         return;
       }
 
-      setResult(data as VisionResult);
+      const visionResult = data as VisionResult;
+      setResult(visionResult);
+
+      if (visionResult.image_url && equipmentId) {
+        setSaved(true);
+        onAnalysisComplete?.();
+      }
     } catch {
       setError("Failed to analyze image. Please try again.");
     } finally {
       setAnalyzing(false);
     }
-  }, []);
+  }, [equipmentId, onAnalysisComplete]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -205,14 +221,21 @@ export function EquipmentVision() {
       {result && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Equipment Analysis</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Equipment Analysis</h3>
+              {saved && (
+                <span className="flex items-center gap-1 text-xs text-green-400">
+                  <CheckCircle2 className="h-3 w-3" /> Photo saved &amp; fields updated
+                </span>
+              )}
+            </div>
             <Button variant="ghost" size="sm" onClick={reset} className="gap-1 text-xs">
               <X className="h-3 w-3" /> New scan
             </Button>
           </div>
 
-          {previewUrl && (
-            <img src={previewUrl} alt="Equipment" className="w-full max-h-48 rounded-lg object-cover" />
+          {(result?.image_url || previewUrl) && (
+            <img src={result?.image_url || previewUrl!} alt="Equipment" className="w-full max-h-48 rounded-lg object-cover" />
           )}
 
           {/* Identification */}

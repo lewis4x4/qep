@@ -50,6 +50,7 @@ interface SourcePayload {
   title: string;
   confidence: number;
   kind: "document" | "crm";
+  excerpt?: string;
 }
 
 type DocumentAudience =
@@ -388,11 +389,15 @@ function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
   for (const item of evidence) {
     const key = `${item.sourceType}:${item.sourceId}`;
     const existing = byKey.get(key);
+    const excerptSnippet = item.excerpt
+      ? item.excerpt.slice(0, 200) + (item.excerpt.length > 200 ? "…" : "")
+      : undefined;
     const next: SourcePayload = {
       id: item.sourceId,
       title: item.sourceTitle,
       confidence: Math.max(1, Math.round(item.confidence * 100)),
       kind: item.sourceType,
+      excerpt: excerptSnippet,
     };
     if (!existing || next.confidence > existing.confidence) {
       byKey.set(key, next);
@@ -470,6 +475,7 @@ async function chatCompletionWithTools(input: {
       tools: CHAT_TOOLS,
       tool_choice: "auto",
     }),
+    signal: AbortSignal.timeout(90_000),
   });
 
   const payload = await response.json();
@@ -508,6 +514,7 @@ async function openStreamingCompletion(input: {
       max_completion_tokens: 2048,
       stream: true,
     }),
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!response.ok) {
@@ -2162,6 +2169,20 @@ ${toolInstructions}`;
         empty_evidence: evidence.length === 0,
       },
     };
+
+    // Detect knowledge gaps — questions with no supporting evidence
+    if (evidence.length === 0 && rawMessage.length > 10) {
+      try {
+        await adminClient.from("knowledge_gaps").insert({
+          workspace_id: "default",
+          user_id: caller.userId,
+          question: rawMessage.slice(0, 500),
+          trace_id: traceId,
+        });
+      } catch (gapErr) {
+        console.error(`[chat:${traceId}] knowledge gap log failed`, gapErr);
+      }
+    }
 
     const readable = new ReadableStream({
       async start(controller) {

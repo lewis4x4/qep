@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical } from "lucide-react";
+import { Upload, FileText, Trash2, ToggleLeft, ToggleRight, Cloud, RefreshCw, Search, X, MoreVertical, Loader2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Database, UserRole } from "../lib/database.types";
 import { UsersTab } from "./UsersTab";
@@ -105,7 +105,7 @@ function ChatInsightsPanel() {
       setRecentFeedback((recent ?? []) as FeedbackRow[]);
       setLoading(false);
     }
-    load();
+    void load();
   }, []);
 
   if (loading) {
@@ -196,6 +196,95 @@ function ChatInsightsPanel() {
   );
 }
 
+interface KnowledgeGap {
+  id: string;
+  question: string;
+  created_at: string;
+  resolved: boolean;
+}
+
+function KnowledgeGapsPanel() {
+  const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const db = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const { data } = await db
+        .from("knowledge_gaps")
+        .select("id, question, created_at, resolved")
+        .eq("resolved", false)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      setGaps((data ?? []) as KnowledgeGap[]);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  async function resolveGap(id: string) {
+    const db = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    await db.from("knowledge_gaps").update({ resolved: true }).eq("id", id);
+    setGaps((prev) => prev.filter((g) => g.id !== id));
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading knowledge gaps...
+      </div>
+    );
+  }
+
+  if (gaps.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-sm text-muted-foreground">No unanswered questions detected yet.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Questions the knowledge base can&apos;t answer will appear here so you know what documents to add.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        These are questions users asked that the knowledge base couldn&apos;t find answers for.
+        Upload relevant documents or add CRM data to resolve them.
+      </p>
+      <div className="space-y-2">
+        {gaps.map((gap) => (
+          <Card key={gap.id}>
+            <CardContent className="py-3 px-4 flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-foreground">{gap.question}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(gap.created_at).toLocaleDateString([], {
+                    month: "short", day: "numeric", year: "numeric",
+                    hour: "numeric", minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resolveGap(gap.id)}
+                className="shrink-0 text-xs"
+              >
+                Resolve
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface AdminPageProps {
   userRole: UserRole;
   userId: string;
@@ -241,6 +330,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<"uploading" | "processing" | "done">("uploading");
   const [dragOver, setDragOver] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [editTarget, setEditTarget] = useState<Document | null>(null);
@@ -261,7 +351,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
   const canReviewDocs = userRole === "admin" || userRole === "owner";
 
   useEffect(() => {
-    loadDocuments();
+    void loadDocuments();
   }, []);
 
   useEffect(() => {
@@ -379,9 +469,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
 
     setUploading(true);
     setUploadProgress(0);
-    const progressInterval = setInterval(() => {
-      setUploadProgress((p) => (p < 80 ? p + Math.random() * 15 : p));
-    }, 400);
+    setUploadStage("uploading");
     try {
       const {
         data: { session },
@@ -396,22 +484,42 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
         formData.append("status", uploadStatus);
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: formData,
-        }
-      );
+      const result = await new Promise<{ chunks?: number; error?: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`);
+        xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
+        xhr.setRequestHeader("apikey", import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-      const result = (await response.json()) as { chunks?: number; error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Upload failed");
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 70));
+          }
+        };
 
-      clearInterval(progressInterval);
+        xhr.upload.onload = () => {
+          setUploadStage("processing");
+          setUploadProgress(75);
+          const tick = setInterval(() => {
+            setUploadProgress((p) => Math.min(p + 2, 95));
+          }, 800);
+          xhr.addEventListener("load", () => clearInterval(tick), { once: true });
+        };
+
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+            else reject(new Error(data.error ?? "Upload failed"));
+          } catch {
+            reject(new Error("Upload failed"));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Network error during upload"));
+        xhr.send(formData);
+      });
+
+      setUploadStage("done");
       setUploadProgress(100);
       toast({
         title: "Document uploaded",
@@ -422,7 +530,6 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       });
       await loadDocuments();
     } catch (err) {
-      clearInterval(progressInterval);
       setUploadProgress(0);
       toast({
         title: "Upload failed",
@@ -433,6 +540,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
       setTimeout(() => {
         setUploading(false);
         setUploadProgress(0);
+        setUploadStage("uploading");
       }, 600);
     }
   }
@@ -531,6 +639,12 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
             className="rounded-none px-4 pb-3 pt-1 text-sm data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary -mb-px"
           >
             Team Members
+          </TabsTrigger>
+          <TabsTrigger
+            value="knowledge-gaps"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground data-[state=active]:text-foreground"
+          >
+            Knowledge Gaps
           </TabsTrigger>
           <TabsTrigger
             value="chat-insights"
@@ -641,7 +755,9 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                           />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1.5">
-                          {Math.round(uploadProgress)}%
+                          {uploadStage === "uploading" && `Uploading... ${Math.round(uploadProgress)}%`}
+                          {uploadStage === "processing" && "Processing — parsing, chunking, embedding..."}
+                          {uploadStage === "done" && "Complete!"}
                         </p>
                       </div>
                     ) : (
@@ -821,6 +937,11 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                 {doc.source.replace("_", " ")}
                                 {doc.word_count ? ` · ${doc.word_count.toLocaleString()} words` : ""}
                               </p>
+                              {(doc as any).summary && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2 italic">
+                                  {(doc as any).summary}
+                                </p>
+                              )}
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 <Badge variant="outline" className="text-[10px]">
                                   {formatAudienceLabel(doc.audience as DocumentAudience)}
@@ -978,6 +1099,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
 
         <TabsContent value="users">
           <UsersTab callerRole={userRole} callerId={userId} />
+        </TabsContent>
+
+        <TabsContent value="knowledge-gaps">
+          <KnowledgeGapsPanel />
         </TabsContent>
 
         <TabsContent value="chat-insights">

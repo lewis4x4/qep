@@ -52,7 +52,7 @@ interface TopBarProps {
 const BELL_STORAGE_KEY = "qep-bell-last-click";
 
 const BREADCRUMB_LABELS: Record<string, string> = {
-  "/dashboard": "Dashboard",
+  "/dashboard": "Command Center",
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",

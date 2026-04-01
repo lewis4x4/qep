@@ -27,6 +27,7 @@ import {
   Send,
   Clock,
   XCircle,
+  Volume2,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { UserRole, Database } from "../lib/database.types";
@@ -316,6 +317,8 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [recentCaptureSheetOpen, setRecentCaptureSheetOpen] = useState(false);
   const [recentCaptureLoading, setRecentCaptureLoading] = useState(false);
   const [selectedRecentCapture, setSelectedRecentCapture] = useState<RecentCaptureDetail | null>(null);
+  const [recentAudioUrl, setRecentAudioUrl] = useState<string | null>(null);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // Track viewport width for responsive tooltip positioning (QUA-75)
@@ -543,6 +546,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       recorderEmail: profileResult.data?.email ?? capture.recorderEmail,
     });
     setRecentCaptureLoading(false);
+
+    // Generate signed URL for audio playback
+    setRecentAudioUrl(null);
+    if (captureRow.audio_storage_path) {
+      const { data: signedData } = await supabase.storage
+        .from("voice-recordings")
+        .createSignedUrl(captureRow.audio_storage_path, 3600);
+      if (signedData?.signedUrl) {
+        setRecentAudioUrl(signedData.signedUrl);
+      }
+    }
   }
 
   // Clean up object URL on unmount
@@ -1320,9 +1334,14 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── RECENT RECORDINGS ───────────────────────────────────────────── */}
           {(recordingState === "idle" || recordingState === "done") && (
             <div className="mt-8">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold text-foreground">Recent Recordings</h2>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <h2 className="text-sm font-semibold text-foreground">Recent Recordings</h2>
+                </div>
+                <Link to="/voice/history" className="text-xs text-qep-orange hover:underline">
+                  View all
+                </Link>
               </div>
               {recentLoading ? (
                 <div className="space-y-2">
@@ -1394,51 +1413,87 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
           </div>{/* end main col */}
 
-          {/* Context panel — 5 cols, xl+ only */}
-          <aside className="hidden xl:flex xl:col-span-5 flex-col gap-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">What to include</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="flex gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with and where</span>
+          {/* Context panel — sidebar on xl+, collapsible on mobile/tablet */}
+          <aside className="xl:col-span-5 flex flex-col gap-4">
+            {/* Mobile: collapsible tips */}
+            <div className="xl:hidden">
+              <button
+                type="button"
+                onClick={() => setTipsOpen((v) => !v)}
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full py-2"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Recording tips
+                <ChevronDown className={cn("h-3 w-3 ml-auto transition-transform", tipsOpen && "rotate-180")} />
+              </button>
+              {tipsOpen && (
+                <div className="space-y-3 pb-4">
+                  <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground text-xs uppercase tracking-wide">What to include</p>
+                    <p><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with</p>
+                    <p><span className="font-medium text-foreground">Equipment interest</span> — models, categories</p>
+                    <p><span className="font-medium text-foreground">Deal stage</span> — where in the buying process</p>
+                    <p><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers</p>
+                    <p><span className="font-medium text-foreground">Next steps</span> — follow-up, quote request</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3 space-y-1.5 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground text-xs uppercase tracking-wide">Tips</p>
+                    <p>Keep recordings under 2 minutes. Speak clearly.</p>
+                    <p>Record right after the visit while details are fresh.</p>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span><span className="font-medium text-foreground">Equipment interest</span> — model numbers, categories, attachments discussed</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span><span className="font-medium text-foreground">Deal stage</span> — where they are in the buying process</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers or urgency mentioned</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span><span className="font-medium text-foreground">Next steps</span> — follow-up date, callback, quote request</span>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Tips for best results</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
-                <p>Record immediately after the visit while details are fresh.</p>
-                <p>If you know the CRM deal ID, paste it before recording to link the note automatically.</p>
-              </CardContent>
-            </Card>
+              )}
+            </div>
+
+            {/* Desktop: always-visible cards */}
+            <div className="hidden xl:flex xl:flex-col gap-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">What to include</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <div className="flex gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with and where</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span><span className="font-medium text-foreground">Equipment interest</span> — model numbers, categories, attachments discussed</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span><span className="font-medium text-foreground">Deal stage</span> — where they are in the buying process</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers or urgency mentioned</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span><span className="font-medium text-foreground">Next steps</span> — follow-up date, callback, quote request</span>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium">Tips for best results</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
+                  <p>Record immediately after the visit while details are fresh.</p>
+                  <p>If you know the CRM deal ID, paste it before recording to link the note automatically.</p>
+                </CardContent>
+              </Card>
+            </div>
           </aside>
 
           </div>{/* end grid */}
         </div>
       </div>
-      <Sheet open={recentCaptureSheetOpen} onOpenChange={setRecentCaptureSheetOpen}>
+      <Sheet open={recentCaptureSheetOpen} onOpenChange={(open) => {
+        setRecentCaptureSheetOpen(open);
+        if (!open) setRecentAudioUrl(null);
+      }}>
         <SheetContent className="sm:max-w-xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Field note review</SheetTitle>
@@ -1524,6 +1579,25 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                           />
                         </CardContent>
                       </Card>
+
+                      {recentAudioUrl && (
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                              <Volume2 className="w-3.5 h-3.5 text-muted-foreground" />
+                              Audio Playback
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <audio
+                              controls
+                              src={recentAudioUrl}
+                              className="w-full h-10"
+                              preload="metadata"
+                            />
+                          </CardContent>
+                        </Card>
+                      )}
 
                       {selectedRecentCapture.sync_error && (
                         <Card className="border-destructive/40 bg-destructive/5">

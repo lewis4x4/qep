@@ -75,7 +75,7 @@ export function RecentActivityFeed() {
         if (!cancelled) setLoading(false);
       }
     }
-    fetchActivity();
+    void fetchActivity();
     return () => { cancelled = true; };
   }, []);
 

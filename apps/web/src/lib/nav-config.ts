@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard,
+  Crosshair,
   MessageSquare,
   Mic,
   FileText,
@@ -23,9 +23,9 @@ export interface NavItem extends NavItemDefinition {
 
 export const NAV_ITEMS: NavItemDefinition[] = [
   {
-    label: "Dashboard",
+    label: "Command Center",
     href: "/dashboard",
-    icon: LayoutDashboard,
+    icon: Crosshair,
     roles: ["rep", "admin", "manager", "owner"],
   },
   {

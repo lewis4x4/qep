@@ -160,6 +160,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
           },
         ],
       }),
+      signal: AbortSignal.timeout(90_000),
     });
 
     if (!visionRes.ok) {
@@ -187,6 +188,96 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Save the photo to Supabase Storage so it persists across page refreshes
+    let savedImageUrl: string | null = null;
+    const equipmentId = new URL(req.url).searchParams.get("equipmentId");
+    try {
+      const ext = imageMimeType.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+      const fileName = `${equipmentId ?? user.id}/${crypto.randomUUID()}.${ext}`;
+      const binaryString = atob(imageBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const { error: uploadErr } = await adminDb.storage
+        .from("equipment-photos")
+        .upload(fileName, bytes.buffer, {
+          contentType: imageMimeType,
+          upsert: false,
+        });
+
+      if (!uploadErr) {
+        const { data: urlData } = adminDb.storage
+          .from("equipment-photos")
+          .getPublicUrl(fileName);
+        savedImageUrl = urlData?.publicUrl ?? null;
+      } else {
+        console.error("Photo upload error:", uploadErr.message);
+      }
+    } catch (uploadEx) {
+      console.error("Photo upload exception:", uploadEx);
+    }
+
+    // If equipmentId provided, auto-update the equipment record with photo + analysis fields
+    if (equipmentId && savedImageUrl) {
+      try {
+        const { data: existing } = await adminDb
+          .from("crm_equipment")
+          .select("photo_urls")
+          .eq("id", equipmentId)
+          .maybeSingle();
+
+        const currentPhotos = Array.isArray(existing?.photo_urls) ? existing.photo_urls : [];
+        const updatedPhotos = [...currentPhotos, savedImageUrl];
+
+        const updateFields: Record<string, unknown> = {
+          photo_urls: updatedPhotos,
+        };
+
+        if (analysis.equipment.make) updateFields.make = analysis.equipment.make;
+        if (analysis.equipment.model) updateFields.model = analysis.equipment.model;
+        if (analysis.equipment.year) {
+          const yearNum = parseInt(analysis.equipment.year, 10);
+          if (yearNum > 1900 && yearNum < 2100) updateFields.year = yearNum;
+        }
+        if (analysis.equipment.category) {
+          const catMap: Record<string, string> = {
+            "excavator": "excavator", "wheel loader": "loader", "loader": "loader",
+            "backhoe": "backhoe", "dozer": "dozer", "bulldozer": "dozer",
+            "skid steer": "skid_steer", "crane": "crane", "forklift": "forklift",
+            "telehandler": "telehandler", "truck": "truck", "trailer": "trailer",
+            "dump truck": "dump_truck", "aerial lift": "aerial_lift",
+            "boom lift": "boom_lift", "scissor lift": "scissor_lift",
+            "compactor": "compactor", "roller": "roller", "generator": "generator",
+            "compressor": "compressor", "pump": "pump", "welder": "welder",
+            "compact track loader": "skid_steer",
+            "track loader": "loader",
+          };
+          const normalized = analysis.equipment.category.toLowerCase();
+          const mapped = catMap[normalized];
+          if (mapped) updateFields.category = mapped;
+        }
+        if (analysis.condition.overall && analysis.condition.overall !== "unknown") {
+          updateFields.condition = analysis.condition.overall;
+        }
+        if (analysis.condition.hours_estimate) {
+          const hoursMatch = analysis.condition.hours_estimate.match(/[\d,]+/);
+          if (hoursMatch) {
+            const hours = parseFloat(hoursMatch[0].replace(/,/g, ""));
+            if (hours > 0) updateFields.engine_hours = hours;
+          }
+        }
+
+        await adminDb
+          .from("crm_equipment")
+          .update(updateFields)
+          .eq("id", equipmentId);
+      } catch (patchEx) {
+        console.error("Equipment auto-update error:", patchEx);
+      }
+    }
 
     let matchingInventory: unknown[] = [];
     let marketValuations: unknown[] = [];
@@ -217,6 +308,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
 
     return new Response(JSON.stringify({
       analysis,
+      image_url: savedImageUrl,
       crm_matches: {
         inventory: matchingInventory,
         valuations: marketValuations,

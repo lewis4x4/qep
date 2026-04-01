@@ -271,13 +271,34 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
         <span>Updated {new Date(eq.updatedAt).toLocaleDateString()}</span>
       </div>
 
+      {/* ─── Equipment Photos ────────────────────────── */}
+      {eq.photoUrls.length > 0 && (
+        <SectionCard title="Photos">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {eq.photoUrls.map((url, i) => (
+              <img
+                key={i}
+                src={url}
+                alt={`${eq.name} photo ${i + 1}`}
+                className="w-full h-32 rounded-lg object-cover border border-white/10"
+              />
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
       {/* ─── AI Vision Analysis ─────────────────────── */}
       <Card className="p-4 bg-white/5 border-white/10">
         <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
           <Gauge className="h-4 w-4 text-qep-orange" />
           AI Equipment Analysis
         </h3>
-        <EquipmentVision />
+        <EquipmentVision
+          equipmentId={equipmentId}
+          onAnalysisComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ["crm", "equipment", equipmentId] });
+          }}
+        />
       </Card>
 
       {/* ─── Editor Sheet ────────────────────────────── */}

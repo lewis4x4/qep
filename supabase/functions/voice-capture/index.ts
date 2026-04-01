@@ -194,6 +194,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { Authorization: `Bearer ${openAiKey}` },
         body: whisperForm,
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!whisperRes.ok) {
@@ -335,6 +336,7 @@ Return ONLY valid JSON matching this exact structure:
             { role: "user", content: extractionPrompt },
           ],
         }),
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (!extractionRes.ok) {

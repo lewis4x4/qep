@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/lib/database.types";
 import { RecentActivityFeed } from "./RecentActivityFeed";
+import { SalesCommandCenter } from "./SalesCommandCenter";
 
 interface DashboardPageProps {
+  userId: string;
   userRole: UserRole;
   userEmail: string | null;
   userName: string | null;
@@ -118,12 +120,15 @@ function StatCard({ label, value, icon: Icon, href, navigable }: StatCardProps) 
   );
 }
 
-export function DashboardPage({ userRole, userEmail, userName }: DashboardPageProps) {
+export function DashboardPage({ userId, userRole, userEmail, userName }: DashboardPageProps) {
   const navigate = useNavigate();
   const [counts, setCounts] = useState<StatCounts | null>(null);
   const [loadingCounts, setLoadingCounts] = useState(true);
 
+  const showCommandCenter = ["rep", "manager", "owner"].includes(userRole);
+
   useEffect(() => {
+    if (showCommandCenter) return;
     let cancelled = false;
     async function fetchCounts() {
       try {
@@ -150,20 +155,29 @@ export function DashboardPage({ userRole, userEmail, userName }: DashboardPagePr
         if (!cancelled) setLoadingCounts(false);
       }
     }
-    fetchCounts();
+    void fetchCounts();
     return () => { cancelled = true; };
-  }, []);
+  }, [showCommandCenter]);
 
   const greeting = useMemo(() => getTimeGreeting(), []);
 
-  // First name only
   const firstName = useMemo(() => {
     if (userName) return userName.split(" ")[0];
     return userEmail?.split("@")[0] ?? "there";
   }, [userName, userEmail]);
 
-  // Admin/manager/owner can navigate to team members
   const canViewTeam = ["admin", "manager", "owner"].includes(userRole);
+
+  if (showCommandCenter) {
+    return (
+      <SalesCommandCenter
+        userId={userId}
+        userName={userName}
+        userEmail={userEmail}
+        userRole={userRole}
+      />
+    );
+  }
 
   const statCards = [
     {

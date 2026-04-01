@@ -42,7 +42,10 @@ interface PrepData {
 type DB = ReturnType<typeof createClient>;
 
 async function gatherPrepData(db: DB, entityType: string, name: string): Promise<PrepData | null> {
-  const like = `%${name}%`;
+  // Sanitize: strip PostgREST filter operators and control chars
+  const sanitized = name.replace(/[%_\\().,]/g, " ").replace(/\s+/g, " ").trim();
+  if (!sanitized) return null;
+  const like = `%${sanitized}%`;
 
   if (entityType === "company") {
     const { data: companies } = await db
@@ -253,6 +256,7 @@ async function generatePrepSheet(data: PrepData): Promise<string> {
       Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({
       model: PREP_MODEL,
       max_completion_tokens: 1500,
@@ -329,9 +333,25 @@ Deno.serve(async (req) => {
       return jsonError("Unauthorized", 401, ch);
     }
 
+    const adminDb = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Enforce role: only reps, managers, admins, and owners
+    const { data: profile } = await adminDb
+      .from("profiles")
+      .select("role, workspace_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
+      return jsonError("Forbidden", 403, ch);
+    }
+
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const entityType = (body.entity_type as string) ?? "company";
-    const name = (body.name as string)?.trim();
+    const name = (body.name as string)?.trim()?.slice(0, 200);
 
     if (!name) {
       return jsonError("name is required", 400, ch);
@@ -339,11 +359,6 @@ Deno.serve(async (req) => {
     if (!["company", "contact"].includes(entityType)) {
       return jsonError("entity_type must be 'company' or 'contact'", 400, ch);
     }
-
-    const adminDb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     const data = await gatherPrepData(adminDb, entityType, name);
     if (!data) {

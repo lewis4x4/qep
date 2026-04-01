@@ -230,7 +230,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     catalogAdapter.getMachines().then((list) => {
       setMachines(list);
       setCatalogLoading(false);
-    });
+    }).catch(() => setCatalogLoading(false));
   }, [step, machines.length]);
 
   useEffect(() => {
@@ -246,7 +246,8 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     if (attachmentsMap[cat]) return;
     catalogAdapter
       .getAttachments(cat)
-      .then((list) => setAttachmentsMap((prev) => ({ ...prev, [cat]: list })));
+      .then((list) => setAttachmentsMap((prev) => ({ ...prev, [cat]: list })))
+      .catch(() => {});
   }, [selectedMachine, attachmentsMap]);
 
   useEffect(() => {

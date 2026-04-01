@@ -106,6 +106,7 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
+    signal: AbortSignal.timeout(30_000),
   });
   const data = await response.json();
   if (!response.ok) {

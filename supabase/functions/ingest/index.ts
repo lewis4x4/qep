@@ -234,6 +234,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
       model: "text-embedding-3-small",
       input: text,
     }),
+    signal: AbortSignal.timeout(30_000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(`Embedding API error: ${JSON.stringify(data)}`);
@@ -249,10 +250,15 @@ async function ingestDocument(
   const textChunks = chunkText(rawText);
   console.log(`Ingesting "${title}": ${textChunks.length} chunks`);
 
-  // Delete existing chunks for this document (re-ingest)
-  await supabase.from("chunks").delete().eq("document_id", documentId);
-
-  // Process in batches of 10 to avoid rate limits
+  // Build all new rows first before deleting old chunks — prevents data loss
+  // if embedding generation or insert fails partway through.
+  const allRows: Array<{
+    document_id: string;
+    chunk_index: number;
+    content: string;
+    token_count: number;
+    embedding: string;
+  }>  = [];
   const batchSize = 10;
   for (let i = 0; i < textChunks.length; i += batchSize) {
     const batch = textChunks.slice(i, i + batchSize);
@@ -268,15 +274,56 @@ async function ingestDocument(
         };
       })
     );
+    allRows.push(...rows);
+  }
 
-    const { error } = await supabase.from("chunks").insert(rows);
+  // All embeddings generated successfully — safe to swap old for new
+  await supabase.from("chunks").delete().eq("document_id", documentId);
+  for (let i = 0; i < allRows.length; i += batchSize) {
+    const { error } = await supabase.from("chunks").insert(allRows.slice(i, i + batchSize));
     if (error) throw new Error(`Chunk insert error: ${error.message}`);
   }
 
-  // Re-ingest refreshes timestamps but leaves publication state unchanged.
+  // Generate AI summary of the document
+  let summary: string | null = null;
+  try {
+    const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    if (openAiKey) {
+      const summarySnippet = rawText.slice(0, 6000);
+      const summaryRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+        signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({
+          model: "gpt-5.4-mini",
+          max_completion_tokens: 200,
+          messages: [
+            {
+              role: "system",
+              content: "Write a 2-3 sentence summary of this document. Be specific about what it contains. No preamble.",
+            },
+            { role: "user", content: `Document: "${title}"\n\n${summarySnippet}` },
+          ],
+        }),
+      });
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        summary = summaryData.choices?.[0]?.message?.content?.trim() ?? null;
+      }
+    }
+  } catch (sumErr) {
+    console.error(`Summary generation failed for "${title}":`, sumErr);
+  }
+
   await supabase
     .from("documents")
-    .update({ updated_at: new Date().toISOString() })
+    .update({
+      updated_at: new Date().toISOString(),
+      ...(summary ? { summary } : {}),
+    })
     .eq("id", documentId);
 
   return textChunks.length;
@@ -720,6 +767,13 @@ Deno.serve(async (req) => {
             rawText = await extractDocxText(await contentRes.arrayBuffer());
           } catch (docxErr) {
             console.error(`[ingest] Failed to parse OneDrive DOCX ${item.id}:`, docxErr);
+            continue;
+          }
+        } else if (uploadKind === "spreadsheet") {
+          try {
+            rawText = await extractSpreadsheetText(await contentRes.arrayBuffer());
+          } catch (xlsxErr) {
+            console.error(`[ingest] Failed to parse OneDrive spreadsheet ${item.id}:`, xlsxErr);
             continue;
           }
         } else {

@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { AlertTriangle, Send, History, Plus, ChevronDown, Shield } from "lucide-react";
+import { AlertTriangle, Send, History, Plus, ChevronDown, Shield, Download } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ export interface Source {
   title: string;
   confidence: number;
   kind: "document" | "crm";
+  excerpt?: string;
 }
 
 export interface Message {
@@ -22,6 +23,7 @@ export interface Message {
   timestamp: Date;
   sources?: Source[];
   feedback?: "up" | "down";
+  isError?: boolean;
 }
 
 interface ConversationSession {
@@ -52,11 +54,15 @@ function autoTitle(messages: Message[]): string {
 const db = supabase as any;
 
 async function dbCreateConversation(title: string, context?: Record<string, unknown>): Promise<string | null> {
-  const { data } = await db
+  const { data, error } = await db
     .from("chat_conversations")
     .insert({ title, context: context ?? null })
     .select("id")
     .single();
+  if (error) {
+    console.error("[chat] Failed to create conversation:", error.message);
+    return null;
+  }
   return data?.id ?? null;
 }
 
@@ -64,7 +70,7 @@ async function dbSaveMessage(
   conversationId: string,
   msg: { role: string; content: string; sources?: Source[]; traceId?: string; retrievalMeta?: Record<string, unknown> },
 ): Promise<void> {
-  await db.from("chat_messages").insert({
+  const { error } = await db.from("chat_messages").insert({
     conversation_id: conversationId,
     role: msg.role,
     content: msg.content,
@@ -72,6 +78,7 @@ async function dbSaveMessage(
     trace_id: msg.traceId ?? null,
     retrieval_meta: msg.retrievalMeta ?? null,
   });
+  if (error) console.error("[chat] Failed to save message:", error.message);
 }
 
 async function dbUpdateConversationTitle(id: string, title: string): Promise<void> {
@@ -158,7 +165,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     chatMountedRef.current = true;
     dbLoadHistory().then((h) => {
       if (chatMountedRef.current) setHistory(h);
-    });
+    }).catch(() => {});
     return () => {
       chatMountedRef.current = false;
       chatAbortRef.current?.abort();
@@ -231,7 +238,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const refreshHistory = useCallback(() => {
     dbLoadHistory().then((h) => {
       if (chatMountedRef.current) setHistory(h);
-    });
+    }).catch(() => {});
   }, []);
 
   function startNewChat() {
@@ -239,9 +246,37 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     conversationIdRef.current = null;
     setMessages([]);
     setInput("");
+    setStreaming(false);
+    setChatDiagnostics(null);
     setHistoryOpen(false);
     refreshHistory();
     setTimeout(() => inputRef.current?.focus(), 50);
+  }
+
+  function exportConversation() {
+    if (messages.length === 0) return;
+    const lines: string[] = [
+      "# QEP Knowledge Chat Export",
+      `*Exported: ${new Date().toLocaleString()}*`,
+      "",
+    ];
+    for (const msg of messages) {
+      const role = msg.role === "user" ? "**You**" : "**QEP Assistant**";
+      const time = msg.timestamp.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      lines.push(`### ${role} — ${time}`);
+      lines.push("");
+      lines.push(msg.content);
+      lines.push("");
+    }
+
+    const markdown = lines.join("\n");
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qep-chat-${new Date().toISOString().split("T")[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function loadSession(session: ConversationSession) {
@@ -468,6 +503,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
             m.id === assistantId
               ? {
                   ...m,
+                  isError: true,
                   content:
                     error instanceof Error
                       ? error.message
@@ -492,7 +528,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      void sendMessage();
     }
   }
 
@@ -509,9 +545,8 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     }
   }
 
-  // Suggestion chip click → populate input + auto-send
   function handleSuggestion(text: string) {
-    sendMessage(text);
+    void sendMessage(text);
   }
 
   const userInitials = getInitials(userEmail);
@@ -579,12 +614,25 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
             )}
           </div>
 
+          {/* Export */}
+          {messages.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportConversation}
+              className="gap-1.5"
+              aria-label="Export conversation"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          )}
+
           {/* New chat */}
           <Button
             variant="outline"
             size="sm"
             onClick={startNewChat}
-            disabled={messages.length === 0}
             className="gap-1.5"
             aria-label="New conversation"
           >
@@ -620,13 +668,20 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
           <ChatEmptyState userRole={userRole} onSuggestionClick={handleSuggestion} />
         ) : (
           <div className="max-w-3xl mx-auto space-y-6">
-            {messages.map((message) => (
+            {messages.map((message, idx) => (
               <ChatMessage
                 key={message.id}
                 message={message}
                 userInitials={userInitials}
                 streaming={streaming}
                 onFeedback={handleFeedback}
+                onRetry={message.isError ? () => {
+                  const lastUserMsg = messages.slice(0, idx).reverse().find(m => m.role === "user");
+                  if (lastUserMsg) {
+                    setMessages(prev => prev.filter(m => m.id !== message.id));
+                    void sendMessage(lastUserMsg.content);
+                  }
+                } : undefined}
               />
             ))}
             <div ref={messagesEndRef} />
@@ -652,7 +707,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
             )}
           />
           <Button
-            onClick={() => sendMessage()}
+            onClick={() => void sendMessage()}
             disabled={streaming || !input.trim()}
             size="icon"
             className={cn(

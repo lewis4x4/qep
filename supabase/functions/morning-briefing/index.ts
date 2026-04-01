@@ -212,6 +212,7 @@ Keep it under 400 words. Be specific and actionable. If overdue follow-ups exist
       Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({
       model: BRIEFING_MODEL,
       messages: [

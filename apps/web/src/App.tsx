@@ -26,6 +26,9 @@ const AdminPage = lazy(() =>
 const VoiceCapturePage = lazy(() =>
   import("./components/VoiceCapturePage").then((m) => ({ default: m.VoiceCapturePage }))
 );
+const VoiceHistoryPage = lazy(() =>
+  import("./components/VoiceHistoryPage").then((m) => ({ default: m.VoiceHistoryPage }))
+);
 const QuoteBuilderPage = lazy(() =>
   import("./components/QuoteBuilderPage").then((m) => ({ default: m.QuoteBuilderPage }))
 );
@@ -178,7 +181,7 @@ function App() {
           void supabase.auth.signOut();
         }
       }
-    });
+    }).catch(() => {});
 
     return () => subscription.unsubscribe();
   }, []);
@@ -394,6 +397,7 @@ function App() {
                 path="/dashboard"
                 element={
                   <DashboardPage
+                    userId={profile.id}
                     userRole={profile.role}
                     userEmail={profile.email}
                     userName={profile.full_name}
@@ -444,6 +448,16 @@ function App() {
                       userRole={profile.role}
                       userEmail={profile.email}
                     />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/voice/history"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VoiceHistoryPage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

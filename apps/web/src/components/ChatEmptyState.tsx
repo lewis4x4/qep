@@ -102,7 +102,7 @@ function MorningBriefingCard() {
   }, []);
 
   useEffect(() => {
-    loadBriefing();
+    void loadBriefing();
   }, [loadBriefing]);
 
   async function handleGenerate() {
