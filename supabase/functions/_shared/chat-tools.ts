@@ -220,6 +220,25 @@ export const CHAT_TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "generatePrepSheet",
+      description: "Generate a comprehensive pre-meeting customer prep sheet. Pulls all CRM data for a company or contact and synthesizes a one-page briefing with talking points, intelligence, and action items. Use when user says 'prep for meeting with X', 'prep sheet for X', or 'what do I need to know before meeting X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          entity_type: {
+            type: "string",
+            enum: ["company", "contact"],
+            description: "Look up by company name or contact name",
+          },
+          name: { type: "string", description: "Company name or contact name to prep for" },
+        },
+        required: ["entity_type", "name"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "getAnomalyAlerts",
       description: "Get proactive anomaly alerts — stalling deals, overdue follow-ups, activity gaps, pipeline risk. Use when user asks about risks, what needs attention, stalled deals, or team activity concerns.",
       parameters: {
@@ -1089,6 +1108,100 @@ async function execGetCompetitiveIntelligence(
   return { mentions: competitors, summary, period_days: days };
 }
 
+async function execGeneratePrepSheet(
+  db: SupabaseClient,
+  args: { entity_type: string; name: string },
+): Promise<unknown> {
+  const name = (args.name ?? "").trim();
+  if (!name) return { error: "name is required" };
+  const entityType = args.entity_type ?? "company";
+  const like = `%${name}%`;
+
+  let entityName = name;
+  let companyInfo: Record<string, unknown> | null = null;
+  const contacts: Record<string, unknown>[] = [];
+  const deals: Record<string, unknown>[] = [];
+  const activities: Record<string, unknown>[] = [];
+  const voiceNotes: Record<string, unknown>[] = [];
+
+  if (entityType === "company") {
+    const { data: companies } = await db.from("crm_companies").select("id, name, industry, city, state").ilike("name", like).is("deleted_at", null).limit(1);
+    if (!companies || companies.length === 0) return { error: `No company found matching "${name}"` };
+    const co = companies[0] as Record<string, unknown>;
+    companyInfo = co;
+    entityName = co.name as string;
+    const coId = co.id as string;
+
+    const [c, d, a, v] = await Promise.all([
+      db.from("crm_contacts").select("first_name, last_name, title, email, phone").eq("primary_company_id", coId).is("deleted_at", null).limit(10).then((r: { data: unknown[] | null }) => r.data ?? []),
+      db.from("crm_deals").select("name, amount, expected_close_on, closed_at").eq("company_id", coId).is("deleted_at", null).order("created_at", { ascending: false }).limit(10).then((r: { data: unknown[] | null }) => r.data ?? []),
+      db.from("crm_activities").select("activity_type, body, occurred_at").eq("company_id", coId).is("deleted_at", null).order("occurred_at", { ascending: false }).limit(8).then((r: { data: unknown[] | null }) => r.data ?? []),
+      db.from("voice_captures").select("transcript, sentiment, competitor_mentions, created_at").eq("linked_company_id", coId).not("transcript", "is", null).order("created_at", { ascending: false }).limit(3).then((r: { data: unknown[] | null }) => r.data ?? []),
+    ]);
+    contacts.push(...(c as Record<string, unknown>[]));
+    deals.push(...(d as Record<string, unknown>[]));
+    activities.push(...(a as Record<string, unknown>[]));
+    voiceNotes.push(...(v as Record<string, unknown>[]));
+  } else {
+    const nameParts = name.split(/\s+/);
+    let cq = db.from("crm_contacts").select("id, first_name, last_name, title, email, phone, primary_company_id").is("deleted_at", null);
+    if (nameParts.length > 1) {
+      cq = cq.ilike("first_name", `%${nameParts[0]}%`).ilike("last_name", `%${nameParts[nameParts.length - 1]}%`);
+    } else {
+      cq = cq.or(`first_name.ilike.${like},last_name.ilike.${like}`);
+    }
+    const { data: cList } = await cq.limit(1);
+    if (!cList || cList.length === 0) return { error: `No contact found matching "${name}"` };
+    const contact = cList[0] as Record<string, unknown>;
+    entityName = `${contact.first_name} ${contact.last_name}`;
+    contacts.push(contact);
+    if (contact.primary_company_id) {
+      const { data: co } = await db.from("crm_companies").select("id, name, industry, city, state").eq("id", contact.primary_company_id).single();
+      companyInfo = co as Record<string, unknown> | null;
+    }
+    const cId = contact.id as string;
+    const [d, a, v] = await Promise.all([
+      db.from("crm_deals").select("name, amount, expected_close_on, closed_at").eq("primary_contact_id", cId).is("deleted_at", null).order("created_at", { ascending: false }).limit(10).then((r: { data: unknown[] | null }) => r.data ?? []),
+      db.from("crm_activities").select("activity_type, body, occurred_at").eq("contact_id", cId).is("deleted_at", null).order("occurred_at", { ascending: false }).limit(8).then((r: { data: unknown[] | null }) => r.data ?? []),
+      db.from("voice_captures").select("transcript, sentiment, competitor_mentions, created_at").eq("linked_contact_id", cId).not("transcript", "is", null).order("created_at", { ascending: false }).limit(3).then((r: { data: unknown[] | null }) => r.data ?? []),
+    ]);
+    deals.push(...(d as Record<string, unknown>[]));
+    activities.push(...(a as Record<string, unknown>[]));
+    voiceNotes.push(...(v as Record<string, unknown>[]));
+  }
+
+  return {
+    prep_data: {
+      entity_type: entityType,
+      entity_name: entityName,
+      company: companyInfo ? { name: companyInfo.name, industry: companyInfo.industry, location: `${companyInfo.city ?? ""}${companyInfo.state ? `, ${companyInfo.state}` : ""}`.trim() || null } : null,
+      contacts: contacts.map((c) => ({
+        name: `${c.first_name} ${c.last_name}`,
+        title: c.title,
+        email: c.email,
+        phone: c.phone,
+      })),
+      active_deals: deals.filter((d) => !d.closed_at).map((d) => ({
+        name: d.name,
+        amount: d.amount,
+        close_date: d.expected_close_on,
+      })),
+      past_deals: deals.filter((d) => d.closed_at).length,
+      recent_interactions: activities.slice(0, 5).map((a) => ({
+        type: a.activity_type,
+        summary: typeof a.body === "string" ? (a.body as string).slice(0, 150) : null,
+        date: a.occurred_at,
+      })),
+      voice_insights: voiceNotes.map((v) => ({
+        excerpt: typeof v.transcript === "string" ? (v.transcript as string).slice(0, 200) : null,
+        sentiment: v.sentiment,
+        competitors: v.competitor_mentions,
+      })),
+    },
+    instruction: "Use this data to generate a comprehensive pre-meeting prep sheet. Include: key facts, open opportunities, relationship history, talking points, and watch-outs.",
+  };
+}
+
 async function execGetAnomalyAlerts(
   db: SupabaseClient,
   args: { alert_type?: string; severity?: string; acknowledged?: boolean; limit?: number },
@@ -1197,6 +1310,7 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getManufacturerIncentives: (db, args) => execGetManufacturerIncentives(db, args as Parameters<typeof execGetManufacturerIncentives>[1]),
   getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
   getDealCoaching: (db, args) => execGetDealCoaching(db, args as Parameters<typeof execGetDealCoaching>[1]),
+  generatePrepSheet: (db, args) => execGeneratePrepSheet(db, args as Parameters<typeof execGeneratePrepSheet>[1]),
   getWinLossAnalysis: (db, args) => execGetWinLossAnalysis(db, args as Parameters<typeof execGetWinLossAnalysis>[1]),
   getCompetitiveIntelligence: (db, args) => execGetCompetitiveIntelligence(db, args as Parameters<typeof execGetCompetitiveIntelligence>[1]),
   getVoiceNoteInsights: (db, args) => execGetVoiceNoteInsights(db, args as Parameters<typeof execGetVoiceNoteInsights>[1]),
