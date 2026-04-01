@@ -36,7 +36,7 @@ type Document = Database["public"]["Tables"]["documents"]["Row"];
 type DocumentAudience = "company_wide" | "finance" | "leadership" | "admin_owner" | "owner_only";
 type DocumentStatus = "draft" | "pending_review" | "published" | "archived" | "ingest_failed";
 
-const SUPPORTED_UPLOAD_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".csv"] as const;
+const SUPPORTED_UPLOAD_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv"] as const;
 const SUPPORTED_UPLOAD_EXTENSION_SET = new Set<string>(SUPPORTED_UPLOAD_EXTENSIONS);
 const SUPPORTED_UPLOAD_ACCEPT = SUPPORTED_UPLOAD_EXTENSIONS.join(",");
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
@@ -442,7 +442,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                       {uploading ? "Processing document…" : "Drag & drop or click to upload"}
                     </p>
                     <p className="text-xs text-muted-foreground mb-3">
-                      Upload one text-based document at a time up to {MAX_UPLOAD_SIZE_LABEL}
+                      Upload one document at a time up to {MAX_UPLOAD_SIZE_LABEL}
                     </p>
                     {!uploading && (
                       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:justify-center">

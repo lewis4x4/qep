@@ -24,6 +24,8 @@ The knowledge base accepts these extensions for browser upload:
 
 - `.pdf`
 - `.docx`
+- `.xlsx`
+- `.xls`
 - `.txt`
 - `.md`
 - `.csv`
@@ -32,9 +34,10 @@ The backend treats uploads as one of three ingest classes:
 
 - `pdf`
 - `docx`
+- `spreadsheet`
 - `text`
 
-`.txt`, `.md`, and `.csv` are all ingested as plain text.
+`.txt`, `.md`, and `.csv` are all ingested as plain text. `.xlsx` and `.xls` are ingested as spreadsheet text with sheet names preserved.
 
 ## Admin UI Contract
 
@@ -81,8 +84,15 @@ The `ingest` function must:
 - Normalize empty browser MIME types from the filename extension when possible
 - Verify PDF content using `%PDF` magic bytes
 - Verify DOCX content using ZIP container magic bytes
+- Verify Excel workbook content using ZIP (xlsx) or OLE compound binary (xls) magic bytes
 - Reject mismatched declared type vs actual file content with HTTP `415`
 - Reject files with no extractable text with HTTP `422`
+
+## Storage Contract
+
+- Browser uploads must store the original file in the private `documents` storage bucket
+- Stored metadata must include the bucket and path so document deletion can remove the original object
+- Voice capture audio must live in the private `voice-recordings` bucket
 
 ## Extraction Contract
 

@@ -79,6 +79,17 @@ function jsonResponse(
   });
 }
 
+function getStoredDocumentLocation(
+  metadata: unknown,
+): { bucket: string; path: string } | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const record = metadata as Record<string, unknown>;
+  const bucket = typeof record.storage_bucket === "string" ? record.storage_bucket : null;
+  const path = typeof record.storage_path === "string" ? record.storage_path : null;
+  if (!bucket || !path) return null;
+  return { bucket, path };
+}
+
 async function logAuditEvent(
   adminClient: ReturnType<typeof createAdminClient>,
   input: {
@@ -127,7 +138,7 @@ Deno.serve(async (req) => {
 
     const { data: document, error: documentError } = await adminClient
       .from("documents")
-      .select("id, title, audience, status, review_owner_user_id, review_due_at")
+      .select("id, title, audience, status, review_owner_user_id, review_due_at, metadata")
       .eq("id", body.documentId)
       .single();
 
@@ -155,6 +166,16 @@ Deno.serve(async (req) => {
       if (deleteError) {
         console.error("[document-admin] delete failed:", deleteError.message);
         return jsonResponse({ error: "Document deletion failed." }, 500, ch);
+      }
+
+      const storedDocument = getStoredDocumentLocation(document.metadata);
+      if (storedDocument) {
+        const { error: storageDeleteError } = await adminClient.storage
+          .from(storedDocument.bucket)
+          .remove([storedDocument.path]);
+        if (storageDeleteError) {
+          console.error("[document-admin] original file delete failed:", storageDeleteError.message);
+        }
       }
 
       return jsonResponse({ success: true }, 200, ch);

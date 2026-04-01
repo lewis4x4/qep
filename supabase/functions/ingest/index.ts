@@ -7,6 +7,7 @@ import { Buffer } from "node:buffer";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import mammoth from "npm:mammoth@1.8.0";
 import pdfParse from "npm:pdf-parse@1.1.1";
+import XLSX from "npm:xlsx@0.18.5";
 import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
 const ALLOWED_ORIGINS = [
@@ -26,7 +27,7 @@ const CHUNK_SIZE = 512;      // target tokens per chunk
 const CHUNK_OVERLAP = 50;    // overlap tokens between chunks
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-type UploadKind = "pdf" | "docx" | "text";
+type UploadKind = "pdf" | "docx" | "spreadsheet" | "text";
 type UserRole = "rep" | "admin" | "manager" | "owner";
 type DocumentAudience =
   | "company_wide"
@@ -41,7 +42,7 @@ type DocumentStatus =
   | "archived"
   | "ingest_failed";
 
-const SUPPORTED_UPLOAD_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv"]);
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx", ".xls"]);
 const DOCUMENT_AUDIENCES = new Set<DocumentAudience>([
   "company_wide",
   "finance",
@@ -53,11 +54,12 @@ const DIRECT_UPLOAD_STATUSES = new Set<DocumentStatus>(["draft", "published"]);
 const MIME_TO_UPLOAD_KIND: Record<string, UploadKind> = {
   "application/pdf": "pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
+  "application/vnd.ms-excel": "spreadsheet",
   "text/plain": "text",
   "text/markdown": "text",
   "text/csv": "text",
   "application/csv": "text",
-  "application/vnd.ms-excel": "text",
 };
 
 // Naive tokenization estimate: 1 token ≈ 4 chars
@@ -105,6 +107,17 @@ async function extractDocxText(fileBuffer: ArrayBuffer): Promise<string> {
   return result.value ?? "";
 }
 
+async function extractSpreadsheetText(fileBuffer: ArrayBuffer): Promise<string> {
+  const workbook = XLSX.read(Buffer.from(fileBuffer), { type: "buffer" });
+  const parts = workbook.SheetNames.map((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(worksheet, { blankrows: false }).trim();
+    if (!csv) return "";
+    return `Sheet: ${sheetName}\n${csv}`;
+  }).filter((part) => part.length > 0);
+  return parts.join("\n\n");
+}
+
 function getFileExtension(filename: string): string {
   const match = filename.toLowerCase().match(/\.[^.]+$/);
   return match?.[0] ?? "";
@@ -121,6 +134,7 @@ function inferUploadKind(
   const extension = getFileExtension(filename);
   if (extension === ".pdf") return "pdf";
   if (extension === ".docx") return "docx";
+  if (extension === ".xlsx" || extension === ".xls") return "spreadsheet";
   if (SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) return "text";
   return null;
 }
@@ -137,6 +151,10 @@ function normalizeMimeType(
       return "application/pdf";
     case ".docx":
       return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case ".xls":
+      return "application/vnd.ms-excel";
     case ".md":
       return "text/markdown";
     case ".csv":
@@ -344,7 +362,7 @@ Deno.serve(async (req) => {
 
       if (!uploadKind) {
         return jsonResponse(
-          { error: "Unsupported file type. Allowed: PDF, DOCX, TXT, MD, CSV." },
+          { error: "Unsupported file type. Allowed: PDF, DOCX, XLSX, XLS, TXT, MD, CSV." },
           415,
           ch
         );
@@ -360,6 +378,8 @@ Deno.serve(async (req) => {
                     headerBuffer[2] === 0x44 && headerBuffer[3] === 0x46; // %PDF
       const isZip = headerBuffer[0] === 0x50 && headerBuffer[1] === 0x4B &&
                     headerBuffer[2] === 0x03 && headerBuffer[3] === 0x04; // PK\x03\x04 (DOCX/ZIP)
+      const isOleCompound = headerBuffer[0] === 0xD0 && headerBuffer[1] === 0xCF &&
+        headerBuffer[2] === 0x11 && headerBuffer[3] === 0xE0; // legacy XLS compound binary
 
       if (uploadKind === "pdf" && !isPdf) {
         return jsonResponse(
@@ -375,8 +395,27 @@ Deno.serve(async (req) => {
           ch
         );
       }
+      if (uploadKind === "spreadsheet" && !(isZip || isOleCompound)) {
+        return jsonResponse(
+          { error: "File content does not match declared type (expected Excel workbook)" },
+          415,
+          ch
+        );
+      }
 
       const fileBuffer = await file.arrayBuffer();
+      const storagePath = `${user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error: storageError } = await supabaseAdmin.storage
+        .from("documents")
+        .upload(storagePath, fileBuffer, {
+          contentType: normalizedMimeType,
+          upsert: false,
+        });
+      if (storageError) {
+        console.error("[ingest] document storage upload failed:", storageError.message);
+        return jsonResponse({ error: "Failed to store the original document file." }, 500, ch);
+      }
+
       let rawText: string;
       if (uploadKind === "pdf") {
         try {
@@ -426,6 +465,30 @@ Deno.serve(async (req) => {
             ch
           );
         }
+      } else if (uploadKind === "spreadsheet") {
+        try {
+          rawText = await extractSpreadsheetText(fileBuffer);
+          if (!rawText.trim()) {
+            return jsonResponse(
+              {
+                error:
+                  "Spreadsheet contained no extractable text. Ensure the workbook has visible cell content.",
+              },
+              422,
+              ch
+            );
+          }
+        } catch (sheetErr) {
+          console.error("Spreadsheet parse error:", sheetErr);
+          return jsonResponse(
+            {
+              error:
+                "Failed to extract text from the spreadsheet. Ensure the workbook is a standard .xlsx or .xls file.",
+            },
+            422,
+            ch
+          );
+        }
       } else {
         rawText = await file.text();
       }
@@ -451,6 +514,12 @@ Deno.serve(async (req) => {
           raw_text: rawText,
           word_count: rawText.split(/\s+/).length,
           uploaded_by: user.id,
+          metadata: {
+            storage_bucket: "documents",
+            storage_path: storagePath,
+            original_filename: file.name,
+            upload_kind: uploadKind,
+          },
           audience: governance.audience,
           status: governance.status,
           approved_by: governance.status === "published" ? user.id : null,

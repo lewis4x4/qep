@@ -141,6 +141,22 @@ Deno.serve(async (req) => {
 
     const captureId = captureRecord.id as string;
 
+    const openAiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openAiKey) {
+      await supabaseAdmin
+        .from("voice_captures")
+        .update({
+          sync_status: "failed",
+          sync_error: "Transcription failed: OPENAI_API_KEY is not configured for the voice-capture function",
+        })
+        .eq("id", captureId);
+      return jsonError(
+        "Voice capture is not configured. Missing OPENAI_API_KEY in Supabase edge function secrets.",
+        503,
+        ch,
+      );
+    }
+
     // ── Transcribe via Whisper ────────────────────────────────────────────────
     let transcript: string;
     let durationSeconds: number | null = null;
@@ -154,7 +170,7 @@ Deno.serve(async (req) => {
 
       const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
-        headers: { Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}` },
+        headers: { Authorization: `Bearer ${openAiKey}` },
         body: whisperForm,
       });
 
@@ -173,7 +189,7 @@ Deno.serve(async (req) => {
         .from("voice_captures")
         .update({ sync_status: "failed", sync_error: `Transcription failed: ${errMsg}` })
         .eq("id", captureId);
-      return jsonError("Transcription failed. Please try again.", 500, ch);
+      return jsonError(humanizeVoiceCaptureError(errMsg, "transcription"), 500, ch);
     }
 
     if (!transcript) {
@@ -282,7 +298,7 @@ Return ONLY valid JSON matching this exact structure:
       const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+          Authorization: `Bearer ${openAiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -324,7 +340,7 @@ Return ONLY valid JSON matching this exact structure:
           sync_error: `Data extraction failed: ${errMsg}`,
         })
         .eq("id", captureId);
-      return jsonError("Failed to extract deal data from transcript.", 500, ch);
+      return jsonError(humanizeVoiceCaptureError(errMsg, "extraction"), 500, ch);
     }
 
     // ── Persist transcript + extracted data ───────────────────────────────────
@@ -620,6 +636,62 @@ function getAudioExtension(mimeType: string): string {
     "audio/x-m4a": "m4a",
   };
   return map[mimeType] ?? "webm";
+}
+
+function humanizeVoiceCaptureError(
+  rawMessage: string,
+  stage: "transcription" | "extraction",
+): string {
+  const lower = rawMessage.toLowerCase();
+  const shortRaw = rawMessage.length > 500 ? `${rawMessage.slice(0, 500)}…` : rawMessage;
+  if (
+    lower.includes("incorrect api key") ||
+    lower.includes("invalid api key") ||
+    lower.includes("unauthorized") ||
+    lower.includes("401")
+  ) {
+    return `Voice capture ${stage} is not authorized. Check OPENAI_API_KEY in Supabase edge function secrets. Details: ${shortRaw}`;
+  }
+  if (
+    lower.includes("model") && (
+      lower.includes("not found") ||
+      lower.includes("does not exist") ||
+      lower.includes("unsupported")
+    )
+  ) {
+    return `Voice capture ${stage} is using an unavailable OpenAI model. Update the function configuration and redeploy. Details: ${shortRaw}`;
+  }
+  if (
+    lower.includes("invalid file format") ||
+    lower.includes("unsupported media type") ||
+    lower.includes("audio file") ||
+    lower.includes("codec") ||
+    lower.includes("unrecognized file format")
+  ) {
+    return `This recording format could not be processed. Try a shorter recording or a different browser/device. Details: ${shortRaw}`;
+  }
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("capacity") ||
+    lower.includes("quota")
+  ) {
+    return `OpenAI is rate limiting voice capture ${stage} right now. Please wait a minute and try again. Details: ${shortRaw}`;
+  }
+  if (
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("load failed") ||
+    lower.includes("error sending request") ||
+    lower.includes("dns error") ||
+    lower.includes("connection reset")
+  ) {
+    return `Voice capture ${stage} could not reach OpenAI. Please try again in a moment. Details: ${shortRaw}`;
+  }
+  return stage === "transcription"
+    ? `Transcription failed. Details: ${shortRaw}`
+    : `Failed to extract deal data from the transcript. Details: ${shortRaw}`;
 }
 
 async function getValidToken(
