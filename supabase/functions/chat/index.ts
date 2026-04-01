@@ -8,7 +8,7 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-broad-crm-search";
+const CHAT_EDGE_REVISION = "20260401-dge-intelligence-search";
 const CHAT_MODEL = "gpt-5.4-nano";
 
 const ALLOWED_ORIGINS = [
@@ -1109,6 +1109,115 @@ type VoiceCaptureRow = {
   created_at: string;
 };
 
+type MarketValuationRow = {
+  id: string;
+  stock_number: string | null;
+  make: string;
+  model: string;
+  year: number;
+  hours: number | null;
+  condition: string | null;
+  location: string | null;
+  estimated_fmv: number | null;
+  low_estimate: number | null;
+  high_estimate: number | null;
+  source: string;
+  updated_at: string;
+};
+
+type AuctionResultRow = {
+  id: string;
+  source: string;
+  auction_date: string;
+  make: string;
+  model: string;
+  year: number | null;
+  hours: number | null;
+  hammer_price: number;
+  location: string | null;
+  condition: string | null;
+};
+
+type CompetitorListingRow = {
+  id: string;
+  source: string;
+  make: string;
+  model: string;
+  year: number | null;
+  hours: number | null;
+  asking_price: number | null;
+  location: string | null;
+  is_active: boolean;
+  last_seen_at: string;
+};
+
+type CustomerProfileExtRow = {
+  id: string;
+  customer_name: string;
+  company_name: string | null;
+  industry: string | null;
+  region: string | null;
+  pricing_persona: string | null;
+  lifetime_value: number | null;
+  total_deals: number | null;
+  avg_deal_size: number | null;
+  avg_discount_pct: number | null;
+  fleet_size: number | null;
+  seasonal_pattern: string | null;
+  price_sensitivity_score: number | null;
+  notes: string | null;
+};
+
+type FleetIntelligenceRow = {
+  id: string;
+  customer_name: string;
+  make: string;
+  model: string;
+  year: number | null;
+  current_hours: number | null;
+  equipment_serial: string | null;
+  utilization_trend: string | null;
+  predicted_replacement_date: string | null;
+  replacement_confidence: number | null;
+  outreach_status: string | null;
+  outreach_deal_value: number | null;
+};
+
+type ManufacturerIncentiveRow = {
+  id: string;
+  oem_name: string;
+  program_name: string;
+  discount_type: string;
+  discount_value: number;
+  eligibility_criteria: string | null;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+};
+
+type FinancingRateRow = {
+  id: string;
+  lender_name: string;
+  term_months: number;
+  credit_tier: string;
+  rate_pct: number;
+  dealer_holdback_pct: number | null;
+  min_amount: number | null;
+  max_amount: number | null;
+  is_active: boolean;
+};
+
+type OutreachQueueRow = {
+  id: string;
+  customer_name: string;
+  equipment_description: string;
+  trigger_reason: string;
+  estimated_deal_value: number | null;
+  priority_score: number | null;
+  status: string;
+  notes: string | null;
+};
+
 /**
  * Broad CRM search: always runs alongside document retrieval so the assistant
  * can answer questions about ANY entity in the system — contacts, companies,
@@ -1151,6 +1260,12 @@ async function searchCrmBroadly(
     );
   }
 
+  // Build a make/model ilike filter for equipment-centric DGE tables
+  const equipLikeTokens = searchTokens.filter((t) => t.length >= 3).slice(0, 3);
+  const makeModelOr = equipLikeTokens.length > 0
+    ? equipLikeTokens.map((t) => `make.ilike.%${t}%,model.ilike.%${t}%`).join(",")
+    : `make.ilike.${likePattern},model.ilike.${likePattern}`;
+
   const [
     contactResults,
     companyResult,
@@ -1159,6 +1274,14 @@ async function searchCrmBroadly(
     activityResult,
     voiceCaptureResult,
     quoteResult,
+    valuationResult,
+    auctionResult,
+    competitorResult,
+    customerProfileResult,
+    fleetResult,
+    incentiveResult,
+    financingResult,
+    outreachResult,
   ] = await Promise.all([
     Promise.all(contactSearches),
     callerClient
@@ -1198,6 +1321,55 @@ async function searchCrmBroadly(
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(3),
+    // ── DGE intelligence tables ─────────────────────────────────────────
+    callerClient
+      .from("market_valuations")
+      .select("id, stock_number, make, model, year, hours, condition, location, estimated_fmv, low_estimate, high_estimate, source, updated_at")
+      .or(makeModelOr)
+      .order("updated_at", { ascending: false })
+      .limit(5),
+    callerClient
+      .from("auction_results")
+      .select("id, source, auction_date, make, model, year, hours, hammer_price, location, condition")
+      .or(makeModelOr)
+      .order("auction_date", { ascending: false })
+      .limit(5),
+    callerClient
+      .from("competitor_listings")
+      .select("id, source, make, model, year, hours, asking_price, location, is_active, last_seen_at")
+      .or(makeModelOr)
+      .eq("is_active", true)
+      .order("last_seen_at", { ascending: false })
+      .limit(5),
+    callerClient
+      .from("customer_profiles_extended")
+      .select("id, customer_name, company_name, industry, region, pricing_persona, lifetime_value, total_deals, avg_deal_size, avg_discount_pct, fleet_size, seasonal_pattern, price_sensitivity_score, notes")
+      .or(`customer_name.ilike.${likePattern},company_name.ilike.${likePattern}`)
+      .limit(5),
+    callerClient
+      .from("fleet_intelligence")
+      .select("id, customer_name, make, model, year, current_hours, equipment_serial, utilization_trend, predicted_replacement_date, replacement_confidence, outreach_status, outreach_deal_value")
+      .or(`customer_name.ilike.${likePattern},${makeModelOr}`)
+      .order("updated_at", { ascending: false })
+      .limit(5),
+    callerClient
+      .from("manufacturer_incentives")
+      .select("id, oem_name, program_name, discount_type, discount_value, eligibility_criteria, start_date, end_date, is_active")
+      .or(`oem_name.ilike.${likePattern},program_name.ilike.${likePattern}`)
+      .eq("is_active", true)
+      .limit(5),
+    callerClient
+      .from("financing_rate_matrix")
+      .select("id, lender_name, term_months, credit_tier, rate_pct, dealer_holdback_pct, min_amount, max_amount, is_active")
+      .or(`lender_name.ilike.${likePattern},credit_tier.ilike.${likePattern}`)
+      .eq("is_active", true)
+      .limit(5),
+    callerClient
+      .from("outreach_queue")
+      .select("id, customer_name, equipment_description, trigger_reason, estimated_deal_value, priority_score, status, notes")
+      .or(`customer_name.ilike.${likePattern},equipment_description.ilike.${likePattern},trigger_reason.ilike.${likePattern}`)
+      .order("priority_score", { ascending: false })
+      .limit(5),
   ]);
 
   const seenIds = new Set<string>();
@@ -1454,6 +1626,212 @@ async function searchCrmBroadly(
     });
   }
 
+  // ── 9. Process market valuations ──────────────────────────────────────
+  for (const mv of ((valuationResult.data ?? []) as MarketValuationRow[]).slice(0, 3)) {
+    const label = [mv.year, mv.make, mv.model].filter(Boolean).join(" ");
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `market-valuation:${mv.id}`,
+      sourceTitle: `Market Valuation: ${label}`,
+      excerpt: truncateText(
+        [
+          `Equipment: ${label}`,
+          mv.stock_number ? `Stock #: ${mv.stock_number}` : null,
+          mv.hours ? `Hours: ${mv.hours}` : null,
+          mv.condition ? `Condition: ${mv.condition}` : null,
+          mv.location ? `Location: ${mv.location}` : null,
+          typeof mv.estimated_fmv === "number" ? `Fair Market Value: ${formatCurrency(mv.estimated_fmv)}` : null,
+          typeof mv.low_estimate === "number" && typeof mv.high_estimate === "number"
+            ? `Range: ${formatCurrency(mv.low_estimate)} – ${formatCurrency(mv.high_estimate)}`
+            : null,
+          `Source: ${mv.source}`,
+          `Updated: ${mv.updated_at.slice(0, 10)}`,
+        ].filter(Boolean).join("\n"),
+        500,
+      ),
+      confidence: 0.91,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 10. Process auction results ───────────────────────────────────────
+  const auctionRows = ((auctionResult.data ?? []) as AuctionResultRow[]).slice(0, 5);
+  if (auctionRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `auction-results:${auctionRows.map((a) => a.id).join(",")}`,
+      sourceTitle: `Auction Comps: ${[auctionRows[0].make, auctionRows[0].model].filter(Boolean).join(" ")}`,
+      excerpt: truncateText(
+        auctionRows.map((a) =>
+          [
+            `${a.auction_date}: ${[a.year, a.make, a.model].filter(Boolean).join(" ")}`,
+            `Hammer: ${formatCurrency(a.hammer_price)}`,
+            a.hours ? `${a.hours}hrs` : null,
+            a.condition ?? null,
+            a.location ?? null,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        600,
+      ),
+      confidence: 0.89,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 11. Process competitor listings ───────────────────────────────────
+  const competitorRows = ((competitorResult.data ?? []) as CompetitorListingRow[]).slice(0, 5);
+  if (competitorRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `competitor-listings:${competitorRows.map((c) => c.id).join(",")}`,
+      sourceTitle: `Competitor Inventory: ${[competitorRows[0].make, competitorRows[0].model].filter(Boolean).join(" ")}`,
+      excerpt: truncateText(
+        competitorRows.map((c) =>
+          [
+            `${[c.year, c.make, c.model].filter(Boolean).join(" ")}`,
+            typeof c.asking_price === "number" ? `Asking: ${formatCurrency(c.asking_price)}` : null,
+            c.hours ? `${c.hours}hrs` : null,
+            c.location ?? null,
+            `Source: ${c.source}`,
+            `Seen: ${c.last_seen_at.slice(0, 10)}`,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        600,
+      ),
+      confidence: 0.88,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 12. Process customer profiles / DNA ───────────────────────────────
+  for (const cp of ((customerProfileResult.data ?? []) as CustomerProfileExtRow[]).slice(0, 3)) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `customer-profile:${cp.id}`,
+      sourceTitle: `Customer DNA: ${cp.customer_name}`,
+      excerpt: truncateText(
+        [
+          `Customer: ${cp.customer_name}`,
+          cp.company_name ? `Company: ${cp.company_name}` : null,
+          cp.industry ? `Industry: ${cp.industry}` : null,
+          cp.region ? `Region: ${cp.region}` : null,
+          cp.pricing_persona ? `Pricing persona: ${cp.pricing_persona}` : null,
+          typeof cp.lifetime_value === "number" ? `Lifetime value: ${formatCurrency(cp.lifetime_value)}` : null,
+          typeof cp.total_deals === "number" ? `Total deals: ${cp.total_deals}` : null,
+          typeof cp.avg_deal_size === "number" ? `Avg deal size: ${formatCurrency(cp.avg_deal_size)}` : null,
+          typeof cp.avg_discount_pct === "number" ? `Avg discount: ${cp.avg_discount_pct}%` : null,
+          typeof cp.fleet_size === "number" ? `Fleet size: ${cp.fleet_size}` : null,
+          cp.seasonal_pattern ? `Seasonal pattern: ${cp.seasonal_pattern}` : null,
+          typeof cp.price_sensitivity_score === "number" ? `Price sensitivity: ${cp.price_sensitivity_score}` : null,
+          cp.notes ? `Notes: ${truncateText(cp.notes, 200)}` : null,
+        ].filter(Boolean).join("\n"),
+        600,
+      ),
+      confidence: 0.93,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 13. Process fleet intelligence ────────────────────────────────────
+  const fleetRows = ((fleetResult.data ?? []) as FleetIntelligenceRow[]).slice(0, 5);
+  if (fleetRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `fleet-intelligence:${fleetRows.map((f) => f.id).join(",")}`,
+      sourceTitle: `Fleet Records: ${fleetRows[0].customer_name}`,
+      excerpt: truncateText(
+        fleetRows.map((f) =>
+          [
+            `${f.customer_name}: ${[f.year, f.make, f.model].filter(Boolean).join(" ")}`,
+            f.equipment_serial ? `Serial: ${f.equipment_serial}` : null,
+            f.current_hours ? `Hours: ${f.current_hours}` : null,
+            f.utilization_trend ? `Trend: ${f.utilization_trend}` : null,
+            f.predicted_replacement_date ? `Predicted replacement: ${f.predicted_replacement_date}` : null,
+            typeof f.outreach_deal_value === "number" ? `Opportunity: ${formatCurrency(f.outreach_deal_value)}` : null,
+            f.outreach_status ? `Outreach: ${f.outreach_status}` : null,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        600,
+      ),
+      confidence: 0.88,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 14. Process manufacturer incentives ───────────────────────────────
+  const incentiveRows = ((incentiveResult.data ?? []) as ManufacturerIncentiveRow[]).slice(0, 3);
+  if (incentiveRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `incentives:${incentiveRows.map((i) => i.id).join(",")}`,
+      sourceTitle: "Manufacturer Incentives",
+      excerpt: truncateText(
+        incentiveRows.map((inc) =>
+          [
+            `${inc.oem_name} — ${inc.program_name}`,
+            `${inc.discount_type}: ${formatCurrency(inc.discount_value)}`,
+            inc.eligibility_criteria ? `Eligibility: ${inc.eligibility_criteria}` : null,
+            `Valid: ${inc.start_date}${inc.end_date ? ` to ${inc.end_date}` : " (ongoing)"}`,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        500,
+      ),
+      confidence: 0.90,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 15. Process financing rates ───────────────────────────────────────
+  const financingRows = ((financingResult.data ?? []) as FinancingRateRow[]).slice(0, 5);
+  if (financingRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `financing-rates:${financingRows.map((f) => f.id).join(",")}`,
+      sourceTitle: "Financing Options",
+      excerpt: truncateText(
+        financingRows.map((fr) =>
+          [
+            `${fr.lender_name} — ${fr.term_months}mo`,
+            `Rate: ${fr.rate_pct}%`,
+            `Credit: ${fr.credit_tier}`,
+            typeof fr.dealer_holdback_pct === "number" ? `Holdback: ${fr.dealer_holdback_pct}%` : null,
+            typeof fr.min_amount === "number" && typeof fr.max_amount === "number"
+              ? `Range: ${formatCurrency(fr.min_amount)}–${formatCurrency(fr.max_amount)}`
+              : null,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        500,
+      ),
+      confidence: 0.86,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 16. Process outreach queue ────────────────────────────────────────
+  const outreachRows = ((outreachResult.data ?? []) as OutreachQueueRow[]).slice(0, 5);
+  if (outreachRows.length > 0) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `outreach-queue:${outreachRows.map((o) => o.id).join(",")}`,
+      sourceTitle: "Outreach Opportunities",
+      excerpt: truncateText(
+        outreachRows.map((oq) =>
+          [
+            `${oq.customer_name}: ${oq.equipment_description}`,
+            `Reason: ${oq.trigger_reason}`,
+            typeof oq.estimated_deal_value === "number" ? `Est. value: ${formatCurrency(oq.estimated_deal_value)}` : null,
+            typeof oq.priority_score === "number" ? `Priority: ${oq.priority_score}` : null,
+            `Status: ${oq.status}`,
+            oq.notes ? `Notes: ${truncateText(oq.notes, 100)}` : null,
+          ].filter(Boolean).join(" | "),
+        ).join("\n"),
+        600,
+      ),
+      confidence: 0.87,
+      accessClass: "crm_context",
+    });
+  }
+
   if (evidence.length > 0) {
     console.info(
       `[chat:${input.traceId}] crm_broad_search matched=${evidence.length} query="${queryText.slice(0, 40)}"`,
@@ -1621,7 +1999,7 @@ Deno.serve(async (req) => {
     );
 
     const systemPrompt = contextBlock
-      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment records, voice field notes, sales documents, and deal history. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
+      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
 ${contextBlock}
 
@@ -1630,8 +2008,14 @@ Rules:
 - Cite the source title naturally in the answer when it materially supports the claim.
 - Use CRM evidence (contacts, deals, equipment, voice notes, activities) for customer-specific and operational facts.
 - Use document evidence for policy, process, and product reference facts.
+- Market valuations provide current fair market values — cite the source and date.
+- Auction results are historical comps — present as comparable sales data.
+- Competitor listings show what rival dealers are offering — present as competitive intelligence.
+- Customer DNA profiles describe buying patterns, negotiation style, and price sensitivity — use to contextualize customer questions.
+- Fleet intelligence shows customer equipment and replacement predictions — use for proactive opportunity insights.
+- Manufacturer incentives are active OEM programs — highlight when relevant to equipment being discussed.
+- Financing rates are current lending terms — present specific rates and terms when asked about financing.
 - Voice notes contain field observations recorded by sales reps — treat them as firsthand accounts.
-- Equipment records contain fleet inventory details — use them for availability, specs, and pricing questions.
 - If CRM and document evidence conflict, say which source you relied on.
 - If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
       : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
