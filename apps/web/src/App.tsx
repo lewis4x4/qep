@@ -501,7 +501,7 @@ function App() {
                 path="/crm"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmHubPage userRole={profile.role} />
+                    <CrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
