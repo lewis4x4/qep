@@ -41,6 +41,7 @@ describe("isTransientAuthRecoveryError", () => {
 
   it("treats Safari load failures as transient", () => {
     expect(isTransientAuthRecoveryError("TypeError: Load failed")).toBe(true);
+    expect(isTransientAuthRecoveryError("Load failed")).toBe(true);
   });
 
   it("does not treat expired sessions as transient", () => {

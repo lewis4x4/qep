@@ -86,6 +86,12 @@ export function useAuth(): AuthState {
     )
       .then(async ({ data: { session }, error: sessionReadError }) => {
         if (sessionReadError) {
+          const readMsg = sessionReadError.message ?? "";
+          if (isTransientAuthRecoveryError(readMsg)) {
+            await supabase.auth.signOut();
+            setState({ user: null, session: null, profile: null, loading: false, error: null });
+            return;
+          }
           await supabase.auth.signOut();
           setState({
             user: null,
@@ -161,6 +167,12 @@ export function useAuth(): AuthState {
         const shouldSilenceAnonymousBootstrapError =
           !hasRecoverableClientState() && (timedOut || transientAuthFailure || !looksAuth);
         if (shouldSilenceAnonymousBootstrapError) {
+          setState({ user: null, session: null, profile: null, loading: false, error: null });
+          return;
+        }
+        // Stale local token + network blip (e.g. Safari "Load failed"): never imply auth is down.
+        if (transientAuthFailure) {
+          void supabase.auth.signOut();
           setState({ user: null, session: null, profile: null, loading: false, error: null });
           return;
         }

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import qepLoginYardHero from "@/assets/qep-login-yard-hero.svg";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
+import { isTransientAuthRecoveryError } from "@/lib/auth-recovery";
 import { supabase } from "../lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,8 +26,15 @@ interface LoginPageProps {
   authError?: string | null;
 }
 
+function friendlyAuthErrorMessage(raw: string): string {
+  if (isTransientAuthRecoveryError(raw)) {
+    return "We couldn't reach the server. Check your connection, try turning off VPN or iCloud Private Relay, then try again.";
+  }
+  return raw;
+}
+
 const HERO_METRICS = [
-  { label: "Branches connected", value: "3 live", icon: Building2 },
+  { label: "Branches connected", value: "2 live", icon: Building2 },
   { label: "Field follow-up", value: "< 2 min", icon: Truck },
   { label: "Quote turnaround", value: "Same day", icon: Wrench },
 ];
@@ -49,7 +57,7 @@ export function LoginPage({ authError }: LoginPageProps) {
       toast({
         variant: "destructive",
         title: "Sign-in failed",
-        description: error.message,
+        description: friendlyAuthErrorMessage(error.message),
       });
     }
     setLoading(false);
@@ -66,7 +74,7 @@ export function LoginPage({ authError }: LoginPageProps) {
       toast({
         variant: "destructive",
         title: "Couldn't send magic link",
-        description: error.message,
+        description: friendlyAuthErrorMessage(error.message),
       });
     } else {
       toast({
@@ -89,13 +97,15 @@ export function LoginPage({ authError }: LoginPageProps) {
 
             <div className="relative z-10 flex h-full flex-col justify-between gap-8">
               <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="rounded-2xl bg-black/40 p-2 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10">
-                    <BrandLogo className="h-11 w-auto max-w-[min(100%,220px)] sm:h-12" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold tracking-tight text-white">{BRAND_NAME}</p>
-                    <p className="text-sm text-slate-300">Dealership operating system</p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
+                  <div className="rounded-2xl bg-black/50 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10 w-fit max-w-full">
+                    <BrandLogo
+                      className="h-[4.25rem] w-auto max-w-[min(100%,320px)] sm:h-[4.75rem]"
+                      decorative
+                    />
+                    <span className="sr-only">
+                      {BRAND_NAME}. Dealership operating system.
+                    </span>
                   </div>
                 </div>
 
@@ -152,14 +162,6 @@ export function LoginPage({ authError }: LoginPageProps) {
                         <p className="mt-1 text-sm font-medium text-white">
                           A dealership login screen should look like the business it runs.
                         </p>
-                      </div>
-
-                      <div className="absolute bottom-4 right-4 rounded-2xl border border-white/10 bg-[#0A121E]/82 px-3 py-2 backdrop-blur">
-                        <div className="flex items-center gap-2 text-xs text-emerald-200">
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          Customer follow-up live
-                        </div>
-                        <p className="mt-1 text-[11px] text-slate-400">Ready for real dealership photography later.</p>
                       </div>
                     </div>
                   </div>
