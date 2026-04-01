@@ -8,8 +8,8 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-true-streaming";
-const CHAT_MODEL = "gpt-5.4-nano";
+const CHAT_EDGE_REVISION = "20260401-model-upgrade";
+const CHAT_MODEL = "gpt-5.4-mini";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
