@@ -127,7 +127,7 @@ async function dbLoadConversationMessages(conversationId: string): Promise<Messa
   }));
 }
 
-export function ChatPage({ userEmail }: ChatPageProps) {
+export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -617,7 +617,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
-          <ChatEmptyState onSuggestionClick={handleSuggestion} />
+          <ChatEmptyState userRole={userRole} onSuggestionClick={handleSuggestion} />
         ) : (
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((message) => (
