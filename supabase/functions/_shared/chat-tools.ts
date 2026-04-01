@@ -177,6 +177,34 @@ export const CHAT_TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "getDealCoaching",
+      description: "Get AI coaching for a specific deal based on historical win/loss patterns, deal velocity, and success factors. Analyzes similar past deals to recommend what to do. Use when a user asks for coaching, advice on a deal, how to close a deal, or what worked on similar deals.",
+      parameters: {
+        type: "object",
+        properties: {
+          deal_name: { type: "string", description: "Name or partial name of the deal to coach on" },
+        },
+        required: ["deal_name"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "getWinLossAnalysis",
+      description: "Get aggregate win/loss analysis across historical deals — win rate, average deal size, average time-to-close, common loss reasons, and top success patterns. Use when user asks about win rate, deal performance, or what makes deals succeed or fail.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "Look back period in days (default 90, max 365)" },
+          rep_id: { type: "string", description: "Filter to a specific rep's deals (optional)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "getCompetitiveIntelligence",
       description: "Get competitive intelligence from voice note mentions. Shows which competitors are being mentioned by reps, how often, and in what sentiment context. Use when user asks about competitors, competitive landscape, or market positioning.",
       parameters: {
@@ -787,6 +815,238 @@ async function execGetEntityBriefing(
   return { error: `Unknown entity_type: ${args.entity_type}` };
 }
 
+async function execGetDealCoaching(
+  db: SupabaseClient,
+  args: { deal_name: string },
+): Promise<unknown> {
+  const name = (args.deal_name ?? "").trim();
+  if (!name) return { error: "deal_name is required" };
+
+  // Find the active deal
+  const { data: deals } = await db
+    .from("crm_deals")
+    .select("id, name, amount, stage_id, assigned_rep_id, company_id, expected_close_on, created_at, updated_at, last_activity_at, metadata")
+    .ilike("name", `%${name}%`)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (!deals || deals.length === 0) return { error: `No active deal found matching "${name}"` };
+  const deal = deals[0] as Record<string, unknown>;
+
+  // Resolve stage
+  let stageName = "Unknown";
+  let stageOrder = 0;
+  if (deal.stage_id) {
+    const { data: stage } = await db.from("crm_deal_stages").select("name, display_order, probability, is_closed_won, is_closed_lost").eq("id", deal.stage_id).single();
+    if (stage) {
+      const s = stage as Record<string, unknown>;
+      stageName = s.name as string;
+      stageOrder = s.display_order as number;
+    }
+  }
+
+  // Get deal's activity history
+  const { data: activities, count: activityCount } = await db
+    .from("crm_activities")
+    .select("activity_type, occurred_at", { count: "exact" })
+    .eq("deal_id", deal.id)
+    .is("deleted_at", null)
+    .order("occurred_at", { ascending: false })
+    .limit(10);
+
+  // Find similar historical deals (same stage range, similar amount)
+  const { data: wonDeals } = await db
+    .from("crm_deals_rep_safe")
+    .select("id, name, amount, created_at, closed_at")
+    .not("closed_at", "is", null)
+    .limit(50);
+
+  // Compute patterns from won/lost deals
+  const wins: { amount: number; duration_days: number }[] = [];
+  const losses: { amount: number; duration_days: number; loss_reason: string | null }[] = [];
+
+  if (wonDeals) {
+    for (const d of wonDeals as Record<string, unknown>[]) {
+      const duration = d.closed_at && d.created_at
+        ? Math.floor((new Date(d.closed_at as string).getTime() - new Date(d.created_at as string).getTime()) / 86_400_000)
+        : null;
+
+      // We need to check if it's won or lost via stage
+      // For now, bucket by presence of loss_reason
+      if ((d as Record<string, unknown>).loss_reason) {
+        losses.push({
+          amount: Number(d.amount) || 0,
+          duration_days: duration ?? 0,
+          loss_reason: (d as Record<string, unknown>).loss_reason as string | null,
+        });
+      } else {
+        wins.push({
+          amount: Number(d.amount) || 0,
+          duration_days: duration ?? 0,
+        });
+      }
+    }
+  }
+
+  const dealAge = Math.floor(
+    (Date.now() - new Date(deal.created_at as string).getTime()) / 86_400_000,
+  );
+  const daysSinceActivity = deal.last_activity_at
+    ? Math.floor((Date.now() - new Date(deal.last_activity_at as string).getTime()) / 86_400_000)
+    : null;
+
+  const avgWinDuration = wins.length > 0
+    ? Math.round(wins.reduce((sum, w) => sum + w.duration_days, 0) / wins.length)
+    : null;
+  const avgWinAmount = wins.length > 0
+    ? Math.round(wins.reduce((sum, w) => sum + w.amount, 0) / wins.length)
+    : null;
+
+  // Build coaching insights
+  const insights: string[] = [];
+
+  if (avgWinDuration && dealAge > avgWinDuration * 1.5) {
+    insights.push(`This deal has been open ${dealAge} days, which is ${Math.round((dealAge / avgWinDuration - 1) * 100)}% longer than the average winning deal (${avgWinDuration} days). Consider accelerating or reassessing.`);
+  }
+
+  if (daysSinceActivity && daysSinceActivity > 5) {
+    insights.push(`No activity in ${daysSinceActivity} days. Winning deals typically have activity every 3-4 days. Schedule a touchpoint.`);
+  }
+
+  if (stageOrder <= 2 && deal.expected_close_on) {
+    const daysToClose = Math.floor(
+      (new Date(deal.expected_close_on as string).getTime() - Date.now()) / 86_400_000,
+    );
+    if (daysToClose < 14) {
+      insights.push(`Deal is in early stage "${stageName}" but expected to close in ${daysToClose} days. Either advance the deal stage quickly or update the close date.`);
+    }
+  }
+
+  if (activityCount !== null && activityCount < 3) {
+    insights.push(`Only ${activityCount} activities logged. Successful deals average 5+ touchpoints before closing.`);
+  }
+
+  // Aggregate loss reasons
+  const lossReasons = losses
+    .map((l) => l.loss_reason)
+    .filter(Boolean)
+    .reduce((acc: Record<string, number>, r) => { acc[r!] = (acc[r!] ?? 0) + 1; return acc; }, {});
+
+  return {
+    deal: {
+      name: deal.name,
+      amount: deal.amount,
+      stage: stageName,
+      age_days: dealAge,
+      days_since_activity: daysSinceActivity,
+      expected_close: deal.expected_close_on,
+      activity_count: activityCount,
+    },
+    coaching_insights: insights,
+    benchmarks: {
+      avg_win_duration_days: avgWinDuration,
+      avg_win_amount: avgWinAmount,
+      win_count: wins.length,
+      loss_count: losses.length,
+      win_rate: wins.length + losses.length > 0
+        ? Math.round((wins.length / (wins.length + losses.length)) * 100)
+        : null,
+      top_loss_reasons: Object.entries(lossReasons)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([reason, count]) => ({ reason, count })),
+    },
+    recent_activities: (activities ?? []).map((a: Record<string, unknown>) => ({
+      type: a.activity_type,
+      date: a.occurred_at,
+    })),
+  };
+}
+
+async function execGetWinLossAnalysis(
+  db: SupabaseClient,
+  args: { days?: number; rep_id?: string },
+): Promise<unknown> {
+  const days = clamp(args.days ?? 90, 7, 365);
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+  // Get closed deals with stage info
+  let query = db
+    .from("crm_deals")
+    .select("id, name, amount, stage_id, created_at, closed_at, loss_reason, assigned_rep_id")
+    .is("deleted_at", null)
+    .not("closed_at", "is", null)
+    .gte("closed_at", since);
+
+  if (args.rep_id) {
+    query = query.eq("assigned_rep_id", args.rep_id);
+  }
+
+  const { data: deals } = await query.limit(200);
+  if (!deals || deals.length === 0) {
+    return { message: `No closed deals found in the last ${days} days.` };
+  }
+
+  // Resolve stages to determine won/lost
+  const stageIds = [...new Set((deals as Record<string, unknown>[]).map((d) => d.stage_id).filter(Boolean))];
+  let stageMap: Record<string, { name: string; is_closed_won: boolean; is_closed_lost: boolean }> = {};
+  if (stageIds.length > 0) {
+    const { data: stages } = await db.from("crm_deal_stages").select("id, name, is_closed_won, is_closed_lost").in("id", stageIds);
+    if (stages) {
+      stageMap = Object.fromEntries(
+        (stages as { id: string; name: string; is_closed_won: boolean; is_closed_lost: boolean }[]).map((s) => [s.id, s]),
+      );
+    }
+  }
+
+  let wonCount = 0;
+  let lostCount = 0;
+  let wonAmount = 0;
+  let lostAmount = 0;
+  const wonDurations: number[] = [];
+  const lostDurations: number[] = [];
+  const lossReasons: Record<string, number> = {};
+
+  for (const deal of deals as Record<string, unknown>[]) {
+    const stage = stageMap[deal.stage_id as string];
+    const duration = deal.closed_at && deal.created_at
+      ? Math.floor((new Date(deal.closed_at as string).getTime() - new Date(deal.created_at as string).getTime()) / 86_400_000)
+      : 0;
+
+    if (stage?.is_closed_won) {
+      wonCount++;
+      wonAmount += Number(deal.amount) || 0;
+      wonDurations.push(duration);
+    } else if (stage?.is_closed_lost || deal.loss_reason) {
+      lostCount++;
+      lostAmount += Number(deal.amount) || 0;
+      lostDurations.push(duration);
+      if (deal.loss_reason) {
+        lossReasons[deal.loss_reason as string] = (lossReasons[deal.loss_reason as string] ?? 0) + 1;
+      }
+    }
+  }
+
+  const avgFn = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+
+  return {
+    period_days: days,
+    total_closed: wonCount + lostCount,
+    wins: wonCount,
+    losses: lostCount,
+    win_rate_pct: wonCount + lostCount > 0 ? Math.round((wonCount / (wonCount + lostCount)) * 100) : null,
+    won_revenue: wonAmount,
+    lost_revenue: lostAmount,
+    avg_win_duration_days: avgFn(wonDurations),
+    avg_loss_duration_days: avgFn(lostDurations),
+    avg_deal_size_won: wonCount > 0 ? Math.round(wonAmount / wonCount) : null,
+    top_loss_reasons: Object.entries(lossReasons)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([reason, count]) => ({ reason, count })),
+  };
+}
+
 async function execGetCompetitiveIntelligence(
   db: SupabaseClient,
   args: { competitor_name?: string; days?: number; limit?: number },
@@ -936,6 +1196,8 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getRecentActivities: (db, args) => execGetRecentActivities(db, args as Parameters<typeof execGetRecentActivities>[1]),
   getManufacturerIncentives: (db, args) => execGetManufacturerIncentives(db, args as Parameters<typeof execGetManufacturerIncentives>[1]),
   getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
+  getDealCoaching: (db, args) => execGetDealCoaching(db, args as Parameters<typeof execGetDealCoaching>[1]),
+  getWinLossAnalysis: (db, args) => execGetWinLossAnalysis(db, args as Parameters<typeof execGetWinLossAnalysis>[1]),
   getCompetitiveIntelligence: (db, args) => execGetCompetitiveIntelligence(db, args as Parameters<typeof execGetCompetitiveIntelligence>[1]),
   getVoiceNoteInsights: (db, args) => execGetVoiceNoteInsights(db, args as Parameters<typeof execGetVoiceNoteInsights>[1]),
   getAnomalyAlerts: (db, args) => execGetAnomalyAlerts(db, args as Parameters<typeof execGetAnomalyAlerts>[1]),
