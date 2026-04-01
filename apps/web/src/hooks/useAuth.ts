@@ -3,8 +3,8 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
 import {
-  hasCachedAuthProfile,
   isTransientAuthRecoveryError,
+  messageSuggestsCorruptLocalAuthStorage,
   readCachedProfile,
   writeCachedProfile,
 } from "../lib/auth-recovery";
@@ -38,18 +38,8 @@ export function useAuth(): AuthState {
     error: null,
   });
 
-  // Gate onAuthStateChange handler until getSession() resolves. The
-  // INITIAL_SESSION event fires before getSession() completes; without this
-  // gate the deferred setTimeout(0) handler would set loading=false (no error)
-  // before the getSession() handler can detect corrupt tokens and set the
-  // session-expired error for the modal.
   const initializedRef = useRef(false);
 
-  // Snapshot token presence during RENDER — not in useEffect. Supabase's
-  // createClient() starts async _initialize() → _recoverSession() which
-  // reads "garbage" tokens and removes them from localStorage. By the time
-  // useEffect fires (post-paint), the cleanup is already done and the token
-  // is gone. Capturing here (first render) beats the async cleanup.
   const hadStoredTokenRef = useRef(
     Object.keys(localStorage).some(
       (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
@@ -65,8 +55,10 @@ export function useAuth(): AuthState {
       );
     }
 
+    // Only Supabase token keys count: stale sessionStorage profile cache after
+    // logout must not force the outage banner on anonymous bootstrap.
     function hasRecoverableClientState(): boolean {
-      return hadStoredToken || hasStoredSupabaseToken() || hasCachedAuthProfile();
+      return hadStoredToken || hasStoredSupabaseToken();
     }
 
     function applyProfileState(session: Session, profile: Profile | null, error: string | null): void {
@@ -140,8 +132,6 @@ export function useAuth(): AuthState {
           // that Supabase silently cleaned up during parsing.
           const stillHasToken = hasStoredSupabaseToken();
           if (hadStoredToken || stillHasToken) {
-            // Clean up any remaining tokens and force signOut so
-            // App.tsx onAuthStateChange fires SIGNED_OUT.
             Object.keys(localStorage)
               .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
               .forEach((k) => localStorage.removeItem(k));
@@ -167,7 +157,7 @@ export function useAuth(): AuthState {
           lower.includes("jwt") ||
           lower.includes("token") ||
           lower.includes("session") ||
-          lower.includes("json");
+          messageSuggestsCorruptLocalAuthStorage(raw);
         const shouldSilenceAnonymousBootstrapError =
           !hasRecoverableClientState() && (timedOut || transientAuthFailure || !looksAuth);
         if (shouldSilenceAnonymousBootstrapError) {
@@ -186,13 +176,8 @@ export function useAuth(): AuthState {
         initializedRef.current = true;
       });
 
-    // Listen for auth changes. Defer async work off the Supabase auth callback
-    // stack — awaiting getUser()/fetchProfile inside the synchronous listener can
-    // deadlock the client on hard refresh (INITIAL_SESSION + getSession race).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setTimeout(() => {
-        // Skip until getSession() initial handler completes — it handles
-        // corrupt-token detection and sets the session-expired error.
         if (!initializedRef.current) return;
         void (async () => {
           try {
@@ -217,8 +202,6 @@ export function useAuth(): AuthState {
               }
               applyProfileState(session, profile, error);
             } else {
-              // Preserve any existing error (e.g. corrupt-token detection) so
-              // App.tsx can still trigger SessionExpiredModal.
               setState((prev) => ({
                 user: null, session: null, profile: null, loading: false,
                 error: prev.error,
@@ -240,11 +223,11 @@ export function useAuth(): AuthState {
                 !prev.profile &&
                 (raw === "Auth token validation timed out" || transientAuthFailure);
               return {
-              user: prev.user,
-              session: prev.session,
-              profile: prev.profile,
-              loading: false,
-              error: shouldSilenceAnonymousBootstrapError ? null : message,
+                user: prev.user,
+                session: prev.session,
+                profile: prev.profile,
+                loading: false,
+                error: shouldSilenceAnonymousBootstrapError ? null : message,
               };
             });
           }

@@ -14,6 +14,7 @@ import { hubspotAdminSupabase } from "@/lib/hubspot-admin-supabase";
 import { cn } from "@/lib/utils";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import type { UserRole } from "@/lib/database.types";
+import { BRAND_NAME } from "@/components/BrandLogo";
 
 export interface IntegrationCardConfig {
   key: string;
@@ -691,7 +692,7 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
             <Wifi className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" aria-hidden="true" />
             <h3 className="text-base font-semibold text-foreground mb-1">No integrations found</h3>
             <p className="text-sm text-muted-foreground">
-              Your integrations aren't set up yet. Contact your administrator or QEP support to complete
+              Your integrations aren't set up yet. Contact your administrator or {BRAND_NAME} support to complete
               initial setup.
             </p>
           </div>

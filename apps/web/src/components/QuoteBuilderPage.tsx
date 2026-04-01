@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { BRAND_NAME } from "@/components/BrandLogo";
 import {
   CustomerInsightCard,
   MarketValuationCard,
@@ -917,7 +918,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
                 </h2>
               </div>
 
-              {/* QEP branding header */}
+              {/* Company branding header */}
               <Card>
                 <CardContent className="pt-4 pb-3 flex items-start justify-between gap-3">
                   <div>
@@ -1544,7 +1545,7 @@ function ProposalPrint({
             confirmation.
           </p>
           <p>
-            Financing options available. Contact your QEP sales representative for details.
+            Financing options available. Contact your {BRAND_NAME} sales representative for details.
           </p>
         </div>
       </div>

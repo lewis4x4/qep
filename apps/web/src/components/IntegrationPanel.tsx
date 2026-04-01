@@ -35,6 +35,7 @@ import type {
 import { supabase } from "@/lib/supabase";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import { useToast } from "@/hooks/use-toast";
+import { BRAND_NAME } from "@/components/BrandLogo";
 
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -981,7 +982,7 @@ export function IntegrationPanel({
     setHubspotCutoverDecisionNote((current) =>
       current.trim().length > 0
         ? current
-        : "HubSpot is now source-only. Operators should stay in QEP OS while post-cutover validation runs.",
+        : `HubSpot is now source-only. Operators should stay in ${BRAND_NAME} while post-cutover validation runs.`,
     );
     toast({
       title: "HubSpot moved to source-only",

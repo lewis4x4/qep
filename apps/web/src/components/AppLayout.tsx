@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import { Menu, HardHat, Lock } from "lucide-react";
+import { Menu, Lock } from "lucide-react";
+import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
@@ -142,13 +143,12 @@ function MobileNavContent({
 
   return (
     <div className="flex flex-col h-full bg-qep-dark">
-      <div className="flex items-center gap-2 px-4 py-5">
-        <HardHat className="w-7 h-7 text-qep-orange shrink-0" />
-        <div>
-          <p className="font-bold text-sm leading-none text-white">QEP</p>
-          <p className="text-xs leading-none mt-0.5 text-[#94A3B8]">
-            Quality Equipment &amp; Parts
-          </p>
+      <div className="flex items-center gap-3 px-4 py-5">
+        <div className="shrink-0 rounded-md bg-black/50 p-1 ring-1 ring-white/10">
+          <BrandLogo className="h-8 w-auto max-w-[140px]" decorative />
+        </div>
+        <div className="min-w-0">
+          <p className="font-bold text-sm leading-tight text-white">{BRAND_NAME}</p>
         </div>
       </div>
 
@@ -236,9 +236,13 @@ export function AppLayout({
         className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10"
         role="banner"
       >
-        <div className="flex items-center gap-2">
-          <HardHat className="w-6 h-6 text-qep-orange" aria-hidden="true" />
-          <span className="font-bold text-sm text-white">QEP</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="shrink-0 rounded bg-black/40 p-0.5 ring-1 ring-white/10">
+            <BrandLogo className="h-6 w-auto max-w-[100px]" decorative />
+          </div>
+          <span className="truncate font-semibold text-[11px] leading-tight text-white sm:text-xs" title={BRAND_NAME}>
+            {BRAND_NAME}
+          </span>
         </div>
       </div>
 

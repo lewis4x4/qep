@@ -12,6 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import qepLoginYardHero from "@/assets/qep-login-yard-hero.svg";
+import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { supabase } from "../lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -88,12 +89,12 @@ export function LoginPage({ authError }: LoginPageProps) {
 
             <div className="relative z-10 flex h-full flex-col justify-between gap-8">
               <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-[0_18px_40px_rgba(232,119,34,0.28)]">
-                    <HardHat className="h-7 w-7 text-white" />
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="rounded-2xl bg-black/40 p-2 shadow-[0_18px_40px_rgba(0,0,0,0.35)] ring-1 ring-white/10">
+                    <BrandLogo className="h-11 w-auto max-w-[min(100%,220px)] sm:h-12" />
                   </div>
-                  <div>
-                    <p className="text-lg font-semibold tracking-[0.08em] text-white">QEP</p>
+                  <div className="min-w-0">
+                    <p className="text-lg font-semibold tracking-tight text-white">{BRAND_NAME}</p>
                     <p className="text-sm text-slate-300">Dealership operating system</p>
                   </div>
                 </div>
@@ -131,7 +132,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     <div className="relative aspect-[4/3] bg-[linear-gradient(180deg,_#304563_0%,_#1A2D45_34%,_#182232_62%,_#0B1322_100%)]">
                       <img
                         src={qepLoginYardHero}
-                        alt="Stylized QEP dealership yard with equipment, service building, and machines ready for the day."
+                        alt={`Stylized ${BRAND_NAME} dealership yard with equipment, service building, and machines ready for the day.`}
                         className="absolute inset-0 h-full w-full object-cover"
                       />
                       <div className="absolute inset-0 bg-[linear-gradient(180deg,_rgba(11,19,34,0.08)_0%,_rgba(11,19,34,0.2)_48%,_rgba(10,18,30,0.72)_100%)]" />
@@ -202,7 +203,8 @@ export function LoginPage({ authError }: LoginPageProps) {
                     Welcome back
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    Sign in with your QEP work account to access knowledge, CRM follow-up, voice capture, and quotes.
+                    Sign in with your {BRAND_NAME} work account to access knowledge, CRM follow-up, voice capture, and
+                    quotes.
                   </p>
                 </div>
 

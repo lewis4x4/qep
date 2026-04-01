@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
-  HardHat,
   Search,
   Bell,
   LogOut,
@@ -9,6 +8,7 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
+import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -262,9 +262,21 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
       >
         {/* Left: Logo + Breadcrumb */}
         <div className="flex items-center gap-3 shrink-0">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <HardHat className="w-6 h-6 text-qep-orange" aria-hidden="true" />
-            <span className="font-bold text-sm text-white">QEP</span>
+          <Link
+            to="/dashboard"
+            className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-2"
+            aria-label={`${BRAND_NAME} — dashboard`}
+          >
+            <div className="shrink-0 rounded bg-black/40 p-0.5 ring-1 ring-white/10">
+              <BrandLogo className="h-7 w-auto max-w-[104px]" decorative />
+            </div>
+            <span
+              className="hidden font-semibold text-xs leading-tight text-white sm:inline sm:max-w-[11rem] sm:truncate md:max-w-[14rem] lg:max-w-none"
+              title={BRAND_NAME}
+              aria-hidden
+            >
+              {BRAND_NAME}
+            </span>
           </Link>
 
           {breadcrumbLabel && (
@@ -463,7 +475,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
           <DialogHeader>
             <DialogTitle>Sign out?</DialogTitle>
             <DialogDescription>
-              You'll need to sign in again to access QEP.
+              {`You'll need to sign in again to access ${BRAND_NAME}.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

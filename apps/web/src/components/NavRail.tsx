@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
 import { resolveNavItems, getInitials } from "@/lib/nav-config";
+import { BRAND_NAME } from "@/components/BrandLogo";
 
 interface Profile {
   id: string;
@@ -241,7 +242,7 @@ export function NavRail({
           <DialogHeader>
             <DialogTitle>Sign out?</DialogTitle>
             <DialogDescription>
-              You'll need to sign in again to access QEP.
+              {`You'll need to sign in again to access ${BRAND_NAME}.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

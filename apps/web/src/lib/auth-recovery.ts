@@ -30,9 +30,34 @@ interface WriteStorageLike extends ReadStorageLike {
 }
 
 export function isTransientAuthRecoveryError(message: string): boolean {
-  return /lock broken|steal option|timeout|timed out|network request failed|failed to fetch|load failed|networkerror/i.test(
-    message
-  );
+  if (
+    /lock broken|steal option|timeout|timed out|network request failed|failed to fetch|load failed|networkerror/i.test(
+      message
+    )
+  ) {
+    return true;
+  }
+  // CDN / proxy HTML error pages parsed as JSON
+  if (/unexpected token\s*<\s*(in\s*json)?|expected json|DOCTYPE/i.test(message)) {
+    return true;
+  }
+  if (
+    /connection (refused|reset|lost)|econnrefused|socket hang up|cors|cross-origin|aborted|cancel(ed)?|bad gateway|service unavailable|gateway timeout/i.test(
+      message
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** True when the message likely comes from corrupt *local* session JSON, not a generic API JSON error. */
+export function messageSuggestsCorruptLocalAuthStorage(message: string): boolean {
+  if (isTransientAuthRecoveryError(message)) {
+    return false;
+  }
+  const lower = message.toLowerCase();
+  return /unexpected token(?!\s*<\s*in)|unterminated json|json\.parse|not valid json/i.test(lower);
 }
 
 export function readCachedProfile(

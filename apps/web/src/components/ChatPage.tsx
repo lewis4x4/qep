@@ -473,7 +473,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
           <p className="text-sm text-muted-foreground">
             {hasChatContext
               ? "Ask questions grounded in your accessible documents and this customer context"
-              : "Ask questions about QEP equipment and processes"}
+              : "Ask questions about equipment and dealership processes"}
           </p>
         </div>
 
@@ -590,7 +590,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about QEP equipment, policies, or procedures…"
+            placeholder="Ask about equipment, policies, or procedures…"
             rows={1}
             disabled={streaming}
             className={cn(
