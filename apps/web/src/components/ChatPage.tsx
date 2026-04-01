@@ -562,7 +562,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
                     {history.map((session) => (
                       <li key={session.id}>
                         <button
-                          onClick={() => loadSession(session)}
+                          onClick={() => loadSession(session).catch(() => {})}
                           className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors duration-100 group"
                         >
                           <p className="text-sm text-foreground truncate">{session.title}</p>

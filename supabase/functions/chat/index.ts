@@ -396,24 +396,6 @@ function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
 
 type EmbedQueryResult = { ok: true; vector: number[] } | { ok: false; reason: string };
 
-type OpenAIChatCompletionResponse = {
-  choices?: Array<{
-    message?: {
-      content?:
-        | string
-        | Array<{
-            type?: string;
-            text?: string;
-          }>;
-    };
-  }>;
-  error?: {
-    message?: string;
-    type?: string;
-    code?: string;
-  };
-};
-
 async function embedQuery(message: string, traceId: string): Promise<EmbedQueryResult> {
   try {
     const embeddingResponse = await fetch("https://api.openai.com/v1/embeddings", {
@@ -448,59 +430,6 @@ async function embedQuery(message: string, traceId: string): Promise<EmbedQueryR
     console.error(`[chat:${traceId}] embedding_failed exception`, error);
     return { ok: false, reason: "embedding_exception" };
   }
-}
-
-function extractOpenAIText(payload: OpenAIChatCompletionResponse): string | null {
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content === "string") {
-    return content.trim() || null;
-  }
-  if (Array.isArray(content)) {
-    const text = content
-      .filter((item) => item?.type === "text" || item?.type === "output_text")
-      .map((item) => item.text ?? "")
-      .join("")
-      .trim();
-    return text || null;
-  }
-  return null;
-}
-
-async function generateAnswerWithOpenAI(input: {
-  traceId: string;
-  systemPrompt: string;
-  history: ChatMessage[];
-  message: string;
-}): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: CHAT_MODEL,
-      messages: [
-        { role: "system", content: input.systemPrompt },
-        ...input.history,
-        { role: "user", content: input.message },
-      ],
-      max_completion_tokens: 2048,
-    }),
-  });
-
-  const payload = await response.json() as OpenAIChatCompletionResponse;
-  if (!response.ok) {
-    const detail = payload.error?.message ?? `openai_http_${response.status}`;
-    console.error(`[chat:${input.traceId}] openai_generation_failed`, payload);
-    throw new Error(detail);
-  }
-
-  const text = extractOpenAIText(payload);
-  if (!text) {
-    throw new Error("empty_model_output");
-  }
-  return text;
 }
 
 /**
