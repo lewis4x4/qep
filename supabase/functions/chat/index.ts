@@ -8,7 +8,7 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260331-openai-nano-retrieval2";
+const CHAT_EDGE_REVISION = "20260401-crm-name-search";
 const CHAT_MODEL = "gpt-5.4-nano";
 
 const ALLOWED_ORIGINS = [
@@ -1086,6 +1086,269 @@ async function buildCustomerContextEvidence(
   return evidence;
 }
 
+/**
+ * When no explicit CRM context IDs are provided, extract plausible person /
+ * company names from the user message and search CRM contacts, companies,
+ * deals, and recent activities so the assistant can answer questions like
+ * "tell me about John Smith".
+ */
+async function searchCrmByName(
+  callerClient: ReturnType<typeof createCallerClient>,
+  input: {
+    traceId: string;
+    role: UserRole;
+    message: string;
+  },
+): Promise<EvidenceItem[]> {
+  const evidence: EvidenceItem[] = [];
+  const tokens = extractSearchTokens(input.message);
+  if (tokens.length === 0) return evidence;
+
+  const nameQuery = simplifyQuestion(input.message).slice(0, 120);
+  if (!nameQuery || nameQuery.length < 2) return evidence;
+
+  // Search contacts by ilike on first_name / last_name
+  const contactSearches: Array<Promise<{ data: ContactRow[] | null }>> = [];
+  for (const token of tokens.slice(0, 4)) {
+    if (token.length < 3) continue;
+    contactSearches.push(
+      callerClient
+        .from("crm_contacts")
+        .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
+        .or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%`)
+        .is("deleted_at", null)
+        .limit(5) as unknown as Promise<{ data: ContactRow[] | null }>,
+    );
+  }
+  const contactResults = await Promise.all(contactSearches);
+  const contactMap = new Map<string, ContactRow>();
+  for (const result of contactResults) {
+    for (const row of result.data ?? []) {
+      contactMap.set(row.id, row);
+    }
+  }
+
+  // Score contacts by how many tokens match
+  const scoredContacts = [...contactMap.values()].map((c) => {
+    const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase();
+    let score = 0;
+    for (const token of tokens) {
+      if (fullName.includes(token)) score++;
+    }
+    return { contact: c, score };
+  }).filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  for (const { contact } of scoredContacts) {
+    const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact";
+    evidence.push({
+      sourceType: "crm",
+      sourceId: `crm-contact:${contact.id}`,
+      sourceTitle: `CRM Contact: ${fullName}`,
+      excerpt: truncateText(
+        [
+          `Contact: ${fullName}`,
+          contact.title ? `Title: ${contact.title}` : null,
+          contact.email ? `Email: ${contact.email}` : null,
+          contact.phone ? `Phone: ${contact.phone}` : null,
+        ].filter(Boolean).join("\n"),
+        420,
+      ),
+      confidence: 0.92,
+      accessClass: "crm_context",
+    });
+
+    // Pull that contact's company
+    if (contact.primary_company_id) {
+      const { data: companyRow } = await callerClient
+        .from("crm_companies")
+        .select("id, name, city, state, country")
+        .eq("id", contact.primary_company_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (companyRow) {
+        const co = companyRow as CompanyRow;
+        evidence.push({
+          sourceType: "crm",
+          sourceId: `crm-company:${co.id}`,
+          sourceTitle: `CRM Company: ${co.name}`,
+          excerpt: truncateText(
+            [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
+              .filter(Boolean).join("\n"),
+            300,
+          ),
+          confidence: 0.90,
+          accessClass: "crm_context",
+        });
+      }
+    }
+
+    // Pull recent activities for the contact
+    const { data: activityRows } = await callerClient
+      .from("crm_activities")
+      .select("id, activity_type, body, occurred_at")
+      .eq("contact_id", contact.id)
+      .is("deleted_at", null)
+      .order("occurred_at", { ascending: false })
+      .limit(3);
+    const activities = (activityRows ?? []) as ActivityRow[];
+
+    // Also pull activities linked to deals that belong to this contact
+    const { data: dealRows } = await callerClient
+      .from("crm_deals_rep_safe")
+      .select("id, name, amount, expected_close_on, next_follow_up_at, primary_contact_id, company_id")
+      .eq("primary_contact_id", contact.id)
+      .order("expected_close_on", { ascending: false })
+      .limit(3);
+    const deals = (dealRows ?? []) as DealRow[];
+
+    if (deals.length > 0) {
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `crm-deals:${deals.map((d) => d.id).join(",")}`,
+        sourceTitle: `Deals for ${fullName}`,
+        excerpt: truncateText(
+          deals.map((d) =>
+            [
+              `Deal: ${d.name}`,
+              `Amount: ${formatCurrency(d.amount)}`,
+              d.expected_close_on ? `Expected close: ${d.expected_close_on}` : null,
+              d.next_follow_up_at ? `Next follow-up: ${d.next_follow_up_at}` : null,
+            ].filter(Boolean).join(" | "),
+          ).join("\n"),
+          500,
+        ),
+        confidence: 0.93,
+        accessClass: "crm_context",
+      });
+
+      // Fetch deal activities too
+      for (const deal of deals.slice(0, 2)) {
+        const { data: dealActivities } = await callerClient
+          .from("crm_activities")
+          .select("id, activity_type, body, occurred_at")
+          .eq("deal_id", deal.id)
+          .is("deleted_at", null)
+          .order("occurred_at", { ascending: false })
+          .limit(3);
+        for (const da of (dealActivities ?? []) as ActivityRow[]) {
+          if (!activities.some((a) => a.id === da.id)) {
+            activities.push(da);
+          }
+        }
+      }
+    }
+
+    if (activities.length > 0) {
+      activities.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `crm-activities:${activities.slice(0, 5).map((a) => a.id).join(",")}`,
+        sourceTitle: `Recent Activity: ${fullName}`,
+        excerpt: truncateText(
+          activities.slice(0, 5).map((row) =>
+            `${row.occurred_at}: ${row.activity_type}${row.body ? ` — ${truncateText(row.body, 150)}` : ""}`
+          ).join("\n"),
+          600,
+        ),
+        confidence: 0.91,
+        accessClass: "crm_context",
+      });
+    }
+  }
+
+  // Search companies by name
+  if (scoredContacts.length === 0) {
+    const { data: companyRows } = await callerClient
+      .from("crm_companies")
+      .select("id, name, city, state, country")
+      .ilike("name", `%${nameQuery.slice(0, 60)}%`)
+      .is("deleted_at", null)
+      .limit(3);
+    for (const co of (companyRows ?? []) as CompanyRow[]) {
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `crm-company:${co.id}`,
+        sourceTitle: `CRM Company: ${co.name}`,
+        excerpt: truncateText(
+          [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
+            .filter(Boolean).join("\n"),
+          300,
+        ),
+        confidence: 0.88,
+        accessClass: "crm_context",
+      });
+    }
+  }
+
+  // Search voice captures transcript and CRM activity bodies for the query
+  // (catches cases where a name is mentioned in a voice note but isn't a CRM contact)
+  if (evidence.length === 0 && nameQuery.length >= 3) {
+    const likePattern = `%${nameQuery.slice(0, 80)}%`;
+    const [vcResult, actResult] = await Promise.all([
+      callerClient
+        .from("voice_captures")
+        .select("id, transcript, extracted_data, created_at")
+        .ilike("transcript", likePattern)
+        .order("created_at", { ascending: false })
+        .limit(3),
+      callerClient
+        .from("crm_activities")
+        .select("id, activity_type, body, occurred_at")
+        .ilike("body", likePattern)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(5),
+    ]);
+
+    type VoiceCaptureRow = {
+      id: string;
+      transcript: string | null;
+      extracted_data: Record<string, unknown> | null;
+      created_at: string;
+    };
+
+    for (const vc of ((vcResult.data ?? []) as VoiceCaptureRow[]).slice(0, 2)) {
+      const excerptText = vc.transcript
+        ? excerptAroundToken(vc.transcript, nameQuery.split(" ")[0] ?? nameQuery)
+        : "";
+      if (!excerptText) continue;
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `voice-capture:${vc.id}`,
+        sourceTitle: `Voice Note (${vc.created_at.slice(0, 10)})`,
+        excerpt: truncateText(excerptText, 500),
+        confidence: 0.85,
+        accessClass: "crm_context",
+      });
+    }
+
+    for (const act of ((actResult.data ?? []) as ActivityRow[]).slice(0, 3)) {
+      const excerptText = act.body
+        ? excerptAroundToken(act.body, nameQuery.split(" ")[0] ?? nameQuery)
+        : "";
+      if (!excerptText) continue;
+      evidence.push({
+        sourceType: "crm",
+        sourceId: `crm-activity:${act.id}`,
+        sourceTitle: `${act.activity_type} (${act.occurred_at.slice(0, 10)})`,
+        excerpt: truncateText(excerptText, 500),
+        confidence: 0.84,
+        accessClass: "crm_context",
+      });
+    }
+  }
+
+  if (evidence.length > 0) {
+    console.info(
+      `[chat:${input.traceId}] crm_name_search matched=${evidence.length} query="${nameQuery.slice(0, 40)}"`,
+    );
+  }
+
+  return evidence;
+}
+
 Deno.serve(async (req) => {
   const traceId = crypto.randomUUID();
   const ch = corsHeaders(req.headers.get("origin"));
@@ -1213,6 +1476,19 @@ Deno.serve(async (req) => {
         "Customer context could not be loaded for this chat.",
         ch,
       );
+    }
+
+    // When no explicit CRM context IDs are provided, search CRM by name
+    if (crmEvidence.length === 0 && !context) {
+      try {
+        crmEvidence = await searchCrmByName(callerClient, {
+          traceId,
+          role: caller.role,
+          message: rawMessage,
+        });
+      } catch (nameSearchErr) {
+        console.warn(`[chat:${traceId}] crm_name_search failed (non-fatal)`, nameSearchErr);
+      }
     }
 
     const evidence = [...crmEvidence, ...documentEvidence];
