@@ -182,8 +182,8 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
                 className={cn(
                   "min-h-[44px] rounded-full px-4",
                   selectedType === option.value
-                    ? "border-primary bg-primary/15 text-primary hover:bg-primary/15"
-                    : "border-input bg-card text-muted-foreground hover:bg-muted/30"
+                    ? "border-primary/55 bg-gradient-to-b from-primary/32 to-primary/[0.08] text-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] backdrop-blur-xl hover:from-primary/38 hover:to-primary/12"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {option.label}

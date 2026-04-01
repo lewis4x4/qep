@@ -681,7 +681,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
                   <header className="border-b border-border px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold text-foreground">{column.stageName}</h3>
-                      <span className="rounded-full bg-card px-2 py-0.5 text-xs text-muted-foreground">
+                      <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.07] dark:to-white/[0.02]">
                         {column.deals.length}
                       </span>
                     </div>

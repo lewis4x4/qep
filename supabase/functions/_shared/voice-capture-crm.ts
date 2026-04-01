@@ -700,9 +700,10 @@ async function ensureNoteActivity(
       activity_type: "note",
       body: buildVoiceCaptureNoteBody(transcript, extracted),
       occurred_at: occurredAtIso,
+      // Exactly one of contact_id / deal_id / company_id (see crm_activities check constraint).
       deal_id: target.dealId,
-      contact_id: target.contactId,
-      company_id: target.companyId,
+      contact_id: null,
+      company_id: null,
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",
@@ -710,6 +711,8 @@ async function ensureNoteActivity(
         activityKind: "note",
         transcript,
         extractedSummary: buildCrmSummary(extracted),
+        resolvedContactId: target.contactId,
+        resolvedCompanyId: target.companyId,
       },
     })
     .select("id")
@@ -771,8 +774,8 @@ async function ensureTaskActivity(
       body: taskBody,
       occurred_at: occurredAtIso,
       deal_id: target.dealId,
-      contact_id: target.contactId,
-      company_id: target.companyId,
+      contact_id: null,
+      company_id: null,
       created_by: actorUserId,
       metadata: {
         source: "voice_capture",
@@ -784,6 +787,8 @@ async function ensureTaskActivity(
         },
         actionItems: extracted.opportunity.actionItems,
         extractedSummary: buildCrmSummary(extracted),
+        resolvedContactId: target.contactId,
+        resolvedCompanyId: target.companyId,
       },
     })
     .select("id")

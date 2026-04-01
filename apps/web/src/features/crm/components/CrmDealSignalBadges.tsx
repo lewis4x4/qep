@@ -19,13 +19,13 @@ export function CrmDealSignalBadges({ deal }: CrmDealSignalBadgesProps) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Deal status signals">
       {isOverdueFollowUp && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-[#FECACA] bg-[#FEF2F2] px-2 py-0.5 text-xs font-medium text-[#991B1B]">
+        <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/45 bg-gradient-to-br from-rose-400/22 to-rose-950/12 px-2 py-0.5 text-xs font-medium text-rose-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-rose-400/18 dark:to-rose-950/38 dark:text-rose-50">
           <AlertTriangle className="h-3 w-3" aria-hidden="true" />
           Overdue Follow-Up
         </span>
       )}
       {isStalled && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-gradient-to-br from-amber-400/22 to-amber-950/12 px-2 py-0.5 text-xs font-medium text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-amber-400/18 dark:to-amber-950/38 dark:text-amber-50">
           <Clock3 className="h-3 w-3" aria-hidden="true" />
           Stalled
         </span>

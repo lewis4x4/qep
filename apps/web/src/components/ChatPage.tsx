@@ -545,7 +545,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       {(contextLabel || chatDiagnostics?.embeddingDegraded) && (
         <div className="px-6 py-3 border-b bg-card/60 space-y-2">
           {contextLabel && (
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/14 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16)] backdrop-blur-md dark:border-white/12 dark:from-white/[0.07] dark:to-white/[0.02]">
               <Shield className="w-3.5 h-3.5 text-qep-orange" />
               {contextLabel}
             </div>

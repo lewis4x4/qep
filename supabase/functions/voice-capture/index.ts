@@ -344,15 +344,37 @@ Return ONLY valid JSON matching this exact structure:
     }
 
     // ── Persist transcript + extracted data ───────────────────────────────────
-    const localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
-      workspaceId: "default",
-      actorUserId: user.id,
-      captureId,
-      dealId: crmDealId,
-      occurredAtIso: captureRecord.created_at as string,
-      transcript,
-      extracted,
-    });
+    let localCrmSync: Awaited<ReturnType<typeof writeVoiceCaptureToLocalCrm>>;
+    try {
+      localCrmSync = await writeVoiceCaptureToLocalCrm(supabaseAdmin, {
+        workspaceId: "default",
+        actorUserId: user.id,
+        captureId,
+        dealId: crmDealId,
+        occurredAtIso: captureRecord.created_at as string,
+        transcript,
+        extracted,
+      });
+    } catch (localCrmErr) {
+      const errMsg =
+        localCrmErr instanceof Error ? localCrmErr.message : "Unknown error saving to CRM";
+      console.error("Local CRM sync failed:", errMsg, localCrmErr);
+      await supabaseAdmin
+        .from("voice_captures")
+        .update({
+          transcript,
+          duration_seconds: durationSeconds,
+          extracted_data: extracted,
+          sync_status: "failed",
+          sync_error: `Local CRM save failed: ${errMsg}`,
+        })
+        .eq("id", captureId);
+      return jsonError(
+        "Could not attach this note to the CRM deal. If this keeps happening, contact support.",
+        500,
+        ch,
+      );
+    }
 
     await supabaseAdmin
       .from("voice_captures")

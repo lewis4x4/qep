@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import {
   ALLOWED_SEQUENCE_TRIGGER_STAGES,
@@ -271,11 +272,12 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-foreground">{sequence.name}</p>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs ${
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-xs font-medium shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)] backdrop-blur-md",
                             sequence.isActive
-                              ? "bg-emerald-100 text-emerald-900"
-                              : "bg-slate-100 text-slate-700"
-                          }`}
+                              ? "border-emerald-400/45 bg-gradient-to-br from-emerald-400/20 to-emerald-950/12 text-emerald-950 dark:from-emerald-400/16 dark:to-emerald-950/35 dark:text-emerald-50"
+                              : "border-slate-300/60 bg-gradient-to-br from-slate-200/60 to-slate-500/10 text-slate-800 dark:border-white/14 dark:from-white/[0.08] dark:to-white/[0.02] dark:text-slate-200",
+                          )}
                         >
                           {sequence.isActive ? "Active" : "Paused"}
                         </span>
@@ -290,7 +292,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                         {sequence.steps.map((step) => (
                           <span
                             key={step.id}
-                            className="rounded-full bg-muted/30 px-2 py-1 text-xs text-muted-foreground"
+                            className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.09] to-white/[0.02] px-2 py-1 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.06] dark:to-white/[0.02]"
                           >
                             Day {step.dayOffset} · {step.stepType.replace("_", " ")}
                           </span>
@@ -545,7 +547,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
               See which deals are in motion and pause, resume, or cancel them before the scheduler runs the next step.
             </p>
           </div>
-          <div className="rounded-full bg-muted/30 px-3 py-1 text-sm text-muted-foreground">
+          <div className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.09] to-white/[0.02] px-3 py-1 text-sm text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.06] dark:to-white/[0.02]">
             {selectedEnrollments.length} visible
           </div>
         </div>
@@ -574,19 +576,20 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
                       <p className="text-sm font-semibold text-foreground">
                         {enrollment.dealName ?? enrollment.dealId}
                       </p>
-                      <span className="rounded-full bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground">
+                      <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.09] to-white/[0.02] px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.06] dark:to-white/[0.02]">
                         {enrollment.sequenceName}
                       </span>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-xs font-medium shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16)] backdrop-blur-md",
                           enrollment.status === "active"
-                            ? "bg-emerald-100 text-emerald-900"
+                            ? "border-emerald-400/45 bg-gradient-to-br from-emerald-400/20 to-emerald-950/12 text-emerald-950 dark:from-emerald-400/16 dark:to-emerald-950/35 dark:text-emerald-50"
                             : enrollment.status === "paused"
-                            ? "bg-amber-100 text-amber-900"
-                            : enrollment.status === "completed"
-                            ? "bg-slate-100 text-slate-700"
-                            : "bg-rose-100 text-rose-900"
-                        }`}
+                              ? "border-amber-400/45 bg-gradient-to-br from-amber-400/20 to-amber-950/12 text-amber-950 dark:from-amber-400/16 dark:to-amber-950/35 dark:text-amber-50"
+                              : enrollment.status === "completed"
+                                ? "border-slate-300/60 bg-gradient-to-br from-slate-200/55 to-slate-500/10 text-slate-800 dark:border-white/14 dark:from-white/[0.08] dark:to-white/[0.02] dark:text-slate-200"
+                                : "border-rose-400/45 bg-gradient-to-br from-rose-400/20 to-rose-950/12 text-rose-950 dark:from-rose-400/16 dark:to-rose-950/35 dark:text-rose-50",
+                        )}
                       >
                         {formatEnrollmentStatus(enrollment.status)}
                       </span>

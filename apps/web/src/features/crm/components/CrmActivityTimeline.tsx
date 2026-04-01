@@ -29,12 +29,42 @@ interface CrmActivityTimelineProps {
 }
 
 const TYPE_STYLE: Record<CrmActivityType, { icon: ComponentType<{ className?: string }>; badge: string; label: string }> = {
-  call: { icon: Phone, badge: "bg-green-100 text-green-900", label: "Call" },
-  email: { icon: Mail, badge: "bg-blue-100 text-blue-900", label: "Email" },
-  meeting: { icon: CalendarClock, badge: "bg-violet-100 text-violet-900", label: "Meeting" },
-  note: { icon: StickyNote, badge: "bg-slate-100 text-slate-900", label: "Note" },
-  task: { icon: ClipboardList, badge: "bg-amber-100 text-amber-900", label: "Task" },
-  sms: { icon: MessageSquareText, badge: "bg-cyan-100 text-cyan-900", label: "SMS" },
+  call: {
+    icon: Phone,
+    badge:
+      "border-emerald-400/45 bg-gradient-to-br from-emerald-400/22 to-emerald-950/12 text-emerald-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-emerald-400/18 dark:to-emerald-950/38 dark:text-emerald-50",
+    label: "Call",
+  },
+  email: {
+    icon: Mail,
+    badge:
+      "border-sky-400/45 bg-gradient-to-br from-sky-400/22 to-sky-950/12 text-sky-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-sky-400/18 dark:to-sky-950/42 dark:text-sky-50",
+    label: "Email",
+  },
+  meeting: {
+    icon: CalendarClock,
+    badge:
+      "border-violet-400/45 bg-gradient-to-br from-violet-400/22 to-violet-950/14 text-violet-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-violet-400/18 dark:to-violet-950/42 dark:text-violet-50",
+    label: "Meeting",
+  },
+  note: {
+    icon: StickyNote,
+    badge:
+      "border-slate-300/70 bg-gradient-to-br from-slate-200/75 to-slate-500/10 text-slate-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3)] backdrop-blur-md dark:border-white/14 dark:from-white/[0.09] dark:to-white/[0.02] dark:text-slate-100",
+    label: "Note",
+  },
+  task: {
+    icon: ClipboardList,
+    badge:
+      "border-amber-400/50 bg-gradient-to-br from-amber-400/25 to-amber-950/14 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22)] backdrop-blur-md dark:from-amber-400/20 dark:to-amber-950/38 dark:text-amber-50",
+    label: "Task",
+  },
+  sms: {
+    icon: MessageSquareText,
+    badge:
+      "border-cyan-400/45 bg-gradient-to-br from-cyan-400/20 to-cyan-950/14 text-cyan-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-cyan-400/18 dark:to-cyan-950/42 dark:text-cyan-50",
+    label: "SMS",
+  },
 };
 
 interface CommunicationDeliveryMetadata {
@@ -198,8 +228,8 @@ function formatTaskDueLabel(value: string | null | undefined): string {
 
 function taskStatusTone(status: CrmTaskMetadata["status"]): string {
   return status === "completed"
-    ? "bg-emerald-100 text-emerald-900"
-    : "bg-amber-100 text-amber-900";
+    ? "border-emerald-400/45 bg-gradient-to-br from-emerald-400/18 to-emerald-950/12 text-emerald-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)] backdrop-blur-md dark:from-emerald-400/16 dark:to-emerald-950/35 dark:text-emerald-50"
+    : "border-amber-400/45 bg-gradient-to-br from-amber-400/20 to-amber-950/12 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-amber-400/18 dark:to-amber-950/35 dark:text-amber-50";
 }
 
 function taskDueTone(dueAt: string | null | undefined, status: CrmTaskMetadata["status"]): string {

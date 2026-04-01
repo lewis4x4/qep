@@ -118,7 +118,7 @@ export function ChatMessage({
               onClick={handleCopy}
               aria-label="Copy response"
               className={cn(
-                "absolute -top-3 -right-3 h-11 w-11 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-150",
+                "absolute -top-3 -right-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/16 bg-gradient-to-b from-white/[0.14] to-white/[0.04] text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md transition-all duration-150 hover:border-primary/40 hover:from-primary/15 hover:to-primary/5 hover:text-foreground dark:border-white/12 dark:from-white/[0.09] dark:to-white/[0.02]",
                 "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100 [@media(hover:none)]:opacity-100"
               )}
             >
@@ -162,7 +162,7 @@ export function ChatMessage({
                         <span className="text-xs truncate text-foreground">
                           {src.title}
                         </span>
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)] backdrop-blur-sm dark:from-white/[0.07] dark:to-white/[0.02]">
                           {src.kind === "crm" ? "CRM" : "Document"}
                         </span>
                       </div>

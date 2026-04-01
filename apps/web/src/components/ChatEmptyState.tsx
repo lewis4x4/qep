@@ -28,7 +28,7 @@ export function ChatEmptyState({ onSuggestionClick }: ChatEmptyStateProps) {
           <button
             key={suggestion}
             onClick={() => onSuggestionClick(suggestion)}
-            className="rounded-full border border-border bg-card px-4 py-2 min-h-[44px] text-sm text-foreground hover:border-qep-orange hover:text-qep-orange transition-colors duration-150"
+            className="rounded-full border border-white/14 bg-gradient-to-b from-white/[0.12] to-white/[0.03] px-4 py-2 min-h-[44px] text-sm text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)] backdrop-blur-md transition-all duration-150 hover:border-qep-orange/55 hover:from-qep-orange/20 hover:to-qep-orange/5 hover:text-qep-orange dark:border-white/12 dark:from-white/[0.08] dark:to-white/[0.02]"
           >
             {suggestion}
           </button>

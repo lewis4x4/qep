@@ -51,12 +51,42 @@ const ACTIVITY_META: Record<
     badgeClassName: string;
   }
 > = {
-  call: { label: "Call", icon: Phone, badgeClassName: "bg-green-100 text-green-900" },
-  email: { label: "Email", icon: Mail, badgeClassName: "bg-blue-100 text-blue-900" },
-  meeting: { label: "Meeting", icon: UserRound, badgeClassName: "bg-violet-100 text-violet-900" },
-  note: { label: "Note", icon: MessageSquareText, badgeClassName: "bg-slate-200 text-slate-900" },
-  sms: { label: "SMS", icon: MessageSquareText, badgeClassName: "bg-cyan-100 text-cyan-900" },
-  task: { label: "Task", icon: ClipboardList, badgeClassName: "bg-amber-100 text-amber-900" },
+  call: {
+    label: "Call",
+    icon: Phone,
+    badgeClassName:
+      "border-emerald-400/45 bg-gradient-to-br from-emerald-400/25 to-emerald-950/12 text-emerald-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-emerald-400/20 dark:to-emerald-950/40 dark:text-emerald-50",
+  },
+  email: {
+    label: "Email",
+    icon: Mail,
+    badgeClassName:
+      "border-sky-400/45 bg-gradient-to-br from-sky-400/25 to-sky-950/12 text-sky-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-sky-400/22 dark:to-sky-950/45 dark:text-sky-50",
+  },
+  meeting: {
+    label: "Meeting",
+    icon: UserRound,
+    badgeClassName:
+      "border-violet-400/45 bg-gradient-to-br from-violet-400/25 to-violet-950/14 text-violet-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-violet-400/22 dark:to-violet-950/45 dark:text-violet-50",
+  },
+  note: {
+    label: "Note",
+    icon: MessageSquareText,
+    badgeClassName:
+      "border-slate-300/70 bg-gradient-to-br from-slate-200/80 to-slate-500/10 text-slate-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35)] backdrop-blur-md dark:border-white/15 dark:from-white/[0.1] dark:to-white/[0.03] dark:text-slate-100",
+  },
+  sms: {
+    label: "SMS",
+    icon: MessageSquareText,
+    badgeClassName:
+      "border-cyan-400/45 bg-gradient-to-br from-cyan-400/22 to-cyan-950/14 text-cyan-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-cyan-400/20 dark:to-cyan-950/45 dark:text-cyan-50",
+  },
+  task: {
+    label: "Task",
+    icon: ClipboardList,
+    badgeClassName:
+      "border-amber-400/50 bg-gradient-to-br from-amber-400/28 to-amber-950/14 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22)] backdrop-blur-md dark:from-amber-400/24 dark:to-amber-950/40 dark:text-amber-50",
+  },
 };
 
 function readTaskMetadata(activity: CrmActivityFeedItem): CrmTaskMetadata | null {
@@ -124,10 +154,16 @@ function toIsoOrNull(value: string): string | null {
 
 function deliveryTone(delivery: Record<string, unknown> | null): string {
   const status = typeof delivery?.status === "string" ? delivery.status : null;
-  if (status === "failed") return "bg-rose-100 text-rose-800";
-  if (status === "manual_logged") return "bg-amber-100 text-amber-900";
-  if (status === "sent") return "bg-emerald-100 text-emerald-800";
-  return "bg-slate-100 text-slate-700";
+  if (status === "failed") {
+    return "border-rose-400/45 bg-gradient-to-br from-rose-400/22 to-rose-950/18 text-rose-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18)] backdrop-blur-md dark:from-rose-400/20 dark:to-rose-950/45 dark:text-rose-50";
+  }
+  if (status === "manual_logged") {
+    return "border-amber-400/45 bg-gradient-to-br from-amber-400/22 to-amber-950/14 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-amber-400/20 dark:to-amber-950/40 dark:text-amber-50";
+  }
+  if (status === "sent") {
+    return "border-emerald-400/45 bg-gradient-to-br from-emerald-400/22 to-emerald-950/12 text-emerald-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)] backdrop-blur-md dark:from-emerald-400/20 dark:to-emerald-950/40 dark:text-emerald-50";
+  }
+  return "border-slate-300/60 bg-gradient-to-br from-slate-200/70 to-slate-600/10 text-slate-800 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25)] backdrop-blur-md dark:border-white/12 dark:from-white/[0.08] dark:to-white/[0.02] dark:text-slate-200";
 }
 
 function canSendFromInbox(activity: CrmActivityFeedItem): boolean {
@@ -1145,12 +1181,32 @@ export function CrmActivitiesPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Activity summary">
         {[
-          { label: "Open tasks", value: summary.openTasks, tone: "text-amber-700 bg-amber-50 border-amber-200" },
-          { label: "Overdue tasks", value: summary.overdueTasks, tone: "text-rose-700 bg-rose-50 border-rose-200" },
-          { label: "Failed deliveries", value: summary.failedDeliveries, tone: "text-blue-800 bg-blue-50 border-blue-200" },
-          { label: "Touches today", value: summary.todayTouches, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+          {
+            label: "Open tasks",
+            value: summary.openTasks,
+            tone:
+              "border-amber-400/40 bg-gradient-to-br from-amber-400/20 to-amber-950/10 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35)] backdrop-blur-md dark:from-amber-400/18 dark:to-amber-950/35 dark:text-amber-50",
+          },
+          {
+            label: "Overdue tasks",
+            value: summary.overdueTasks,
+            tone:
+              "border-rose-400/40 bg-gradient-to-br from-rose-400/18 to-rose-950/12 text-rose-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3)] backdrop-blur-md dark:from-rose-400/16 dark:to-rose-950/38 dark:text-rose-50",
+          },
+          {
+            label: "Failed deliveries",
+            value: summary.failedDeliveries,
+            tone:
+              "border-sky-400/40 bg-gradient-to-br from-sky-400/20 to-sky-950/12 text-sky-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3)] backdrop-blur-md dark:from-sky-400/18 dark:to-sky-950/40 dark:text-sky-50",
+          },
+          {
+            label: "Touches today",
+            value: summary.todayTouches,
+            tone:
+              "border-emerald-400/40 bg-gradient-to-br from-emerald-400/20 to-emerald-950/10 text-emerald-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.32)] backdrop-blur-md dark:from-emerald-400/18 dark:to-emerald-950/35 dark:text-emerald-50",
+          },
         ].map((item) => (
-          <Card key={item.label} className={cn("border p-4 shadow-sm", item.tone)}>
+          <Card key={item.label} className={cn("border p-4 shadow-[0_12px_40px_-18px_rgba(0,0,0,0.25)] dark:shadow-[0_16px_48px_-20px_rgba(0,0,0,0.55)]", item.tone)}>
             <p className="text-xs font-semibold uppercase tracking-[0.16em]">{item.label}</p>
             <p className="mt-2 text-3xl font-bold">{item.value}</p>
           </Card>
@@ -1203,8 +1259,8 @@ export function CrmActivitiesPage() {
               className={cn(
                 "min-h-[44px] rounded-full px-4",
                 feedFilter === item.key
-                  ? "border-primary bg-primary/15 text-primary hover:bg-primary/15"
-                  : "border-input bg-card text-muted-foreground hover:bg-muted/30"
+                  ? "border-primary/55 bg-gradient-to-b from-primary/32 to-primary/[0.08] text-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28)] backdrop-blur-xl hover:from-primary/38 hover:to-primary/12"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {item.label}
@@ -1212,7 +1268,7 @@ export function CrmActivitiesPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl dark:border-white/10 dark:from-white/[0.05] dark:to-transparent">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Queue actions
           </p>
@@ -1221,7 +1277,7 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredSendableSelected ? clearFilteredEligible : selectFilteredEligible}
             disabled={filteredSendableActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary"
+            className="min-h-[44px] rounded-full text-muted-foreground hover:text-primary"
           >
             {allFilteredSendableSelected ? "Clear eligible" : `Select eligible (${filteredSendableActivityIds.length})`}
           </Button>
@@ -1230,7 +1286,7 @@ export function CrmActivitiesPage() {
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/12 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl dark:border-white/10 dark:from-white/[0.05] dark:to-transparent">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Task queue
           </p>
@@ -1239,7 +1295,7 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredOpenTasksSelected ? clearFilteredOpenTasks : selectFilteredOpenTasks}
             disabled={filteredOpenTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-200"
+            className="min-h-[44px] rounded-full text-muted-foreground hover:border-amber-400/35 hover:from-amber-400/12 hover:to-amber-950/5 hover:text-amber-900 dark:hover:text-amber-100"
           >
             {allFilteredOpenTasksSelected
               ? "Clear open tasks"
@@ -1250,7 +1306,7 @@ export function CrmActivitiesPage() {
             variant="outline"
             onClick={allFilteredCompletedTasksSelected ? clearFilteredCompletedTasks : selectFilteredCompletedTasks}
             disabled={filteredCompletedTaskActivityIds.length === 0}
-            className="min-h-[44px] rounded-full border-input bg-card text-muted-foreground hover:bg-emerald-500/10 hover:text-green-700 dark:text-green-400"
+            className="min-h-[44px] rounded-full text-muted-foreground hover:border-emerald-400/35 hover:from-emerald-400/12 hover:to-emerald-950/5 hover:text-green-800 dark:hover:text-green-300"
           >
             {allFilteredCompletedTasksSelected
               ? "Clear completed tasks"
@@ -1289,7 +1345,7 @@ export function CrmActivitiesPage() {
                 type="button"
                 variant="outline"
                 onClick={() => setSelectedActivityIds([])}
-                className="border-orange-300/50 bg-card text-primary hover:bg-primary/15"
+                className="border-primary/40 text-primary hover:border-primary/55 hover:from-primary/20 hover:to-primary/5"
               >
                 Clear
               </Button>
@@ -1299,7 +1355,7 @@ export function CrmActivitiesPage() {
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("completed")}
                   disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
-                  className="border-amber-300/50 bg-card text-amber-800 dark:text-amber-200 hover:bg-amber-500/10"
+                  className="border-amber-400/40 text-amber-900 hover:border-amber-400/55 hover:from-amber-400/15 hover:to-amber-950/5 dark:text-amber-100"
                 >
                   {bulkTaskAction === "completed" ? "Updating..." : `Complete tasks (${selectedOpenTasks.length})`}
                 </Button>
@@ -1310,7 +1366,7 @@ export function CrmActivitiesPage() {
                   variant="outline"
                   onClick={() => void applyTaskStatusToSelected("open")}
                   disabled={bulkTaskAction !== null || selectedTaskHasPendingWork}
-                  className="border-emerald-400/40 bg-card text-green-700 dark:text-green-400 hover:bg-emerald-500/10"
+                  className="border-emerald-400/40 text-green-800 hover:border-emerald-400/55 hover:from-emerald-400/15 hover:to-emerald-950/5 dark:text-green-300"
                 >
                   {bulkTaskAction === "open" ? "Updating..." : `Reopen tasks (${selectedCompletedTasks.length})`}
                 </Button>
@@ -1343,7 +1399,7 @@ export function CrmActivitiesPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setOperationIssues([])}
-                className="border-pink-300/50 bg-card text-rose-700 dark:text-rose-300 hover:bg-rose-500/10"
+                className="border-rose-400/40 text-rose-800 hover:border-rose-400/55 hover:from-rose-400/12 hover:to-rose-950/5 dark:text-rose-200"
               >
                 Clear list
               </Button>
@@ -1412,7 +1468,7 @@ export function CrmActivitiesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {(canSendFromInbox(activity) || canSelectTaskFromInbox(activity)) && (
-                        <label className="inline-flex items-center gap-2 rounded-full border border-input bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        <label className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-2.5 py-1 text-xs font-medium text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-md dark:border-white/12">
                           <input
                             type="checkbox"
                             checked={selectedActivityIds.includes(activity.id)}
@@ -1527,10 +1583,10 @@ export function CrmActivitiesPage() {
                             onClick={() => void toggleTaskStatus(activity, task)}
                             disabled={taskPending}
                             className={cn(
-                              "min-h-[44px] rounded-full px-4",
+                              "min-h-[44px] rounded-full px-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-xl",
                               task.status === "completed"
-                                ? "border-emerald-400/40 bg-card text-green-700 dark:text-green-400 hover:bg-emerald-500/10"
-                                : "border-amber-300/50 bg-card text-amber-800 dark:text-amber-200 hover:bg-amber-500/10"
+                                ? "border-emerald-400/45 bg-gradient-to-b from-emerald-400/16 to-emerald-950/8 text-green-800 hover:border-emerald-400/60 hover:from-emerald-400/22 dark:text-green-300"
+                                : "border-amber-400/45 bg-gradient-to-b from-amber-400/16 to-amber-950/8 text-amber-900 hover:border-amber-400/60 hover:from-amber-400/22 dark:text-amber-100",
                             )}
                           >
                             {taskPending
@@ -1545,7 +1601,7 @@ export function CrmActivitiesPage() {
                             variant="outline"
                             onClick={() => (isEditingTask ? stopTaskEditor() : beginTaskEditor(activity, task))}
                             disabled={taskPending}
-                            className="min-h-[44px] rounded-full border-input bg-card px-4 text-muted-foreground hover:bg-muted/30"
+                            className="min-h-[44px] rounded-full px-4 text-muted-foreground hover:text-foreground"
                           >
                             {isEditingTask ? "Close due editor" : "Edit due time"}
                           </Button>
@@ -1558,7 +1614,7 @@ export function CrmActivitiesPage() {
                           variant="outline"
                           onClick={() => void archiveActivity(activity)}
                           disabled={archivePending || taskPending}
-                          className="min-h-[44px] rounded-full border-pink-300/50 bg-card px-4 text-rose-700 dark:text-rose-300 hover:bg-pink-500/10"
+                          className="min-h-[44px] rounded-full border-rose-400/45 px-4 text-rose-800 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-xl hover:border-rose-400/60 hover:from-rose-400/15 hover:to-rose-950/8 dark:text-rose-200"
                         >
                           <Archive className="mr-2 h-4 w-4" aria-hidden="true" />
                           {archivePending ? "Archiving..." : "Archive"}
@@ -1578,7 +1634,7 @@ export function CrmActivitiesPage() {
                       )}
                       <Link
                         to={targetHref}
-                        className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-muted/30 px-4 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 hover:text-primary"
+                        className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-white/15 bg-gradient-to-b from-white/[0.11] to-white/[0.02] px-4 py-2 text-sm font-medium text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_8px_28px_-14px_rgba(0,0,0,0.35)] backdrop-blur-xl transition hover:border-primary/45 hover:from-primary/18 hover:to-primary/5 hover:text-primary dark:border-white/[0.14] dark:from-white/[0.08] dark:to-white/[0.02]"
                       >
                         {targetLabel}
                         <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
@@ -1743,16 +1799,16 @@ export function CrmActivitiesPage() {
                         </span>
                         <span className="text-xs text-muted-foreground">{formatTimeLabel(activity.occurredAt)}</span>
                         {dirty && (
-                          <span className="inline-flex rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary">
+                          <span className="inline-flex rounded-full border border-primary/45 bg-gradient-to-b from-primary/25 to-primary/[0.06] px-2.5 py-1 text-xs font-semibold text-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22)] backdrop-blur-md">
                             Unsaved edits
                           </span>
                         )}
                         <span
                           className={cn(
-                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                            "inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)] backdrop-blur-md",
                             approved
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-700"
+                              ? "border-emerald-400/45 bg-gradient-to-br from-emerald-400/20 to-emerald-950/12 text-emerald-900 dark:text-emerald-50"
+                              : "border-slate-300/55 bg-gradient-to-br from-slate-200/65 to-slate-600/10 text-slate-800 dark:border-white/12 dark:from-white/[0.08] dark:to-white/[0.02] dark:text-slate-200",
                           )}
                         >
                           {approved ? "Approved to send" : "Needs approval"}
