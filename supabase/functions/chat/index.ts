@@ -6,10 +6,17 @@ import {
 } from "../_shared/dge-auth.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
+import {
+  CHAT_TOOLS,
+  executeToolCalls,
+  type ToolCall,
+  type ToolResult,
+} from "../_shared/chat-tools.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-crm-embeddings";
+const CHAT_EDGE_REVISION = "20260401-function-calling";
 const CHAT_MODEL = "gpt-5.4-mini";
+const MAX_TOOL_ROUNDS = 3;
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -432,15 +439,62 @@ async function embedQuery(message: string, traceId: string): Promise<EmbedQueryR
   }
 }
 
+type OpenAIMessage =
+  | { role: "system" | "user" | "assistant"; content: string }
+  | { role: "assistant"; content: null; tool_calls: ToolCall[] }
+  | ToolResult;
+
+/**
+ * Non-streaming completion with tools.
+ * Used for tool-calling rounds where we need the full response to decide
+ * whether to execute tools or stream the final answer.
+ */
+async function chatCompletionWithTools(input: {
+  traceId: string;
+  messages: OpenAIMessage[];
+}): Promise<{
+  content: string | null;
+  toolCalls: ToolCall[];
+  finishReason: string;
+}> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: input.messages,
+      max_completion_tokens: 2048,
+      tools: CHAT_TOOLS,
+      tool_choice: "auto",
+    }),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    const detail = payload?.error?.message ?? `openai_http_${response.status}`;
+    console.error(`[chat:${input.traceId}] openai_tool_call_failed`, payload);
+    throw new Error(detail);
+  }
+
+  const choice = payload.choices?.[0];
+  return {
+    content: choice?.message?.content ?? null,
+    toolCalls: choice?.message?.tool_calls ?? [],
+    finishReason: choice?.finish_reason ?? "stop",
+  };
+}
+
 /**
  * Open a streaming connection to OpenAI and return the raw Response.
  * Caller is responsible for reading the body as SSE lines.
+ * Used for the final answer (after tool-calling rounds complete).
  */
 async function openStreamingCompletion(input: {
   traceId: string;
-  systemPrompt: string;
-  history: ChatMessage[];
-  message: string;
+  messages: OpenAIMessage[];
 }): Promise<Response> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -450,11 +504,7 @@ async function openStreamingCompletion(input: {
     },
     body: JSON.stringify({
       model: CHAT_MODEL,
-      messages: [
-        { role: "system", content: input.systemPrompt },
-        ...input.history,
-        { role: "user", content: input.message },
-      ],
+      messages: input.messages,
       max_completion_tokens: 2048,
       stream: true,
     }),
@@ -1968,10 +2018,19 @@ Deno.serve(async (req) => {
       `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm_context=${contextCrmEvidence.length} crm_broad=${broadCrmEvidence.length} crm_merged=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
     );
 
+    const toolInstructions = `
+You also have tools to query live CRM data, equipment inventory, valuations, competitor listings, financing rates, and pipeline status. Use them when:
+- The pre-loaded evidence above doesn't answer the question fully
+- The user asks for specific aggregations (pipeline totals, deals closing this week, etc.)
+- The user asks about a specific contact, deal, or equipment not in the evidence
+- The user needs current pricing, financing, or competitive intelligence
+Prefer the pre-loaded evidence when it already contains the answer.`;
+
     const systemPrompt = contextBlock
-      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
+      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer from the provided evidence and your tools. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
 ${contextBlock}
+${toolInstructions}
 
 Rules:
 - Be concise and direct.
@@ -1987,19 +2046,50 @@ Rules:
 - Financing rates are current lending terms — present specific rates and terms when asked about financing.
 - Voice notes contain field observations recorded by sales reps — treat them as firsthand accounts.
 - If CRM and document evidence conflict, say which source you relied on.
-- If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
-      : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
+- If the answer is not in your evidence or tools, say "I don't have that information in the accessible QEP knowledge base."`
+      : `You are the QEP USA internal knowledge assistant. No pre-loaded evidence was retrieved for this request, but you have tools to query live CRM data. Use your tools to find the information the user is looking for. If you cannot find the answer with your tools either, say "I don't have that information in the accessible QEP knowledge base."
+${toolInstructions}`;
 
-    let openaiStream: Response;
+    // ── Tool-calling loop: run non-streaming rounds until the model
+    //    returns a text response or we hit the max rounds. ─────────────
+    const messages: OpenAIMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...validatedHistory.map((h) => ({ role: h.role, content: h.content }) as OpenAIMessage),
+      { role: "user", content: rawMessage },
+    ];
+
+    let toolRoundsUsed = 0;
+    let finalText: string | null = null;
+
     try {
-      openaiStream = await openStreamingCompletion({
-        traceId,
-        systemPrompt,
-        history: validatedHistory,
-        message: rawMessage,
-      });
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const result = await chatCompletionWithTools({ traceId, messages });
+
+        if (result.toolCalls.length === 0) {
+          finalText = result.content;
+          break;
+        }
+
+        toolRoundsUsed = round + 1;
+        console.info(
+          `[chat:${traceId}] tool_round=${round + 1} calls=${result.toolCalls.map((tc) => tc.function.name).join(",")}`,
+        );
+
+        // Add the assistant's tool-call message to the conversation
+        messages.push({
+          role: "assistant",
+          content: null,
+          tool_calls: result.toolCalls,
+        });
+
+        // Execute tools and add results
+        const toolResults = await executeToolCalls(adminClient, result.toolCalls, traceId);
+        for (const tr of toolResults) {
+          messages.push(tr);
+        }
+      }
     } catch (error) {
-      console.error(`[chat:${traceId}] model generation failed model=${CHAT_MODEL}`, error);
+      console.error(`[chat:${traceId}] model/tool generation failed model=${CHAT_MODEL}`, error);
       return jsonError(
         traceId,
         503,
@@ -2008,6 +2098,43 @@ Rules:
         ch,
       );
     }
+
+    // If the model returned text during tool rounds (no streaming needed),
+    // we still stream it out for consistent client behavior.
+    // If tool rounds were used, we stream the final answer.
+    let openaiStream: Response | null = null;
+
+    if (finalText === null) {
+      // Hit max tool rounds — do a final streaming call without tools
+      try {
+        openaiStream = await openStreamingCompletion({ traceId, messages });
+      } catch (error) {
+        console.error(`[chat:${traceId}] final stream failed after tools model=${CHAT_MODEL}`, error);
+        return jsonError(
+          traceId,
+          503,
+          "MODEL_UNAVAILABLE",
+          "The chat model is temporarily unavailable. Please try again shortly.",
+          ch,
+        );
+      }
+    } else if (toolRoundsUsed === 0) {
+      // No tools invoked — stream the response directly for better UX
+      try {
+        openaiStream = await openStreamingCompletion({ traceId, messages });
+      } catch (error) {
+        console.error(`[chat:${traceId}] model generation failed model=${CHAT_MODEL}`, error);
+        return jsonError(
+          traceId,
+          503,
+          "MODEL_UNAVAILABLE",
+          "The chat model is temporarily unavailable. Please try again shortly.",
+          ch,
+        );
+      }
+    }
+
+    console.info(`[chat:${traceId}] tool_rounds_used=${toolRoundsUsed} streaming=${openaiStream !== null} finalText=${finalText !== null}`);
 
     const sources = buildSourcePayload(evidence);
     const encoder = new TextEncoder();
@@ -2018,6 +2145,7 @@ Rules:
         embedding_degraded: !embeddingOk,
         document_evidence_count: documentEvidence.length,
         crm_evidence_count: crmEvidence.length,
+        tool_rounds_used: toolRoundsUsed,
         empty_evidence: evidence.length === 0,
       },
     };
@@ -2028,24 +2156,45 @@ Rules:
           encoder.encode(`data: ${JSON.stringify({ meta: streamMeta })}\n\n`),
         );
 
-        try {
-          const reader = openaiStream.body!.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
+        if (finalText !== null && openaiStream === null) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ text: finalText })}\n\n`),
+          );
+        } else if (openaiStream) {
+          try {
+            const reader = openaiStream.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith("data: ")) continue;
-              const payload = trimmed.slice(6);
-              if (payload === "[DONE]") continue;
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith("data: ")) continue;
+                const payload = trimmed.slice(6);
+                if (payload === "[DONE]") continue;
+                try {
+                  const chunk = JSON.parse(payload);
+                  const delta = chunk.choices?.[0]?.delta?.content;
+                  if (typeof delta === "string" && delta.length > 0) {
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
+                    );
+                  }
+                } catch {
+                  // skip unparseable SSE lines
+                }
+              }
+            }
+
+            if (buffer.trim().startsWith("data: ") && !buffer.includes("[DONE]")) {
               try {
+                const payload = buffer.trim().slice(6);
                 const chunk = JSON.parse(payload);
                 const delta = chunk.choices?.[0]?.delta?.content;
                 if (typeof delta === "string" && delta.length > 0) {
@@ -2053,36 +2202,20 @@ Rules:
                     encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
                   );
                 }
-              } catch {
-                // skip unparseable SSE lines
-              }
+              } catch { /* ignore */ }
             }
+          } catch (streamError) {
+            const errDetail =
+              streamError instanceof Error
+                ? `${streamError.name}: ${streamError.message}`
+                : String(streamError);
+            console.error(`[chat:${traceId}] stream error`, errDetail, streamError);
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ text: `\n\nSorry, I encountered an error generating a response. Reference: ${traceId}` })}\n\n`,
+              ),
+            );
           }
-
-          // Flush any remaining buffer
-          if (buffer.trim().startsWith("data: ") && !buffer.includes("[DONE]")) {
-            try {
-              const payload = buffer.trim().slice(6);
-              const chunk = JSON.parse(payload);
-              const delta = chunk.choices?.[0]?.delta?.content;
-              if (typeof delta === "string" && delta.length > 0) {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
-                );
-              }
-            } catch { /* ignore */ }
-          }
-        } catch (streamError) {
-          const errDetail =
-            streamError instanceof Error
-              ? `${streamError.name}: ${streamError.message}`
-              : String(streamError);
-          console.error(`[chat:${traceId}] stream error`, errDetail, streamError);
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ text: `\n\nSorry, I encountered an error generating a response. Reference: ${traceId}` })}\n\n`,
-            ),
-          );
         }
 
         if (sources.length > 0) {
