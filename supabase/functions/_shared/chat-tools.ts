@@ -192,6 +192,33 @@ export const CHAT_TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "getAnomalyAlerts",
+      description: "Get proactive anomaly alerts — stalling deals, overdue follow-ups, activity gaps, pipeline risk. Use when user asks about risks, what needs attention, stalled deals, or team activity concerns.",
+      parameters: {
+        type: "object",
+        properties: {
+          alert_type: {
+            type: "string",
+            enum: ["stalling_deal", "overdue_follow_up", "activity_gap", "pipeline_risk", "all"],
+            description: "Filter by alert type, or 'all' for everything",
+          },
+          severity: {
+            type: "string",
+            enum: ["low", "medium", "high", "critical", "all"],
+            description: "Filter by severity (default: all)",
+          },
+          acknowledged: {
+            type: "boolean",
+            description: "Include acknowledged alerts (default: false, only unacknowledged)",
+          },
+          limit: { type: "number", description: "Max results (default 10)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "getVoiceNoteInsights",
       description: "Get voice note intelligence — sentiment trends, manager-flagged notes, entity-linked captures. Use when user asks about field note trends, rep sentiment, or notes needing attention.",
       parameters: {
@@ -802,6 +829,47 @@ async function execGetCompetitiveIntelligence(
   return { mentions: competitors, summary, period_days: days };
 }
 
+async function execGetAnomalyAlerts(
+  db: SupabaseClient,
+  args: { alert_type?: string; severity?: string; acknowledged?: boolean; limit?: number },
+): Promise<unknown> {
+  const limit = clamp(args.limit ?? 10, 1, 25);
+
+  let query = db
+    .from("anomaly_alerts")
+    .select("id, alert_type, severity, title, description, entity_type, entity_id, assigned_to, data, acknowledged, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (args.alert_type && args.alert_type !== "all") {
+    query = query.eq("alert_type", args.alert_type);
+  }
+  if (args.severity && args.severity !== "all") {
+    query = query.eq("severity", args.severity);
+  }
+  if (args.acknowledged !== true) {
+    query = query.eq("acknowledged", false);
+  }
+
+  const { data, error } = await query;
+  if (error) return { error: error.message };
+
+  return {
+    alerts: (data ?? []).map((a: Record<string, unknown>) => ({
+      id: a.id,
+      type: a.alert_type,
+      severity: a.severity,
+      title: a.title,
+      description: a.description,
+      entity_type: a.entity_type,
+      acknowledged: a.acknowledged,
+      date: a.created_at,
+      data: a.data,
+    })),
+    count: (data ?? []).length,
+  };
+}
+
 async function execGetVoiceNoteInsights(
   db: SupabaseClient,
   args: { filter: string; days?: number; limit?: number },
@@ -870,6 +938,7 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
   getCompetitiveIntelligence: (db, args) => execGetCompetitiveIntelligence(db, args as Parameters<typeof execGetCompetitiveIntelligence>[1]),
   getVoiceNoteInsights: (db, args) => execGetVoiceNoteInsights(db, args as Parameters<typeof execGetVoiceNoteInsights>[1]),
+  getAnomalyAlerts: (db, args) => execGetAnomalyAlerts(db, args as Parameters<typeof execGetAnomalyAlerts>[1]),
 };
 
 export interface ToolCall {
