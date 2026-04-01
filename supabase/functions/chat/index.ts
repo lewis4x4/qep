@@ -8,7 +8,7 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-model-upgrade";
+const CHAT_EDGE_REVISION = "20260401-crm-embeddings";
 const CHAT_MODEL = "gpt-5.4-mini";
 
 const ALLOWED_ORIGINS = [
@@ -491,7 +491,7 @@ async function retrieveDocumentEvidence(
     access_class: string | null;
   }>) =>
     rows.map((item) => ({
-      sourceType: "document" as const,
+      sourceType: (item.source_type === "document" ? "document" : "crm") as "document" | "crm",
       sourceId: item.source_id,
       sourceTitle: item.source_title,
       excerpt: truncateText(item.excerpt ?? "", 500),
