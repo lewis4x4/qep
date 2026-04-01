@@ -288,6 +288,9 @@ function formatMaybeDate(value: string | null | undefined): string | null {
   });
 }
 
+/** Edge pipeline holds the blob in memory more than once; oversized uploads often fail with a generic 500. */
+const MAX_VOICE_CAPTURE_BYTES = 24 * 1024 * 1024;
+
 export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }: VoiceCapturePageProps) {
   const { toast } = useToast();
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -709,6 +712,15 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
   async function submitCapture(): Promise<void> {
     if (!audioBlob) return;
+
+    if (audioBlob.size > MAX_VOICE_CAPTURE_BYTES) {
+      const mb = (audioBlob.size / (1024 * 1024)).toFixed(1);
+      const msg = `This recording is large (${mb} MB) and may not process reliably. Record a shorter note (aim under about 2 minutes) and try again.`;
+      setErrorMessage(msg);
+      setRecordingState("error");
+      toast({ title: "Recording too large", description: msg, variant: "destructive" });
+      return;
+    }
 
     setRecordingState("processing");
     setErrorMessage(null);

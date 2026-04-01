@@ -90,12 +90,23 @@ Deno.serve(async (req) => {
       return jsonError("Expected multipart/form-data", 400, ch);
     }
 
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch (formErr) {
+      console.error("voice-capture: formData parse failed", formErr);
+      return jsonError(
+        "Could not read the uploaded recording. Try a shorter clip (under ~2 minutes), check your connection, and submit again.",
+        400,
+        ch,
+      );
+    }
+
     const audioFile = formData.get("audio") as File | null;
-    const crmDealId = (formData.get("crm_deal_id") as string | null) ?? null;
-    const hubspotDealId =
-      crmDealId ??
-      ((formData.get("hubspot_deal_id") as string | null) ?? null);
+    const rawCrmDealId = (formData.get("crm_deal_id") as string | null)?.trim() || null;
+    const rawLegacyHubspot = (formData.get("hubspot_deal_id") as string | null)?.trim() || null;
+    const crmDealId = rawCrmDealId || null;
+    const hubspotDealId = crmDealId ?? rawLegacyHubspot;
 
     if (!audioFile || audioFile.size === 0) {
       return jsonError("audio field is required", 400, ch);
@@ -108,7 +119,17 @@ Deno.serve(async (req) => {
     // ── Upload audio to Supabase Storage ──────────────────────────────────────
     const extension = getAudioExtension(audioFile.type);
     const storagePath = `${user.id}/${Date.now()}.${extension}`;
-    const audioBuffer = await audioFile.arrayBuffer();
+    let audioBuffer: ArrayBuffer;
+    try {
+      audioBuffer = await audioFile.arrayBuffer();
+    } catch (bufErr) {
+      console.error("voice-capture: arrayBuffer failed", bufErr);
+      return jsonError(
+        "Could not read the audio data. The recording may be too large for the browser or server memory limits. Try a shorter note.",
+        400,
+        ch,
+      );
+    }
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from("voice-recordings")
@@ -376,21 +397,31 @@ Return ONLY valid JSON matching this exact structure:
       );
     }
 
-    await supabaseAdmin
-      .from("voice_captures")
-      .update({
-        transcript,
-        duration_seconds: durationSeconds,
-        extracted_data: extracted,
-        sync_status: localCrmSync.saved ? "synced" : "pending",
-        sync_error: null,
-        hubspot_deal_id: localCrmSync.dealId ?? hubspotDealId,
-        hubspot_contact_id: localCrmSync.contactId,
-        hubspot_note_id: localCrmSync.noteActivityId,
-        hubspot_task_id: localCrmSync.taskActivityId,
-        hubspot_synced_at: null,
-      })
-      .eq("id", captureId);
+    {
+      const { error: persistErr } = await supabaseAdmin
+        .from("voice_captures")
+        .update({
+          transcript,
+          duration_seconds: durationSeconds,
+          extracted_data: extracted,
+          sync_status: localCrmSync.saved ? "synced" : "pending",
+          sync_error: null,
+          hubspot_deal_id: localCrmSync.dealId ?? hubspotDealId,
+          hubspot_contact_id: localCrmSync.contactId,
+          hubspot_note_id: localCrmSync.noteActivityId,
+          hubspot_task_id: localCrmSync.taskActivityId,
+          hubspot_synced_at: null,
+        })
+        .eq("id", captureId);
+      if (persistErr) {
+        console.error("voice-capture: failed to persist transcript/extracted_data", persistErr.message);
+        return jsonError(
+          "Transcription succeeded but saving the capture failed. Please try again or contact support.",
+          500,
+          ch,
+        );
+      }
+    }
 
     // ── HubSpot push (best-effort — non-fatal if not connected) ───────────────
     let hubspotSynced = false;
@@ -563,18 +594,43 @@ Return ONLY valid JSON matching this exact structure:
         : null,
     };
 
-    await supabaseAdmin
-      .from("voice_captures")
-      .update(finalUpdate)
-      .eq("id", captureId);
+    {
+      const { error: finalizeErr } = await supabaseAdmin
+        .from("voice_captures")
+        .update(finalUpdate)
+        .eq("id", captureId);
+      if (finalizeErr) {
+        console.error("voice-capture: final capture update failed", finalizeErr.message);
+        // Non-fatal for the client — core data was saved in the prior update
+      }
+    }
 
     // ── Return result ─────────────────────────────────────────────────────────
-    return new Response(
-      JSON.stringify({
+    const payload = {
+      id: captureId,
+      transcript,
+      duration_seconds: durationSeconds,
+      extracted_data: extracted,
+      hubspot_synced: hubspotSynced,
+      hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
+      hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
+      hubspot_task_id: localCrmSync.taskActivityId ?? taskId,
+      local_crm_saved: localCrmSync.saved,
+      local_crm_note_id: localCrmSync.noteActivityId,
+      local_crm_task_id: localCrmSync.taskActivityId,
+    };
+    let body: string;
+    try {
+      body = JSON.stringify(payload);
+    } catch (serializeErr) {
+      console.error("voice-capture: JSON.stringify failed", serializeErr);
+      const safeTranscript =
+        transcript.length > 50_000 ? `${transcript.slice(0, 50_000)}…` : transcript;
+      body = JSON.stringify({
         id: captureId,
-        transcript,
+        transcript: safeTranscript,
         duration_seconds: durationSeconds,
-        extracted_data: extracted,
+        extracted_data: {},
         hubspot_synced: hubspotSynced,
         hubspot_deal_id: localCrmSync.dealId ?? resolvedDealId,
         hubspot_note_id: localCrmSync.noteActivityId ?? noteId,
@@ -582,15 +638,40 @@ Return ONLY valid JSON matching this exact structure:
         local_crm_saved: localCrmSync.saved,
         local_crm_note_id: localCrmSync.noteActivityId,
         local_crm_task_id: localCrmSync.taskActivityId,
-      }),
-      {
-        status: 200,
-        headers: { ...ch, "Content-Type": "application/json" },
-      }
-    );
+        _warning:
+          "Response was trimmed due to serialization limits; your capture may still be stored server-side.",
+      });
+    }
+
+    return new Response(body, {
+      status: 200,
+      headers: { ...ch, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    console.error("Voice capture function error:", err);
-    return jsonError("Internal server error", 500, ch);
+    const raw = err instanceof Error ? err.message : String(err);
+    console.error("Voice capture function error:", raw, err);
+    const lower = raw.toLowerCase();
+    let message = "Internal server error";
+    if (
+      lower.includes("memory") ||
+      lower.includes("allocation") ||
+      lower.includes("out of memory") ||
+      lower.includes("oom")
+    ) {
+      message =
+        "The server ran out of memory processing this recording. Try a much shorter field note (under 2 minutes) or re-record at a lower quality.";
+    } else if (
+      lower.includes("formdata") ||
+      lower.includes("multipart") ||
+      lower.includes("boundary") ||
+      lower.includes("unexpected end")
+    ) {
+      message =
+        "The upload was incomplete or corrupted. Check your connection and try again with a shorter recording if it keeps happening.";
+    } else if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("deadline")) {
+      message = "Processing timed out. Try a shorter recording and submit again.";
+    }
+    return jsonError(message, 500, ch);
   }
 });
 
