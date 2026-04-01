@@ -57,6 +57,145 @@ const DOCUMENT_STATUS_OPTIONS: Array<{ value: DocumentStatus; label: string }> =
 ];
 const DOCUMENT_FILTERS = ["all", "published", "pending_review", "draft", "archived", "ingest_failed"] as const;
 
+interface FeedbackRow {
+  id: string;
+  content: string;
+  feedback: "up" | "down";
+  created_at: string;
+  conversation_id: string;
+  user_email?: string;
+}
+
+function ChatInsightsPanel() {
+  const [stats, setStats] = useState<{
+    total: number;
+    thumbsUp: number;
+    thumbsDown: number;
+    conversations: number;
+  } | null>(null);
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+
+      const [upRes, downRes, convoRes] = await Promise.all([
+        db.from("chat_messages").select("id", { count: "exact", head: true }).eq("feedback", "up"),
+        db.from("chat_messages").select("id", { count: "exact", head: true }).eq("feedback", "down"),
+        db.from("chat_conversations").select("id", { count: "exact", head: true }),
+      ]);
+
+      setStats({
+        thumbsUp: upRes.count ?? 0,
+        thumbsDown: downRes.count ?? 0,
+        total: (upRes.count ?? 0) + (downRes.count ?? 0),
+        conversations: convoRes.count ?? 0,
+      });
+
+      const { data: recent } = await db
+        .from("chat_messages")
+        .select("id, content, feedback, created_at, conversation_id")
+        .not("feedback", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      setRecentFeedback((recent ?? []) as FeedbackRow[]);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground py-8 text-center">Loading chat insights...</div>;
+  }
+
+  const approvalRate = stats && stats.total > 0
+    ? Math.round((stats.thumbsUp / stats.total) * 100)
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-2xl font-bold">{stats?.conversations ?? 0}</p>
+            <p className="text-xs text-muted-foreground">Total Conversations</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-2xl font-bold">{stats?.total ?? 0}</p>
+            <p className="text-xs text-muted-foreground">Feedback Signals</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-2xl font-bold text-green-600">{stats?.thumbsUp ?? 0}</p>
+            <p className="text-xs text-muted-foreground">Thumbs Up</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className={cn("text-2xl font-bold", (stats?.thumbsDown ?? 0) > 0 ? "text-red-500" : "")}>
+              {stats?.thumbsDown ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground">Thumbs Down</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {approvalRate !== null && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-3 flex-1 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-green-500 transition-all"
+                  style={{ width: `${approvalRate}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium tabular-nums">{approvalRate}% approval</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Recent Feedback</h3>
+        {recentFeedback.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No feedback yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {recentFeedback.map((row) => (
+              <Card key={row.id}>
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-start gap-3">
+                    <span className={cn(
+                      "mt-0.5 shrink-0 text-lg",
+                      row.feedback === "up" ? "text-green-500" : "text-red-500",
+                    )}>
+                      {row.feedback === "up" ? "👍" : "👎"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm line-clamp-2">{row.content}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(row.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export interface AdminPageProps {
   userRole: UserRole;
   userId: string;
@@ -392,6 +531,12 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
             className="rounded-none px-4 pb-3 pt-1 text-sm data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary -mb-px"
           >
             Team Members
+          </TabsTrigger>
+          <TabsTrigger
+            value="chat-insights"
+            className="rounded-none px-4 pb-3 pt-1 text-sm data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary -mb-px"
+          >
+            Chat Insights
           </TabsTrigger>
         </TabsList>
 
@@ -833,6 +978,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
 
         <TabsContent value="users">
           <UsersTab callerRole={userRole} callerId={userId} />
+        </TabsContent>
+
+        <TabsContent value="chat-insights">
+          <ChatInsightsPanel />
         </TabsContent>
       </Tabs>
 
