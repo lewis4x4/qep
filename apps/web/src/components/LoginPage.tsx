@@ -15,7 +15,8 @@ import {
 import qepLoginYardHero from "@/assets/qep-login-yard-hero.svg";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { isTransientAuthRecoveryError } from "@/lib/auth-recovery";
-import { supabase } from "../lib/supabase";
+import { getSupabaseUrlHostname } from "@/lib/supabase";
+import { signInWithOtpWithRetry, signInWithPasswordWithRetry } from "@/lib/supabase-auth-retry";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,11 +37,14 @@ function signInErrorDescription(error: AuthError): ReactNode {
     <div className="space-y-2 text-sm leading-snug">
       <p>Your browser could not reach Supabase to sign you in. Check Wi‑Fi, VPN, or iCloud Private Relay.</p>
       <p className="font-mono text-xs opacity-90 break-words">{raw}</p>
+      <p className="font-mono text-xs opacity-80 break-all">
+        API host in this build: {getSupabaseUrlHostname()}
+      </p>
       <p className="text-xs opacity-80">
         If this keeps happening: in Netlify (or your host), confirm{" "}
         <span className="font-mono">VITE_SUPABASE_URL</span> and{" "}
         <span className="font-mono">VITE_SUPABASE_ANON_KEY</span> match your Supabase project, then redeploy so the
-        build picks them up.
+        build picks them up. If the host above is wrong, the deploy is using the wrong env.
       </p>
     </div>
   );
@@ -65,7 +69,7 @@ export function LoginPage({ authError }: LoginPageProps) {
   async function handlePasswordLogin(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await signInWithPasswordWithRetry({ email, password });
     if (error) {
       toast({
         variant: "destructive",
@@ -79,7 +83,7 @@ export function LoginPage({ authError }: LoginPageProps) {
   async function handleMagicLink(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await signInWithOtpWithRetry({
       email,
       options: { emailRedirectTo: window.location.origin },
     });

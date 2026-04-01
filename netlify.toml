@@ -16,7 +16,8 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co https://api.anthropic.com https://api.hubapi.com; font-src 'self' data:; frame-ancestors 'none'"
+    # Include wss + *.supabase.com so Safari can reach Auth/Realtime/pooler; *.co alone is not always enough.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com; font-src 'self' data:; frame-ancestors 'none'"
     Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]

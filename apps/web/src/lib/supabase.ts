@@ -9,3 +9,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+/** Hostname from VITE_SUPABASE_URL (for operator diagnostics when sign-in fails). */
+export function getSupabaseUrlHostname(): string {
+  try {
+    return new URL(supabaseUrl).hostname;
+  } catch {
+    return "(invalid VITE_SUPABASE_URL)";
+  }
+}
