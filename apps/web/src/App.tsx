@@ -11,6 +11,11 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
+import {
+  hasStoredSupabaseAuthToken,
+  shouldShowProtectedRouteBootstrap,
+} from "./lib/auth-route-bootstrap";
+import { hasCachedAuthProfile } from "./lib/auth-recovery";
 
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
@@ -119,6 +124,13 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { user, profile, loading, error } = useAuth();
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  const shouldHoldProtectedRouteBootstrap = shouldShowProtectedRouteBootstrap({
+    pathname,
+    hasStoredToken: hasStoredSupabaseAuthToken(),
+    hasCachedProfile: hasCachedAuthProfile(),
+    authError: error,
+  });
   const [quoteBuilderAccess, setQuoteBuilderAccess] = useState({
     connected: envIntelliDealerConnected,
     loading: true,
@@ -254,7 +266,36 @@ function App() {
     );
   }
 
-  if (!user || !profile) {
+  if (!user && shouldHoldProtectedRouteBootstrap) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <OfflineBanner />
+          <SessionExpiredModal
+            open={showSessionExpiredModal}
+            onSignIn={() => {
+              setSessionExpired(false);
+            }}
+          />
+          <div className="min-h-screen bg-background flex items-center justify-center px-6">
+            <div className="text-center max-w-md" role="status" aria-live="polite">
+              <div
+                className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                aria-hidden="true"
+              />
+              <p className="text-sm font-medium text-foreground">Finishing sign-in...</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {error ?? "We're restoring your workspace access for this page."}
+              </p>
+            </div>
+          </div>
+          <Toaster />
+        </BrowserRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  if (!user) {
     return (
       <>
         <OfflineBanner />
@@ -265,6 +306,62 @@ function App() {
         />
         <Toaster />
       </>
+    );
+  }
+
+  if (!profile) {
+    const profileLoadFailed = Boolean(error);
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <OfflineBanner />
+          <SessionExpiredModal
+            open={showSessionExpiredModal}
+            onSignIn={() => {
+              setSessionExpired(false);
+              void supabase.auth.signOut();
+            }}
+          />
+          <div className="min-h-screen bg-background flex items-center justify-center px-6">
+            <div className="text-center max-w-md" role="status" aria-live="polite">
+              {profileLoadFailed ? (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto mb-3 text-sm font-semibold">
+                    !
+                  </div>
+                  <p className="text-sm font-medium text-foreground">
+                    We could not load your workspace access
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionExpired(false);
+                      void supabase.auth.signOut();
+                    }}
+                    className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    Sign in again
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm font-medium text-foreground">Finishing sign-in...</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    We're loading your workspace access and route permissions.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          <Toaster />
+        </BrowserRouter>
+      </QueryClientProvider>
     );
   }
 
