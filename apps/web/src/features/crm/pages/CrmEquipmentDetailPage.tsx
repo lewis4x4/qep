@@ -21,6 +21,7 @@ import type { UserRole } from "@/lib/database.types";
 import { useToast } from "@/hooks/use-toast";
 import { getEquipmentById, patchEquipment } from "../lib/crm-router-api";
 import { CrmEquipmentFormSheet, draftToPayload } from "../components/CrmEquipmentFormSheet";
+import { EquipmentVision } from "@/components/EquipmentVision";
 
 interface CrmEquipmentDetailPageProps {
   userId: string;
@@ -269,6 +270,15 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
         <span>Created {new Date(eq.createdAt).toLocaleDateString()}</span>
         <span>Updated {new Date(eq.updatedAt).toLocaleDateString()}</span>
       </div>
+
+      {/* ─── AI Vision Analysis ─────────────────────── */}
+      <Card className="p-4 bg-white/5 border-white/10">
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <Gauge className="h-4 w-4 text-qep-orange" />
+          AI Equipment Analysis
+        </h3>
+        <EquipmentVision />
+      </Card>
 
       {/* ─── Editor Sheet ────────────────────────────── */}
       <CrmEquipmentFormSheet
