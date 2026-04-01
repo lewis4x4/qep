@@ -3,6 +3,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
 import {
+  hasCachedAuthProfile,
   isTransientAuthRecoveryError,
   readCachedProfile,
   writeCachedProfile,
@@ -57,6 +58,16 @@ export function useAuth(): AuthState {
 
   useEffect(() => {
     const hadStoredToken = hadStoredTokenRef.current;
+
+    function hasStoredSupabaseToken(): boolean {
+      return Object.keys(localStorage).some(
+        (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+      );
+    }
+
+    function hasRecoverableClientState(): boolean {
+      return hadStoredToken || hasStoredSupabaseToken() || hasCachedAuthProfile();
+    }
 
     function applyProfileState(session: Session, profile: Profile | null, error: string | null): void {
       if (profile) {
@@ -127,9 +138,7 @@ export function useAuth(): AuthState {
         } else {
           // No session — use pre-getSession() snapshot to detect tokens
           // that Supabase silently cleaned up during parsing.
-          const stillHasToken = Object.keys(localStorage).some(
-            (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-          );
+          const stillHasToken = hasStoredSupabaseToken();
           if (hadStoredToken || stillHasToken) {
             // Clean up any remaining tokens and force signOut so
             // App.tsx onAuthStateChange fires SIGNED_OUT.
@@ -159,6 +168,12 @@ export function useAuth(): AuthState {
           lower.includes("token") ||
           lower.includes("session") ||
           lower.includes("json");
+        const shouldSilenceAnonymousBootstrapError =
+          !hasRecoverableClientState() && (timedOut || transientAuthFailure || !looksAuth);
+        if (shouldSilenceAnonymousBootstrapError) {
+          setState({ user: null, session: null, profile: null, loading: false, error: null });
+          return;
+        }
         if (looksAuth && !timedOut && !transientAuthFailure) {
           void supabase.auth.signOut();
         }
@@ -213,16 +228,25 @@ export function useAuth(): AuthState {
             const raw = err instanceof Error
               ? err.message
               : "We had trouble updating your session. Refresh the page or sign in again.";
+            const transientAuthFailure = isTransientAuthRecoveryError(raw);
             const message = raw === "Auth token validation timed out"
               ? "We can't reach the authentication service. Try refreshing the page."
               : raw;
-            setState((prev) => ({
+            setState((prev) => {
+              const shouldSilenceAnonymousBootstrapError =
+                !hasRecoverableClientState() &&
+                !prev.user &&
+                !prev.session &&
+                !prev.profile &&
+                (raw === "Auth token validation timed out" || transientAuthFailure);
+              return {
               user: prev.user,
               session: prev.session,
               profile: prev.profile,
               loading: false,
-              error: message,
-            }));
+              error: shouldSilenceAnonymousBootstrapError ? null : message,
+              };
+            });
           }
         })();
       }, 0);

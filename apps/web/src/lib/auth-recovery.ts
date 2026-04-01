@@ -30,7 +30,7 @@ interface WriteStorageLike extends ReadStorageLike {
 }
 
 export function isTransientAuthRecoveryError(message: string): boolean {
-  return /lock broken|steal option|timeout|timed out|network request failed|failed to fetch/i.test(
+  return /lock broken|steal option|timeout|timed out|network request failed|failed to fetch|load failed|networkerror/i.test(
     message
   );
 }

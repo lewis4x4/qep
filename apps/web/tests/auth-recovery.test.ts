@@ -39,6 +39,10 @@ describe("isTransientAuthRecoveryError", () => {
     ).toBe(true);
   });
 
+  it("treats Safari load failures as transient", () => {
+    expect(isTransientAuthRecoveryError("TypeError: Load failed")).toBe(true);
+  });
+
   it("does not treat expired sessions as transient", () => {
     expect(
       isTransientAuthRecoveryError("Your session token is invalid or expired. Please sign in again.")
