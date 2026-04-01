@@ -2019,12 +2019,25 @@ Deno.serve(async (req) => {
     );
 
     const toolInstructions = `
-You also have tools to query live CRM data, equipment inventory, valuations, competitor listings, financing rates, and pipeline status. Use them when:
+You have tools to query live CRM data AND to take actions on behalf of the user. Use query tools when:
 - The pre-loaded evidence above doesn't answer the question fully
 - The user asks for specific aggregations (pipeline totals, deals closing this week, etc.)
 - The user asks about a specific contact, deal, or equipment not in the evidence
 - The user needs current pricing, financing, or competitive intelligence
-Prefer the pre-loaded evidence when it already contains the answer.`;
+Prefer the pre-loaded evidence when it already contains the answer.
+
+You can also take CRM ACTIONS when the user explicitly asks you to:
+- createFollowUpTask — create tasks/reminders on deals
+- logActivity — log notes, calls, emails, or meetings on deals/contacts/companies
+- updateDealStage — move a deal to a new pipeline stage
+- draftEmail — draft an email to a contact (present as a draft, never claim to send)
+- getDealCoaching — provide coaching insights based on historical patterns
+- generatePrepSheet — generate pre-meeting customer prep sheets
+- getAnomalyAlerts — surface risk alerts (stalling deals, overdue follow-ups)
+- getCompetitiveIntelligence — analyze competitor mentions from voice notes
+- getVoiceNoteInsights — query voice note intelligence
+
+For write actions (createFollowUpTask, logActivity, updateDealStage): confirm what you did and show the result. For draftEmail: present the draft clearly and tell the user to review it before sending.`;
 
     const systemPrompt = contextBlock
       ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer from the provided evidence and your tools. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.

@@ -220,6 +220,83 @@ export const CHAT_TOOLS = [
   {
     type: "function" as const,
     function: {
+      name: "createFollowUpTask",
+      description: "Create a follow-up task/activity on a deal. Use when the user says 'remind me to follow up', 'schedule a follow-up', 'create a task for', or 'set a reminder'.",
+      parameters: {
+        type: "object",
+        properties: {
+          deal_name: { type: "string", description: "Name of the deal to attach the task to" },
+          task_description: { type: "string", description: "What needs to be done" },
+          due_date: { type: "string", description: "Due date in YYYY-MM-DD format (defaults to tomorrow)" },
+        },
+        required: ["deal_name", "task_description"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "logActivity",
+      description: "Log a CRM activity (note, call, email, meeting) on a deal, contact, or company. Use when user says 'log a note', 'record a call', 'note that I met with', or 'add an activity'.",
+      parameters: {
+        type: "object",
+        properties: {
+          activity_type: {
+            type: "string",
+            enum: ["note", "call", "email", "meeting"],
+            description: "Type of activity",
+          },
+          entity_type: {
+            type: "string",
+            enum: ["deal", "contact", "company"],
+            description: "What to attach the activity to",
+          },
+          entity_name: { type: "string", description: "Name of the deal, contact, or company" },
+          body: { type: "string", description: "Activity description/content" },
+        },
+        required: ["activity_type", "entity_type", "entity_name", "body"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "updateDealStage",
+      description: "Move a deal to a different pipeline stage. Use when user says 'move deal to', 'advance deal', 'update stage', or 'mark deal as'.",
+      parameters: {
+        type: "object",
+        properties: {
+          deal_name: { type: "string", description: "Name of the deal" },
+          new_stage: { type: "string", description: "Name of the stage to move to (e.g. 'Negotiation', 'Quote Sent', 'Closed Won')" },
+        },
+        required: ["deal_name", "new_stage"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "draftEmail",
+      description: "Draft a professional email to a contact. Use when user says 'draft an email', 'write an email to', 'send a message to', or 'compose an email'. Returns the draft for the user to review — does NOT send.",
+      parameters: {
+        type: "object",
+        properties: {
+          contact_name: { type: "string", description: "Name of the contact" },
+          subject: { type: "string", description: "Email subject line" },
+          purpose: { type: "string", description: "What the email should accomplish (e.g. 'follow up on demo', 'request meeting', 'send pricing')" },
+          tone: {
+            type: "string",
+            enum: ["professional", "friendly", "urgent", "casual"],
+            description: "Tone of the email (default: professional)",
+          },
+        },
+        required: ["contact_name", "purpose"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "generatePrepSheet",
       description: "Generate a comprehensive pre-meeting customer prep sheet. Pulls all CRM data for a company or contact and synthesizes a one-page briefing with talking points, intelligence, and action items. Use when user says 'prep for meeting with X', 'prep sheet for X', or 'what do I need to know before meeting X'.",
       parameters: {
@@ -1108,6 +1185,245 @@ async function execGetCompetitiveIntelligence(
   return { mentions: competitors, summary, period_days: days };
 }
 
+async function execCreateFollowUpTask(
+  db: SupabaseClient,
+  args: { deal_name: string; task_description: string; due_date?: string },
+): Promise<unknown> {
+  const name = (args.deal_name ?? "").trim();
+  if (!name) return { error: "deal_name is required" };
+
+  const { data: deals } = await db
+    .from("crm_deals")
+    .select("id, name, assigned_rep_id, workspace_id")
+    .ilike("name", `%${name}%`)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (!deals || deals.length === 0) return { error: `No deal found matching "${name}"` };
+  const deal = deals[0] as Record<string, unknown>;
+
+  const dueDate = args.due_date
+    ? new Date(args.due_date).toISOString()
+    : new Date(Date.now() + 86_400_000).toISOString();
+
+  const { data: activity, error } = await db
+    .from("crm_activities")
+    .insert({
+      workspace_id: deal.workspace_id ?? "default",
+      activity_type: "task",
+      body: args.task_description,
+      occurred_at: new Date().toISOString(),
+      deal_id: deal.id,
+      contact_id: null,
+      company_id: null,
+      created_by: deal.assigned_rep_id,
+      metadata: {
+        source: "chat_assistant",
+        task: { dueAt: dueDate, status: "open" },
+      },
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: `Failed to create task: ${error.message}` };
+
+  return {
+    success: true,
+    message: `Follow-up task created on "${deal.name}"`,
+    task_id: (activity as Record<string, unknown>).id,
+    deal_name: deal.name,
+    due_date: dueDate.split("T")[0],
+    description: args.task_description,
+  };
+}
+
+async function execLogActivity(
+  db: SupabaseClient,
+  args: { activity_type: string; entity_type: string; entity_name: string; body: string },
+): Promise<unknown> {
+  const entityName = (args.entity_name ?? "").trim();
+  if (!entityName) return { error: "entity_name is required" };
+
+  const validTypes = ["note", "call", "email", "meeting"];
+  if (!validTypes.includes(args.activity_type)) {
+    return { error: `activity_type must be one of: ${validTypes.join(", ")}` };
+  }
+
+  const like = `%${entityName}%`;
+  let dealId: string | null = null;
+  let contactId: string | null = null;
+  let companyId: string | null = null;
+  let resolvedName = entityName;
+  let workspaceId = "default";
+  let createdBy: string | null = null;
+
+  if (args.entity_type === "deal") {
+    const { data } = await db.from("crm_deals").select("id, name, assigned_rep_id, workspace_id").ilike("name", like).is("deleted_at", null).limit(1);
+    if (!data || data.length === 0) return { error: `No deal found matching "${entityName}"` };
+    const d = data[0] as Record<string, unknown>;
+    dealId = d.id as string;
+    resolvedName = d.name as string;
+    workspaceId = d.workspace_id as string ?? "default";
+    createdBy = d.assigned_rep_id as string | null;
+  } else if (args.entity_type === "contact") {
+    const parts = entityName.split(/\s+/);
+    let q = db.from("crm_contacts").select("id, first_name, last_name").is("deleted_at", null);
+    if (parts.length > 1) {
+      q = q.ilike("first_name", `%${parts[0]}%`).ilike("last_name", `%${parts[parts.length - 1]}%`);
+    } else {
+      q = q.or(`first_name.ilike.${like},last_name.ilike.${like}`);
+    }
+    const { data } = await q.limit(1);
+    if (!data || data.length === 0) return { error: `No contact found matching "${entityName}"` };
+    const c = data[0] as Record<string, unknown>;
+    contactId = c.id as string;
+    resolvedName = `${c.first_name} ${c.last_name}`;
+  } else if (args.entity_type === "company") {
+    const { data } = await db.from("crm_companies").select("id, name, workspace_id").ilike("name", like).is("deleted_at", null).limit(1);
+    if (!data || data.length === 0) return { error: `No company found matching "${entityName}"` };
+    const co = data[0] as Record<string, unknown>;
+    companyId = co.id as string;
+    resolvedName = co.name as string;
+    workspaceId = co.workspace_id as string ?? "default";
+  }
+
+  const { data: activity, error } = await db
+    .from("crm_activities")
+    .insert({
+      workspace_id: workspaceId,
+      activity_type: args.activity_type,
+      body: args.body,
+      occurred_at: new Date().toISOString(),
+      deal_id: dealId,
+      contact_id: contactId,
+      company_id: companyId,
+      created_by: createdBy,
+      metadata: { source: "chat_assistant" },
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: `Failed to log activity: ${error.message}` };
+
+  return {
+    success: true,
+    message: `${args.activity_type} logged on ${args.entity_type} "${resolvedName}"`,
+    activity_id: (activity as Record<string, unknown>).id,
+    entity_type: args.entity_type,
+    entity_name: resolvedName,
+  };
+}
+
+async function execUpdateDealStage(
+  db: SupabaseClient,
+  args: { deal_name: string; new_stage: string },
+): Promise<unknown> {
+  const dealName = (args.deal_name ?? "").trim();
+  const stageName = (args.new_stage ?? "").trim();
+  if (!dealName) return { error: "deal_name is required" };
+  if (!stageName) return { error: "new_stage is required" };
+
+  const { data: deals } = await db
+    .from("crm_deals")
+    .select("id, name, stage_id, workspace_id")
+    .ilike("name", `%${dealName}%`)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (!deals || deals.length === 0) return { error: `No deal found matching "${dealName}"` };
+  const deal = deals[0] as Record<string, unknown>;
+
+  const { data: stages } = await db
+    .from("crm_deal_stages")
+    .select("id, name")
+    .ilike("name", `%${stageName}%`)
+    .eq("workspace_id", deal.workspace_id ?? "default")
+    .limit(1);
+
+  if (!stages || stages.length === 0) return { error: `No stage found matching "${stageName}". Check available stage names.` };
+  const stage = stages[0] as Record<string, unknown>;
+
+  if (deal.stage_id === stage.id) {
+    return { message: `Deal "${deal.name}" is already in stage "${stage.name}".` };
+  }
+
+  const previousStageId = deal.stage_id;
+  let previousStageName = "Unknown";
+  if (previousStageId) {
+    const { data: prev } = await db.from("crm_deal_stages").select("name").eq("id", previousStageId).single();
+    if (prev) previousStageName = (prev as Record<string, unknown>).name as string;
+  }
+
+  const { error } = await db
+    .from("crm_deals")
+    .update({ stage_id: stage.id, updated_at: new Date().toISOString() })
+    .eq("id", deal.id);
+
+  if (error) return { error: `Failed to update deal stage: ${error.message}` };
+
+  return {
+    success: true,
+    message: `Deal "${deal.name}" moved from "${previousStageName}" to "${stage.name}"`,
+    deal_name: deal.name,
+    previous_stage: previousStageName,
+    new_stage: stage.name,
+  };
+}
+
+async function execDraftEmail(
+  db: SupabaseClient,
+  args: { contact_name: string; subject?: string; purpose: string; tone?: string },
+): Promise<unknown> {
+  const contactName = (args.contact_name ?? "").trim();
+  if (!contactName) return { error: "contact_name is required" };
+
+  const like = `%${contactName}%`;
+  const parts = contactName.split(/\s+/);
+  let q = db.from("crm_contacts").select("id, first_name, last_name, email, title, primary_company_id").is("deleted_at", null);
+  if (parts.length > 1) {
+    q = q.ilike("first_name", `%${parts[0]}%`).ilike("last_name", `%${parts[parts.length - 1]}%`);
+  } else {
+    q = q.or(`first_name.ilike.${like},last_name.ilike.${like}`);
+  }
+  const { data: contacts } = await q.limit(1);
+  if (!contacts || contacts.length === 0) return { error: `No contact found matching "${contactName}"` };
+  const contact = contacts[0] as Record<string, unknown>;
+
+  let companyName: string | null = null;
+  if (contact.primary_company_id) {
+    const { data: co } = await db.from("crm_companies").select("name").eq("id", contact.primary_company_id).single();
+    if (co) companyName = (co as Record<string, unknown>).name as string;
+  }
+
+  // Get recent context
+  const contactId = contact.id as string;
+  const { data: recentActivity } = await db
+    .from("crm_activities")
+    .select("activity_type, body, occurred_at")
+    .eq("contact_id", contactId)
+    .is("deleted_at", null)
+    .order("occurred_at", { ascending: false })
+    .limit(3);
+
+  return {
+    draft_context: {
+      to: `${contact.first_name} ${contact.last_name}`,
+      email: contact.email,
+      title: contact.title,
+      company: companyName,
+      purpose: args.purpose,
+      subject: args.subject ?? null,
+      tone: args.tone ?? "professional",
+      recent_interactions: (recentActivity ?? []).map((a: Record<string, unknown>) => ({
+        type: a.activity_type,
+        summary: typeof a.body === "string" ? (a.body as string).slice(0, 150) : null,
+        date: a.occurred_at,
+      })),
+    },
+    instruction: `Generate a ${args.tone ?? "professional"} email draft to ${contact.first_name} ${contact.last_name}${contact.title ? ` (${contact.title})` : ""}${companyName ? ` at ${companyName}` : ""}. Purpose: ${args.purpose}.${args.subject ? ` Subject: ${args.subject}.` : ""} Use the recent interaction context to personalize. Format as: Subject: ...\n\n[email body]. Do NOT send — present it as a draft for the user to review and edit.`,
+  };
+}
+
 async function execGeneratePrepSheet(
   db: SupabaseClient,
   args: { entity_type: string; name: string },
@@ -1310,6 +1626,10 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getManufacturerIncentives: (db, args) => execGetManufacturerIncentives(db, args as Parameters<typeof execGetManufacturerIncentives>[1]),
   getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
   getDealCoaching: (db, args) => execGetDealCoaching(db, args as Parameters<typeof execGetDealCoaching>[1]),
+  createFollowUpTask: (db, args) => execCreateFollowUpTask(db, args as Parameters<typeof execCreateFollowUpTask>[1]),
+  logActivity: (db, args) => execLogActivity(db, args as Parameters<typeof execLogActivity>[1]),
+  updateDealStage: (db, args) => execUpdateDealStage(db, args as Parameters<typeof execUpdateDealStage>[1]),
+  draftEmail: (db, args) => execDraftEmail(db, args as Parameters<typeof execDraftEmail>[1]),
   generatePrepSheet: (db, args) => execGeneratePrepSheet(db, args as Parameters<typeof execGeneratePrepSheet>[1]),
   getWinLossAnalysis: (db, args) => execGetWinLossAnalysis(db, args as Parameters<typeof execGetWinLossAnalysis>[1]),
   getCompetitiveIntelligence: (db, args) => execGetCompetitiveIntelligence(db, args as Parameters<typeof execGetCompetitiveIntelligence>[1]),
