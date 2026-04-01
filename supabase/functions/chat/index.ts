@@ -8,7 +8,7 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-crm-name-search";
+const CHAT_EDGE_REVISION = "20260401-broad-crm-search";
 const CHAT_MODEL = "gpt-5.4-nano";
 
 const ALLOWED_ORIGINS = [
@@ -1086,13 +1086,39 @@ async function buildCustomerContextEvidence(
   return evidence;
 }
 
+type EquipmentRow = {
+  id: string;
+  name: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  serial_number: string | null;
+  category: string | null;
+  condition: string | null;
+  availability: string | null;
+  engine_hours: number | null;
+  location_description: string | null;
+  current_market_value: number | null;
+  daily_rental_rate: number | null;
+};
+
+type VoiceCaptureRow = {
+  id: string;
+  transcript: string | null;
+  extracted_data: Record<string, unknown> | null;
+  created_at: string;
+};
+
 /**
- * When no explicit CRM context IDs are provided, extract plausible person /
- * company names from the user message and search CRM contacts, companies,
- * deals, and recent activities so the assistant can answer questions like
- * "tell me about John Smith".
+ * Broad CRM search: always runs alongside document retrieval so the assistant
+ * can answer questions about ANY entity in the system — contacts, companies,
+ * deals, equipment, activities, voice notes, and quotes — without needing
+ * explicit context IDs from the frontend.
+ *
+ * All searches run in parallel for speed.  Results are scored, deduped by
+ * sourceId, and capped to prevent the context window from exploding.
  */
-async function searchCrmByName(
+async function searchCrmBroadly(
   callerClient: ReturnType<typeof createCallerClient>,
   input: {
     traceId: string;
@@ -1104,45 +1130,106 @@ async function searchCrmByName(
   const tokens = extractSearchTokens(input.message);
   if (tokens.length === 0) return evidence;
 
-  const nameQuery = simplifyQuestion(input.message).slice(0, 120);
-  if (!nameQuery || nameQuery.length < 2) return evidence;
+  const queryText = simplifyQuestion(input.message).slice(0, 120);
+  if (!queryText || queryText.length < 2) return evidence;
 
-  // Search contacts by ilike on first_name / last_name
+  const searchTokens = tokens.slice(0, 5);
+  const likePattern = `%${queryText.slice(0, 80)}%`;
+  const firstToken = searchTokens[0] ?? queryText;
+
+  // ── 1. Fire all searches in parallel ──────────────────────────────────────
   const contactSearches: Array<Promise<{ data: ContactRow[] | null }>> = [];
-  for (const token of tokens.slice(0, 4)) {
+  for (const token of searchTokens) {
     if (token.length < 3) continue;
     contactSearches.push(
       callerClient
         .from("crm_contacts")
         .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
-        .or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%`)
+        .or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%`)
         .is("deleted_at", null)
         .limit(5) as unknown as Promise<{ data: ContactRow[] | null }>,
     );
   }
-  const contactResults = await Promise.all(contactSearches);
+
+  const [
+    contactResults,
+    companyResult,
+    dealResult,
+    equipmentResult,
+    activityResult,
+    voiceCaptureResult,
+    quoteResult,
+  ] = await Promise.all([
+    Promise.all(contactSearches),
+    callerClient
+      .from("crm_companies")
+      .select("id, name, city, state, country")
+      .ilike("name", likePattern)
+      .is("deleted_at", null)
+      .limit(5),
+    callerClient
+      .from("crm_deals_rep_safe")
+      .select("id, name, amount, expected_close_on, next_follow_up_at, primary_contact_id, company_id")
+      .ilike("name", likePattern)
+      .limit(5),
+    callerClient
+      .from("crm_equipment")
+      .select("id, name, make, model, year, serial_number, category, condition, availability, engine_hours, location_description, current_market_value, daily_rental_rate")
+      .or(`name.ilike.${likePattern},make.ilike.${likePattern},model.ilike.${likePattern},serial_number.ilike.${likePattern}`)
+      .is("deleted_at", null)
+      .limit(5),
+    callerClient
+      .from("crm_activities")
+      .select("id, activity_type, body, occurred_at")
+      .ilike("body", likePattern)
+      .is("deleted_at", null)
+      .order("occurred_at", { ascending: false })
+      .limit(8),
+    callerClient
+      .from("voice_captures")
+      .select("id, transcript, extracted_data, created_at")
+      .ilike("transcript", likePattern)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    callerClient
+      .from("quotes")
+      .select("id, title, status, updated_at")
+      .ilike("title", likePattern)
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(3),
+  ]);
+
+  const seenIds = new Set<string>();
+  function pushEvidence(item: EvidenceItem) {
+    if (seenIds.has(item.sourceId)) return;
+    seenIds.add(item.sourceId);
+    evidence.push(item);
+  }
+
+  // ── 2. Process contacts ─────────────────────────────────────────────────
   const contactMap = new Map<string, ContactRow>();
   for (const result of contactResults) {
     for (const row of result.data ?? []) {
       contactMap.set(row.id, row);
     }
   }
-
-  // Score contacts by how many tokens match
   const scoredContacts = [...contactMap.values()].map((c) => {
     const fullName = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase();
+    const emailLower = (c.email ?? "").toLowerCase();
     let score = 0;
-    for (const token of tokens) {
-      if (fullName.includes(token)) score++;
+    for (const token of searchTokens) {
+      if (fullName.includes(token)) score += 2;
+      if (emailLower.includes(token)) score += 1;
     }
     return { contact: c, score };
-  }).filter((entry) => entry.score > 0)
+  }).filter((e) => e.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 
   for (const { contact } of scoredContacts) {
     const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact";
-    evidence.push({
+    pushEvidence({
       sourceType: "crm",
       sourceId: `crm-contact:${contact.id}`,
       sourceTitle: `CRM Contact: ${fullName}`,
@@ -1159,7 +1246,7 @@ async function searchCrmByName(
       accessClass: "crm_context",
     });
 
-    // Pull that contact's company
+    // Pull related company
     if (contact.primary_company_id) {
       const { data: companyRow } = await callerClient
         .from("crm_companies")
@@ -1169,7 +1256,7 @@ async function searchCrmByName(
         .maybeSingle();
       if (companyRow) {
         const co = companyRow as CompanyRow;
-        evidence.push({
+        pushEvidence({
           sourceType: "crm",
           sourceId: `crm-company:${co.id}`,
           sourceTitle: `CRM Company: ${co.name}`,
@@ -1184,37 +1271,26 @@ async function searchCrmByName(
       }
     }
 
-    // Pull recent activities for the contact
-    const { data: activityRows } = await callerClient
-      .from("crm_activities")
-      .select("id, activity_type, body, occurred_at")
-      .eq("contact_id", contact.id)
-      .is("deleted_at", null)
-      .order("occurred_at", { ascending: false })
-      .limit(3);
-    const activities = (activityRows ?? []) as ActivityRow[];
-
-    // Also pull activities linked to deals that belong to this contact
-    const { data: dealRows } = await callerClient
+    // Pull deals for this contact
+    const { data: contactDealRows } = await callerClient
       .from("crm_deals_rep_safe")
       .select("id, name, amount, expected_close_on, next_follow_up_at, primary_contact_id, company_id")
       .eq("primary_contact_id", contact.id)
       .order("expected_close_on", { ascending: false })
       .limit(3);
-    const deals = (dealRows ?? []) as DealRow[];
-
-    if (deals.length > 0) {
-      evidence.push({
+    const contactDeals = (contactDealRows ?? []) as DealRow[];
+    if (contactDeals.length > 0) {
+      pushEvidence({
         sourceType: "crm",
-        sourceId: `crm-deals:${deals.map((d) => d.id).join(",")}`,
+        sourceId: `crm-deals-for-contact:${contact.id}`,
         sourceTitle: `Deals for ${fullName}`,
         excerpt: truncateText(
-          deals.map((d) =>
+          contactDeals.map((d) =>
             [
               `Deal: ${d.name}`,
               `Amount: ${formatCurrency(d.amount)}`,
-              d.expected_close_on ? `Expected close: ${d.expected_close_on}` : null,
-              d.next_follow_up_at ? `Next follow-up: ${d.next_follow_up_at}` : null,
+              d.expected_close_on ? `Close: ${d.expected_close_on}` : null,
+              d.next_follow_up_at ? `Follow-up: ${d.next_follow_up_at}` : null,
             ].filter(Boolean).join(" | "),
           ).join("\n"),
           500,
@@ -1222,32 +1298,40 @@ async function searchCrmByName(
         confidence: 0.93,
         accessClass: "crm_context",
       });
+    }
 
-      // Fetch deal activities too
-      for (const deal of deals.slice(0, 2)) {
-        const { data: dealActivities } = await callerClient
-          .from("crm_activities")
-          .select("id, activity_type, body, occurred_at")
-          .eq("deal_id", deal.id)
-          .is("deleted_at", null)
-          .order("occurred_at", { ascending: false })
-          .limit(3);
-        for (const da of (dealActivities ?? []) as ActivityRow[]) {
-          if (!activities.some((a) => a.id === da.id)) {
-            activities.push(da);
-          }
-        }
+    // Pull activities for this contact + their deals
+    const contactActivities: ActivityRow[] = [];
+    const { data: contactActRows } = await callerClient
+      .from("crm_activities")
+      .select("id, activity_type, body, occurred_at")
+      .eq("contact_id", contact.id)
+      .is("deleted_at", null)
+      .order("occurred_at", { ascending: false })
+      .limit(5);
+    for (const a of (contactActRows ?? []) as ActivityRow[]) contactActivities.push(a);
+
+    for (const deal of contactDeals.slice(0, 2)) {
+      const { data: dActRows } = await callerClient
+        .from("crm_activities")
+        .select("id, activity_type, body, occurred_at")
+        .eq("deal_id", deal.id)
+        .is("deleted_at", null)
+        .order("occurred_at", { ascending: false })
+        .limit(3);
+      for (const da of (dActRows ?? []) as ActivityRow[]) {
+        if (!contactActivities.some((a) => a.id === da.id)) contactActivities.push(da);
       }
     }
 
-    if (activities.length > 0) {
-      activities.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
-      evidence.push({
+    if (contactActivities.length > 0) {
+      contactActivities.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+      pushEvidence({
         sourceType: "crm",
-        sourceId: `crm-activities:${activities.slice(0, 5).map((a) => a.id).join(",")}`,
+        sourceId: `crm-activities-for-contact:${contact.id}`,
         sourceTitle: `Recent Activity: ${fullName}`,
         excerpt: truncateText(
-          activities.slice(0, 5).map((row) =>
+          contactActivities.slice(0, 5).map((row) =>
             `${row.occurred_at}: ${row.activity_type}${row.body ? ` — ${truncateText(row.body, 150)}` : ""}`
           ).join("\n"),
           600,
@@ -1258,91 +1342,121 @@ async function searchCrmByName(
     }
   }
 
-  // Search companies by name
-  if (scoredContacts.length === 0) {
-    const { data: companyRows } = await callerClient
-      .from("crm_companies")
-      .select("id, name, city, state, country")
-      .ilike("name", `%${nameQuery.slice(0, 60)}%`)
-      .is("deleted_at", null)
-      .limit(3);
-    for (const co of (companyRows ?? []) as CompanyRow[]) {
-      evidence.push({
-        sourceType: "crm",
-        sourceId: `crm-company:${co.id}`,
-        sourceTitle: `CRM Company: ${co.name}`,
-        excerpt: truncateText(
-          [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
-            .filter(Boolean).join("\n"),
-          300,
-        ),
-        confidence: 0.88,
-        accessClass: "crm_context",
-      });
-    }
+  // ── 3. Process companies ────────────────────────────────────────────────
+  for (const co of ((companyResult.data ?? []) as CompanyRow[]).slice(0, 3)) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `crm-company:${co.id}`,
+      sourceTitle: `CRM Company: ${co.name}`,
+      excerpt: truncateText(
+        [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
+          .filter(Boolean).join("\n"),
+        300,
+      ),
+      confidence: 0.88,
+      accessClass: "crm_context",
+    });
   }
 
-  // Search voice captures transcript and CRM activity bodies for the query
-  // (catches cases where a name is mentioned in a voice note but isn't a CRM contact)
-  if (evidence.length === 0 && nameQuery.length >= 3) {
-    const likePattern = `%${nameQuery.slice(0, 80)}%`;
-    const [vcResult, actResult] = await Promise.all([
-      callerClient
-        .from("voice_captures")
-        .select("id, transcript, extracted_data, created_at")
-        .ilike("transcript", likePattern)
-        .order("created_at", { ascending: false })
-        .limit(3),
-      callerClient
-        .from("crm_activities")
-        .select("id, activity_type, body, occurred_at")
-        .ilike("body", likePattern)
-        .is("deleted_at", null)
-        .order("occurred_at", { ascending: false })
-        .limit(5),
-    ]);
+  // ── 4. Process deals ────────────────────────────────────────────────────
+  for (const deal of ((dealResult.data ?? []) as DealRow[]).slice(0, 3)) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `crm-deal:${deal.id}`,
+      sourceTitle: `CRM Deal: ${deal.name}`,
+      excerpt: truncateText(
+        [
+          `Deal: ${deal.name}`,
+          `Amount: ${formatCurrency(deal.amount)}`,
+          deal.expected_close_on ? `Expected close: ${deal.expected_close_on}` : null,
+          deal.next_follow_up_at ? `Next follow-up: ${deal.next_follow_up_at}` : null,
+          suggestedFollowUpHintLine(deal.next_follow_up_at),
+        ].filter(Boolean).join("\n"),
+        420,
+      ),
+      confidence: 0.91,
+      accessClass: "crm_context",
+    });
+  }
 
-    type VoiceCaptureRow = {
-      id: string;
-      transcript: string | null;
-      extracted_data: Record<string, unknown> | null;
-      created_at: string;
-    };
+  // ── 5. Process equipment ────────────────────────────────────────────────
+  for (const eq of ((equipmentResult.data ?? []) as EquipmentRow[]).slice(0, 3)) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `crm-equipment:${eq.id}`,
+      sourceTitle: `Equipment: ${[eq.year, eq.make, eq.model].filter(Boolean).join(" ") || eq.name}`,
+      excerpt: truncateText(
+        [
+          `Name: ${eq.name}`,
+          eq.make ? `Make: ${eq.make}` : null,
+          eq.model ? `Model: ${eq.model}` : null,
+          eq.year ? `Year: ${eq.year}` : null,
+          eq.serial_number ? `Serial: ${eq.serial_number}` : null,
+          eq.category ? `Category: ${eq.category}` : null,
+          eq.condition ? `Condition: ${eq.condition}` : null,
+          eq.availability ? `Availability: ${eq.availability}` : null,
+          eq.engine_hours ? `Engine hours: ${eq.engine_hours}` : null,
+          eq.location_description ? `Location: ${eq.location_description}` : null,
+          typeof eq.current_market_value === "number" ? `Market value: ${formatCurrency(eq.current_market_value)}` : null,
+          typeof eq.daily_rental_rate === "number" ? `Daily rental: ${formatCurrency(eq.daily_rental_rate)}` : null,
+        ].filter(Boolean).join("\n"),
+        500,
+      ),
+      confidence: 0.90,
+      accessClass: "crm_context",
+    });
+  }
 
-    for (const vc of ((vcResult.data ?? []) as VoiceCaptureRow[]).slice(0, 2)) {
-      const excerptText = vc.transcript
-        ? excerptAroundToken(vc.transcript, nameQuery.split(" ")[0] ?? nameQuery)
-        : "";
-      if (!excerptText) continue;
-      evidence.push({
-        sourceType: "crm",
-        sourceId: `voice-capture:${vc.id}`,
-        sourceTitle: `Voice Note (${vc.created_at.slice(0, 10)})`,
-        excerpt: truncateText(excerptText, 500),
-        confidence: 0.85,
-        accessClass: "crm_context",
-      });
-    }
+  // ── 6. Process activities (text search on body) ─────────────────────────
+  for (const act of ((activityResult.data ?? []) as ActivityRow[]).slice(0, 5)) {
+    const excerptText = act.body
+      ? excerptAroundToken(act.body, firstToken)
+      : "";
+    if (!excerptText) continue;
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `crm-activity:${act.id}`,
+      sourceTitle: `${act.activity_type} (${act.occurred_at.slice(0, 10)})`,
+      excerpt: truncateText(excerptText, 500),
+      confidence: 0.84,
+      accessClass: "crm_context",
+    });
+  }
 
-    for (const act of ((actResult.data ?? []) as ActivityRow[]).slice(0, 3)) {
-      const excerptText = act.body
-        ? excerptAroundToken(act.body, nameQuery.split(" ")[0] ?? nameQuery)
-        : "";
-      if (!excerptText) continue;
-      evidence.push({
-        sourceType: "crm",
-        sourceId: `crm-activity:${act.id}`,
-        sourceTitle: `${act.activity_type} (${act.occurred_at.slice(0, 10)})`,
-        excerpt: truncateText(excerptText, 500),
-        confidence: 0.84,
-        accessClass: "crm_context",
-      });
-    }
+  // ── 7. Process voice captures (transcript search) ───────────────────────
+  for (const vc of ((voiceCaptureResult.data ?? []) as VoiceCaptureRow[]).slice(0, 3)) {
+    const excerptText = vc.transcript
+      ? excerptAroundToken(vc.transcript, firstToken)
+      : "";
+    if (!excerptText) continue;
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `voice-capture:${vc.id}`,
+      sourceTitle: `Voice Note (${vc.created_at.slice(0, 10)})`,
+      excerpt: truncateText(excerptText, 500),
+      confidence: 0.85,
+      accessClass: "crm_context",
+    });
+  }
+
+  // ── 8. Process quotes ───────────────────────────────────────────────────
+  for (const qt of ((quoteResult.data ?? []) as QuoteRow[]).slice(0, 3)) {
+    pushEvidence({
+      sourceType: "crm",
+      sourceId: `crm-quote:${qt.id}`,
+      sourceTitle: `Quote: ${qt.title || qt.id}`,
+      excerpt: truncateText(
+        `${qt.title || qt.id}: ${qt.status} (updated ${qt.updated_at})`,
+        300,
+      ),
+      confidence: 0.87,
+      accessClass: "crm_context",
+    });
   }
 
   if (evidence.length > 0) {
     console.info(
-      `[chat:${input.traceId}] crm_name_search matched=${evidence.length} query="${nameQuery.slice(0, 40)}"`,
+      `[chat:${input.traceId}] crm_broad_search matched=${evidence.length} query="${queryText.slice(0, 40)}"`,
     );
   }
 
@@ -1460,34 +1574,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    let crmEvidence: EvidenceItem[] = [];
+    // ID-based CRM retrieval (when frontend provides explicit context IDs)
+    let contextCrmEvidence: EvidenceItem[] = [];
     try {
-      crmEvidence = await buildCustomerContextEvidence(adminClient, callerClient, {
+      contextCrmEvidence = await buildCustomerContextEvidence(adminClient, callerClient, {
         traceId,
         role: caller.role,
         context,
       });
     } catch (error) {
       console.error(`[chat:${traceId}] customer context retrieval failed`, error);
-      return jsonError(
-        traceId,
-        503,
-        "CRM_CONTEXT_RETRIEVAL_FAILED",
-        "Customer context could not be loaded for this chat.",
-        ch,
-      );
     }
 
-    // When no explicit CRM context IDs are provided, search CRM by name
-    if (crmEvidence.length === 0 && !context) {
-      try {
-        crmEvidence = await searchCrmByName(callerClient, {
-          traceId,
-          role: caller.role,
-          message: rawMessage,
-        });
-      } catch (nameSearchErr) {
-        console.warn(`[chat:${traceId}] crm_name_search failed (non-fatal)`, nameSearchErr);
+    // Broad CRM search: always runs, searches contacts/companies/deals/
+    // equipment/activities/voice notes/quotes by message text
+    let broadCrmEvidence: EvidenceItem[] = [];
+    try {
+      broadCrmEvidence = await searchCrmBroadly(callerClient, {
+        traceId,
+        role: caller.role,
+        message: rawMessage,
+      });
+    } catch (broadErr) {
+      console.warn(`[chat:${traceId}] crm_broad_search failed (non-fatal)`, broadErr);
+    }
+
+    // Merge and deduplicate CRM evidence (context IDs take priority)
+    const seenCrmIds = new Set<string>();
+    const crmEvidence: EvidenceItem[] = [];
+    for (const item of contextCrmEvidence) {
+      seenCrmIds.add(item.sourceId);
+      crmEvidence.push(item);
+    }
+    for (const item of broadCrmEvidence) {
+      if (!seenCrmIds.has(item.sourceId)) {
+        seenCrmIds.add(item.sourceId);
+        crmEvidence.push(item);
       }
     }
 
@@ -1495,18 +1617,21 @@ Deno.serve(async (req) => {
     const contextBlock = evidence.length > 0 ? formatEvidenceBlock(evidence) : null;
 
     console.info(
-      `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
+      `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm_context=${contextCrmEvidence.length} crm_broad=${broadCrmEvidence.length} crm_merged=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
     );
 
     const systemPrompt = contextBlock
-      ? `You are the QEP USA internal knowledge assistant. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
+      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment records, voice field notes, sales documents, and deal history. Answer only from the provided evidence. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
 ${contextBlock}
 
 Rules:
 - Be concise and direct.
 - Cite the source title naturally in the answer when it materially supports the claim.
-- Use CRM evidence for customer-specific facts and document evidence for policy/process facts.
+- Use CRM evidence (contacts, deals, equipment, voice notes, activities) for customer-specific and operational facts.
+- Use document evidence for policy, process, and product reference facts.
+- Voice notes contain field observations recorded by sales reps — treat them as firsthand accounts.
+- Equipment records contain fleet inventory details — use them for availability, specs, and pricing questions.
 - If CRM and document evidence conflict, say which source you relied on.
 - If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
       : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
