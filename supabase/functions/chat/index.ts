@@ -8,7 +8,7 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 
 /** Bumped when chat edge behavior changes; check response headers to confirm deploy. */
-const CHAT_EDGE_REVISION = "20260401-dge-intelligence-search";
+const CHAT_EDGE_REVISION = "20260401-true-streaming";
 const CHAT_MODEL = "gpt-5.4-nano";
 
 const ALLOWED_ORIGINS = [
@@ -485,7 +485,7 @@ async function generateAnswerWithOpenAI(input: {
         ...input.history,
         { role: "user", content: input.message },
       ],
-      max_completion_tokens: 1024,
+      max_completion_tokens: 2048,
     }),
   });
 
@@ -501,6 +501,47 @@ async function generateAnswerWithOpenAI(input: {
     throw new Error("empty_model_output");
   }
   return text;
+}
+
+/**
+ * Open a streaming connection to OpenAI and return the raw Response.
+ * Caller is responsible for reading the body as SSE lines.
+ */
+async function openStreamingCompletion(input: {
+  traceId: string;
+  systemPrompt: string;
+  history: ChatMessage[];
+  message: string;
+}): Promise<Response> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL,
+      messages: [
+        { role: "system", content: input.systemPrompt },
+        ...input.history,
+        { role: "user", content: input.message },
+      ],
+      max_completion_tokens: 2048,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = `openai_http_${response.status}`;
+    try {
+      const err = await response.json();
+      detail = err?.error?.message ?? detail;
+    } catch { /* ignore parse errors */ }
+    console.error(`[chat:${input.traceId}] openai_stream_failed status=${response.status} detail=${detail}`);
+    throw new Error(detail);
+  }
+
+  return response;
 }
 
 async function retrieveDocumentEvidence(
@@ -2020,9 +2061,9 @@ Rules:
 - If the answer is not in the provided evidence, say "I don't have that information in the accessible QEP knowledge base."`
       : `You are the QEP USA internal knowledge assistant. No accessible evidence was retrieved for this request. Tell the user: "I don't have that information in the accessible QEP knowledge base." Do not speculate or imply that restricted information exists.`;
 
-    let answerText: string;
+    let openaiStream: Response;
     try {
-      answerText = await generateAnswerWithOpenAI({
+      openaiStream = await openStreamingCompletion({
         traceId,
         systemPrompt,
         history: validatedHistory,
@@ -2051,19 +2092,56 @@ Rules:
         empty_evidence: evidence.length === 0,
       },
     };
+
     const readable = new ReadableStream({
       async start(controller) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ meta: streamMeta })}\n\n`),
+        );
+
         try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ meta: streamMeta })}\n\n`),
-          );
-          if (answerText) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: answerText })}\n\n`),
-            );
+          const reader = openaiStream.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data: ")) continue;
+              const payload = trimmed.slice(6);
+              if (payload === "[DONE]") continue;
+              try {
+                const chunk = JSON.parse(payload);
+                const delta = chunk.choices?.[0]?.delta?.content;
+                if (typeof delta === "string" && delta.length > 0) {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
+                  );
+                }
+              } catch {
+                // skip unparseable SSE lines
+              }
+            }
           }
-          if (sources.length > 0) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
+
+          // Flush any remaining buffer
+          if (buffer.trim().startsWith("data: ") && !buffer.includes("[DONE]")) {
+            try {
+              const payload = buffer.trim().slice(6);
+              const chunk = JSON.parse(payload);
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (typeof delta === "string" && delta.length > 0) {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`),
+                );
+              }
+            } catch { /* ignore */ }
           }
         } catch (streamError) {
           const errDetail =
@@ -2073,9 +2151,13 @@ Rules:
           console.error(`[chat:${traceId}] stream error`, errDetail, streamError);
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ text: `Sorry, I encountered an error generating a response. Reference: ${traceId}` })}\n\n`,
+              `data: ${JSON.stringify({ text: `\n\nSorry, I encountered an error generating a response. Reference: ${traceId}` })}\n\n`,
             ),
           );
+        }
+
+        if (sources.length > 0) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ sources })}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
