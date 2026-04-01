@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 function parseDotEnvFile(filePath) {
@@ -55,6 +56,7 @@ loadLocalDemoEnv();
 const DEMO_BATCH_ID = "crm-demo-thursday-2026-04-02";
 const DEMO_WORKSPACE_ID = process.env.QEP_DEMO_WORKSPACE_ID ?? "default";
 const DEMO_PASSWORD = process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
+const PREFER_LOCAL_RUNTIME = process.env.QEP_DEMO_PREFER_LOCAL === "1";
 
 const DEMO_USERS = [
   {
@@ -63,6 +65,13 @@ const DEMO_USERS = [
     email: "demo.owner@qep-demo.local",
     fullName: "Alex Mercer",
     role: "owner",
+  },
+  {
+    key: "admin",
+    id: "10000000-0000-4000-8000-000000000005",
+    email: "demo.admin@qep-demo.local",
+    fullName: "Jordan Pike",
+    role: "admin",
   },
   {
     key: "manager",
@@ -88,12 +97,54 @@ const DEMO_USERS = [
 ];
 
 const STAGE_DEFS = [
-  { id: "91000000-0000-4000-8000-000000000001", name: "Discovery", sortOrder: 10, probability: 15, isClosedWon: false, isClosedLost: false },
-  { id: "91000000-0000-4000-8000-000000000002", name: "Demo Scheduled", sortOrder: 20, probability: 35, isClosedWon: false, isClosedLost: false },
-  { id: "91000000-0000-4000-8000-000000000003", name: "Quote Working", sortOrder: 30, probability: 60, isClosedWon: false, isClosedLost: false },
-  { id: "91000000-0000-4000-8000-000000000004", name: "Negotiation", sortOrder: 40, probability: 80, isClosedWon: false, isClosedLost: false },
-  { id: "91000000-0000-4000-8000-000000000005", name: "Closed Won", sortOrder: 50, probability: 100, isClosedWon: true, isClosedLost: false },
-  { id: "91000000-0000-4000-8000-000000000006", name: "Closed Lost", sortOrder: 60, probability: 0, isClosedWon: false, isClosedLost: true },
+  {
+    id: "91000000-0000-4000-8000-000000000001",
+    name: "Discovery",
+    sortOrder: 10,
+    probability: 15,
+    isClosedWon: false,
+    isClosedLost: false,
+  },
+  {
+    id: "91000000-0000-4000-8000-000000000002",
+    name: "Demo Scheduled",
+    sortOrder: 20,
+    probability: 35,
+    isClosedWon: false,
+    isClosedLost: false,
+  },
+  {
+    id: "91000000-0000-4000-8000-000000000003",
+    name: "Quote Working",
+    sortOrder: 30,
+    probability: 60,
+    isClosedWon: false,
+    isClosedLost: false,
+  },
+  {
+    id: "91000000-0000-4000-8000-000000000004",
+    name: "Negotiation",
+    sortOrder: 40,
+    probability: 80,
+    isClosedWon: false,
+    isClosedLost: false,
+  },
+  {
+    id: "91000000-0000-4000-8000-000000000005",
+    name: "Closed Won",
+    sortOrder: 50,
+    probability: 100,
+    isClosedWon: true,
+    isClosedLost: false,
+  },
+  {
+    id: "91000000-0000-4000-8000-000000000006",
+    name: "Closed Lost",
+    sortOrder: 60,
+    probability: 0,
+    isClosedWon: false,
+    isClosedLost: true,
+  },
 ];
 
 const DEMO_IDS = {
@@ -195,9 +246,11 @@ function usage() {
 
 Commands:
   bun run demo:plan
+  bun run demo:auth-users
   bun run demo:seed
   bun run demo:reset
   bun run demo:reseed
+  bun run demo:baseline:local
 
 Environment:
   SUPABASE_URL / VITE_SUPABASE_URL
@@ -205,6 +258,7 @@ Environment:
 Optional:
   QEP_DEMO_WORKSPACE_ID   defaults to "default"
   QEP_DEMO_PASSWORD       defaults to "${DEMO_PASSWORD}"
+  QEP_DEMO_PREFER_LOCAL   set to "1" to prefer the local Supabase runtime
 
 Demo operator emails:
 ${DEMO_USERS.map((user) => `  - ${user.email} (${user.role})`).join("\n")}
@@ -226,10 +280,137 @@ function isUsableSupabaseUrl(value) {
 }
 
 function isUsableServiceRoleKey(value) {
-  return typeof value === "string" && value.length > 20 && !isPlaceholderValue(value);
+  return (
+    typeof value === "string" && value.length > 20 && !isPlaceholderValue(value)
+  );
 }
 
 let resolvedRuntime = null;
+const LOCAL_RESET_MAX_ATTEMPTS = 5;
+const LOCAL_RESET_RETRY_DELAY_MS = 5_000;
+const LOCAL_RESET_LOCK_KEY = 18_240_402;
+const LOCAL_RESET_RETRYABLE_PATTERNS = [
+  /\bstatus 5\d\d\b/i,
+  /\bcode:\s*42P01\b/i,
+  /failed to inspect container health/i,
+  /no such container/i,
+  /supabase start is not running/i,
+  /unexpected eof/i,
+  /failed to remove container/i,
+  /already in progress/i,
+  /upstream connect error/i,
+  /connection reset by peer/i,
+  /connection refused/i,
+  /timed out/i,
+];
+const LOCAL_RESET_FALLBACK_PATTERNS = [
+  /error running container: exit 1/i,
+  /caseclauseerror/i,
+  /could not query the database for the schema cache/i,
+  /failed to load the schema cache/i,
+];
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function invalidateResolvedRuntime() {
+  resolvedRuntime = null;
+}
+
+function readExecErrorStream(error, key) {
+  const value = error?.[key];
+  if (typeof value === "string") return value;
+  if (value && typeof value.toString === "function") {
+    return value.toString("utf8");
+  }
+  return "";
+}
+
+function formatExecError(error) {
+  const stdout = readExecErrorStream(error, "stdout").trim();
+  const stderr = readExecErrorStream(error, "stderr").trim();
+  if (stdout || stderr) {
+    return [stdout, stderr].filter(Boolean).join("\n");
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isRetryableLocalResetError(message) {
+  return LOCAL_RESET_RETRYABLE_PATTERNS.some((pattern) =>
+    pattern.test(message),
+  );
+}
+
+function runSupabaseCommand(args) {
+  try {
+    const stdout = execFileSync("supabase", args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (stdout.trim()) {
+      process.stdout.write(stdout);
+    }
+  } catch (error) {
+    const stdout = readExecErrorStream(error, "stdout");
+    const stderr = readExecErrorStream(error, "stderr");
+    if (stdout.trim()) {
+      process.stdout.write(stdout);
+    }
+    if (stderr.trim()) {
+      process.stderr.write(stderr);
+    }
+    throw new Error(formatExecError(error));
+  }
+}
+
+function readLocalSupabaseProjectId() {
+  try {
+    const config = readFileSync(
+      `${process.cwd()}/supabase/config.toml`,
+      "utf8",
+    );
+    const match = config.match(/^\s*project_id\s*=\s*"([^"]+)"/m);
+    return match?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readLocalSupabaseDbUrl() {
+  try {
+    const config = readFileSync(
+      `${process.cwd()}/supabase/config.toml`,
+      "utf8",
+    );
+    const dbSection = config.match(/^\[db\]([\s\S]*?)(?:^\[|\Z)/m)?.[1] ?? "";
+    const portMatch = dbSection.match(/^\s*port\s*=\s*(\d+)/m);
+    const port = portMatch?.[1] ?? "54322";
+    return `postgresql://postgres:postgres@127.0.0.1:${port}/postgres`;
+  } catch {
+    return "";
+  }
+}
+
+function ensureLocalSupabaseRuntime() {
+  const projectId = readLocalSupabaseProjectId();
+  if (projectId) {
+    try {
+      runSupabaseCommand(["stop", "--project-id", projectId, "--yes"]);
+    } catch {
+      // Ignore cleanup failures and still try a clean start below.
+    }
+  }
+
+  runSupabaseCommand(["start"]);
+  invalidateResolvedRuntime();
+}
 
 function readLocalSupabaseStatus() {
   try {
@@ -260,27 +441,48 @@ function resolveCredentials() {
   }
 
   const local = readLocalSupabaseStatus();
-  const urlCandidates = [
-    process.env.SUPABASE_URL,
-    process.env.VITE_SUPABASE_URL,
-    local.SUPABASE_URL,
-    local.API_URL,
-  ].map(normalizeEnvValue);
-  const adminKeyCandidates = [
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    process.env.SUPABASE_SECRET_KEY,
-    local.SECRET_KEY,
-    local.SUPABASE_SERVICE_ROLE_KEY,
-    local.SERVICE_ROLE_KEY,
-  ].map(normalizeEnvValue);
-  const dbUrlCandidates = [
-    process.env.SUPABASE_DB_URL,
-    local.DB_URL,
-  ].map(normalizeEnvValue);
+  const urlCandidates = (
+    PREFER_LOCAL_RUNTIME
+      ? [
+          local.SUPABASE_URL,
+          local.API_URL,
+          process.env.SUPABASE_URL,
+          process.env.VITE_SUPABASE_URL,
+        ]
+      : [
+          process.env.SUPABASE_URL,
+          process.env.VITE_SUPABASE_URL,
+          local.SUPABASE_URL,
+          local.API_URL,
+        ]
+  ).map(normalizeEnvValue);
+  const adminKeyCandidates = (
+    PREFER_LOCAL_RUNTIME
+      ? [
+          local.SUPABASE_SERVICE_ROLE_KEY,
+          local.SERVICE_ROLE_KEY,
+          local.SECRET_KEY,
+          process.env.SUPABASE_SERVICE_ROLE_KEY,
+          process.env.SUPABASE_SECRET_KEY,
+        ]
+      : [
+          process.env.SUPABASE_SERVICE_ROLE_KEY,
+          process.env.SUPABASE_SECRET_KEY,
+          local.SECRET_KEY,
+          local.SUPABASE_SERVICE_ROLE_KEY,
+          local.SERVICE_ROLE_KEY,
+        ]
+  ).map(normalizeEnvValue);
+  const dbUrlCandidates = (
+    PREFER_LOCAL_RUNTIME
+      ? [local.DB_URL, process.env.SUPABASE_DB_URL, readLocalSupabaseDbUrl()]
+      : [process.env.SUPABASE_DB_URL, local.DB_URL, readLocalSupabaseDbUrl()]
+  ).map(normalizeEnvValue);
 
   const url = urlCandidates.find(isUsableSupabaseUrl) ?? "";
   const adminKey = adminKeyCandidates.find(isUsableServiceRoleKey) ?? "";
-  const dbUrl = dbUrlCandidates.find((value) => value.startsWith("postgresql://")) ?? "";
+  const dbUrl =
+    dbUrlCandidates.find((value) => value.startsWith("postgresql://")) ?? "";
   const isLocal = url.includes("127.0.0.1") || url.includes("localhost");
 
   if (!url || !adminKey) {
@@ -322,6 +524,411 @@ function execLocalSql(sql) {
   });
 }
 
+function runLocalPsqlCommand(args) {
+  try {
+    const stdout = execFileSync("psql", args, {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (stdout.trim()) {
+      process.stdout.write(stdout);
+    }
+  } catch (error) {
+    const stdout = readExecErrorStream(error, "stdout");
+    const stderr = readExecErrorStream(error, "stderr");
+    if (stdout.trim()) {
+      process.stdout.write(stdout);
+    }
+    if (stderr.trim()) {
+      process.stderr.write(stderr);
+    }
+    throw new Error(formatExecError(error));
+  }
+}
+
+function queryLocalSql(sql) {
+  const { dbUrl } = resolveCredentials();
+  if (!dbUrl) {
+    throw new Error("Missing local DB_URL for readiness checks.");
+  }
+
+  return execFileSync("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-Atqc", sql], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function shouldResetLocalDatabase() {
+  return PREFER_LOCAL_RUNTIME;
+}
+
+function shouldBootstrapLocalSupabase(message) {
+  return /failed to inspect container health|no such container|supabase start is not running/i.test(
+    message,
+  );
+}
+
+function shouldForceLocalSupabaseRestart(message) {
+  return /failed to create docker container|already in use by container|Conflict\./i.test(
+    message,
+  );
+}
+
+function stopLocalSupabaseRuntime() {
+  try {
+    runSupabaseCommand(["stop", "--no-backup"]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Local Supabase stop reported an error during recovery: ${message}`,
+    );
+  } finally {
+    invalidateResolvedRuntime();
+  }
+}
+
+function startLocalSupabaseRuntime() {
+  try {
+    runSupabaseCommand(["start"]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!shouldForceLocalSupabaseRestart(message)) {
+      throw error;
+    }
+
+    console.warn(
+      "Local Supabase start hit a container-name conflict. Stopping the stack before retrying start...",
+    );
+    stopLocalSupabaseRuntime();
+    runSupabaseCommand(["start"]);
+  } finally {
+    invalidateResolvedRuntime();
+  }
+}
+
+function shouldFallbackToDirectLocalReset(message) {
+  return LOCAL_RESET_FALLBACK_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+async function waitForLocalDatabaseConnection(phase) {
+  const timeoutAt = Date.now() + 60_000;
+  let lastError = "local Postgres is still starting";
+
+  while (Date.now() < timeoutAt) {
+    try {
+      const { dbUrl } = resolveCredentials();
+      if (!dbUrl) {
+        throw new Error("local DB_URL is not available yet");
+      }
+
+      execFileSync(
+        "psql",
+        [dbUrl, "-v", "ON_ERROR_STOP=1", "-Atqc", "select 1"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      invalidateResolvedRuntime();
+      await sleep(1_000);
+    }
+  }
+
+  throw new Error(`Timed out waiting for ${phase}: ${lastError}`);
+}
+
+function listLocalMigrationFiles() {
+  const migrationsDir = join(process.cwd(), "supabase", "migrations");
+  return readdirSync(migrationsDir)
+    .filter((name) => /^\d{3}_[a-z0-9_]+\.sql$/.test(name))
+    .sort()
+    .map((name) => ({
+      name,
+      path: join(migrationsDir, name),
+      version: name.slice(0, 3),
+      migrationName: name.slice(4, -4),
+    }));
+}
+
+async function rebuildLocalDatabaseFromRepoMigrations() {
+  const { dbUrl } = resolveCredentials();
+  if (!dbUrl) {
+    throw new Error("Missing local DB_URL for direct migration replay.");
+  }
+
+  const migrations = listLocalMigrationFiles();
+  if (!migrations.length) {
+    throw new Error(
+      "No local repo migrations were found for deterministic reset.",
+    );
+  }
+
+  console.warn(
+    "Supabase CLI local reset did not recover cleanly. Rebuilding the local app schema directly from repo migrations...",
+  );
+
+  await waitForLocalDatabaseConnection(
+    "direct local migration replay database",
+  );
+
+  const psqlBaseArgs = [dbUrl, "-v", "ON_ERROR_STOP=1"];
+  runLocalPsqlCommand([
+    ...psqlBaseArgs,
+    "-c",
+    `select pg_advisory_lock(${LOCAL_RESET_LOCK_KEY});`,
+  ]);
+
+  try {
+    runLocalPsqlCommand([
+      ...psqlBaseArgs,
+      "-c",
+      `
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.schemata
+    where schema_name = 'public'
+  ) then
+    execute 'drop schema public cascade';
+  end if;
+end;
+$$;
+
+create schema public authorization postgres;
+grant usage on schema public to postgres, anon, authenticated, service_role;
+grant create on schema public to postgres, anon, authenticated, service_role;
+truncate table supabase_migrations.schema_migrations;
+notify pgrst, 'reload schema';
+      `,
+    ]);
+
+    for (const migration of migrations) {
+      console.log(`Applying repo migration ${migration.name}...`);
+      runLocalPsqlCommand([...psqlBaseArgs, "-f", migration.path]);
+    }
+
+    const values = migrations
+      .map(
+        (migration) =>
+          `(${sqlLiteral(migration.version)}, null, ${sqlLiteral(migration.migrationName)})`,
+      )
+      .join(",\n");
+    runLocalPsqlCommand([
+      ...psqlBaseArgs,
+      "-c",
+      `
+insert into supabase_migrations.schema_migrations (version, statements, name)
+values
+${values};
+
+notify pgrst, 'reload schema';
+      `,
+    ]);
+  } finally {
+    try {
+      runLocalPsqlCommand([
+        ...psqlBaseArgs,
+        "-c",
+        `select pg_advisory_unlock(${LOCAL_RESET_LOCK_KEY});`,
+      ]);
+    } catch {
+      // Ignore unlock failures to preserve the original reset error.
+    }
+  }
+}
+
+async function waitForLocalRuntimeReadiness({
+  phase,
+  requireSchemaObjects = false,
+  requireProfileRest = true,
+}) {
+  const timeoutAt = Date.now() + 60_000;
+  let lastError = "local Supabase runtime is still starting";
+
+  while (Date.now() < timeoutAt) {
+    try {
+      invalidateResolvedRuntime();
+      const local = readLocalSupabaseStatus();
+      const apiUrl = normalizeEnvValue(local.SUPABASE_URL || local.API_URL);
+      const adminKey = normalizeEnvValue(
+        local.SUPABASE_SERVICE_ROLE_KEY ||
+          local.SERVICE_ROLE_KEY ||
+          local.SECRET_KEY,
+      );
+
+      if (!apiUrl || !adminKey) {
+        throw new Error(
+          "supabase status -o env did not return API credentials yet",
+        );
+      }
+
+      const sql = requireSchemaObjects
+        ? `
+          select case
+            when to_regclass('public.profiles') is not null
+              and exists (
+                select 1
+                from information_schema.columns
+                where table_schema = 'auth'
+                  and table_name = 'users'
+                  and column_name = 'email_confirmed_at'
+              )
+            then 'ready'
+            else 'waiting'
+          end;
+        `
+        : "select 'ready';";
+      const databaseStatus = queryLocalSql(sql);
+      if (databaseStatus !== "ready") {
+        throw new Error("required local schema objects are not ready yet");
+      }
+
+      if (requireProfileRest) {
+        const restReadinessChecks = requireSchemaObjects
+          ? ["profiles", "crm_deal_stages"]
+          : ["profiles"];
+
+        for (const tableName of restReadinessChecks) {
+          const response = await fetch(
+            `${apiUrl}/rest/v1/${tableName}?select=*&limit=1`,
+            {
+              headers: {
+                apikey: adminKey,
+                Authorization: `Bearer ${adminKey}`,
+              },
+            },
+          );
+          if (!response.ok) {
+            const message = (await response.text()).trim();
+            throw new Error(
+              `REST schema cache for ${tableName} returned ${response.status}${message ? `: ${message}` : ""}`,
+            );
+          }
+        }
+      }
+
+      invalidateResolvedRuntime();
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      await sleep(1_000);
+    }
+  }
+
+  throw new Error(`Timed out waiting for ${phase}: ${lastError}`);
+}
+
+async function resetLocalDatabaseToRepoMigrations() {
+  if (!shouldResetLocalDatabase()) {
+    return;
+  }
+
+  try {
+    await waitForLocalRuntimeReadiness({
+      phase: "local reset preflight",
+      requireProfileRest: false,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Local reset preflight could not confirm a healthy runtime; proceeding with recovery reset. ${message}`,
+    );
+    if (shouldBootstrapLocalSupabase(message)) {
+      console.warn(
+        "Starting local Supabase runtime before deterministic reset...",
+      );
+      startLocalSupabaseRuntime();
+    }
+  }
+
+  console.log(
+    "Resetting local Supabase database to repo migrations for a deterministic QA baseline...",
+  );
+  for (let attempt = 1; attempt <= LOCAL_RESET_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      runSupabaseCommand(["db", "reset", "--local", "--no-seed", "--yes"]);
+      invalidateResolvedRuntime();
+      await waitForLocalRuntimeReadiness({
+        phase: `local reset recovery (attempt ${attempt})`,
+        requireSchemaObjects: true,
+      });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retryable = isRetryableLocalResetError(message);
+      const lastAttempt = attempt === LOCAL_RESET_MAX_ATTEMPTS;
+
+      if (shouldFallbackToDirectLocalReset(message)) {
+        console.warn(
+          "Re-starting local Supabase runtime before direct migration replay fallback...",
+        );
+        ensureLocalSupabaseRuntime();
+        await rebuildLocalDatabaseFromRepoMigrations();
+        invalidateResolvedRuntime();
+        await waitForLocalRuntimeReadiness({
+          phase: "direct local migration replay recovery",
+          requireSchemaObjects: true,
+        });
+        return;
+      }
+
+      if (!retryable) {
+        throw new Error(
+          `Local deterministic reset failed on attempt ${attempt}: ${message}`,
+        );
+      }
+
+      if (shouldBootstrapLocalSupabase(message)) {
+        console.warn(
+          "Local Supabase runtime is not fully available. Starting it before retrying reset...",
+        );
+        startLocalSupabaseRuntime();
+      }
+
+      try {
+        invalidateResolvedRuntime();
+        await waitForLocalRuntimeReadiness({
+          phase: `local reset post-error recovery (attempt ${attempt})`,
+          requireSchemaObjects: true,
+        });
+        console.warn(
+          `Local reset attempt ${attempt} returned a transient CLI error after container restart, but the runtime recovered cleanly.`,
+        );
+        return;
+      } catch (recoveryError) {
+        const recoveryMessage =
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : String(recoveryError);
+
+        if (lastAttempt) {
+          throw new Error(
+            `Local deterministic reset failed on attempt ${attempt}: ${message}\nRecovery check also failed: ${recoveryMessage}`,
+          );
+        }
+
+        console.warn(
+          `Local reset attempt ${attempt} hit a transient runtime error. Waiting ${LOCAL_RESET_RETRY_DELAY_MS}ms before retry...`,
+        );
+        console.warn(
+          `Recovery check after attempt ${attempt} failed: ${recoveryMessage}`,
+        );
+      }
+
+      ensureLocalSupabaseRuntime();
+      invalidateResolvedRuntime();
+      await sleep(LOCAL_RESET_RETRY_DELAY_MS);
+    }
+  }
+}
+
 function buildTimestamp(offset) {
   const value = new Date();
   value.setSeconds(0, 0);
@@ -342,7 +949,16 @@ function buildDate(daysFromNow) {
   return value.toISOString().slice(0, 10);
 }
 
-function deliveryMetadata({ mode, provider, status, destination, attemptedAt, externalMessageId = null, reasonCode = null, message = null }) {
+function deliveryMetadata({
+  mode,
+  provider,
+  status,
+  destination,
+  attemptedAt,
+  externalMessageId = null,
+  reasonCode = null,
+  message = null,
+}) {
   return {
     attempted: true,
     mode,
@@ -376,7 +992,8 @@ const DEMO_INTEGRATION_ROWS = [
         validated_at: buildDate(0),
         note: "Demo validation window active. Daily reconciliation still required before final cutover.",
         decision: "hold_parallel_run",
-        decision_note: "Keep HubSpot active for operators while the final reconciliation rows are cleared. No source-only switch should happen until the board reviews a clean packet.",
+        decision_note:
+          "Keep HubSpot active for operators while the final reconciliation rows are cleared. No source-only switch should happen until the board reviews a clean packet.",
       },
     },
   },
@@ -404,7 +1021,8 @@ const DEMO_INTEGRATION_ROWS = [
     sync_frequency: "manual",
     endpoint_url: "https://api.twilio.com",
     last_sync_records: 11,
-    last_sync_error: "Latest connection check failed. Messages still log safely in manual mode.",
+    last_sync_error:
+      "Latest connection check failed. Messages still log safely in manual mode.",
     last_test_success: false,
     last_test_latency_ms: 0,
     config: {
@@ -541,7 +1159,10 @@ async function listAuthUsers(admin) {
   const users = [];
   let page = 1;
   while (true) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
     if (error) throw error;
     const batch = data.users ?? [];
     users.push(...batch);
@@ -553,7 +1174,11 @@ async function listAuthUsers(admin) {
 
 function ensureLocalDemoUsers() {
   const sql = DEMO_USERS.map((demoUser) => {
-    const appMeta = sqlJson({ provider: "email", providers: ["email"], workspace_id: DEMO_WORKSPACE_ID });
+    const appMeta = sqlJson({
+      provider: "email",
+      providers: ["email"],
+      workspace_id: DEMO_WORKSPACE_ID,
+    });
     const userMeta = sqlJson({
       full_name: demoUser.fullName,
       email: demoUser.email,
@@ -650,7 +1275,9 @@ $$;`;
   }).join("\n");
 
   execLocalSql(sql);
-  return Object.fromEntries(DEMO_USERS.map((demoUser) => [demoUser.key, demoUser.id]));
+  return Object.fromEntries(
+    DEMO_USERS.map((demoUser) => [demoUser.key, demoUser.id]),
+  );
 }
 
 async function ensureDemoUsers(admin) {
@@ -659,7 +1286,9 @@ async function ensureDemoUsers(admin) {
   }
 
   const users = await listAuthUsers(admin);
-  const byEmail = new Map(users.map((user) => [user.email?.toLowerCase(), user]));
+  const byEmail = new Map(
+    users.map((user) => [user.email?.toLowerCase(), user]),
+  );
   const result = {};
 
   for (const demoUser of DEMO_USERS) {
@@ -670,17 +1299,26 @@ async function ensureDemoUsers(admin) {
         password: DEMO_PASSWORD,
         email_confirm: true,
         app_metadata: { workspace_id: DEMO_WORKSPACE_ID },
-        user_metadata: { full_name: demoUser.fullName, workspace_id: DEMO_WORKSPACE_ID },
+        user_metadata: {
+          full_name: demoUser.fullName,
+          workspace_id: DEMO_WORKSPACE_ID,
+        },
       });
       if (created.error || !created.data.user) {
-        throw created.error ?? new Error(`Could not create auth user for ${demoUser.email}`);
+        throw (
+          created.error ??
+          new Error(`Could not create auth user for ${demoUser.email}`)
+        );
       }
       authUser = created.data.user;
     } else {
       const updated = await admin.auth.admin.updateUserById(authUser.id, {
         password: DEMO_PASSWORD,
         email_confirm: true,
-        app_metadata: { ...(authUser.app_metadata ?? {}), workspace_id: DEMO_WORKSPACE_ID },
+        app_metadata: {
+          ...(authUser.app_metadata ?? {}),
+          workspace_id: DEMO_WORKSPACE_ID,
+        },
         user_metadata: {
           ...(authUser.user_metadata ?? {}),
           full_name: demoUser.fullName,
@@ -710,7 +1348,9 @@ async function ensureDemoUsers(admin) {
 
 async function deleteDemoUsers(admin) {
   if (resolveCredentials().isLocal) {
-    const emails = DEMO_USERS.map((user) => sqlLiteral(user.email.toLowerCase())).join(", ");
+    const emails = DEMO_USERS.map((user) =>
+      sqlLiteral(user.email.toLowerCase()),
+    ).join(", ");
     execLocalSql(`
 delete from public.profiles
 where lower(email) in (${emails});
@@ -726,7 +1366,9 @@ where lower(email) in (${emails});
   }
 
   const users = await listAuthUsers(admin);
-  const demoEmails = new Set(DEMO_USERS.map((user) => user.email.toLowerCase()));
+  const demoEmails = new Set(
+    DEMO_USERS.map((user) => user.email.toLowerCase()),
+  );
   for (const user of users) {
     if (!user.email || !demoEmails.has(user.email.toLowerCase())) continue;
     const { error } = await admin.auth.admin.deleteUser(user.id);
@@ -763,7 +1405,10 @@ async function ensureDealStages(admin) {
     .from("crm_deal_stages")
     .select("id, name")
     .eq("workspace_id", DEMO_WORKSPACE_ID)
-    .in("name", STAGE_DEFS.map((stage) => stage.name));
+    .in(
+      "name",
+      STAGE_DEFS.map((stage) => stage.name),
+    );
   if (refreshedError) throw refreshedError;
 
   return Object.fromEntries((refreshed ?? []).map((row) => [row.name, row.id]));
@@ -778,17 +1423,23 @@ async function seedDemoIntegrationStatuses(admin) {
     .in("integration_key", keys);
   if (error) throw error;
 
-  const existingByKey = new Map((data ?? []).map((row) => [row.integration_key, row]));
+  const existingByKey = new Map(
+    (data ?? []).map((row) => [row.integration_key, row]),
+  );
   const upserts = [];
 
   for (const row of DEMO_INTEGRATION_ROWS) {
     const existing = existingByKey.get(row.integration_key);
     const existingConfig =
-      existing?.config && typeof existing.config === "object" && !Array.isArray(existing.config)
+      existing?.config &&
+      typeof existing.config === "object" &&
+      !Array.isArray(existing.config)
         ? existing.config
         : {};
     const ownedByDemo = existingConfig?.demo_seed_batch_id === DEMO_BATCH_ID;
-    const hasLiveCredentials = typeof existing?.credentials_encrypted === "string" && existing.credentials_encrypted.trim().length > 0;
+    const hasLiveCredentials =
+      typeof existing?.credentials_encrypted === "string" &&
+      existing.credentials_encrypted.trim().length > 0;
 
     if (hasLiveCredentials && !ownedByDemo) {
       continue;
@@ -827,7 +1478,9 @@ async function seedDemoIntegrationStatuses(admin) {
 
 async function resetDemoIntegrationStatuses(admin) {
   const keys = DEMO_INTEGRATION_ROWS.map((row) => row.integration_key);
-  const demoRowsByKey = new Map(DEMO_INTEGRATION_ROWS.map((row) => [row.integration_key, row]));
+  const demoRowsByKey = new Map(
+    DEMO_INTEGRATION_ROWS.map((row) => [row.integration_key, row]),
+  );
   const { data, error } = await admin
     .from("integration_status")
     .select("workspace_id, integration_key, credentials_encrypted, config")
@@ -846,7 +1499,8 @@ async function resetDemoIntegrationStatuses(admin) {
     }
 
     const shouldPreserveDemoOwnership =
-      typeof row.credentials_encrypted === "string" && row.credentials_encrypted.trim().length > 0;
+      typeof row.credentials_encrypted === "string" &&
+      row.credentials_encrypted.trim().length > 0;
     if (!shouldPreserveDemoOwnership) {
       delete config.demo_seed_batch_id;
     }
@@ -858,10 +1512,13 @@ async function resetDemoIntegrationStatuses(admin) {
     resets.push({
       workspace_id: row.workspace_id,
       integration_key: row.integration_key,
-      display_name: demoRowsByKey.get(row.integration_key)?.display_name ?? row.integration_key,
+      display_name:
+        demoRowsByKey.get(row.integration_key)?.display_name ??
+        row.integration_key,
       status: row.credentials_encrypted ? "connected" : "pending_credentials",
       auth_type: demoRowsByKey.get(row.integration_key)?.auth_type ?? "api_key",
-      sync_frequency: demoRowsByKey.get(row.integration_key)?.sync_frequency ?? "manual",
+      sync_frequency:
+        demoRowsByKey.get(row.integration_key)?.sync_frequency ?? "manual",
       endpoint_url: null,
       last_sync_at: null,
       last_sync_records: 0,
@@ -919,7 +1576,8 @@ function buildDemoDataset(userIds, stageIds) {
         last_deal_at: timestamps.yesterdayAfternoon,
         last_interaction_at: timestamps.ninetyMinutesAgo,
         price_sensitivity_score: 0.31,
-        notes: "Prefers field demos with operator crew present and moves fastest when delivery timing is firm.",
+        notes:
+          "Prefers field demos with operator crew present and moves fastest when delivery timing is firm.",
         metadata: {
           demoSeedBatchId: DEMO_BATCH_ID,
           badges: ["DEMO"],
@@ -1068,14 +1726,6 @@ function buildDemoDataset(userIds, stageIds) {
         metadata: { demoSeedBatchId: DEMO_BATCH_ID },
       },
     ],
-    contactCompanies: [
-      { id: DEMO_IDS.contactCompanies.masonApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.mason, company_id: DEMO_IDS.companies.apexHoldings, is_primary: true },
-      { id: DEMO_IDS.contactCompanies.hannahApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.hannah, company_id: DEMO_IDS.companies.apexLakeCity, is_primary: true },
-      { id: DEMO_IDS.contactCompanies.jordanGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordan, company_id: DEMO_IDS.companies.gulfCoast, is_primary: true },
-      { id: DEMO_IDS.contactCompanies.jordonGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordon, company_id: DEMO_IDS.companies.gulfCoast, is_primary: true },
-      { id: DEMO_IDS.contactCompanies.elenaPine, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.elena, company_id: DEMO_IDS.companies.pineRiver, is_primary: true },
-      { id: DEMO_IDS.contactCompanies.wesApex, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.wes, company_id: DEMO_IDS.companies.apexLakeCity, is_primary: true },
-    ],
     territories: [
       {
         id: DEMO_IDS.territories.northFlorida,
@@ -1088,14 +1738,30 @@ function buildDemoDataset(userIds, stageIds) {
         id: DEMO_IDS.territories.gulfCoast,
         workspace_id: DEMO_WORKSPACE_ID,
         name: "Gulf Coast Demo Territory",
-        description: "Utility and municipal clearing accounts on the gulf route.",
+        description:
+          "Utility and municipal clearing accounts on the gulf route.",
         assigned_rep_id: userIds.rep_secondary,
       },
     ],
     contactTerritories: [
-      { id: DEMO_IDS.contactTerritories.masonNorth, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.mason, territory_id: DEMO_IDS.territories.northFlorida },
-      { id: DEMO_IDS.contactTerritories.hannahNorth, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.hannah, territory_id: DEMO_IDS.territories.northFlorida },
-      { id: DEMO_IDS.contactTerritories.jordanGulf, workspace_id: DEMO_WORKSPACE_ID, contact_id: DEMO_IDS.contacts.jordan, territory_id: DEMO_IDS.territories.gulfCoast },
+      {
+        id: DEMO_IDS.contactTerritories.masonNorth,
+        workspace_id: DEMO_WORKSPACE_ID,
+        contact_id: DEMO_IDS.contacts.mason,
+        territory_id: DEMO_IDS.territories.northFlorida,
+      },
+      {
+        id: DEMO_IDS.contactTerritories.hannahNorth,
+        workspace_id: DEMO_WORKSPACE_ID,
+        contact_id: DEMO_IDS.contacts.hannah,
+        territory_id: DEMO_IDS.territories.northFlorida,
+      },
+      {
+        id: DEMO_IDS.contactTerritories.jordanGulf,
+        workspace_id: DEMO_WORKSPACE_ID,
+        contact_id: DEMO_IDS.contacts.jordan,
+        territory_id: DEMO_IDS.territories.gulfCoast,
+      },
     ],
     equipment: [
       {
@@ -1225,7 +1891,10 @@ function buildDemoDataset(userIds, stageIds) {
         amount: 485000,
         expected_close_on: buildDate(10),
         next_follow_up_at: timestamps.inThreeHours,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, equipment_family: "Barko 495B" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          equipment_family: "Barko 495B",
+        },
       },
       {
         id: DEMO_IDS.deals.banditDemo,
@@ -1238,7 +1907,10 @@ function buildDemoDataset(userIds, stageIds) {
         amount: 128000,
         expected_close_on: buildDate(18),
         next_follow_up_at: timestamps.tomorrowMidday,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, demo_location: "Lake City branch yard" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          demo_location: "Lake City branch yard",
+        },
       },
       {
         id: DEMO_IDS.deals.prinothRevision,
@@ -1251,7 +1923,10 @@ function buildDemoDataset(userIds, stageIds) {
         amount: 365000,
         expected_close_on: buildDate(21),
         next_follow_up_at: timestamps.inThreeHours,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, focus: "trade allowance and delivery timing" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          focus: "trade allowance and delivery timing",
+        },
       },
       {
         id: DEMO_IDS.deals.yanmarRental,
@@ -1264,7 +1939,10 @@ function buildDemoDataset(userIds, stageIds) {
         amount: 92000,
         expected_close_on: buildDate(30),
         next_follow_up_at: timestamps.tomorrowMidday,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, fleet_need: "rental utilization" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          fleet_need: "rental utilization",
+        },
       },
       {
         id: DEMO_IDS.deals.asvWon,
@@ -1278,7 +1956,10 @@ function buildDemoDataset(userIds, stageIds) {
         expected_close_on: buildDate(-5),
         next_follow_up_at: null,
         closed_at: timestamps.yesterdayMorning,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, win_story: "Won on uptime, operator support, and freight timing" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          win_story: "Won on uptime, operator support, and freight timing",
+        },
       },
       {
         id: DEMO_IDS.deals.municipalLost,
@@ -1292,9 +1973,13 @@ function buildDemoDataset(userIds, stageIds) {
         expected_close_on: buildDate(-3),
         next_follow_up_at: null,
         closed_at: timestamps.yesterdayAfternoon,
-        loss_reason: "Budget committee delayed replacement to next fiscal cycle",
+        loss_reason:
+          "Budget committee delayed replacement to next fiscal cycle",
         competitor: "Fecon dealer network",
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, loss_story: "Lost on budget timing and competitor delivery slot" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          loss_story: "Lost on budget timing and competitor delivery slot",
+        },
       },
     ],
     activities: [
@@ -1498,9 +2183,24 @@ function buildDemoDataset(userIds, stageIds) {
         status: "linked",
         title: "Barko 495B package - Q2 refresh",
         line_items: [
-          { sku: "BARKO-495B", description: "Barko 495B loader", quantity: 1, unitPrice: 452000 },
-          { sku: "TRAINING-OPS", description: "Operator onboarding package", quantity: 1, unitPrice: 3300 },
-          { sku: "FREIGHT-FL", description: "Freight to Lake City", quantity: 1, unitPrice: 4800 },
+          {
+            sku: "BARKO-495B",
+            description: "Barko 495B loader",
+            quantity: 1,
+            unitPrice: 452000,
+          },
+          {
+            sku: "TRAINING-OPS",
+            description: "Operator onboarding package",
+            quantity: 1,
+            unitPrice: 3300,
+          },
+          {
+            sku: "FREIGHT-FL",
+            description: "Freight to Lake City",
+            quantity: 1,
+            unitPrice: 4800,
+          },
         ],
         customer_snapshot: {
           contact_name: "Mason Reed",
@@ -1532,7 +2232,8 @@ function buildDemoDataset(userIds, stageIds) {
         workspace_id: DEMO_WORKSPACE_ID,
         activity_type: "meeting",
         label: "Demo recap",
-        description: "Capture what the crew liked, what they questioned, and the next move.",
+        description:
+          "Capture what the crew liked, what they questioned, and the next move.",
         body: "Recapped the field demo with the crew, captured objections, and locked the next decision date.",
         sort_order: 10,
         is_active: true,
@@ -1543,7 +2244,8 @@ function buildDemoDataset(userIds, stageIds) {
         workspace_id: DEMO_WORKSPACE_ID,
         activity_type: "email",
         label: "Branch check-in",
-        description: "Quick written recap to keep operations and ownership aligned.",
+        description:
+          "Quick written recap to keep operations and ownership aligned.",
         body: "Sharing the branch recap, current machine recommendation, and what still needs approval before we close this out.",
         sort_order: 20,
         is_active: true,
@@ -1554,7 +2256,8 @@ function buildDemoDataset(userIds, stageIds) {
         workspace_id: DEMO_WORKSPACE_ID,
         activity_type: "task",
         label: "Rental fleet follow-up",
-        description: "Queue the next rental fleet check without retyping the task.",
+        description:
+          "Queue the next rental fleet check without retyping the task.",
         body: "Confirm rental fleet utilization, machine availability, and whether the customer wants rent-to-own options.",
         task_due_minutes: 1440,
         task_status: "open",
@@ -1577,7 +2280,10 @@ function buildDemoDataset(userIds, stageIds) {
         activities_processed: 155,
         error_count: 0,
         error_summary: null,
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, mode: "parallel_run_validation" },
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          mode: "parallel_run_validation",
+        },
       },
       {
         id: DEMO_IDS.hubspotImportRuns.completedWithErrors,
@@ -1591,8 +2297,12 @@ function buildDemoDataset(userIds, stageIds) {
         deals_processed: 69,
         activities_processed: 161,
         error_count: 2,
-        error_summary: "Two records still need reconciliation review before cutover.",
-        metadata: { demoSeedBatchId: DEMO_BATCH_ID, mode: "parallel_run_validation" },
+        error_summary:
+          "Two records still need reconciliation review before cutover.",
+        metadata: {
+          demoSeedBatchId: DEMO_BATCH_ID,
+          mode: "parallel_run_validation",
+        },
       },
     ],
     hubspotImportErrors: [
@@ -1602,9 +2312,13 @@ function buildDemoDataset(userIds, stageIds) {
         run_id: DEMO_IDS.hubspotImportRuns.completedWithErrors,
         entity_type: "deal",
         external_id: "hs-deal-demo-001",
-        payload_snippet: { stage: "appointmentscheduled", dealname: "Municipal mulcher replacement" },
+        payload_snippet: {
+          stage: "appointmentscheduled",
+          dealname: "Municipal mulcher replacement",
+        },
         reason_code: "unknown_hubspot_stage",
-        message: "HubSpot stage did not match a current CRM pipeline stage and needs mapping review.",
+        message:
+          "HubSpot stage did not match a current CRM pipeline stage and needs mapping review.",
       },
       {
         id: DEMO_IDS.hubspotImportErrors.activityMissingOwner,
@@ -1614,7 +2328,8 @@ function buildDemoDataset(userIds, stageIds) {
         external_id: "hs-activity-demo-002",
         payload_snippet: { type: "NOTE", association: "contact" },
         reason_code: "missing_owner_mapping",
-        message: "Imported note could not resolve an owner and was held for reconciliation.",
+        message:
+          "Imported note could not resolve an owner and was held for reconciliation.",
       },
     ],
     customerDealHistory: [
@@ -1667,18 +2382,58 @@ async function deleteByIds(admin, table, ids) {
 }
 
 async function resetDemoData(admin) {
-  await deleteByIds(admin, "crm_hubspot_import_errors", Object.values(DEMO_IDS.hubspotImportErrors));
-  await deleteByIds(admin, "crm_hubspot_import_runs", Object.values(DEMO_IDS.hubspotImportRuns));
-  await deleteByIds(admin, "crm_activity_templates", Object.values(DEMO_IDS.activityTemplates));
-  await deleteByIds(admin, "crm_duplicate_candidates", Object.values(DEMO_IDS.duplicateCandidates));
+  await deleteByIds(
+    admin,
+    "crm_hubspot_import_errors",
+    Object.values(DEMO_IDS.hubspotImportErrors),
+  );
+  await deleteByIds(
+    admin,
+    "crm_hubspot_import_runs",
+    Object.values(DEMO_IDS.hubspotImportRuns),
+  );
+  await deleteByIds(
+    admin,
+    "crm_activity_templates",
+    Object.values(DEMO_IDS.activityTemplates),
+  );
+  await deleteByIds(
+    admin,
+    "crm_duplicate_candidates",
+    Object.values(DEMO_IDS.duplicateCandidates),
+  );
   await deleteByIds(admin, "quotes", Object.values(DEMO_IDS.quotes));
-  await deleteByIds(admin, "crm_activities", Object.values(DEMO_IDS.activities));
-  await deleteByIds(admin, "crm_custom_field_values", Object.values(DEMO_IDS.customFieldValues));
-  await deleteByIds(admin, "crm_custom_field_definitions", Object.values(DEMO_IDS.customFieldDefinitions));
+  await deleteByIds(
+    admin,
+    "crm_activities",
+    Object.values(DEMO_IDS.activities),
+  );
+  await deleteByIds(
+    admin,
+    "crm_custom_field_values",
+    Object.values(DEMO_IDS.customFieldValues),
+  );
+  await deleteByIds(
+    admin,
+    "crm_custom_field_definitions",
+    Object.values(DEMO_IDS.customFieldDefinitions),
+  );
   await deleteByIds(admin, "crm_equipment", Object.values(DEMO_IDS.equipment));
-  await deleteByIds(admin, "crm_contact_territories", Object.values(DEMO_IDS.contactTerritories));
-  await deleteByIds(admin, "crm_territories", Object.values(DEMO_IDS.territories));
-  await deleteByIds(admin, "crm_contact_companies", Object.values(DEMO_IDS.contactCompanies));
+  await deleteByIds(
+    admin,
+    "crm_contact_territories",
+    Object.values(DEMO_IDS.contactTerritories),
+  );
+  await deleteByIds(
+    admin,
+    "crm_territories",
+    Object.values(DEMO_IDS.territories),
+  );
+  await deleteByIds(
+    admin,
+    "crm_contact_companies",
+    Object.values(DEMO_IDS.contactCompanies),
+  );
   await deleteByIds(admin, "crm_deals", Object.values(DEMO_IDS.deals));
   await deleteByIds(admin, "crm_contacts", Object.values(DEMO_IDS.contacts));
   await deleteByIds(admin, "crm_companies", Object.values(DEMO_IDS.companies));
@@ -1686,7 +2441,11 @@ async function resetDemoData(admin) {
     "62000000-0000-4000-8000-000000000001",
     "62000000-0000-4000-8000-000000000002",
   ]);
-  await deleteByIds(admin, "customer_profiles_extended", Object.values(DEMO_IDS.customerProfiles));
+  await deleteByIds(
+    admin,
+    "customer_profiles_extended",
+    Object.values(DEMO_IDS.customerProfiles),
+  );
   await resetDemoIntegrationStatuses(admin);
   await deleteByIds(
     admin,
@@ -1716,11 +2475,6 @@ async function seedDemoData(admin) {
     .from("crm_contacts")
     .upsert(dataset.contacts, { onConflict: "id" });
   if (contactError) throw contactError;
-
-  const { error: contactCompanyError } = await admin
-    .from("crm_contact_companies")
-    .upsert(dataset.contactCompanies, { onConflict: "id" });
-  if (contactCompanyError) throw contactCompanyError;
 
   const { error: territoryError } = await admin
     .from("crm_territories")
@@ -1787,7 +2541,9 @@ async function seedDemoData(admin) {
     .upsert(dataset.customerDealHistory, { onConflict: "id" });
   if (dealHistoryError) throw dealHistoryError;
 
-  console.log(`Seeded demo batch ${DEMO_BATCH_ID} into workspace "${DEMO_WORKSPACE_ID}".`);
+  console.log(
+    `Seeded demo batch ${DEMO_BATCH_ID} into workspace "${DEMO_WORKSPACE_ID}".`,
+  );
   console.log("Demo operator accounts:");
   for (const user of DEMO_USERS) {
     console.log(`  ${user.email} (${user.role})`);
@@ -1802,7 +2558,7 @@ Workspace:
   ${DEMO_WORKSPACE_ID} (current app default)
 
 What this seed covers:
-  - 4 demo operator accounts (owner, manager, 2 reps)
+  - 5 demo operator accounts (owner, admin, manager, 2 reps)
   - Sprint 1 integration hub states across HubSpot, SendGrid, Twilio, pricing, and market data
   - 2 HubSpot import runs with reconciliation-ready error rows
   - 4 companies with one parent/child hierarchy
@@ -1825,6 +2581,10 @@ Reset behavior:
   - Removes all demo CRM rows by fixed id
   - Removes demo auth users and their linked profiles
   - Leaves non-demo records intact
+
+Local deterministic baseline:
+  - With QEP_DEMO_PREFER_LOCAL=1, reset waits for the local DB, auth schema, and REST API to finish recovering after db reset
+  - Use bun run demo:baseline:local to force a full local db reset followed by seed
 `);
 }
 
@@ -1841,22 +2601,66 @@ async function main() {
     return;
   }
 
-  const admin = createAdminClient();
+  if (command === "auth-users") {
+    const admin = createAdminClient();
+    await ensureDemoUsers(admin);
+    console.log(`Ensured demo auth users for workspace "${DEMO_WORKSPACE_ID}".`);
+    console.log("Demo operator accounts:");
+    for (const user of DEMO_USERS) {
+      console.log(`  ${user.email} (${user.role})`);
+    }
+    console.log(`Demo password: ${DEMO_PASSWORD}`);
+    return;
+  }
 
   if (command === "reset") {
+    if (shouldResetLocalDatabase()) {
+      await resetLocalDatabaseToRepoMigrations();
+      console.log(
+        "Reset local Supabase database to repo migrations for the QA baseline.",
+      );
+      return;
+    }
+
+    const admin = createAdminClient();
     await resetDemoData(admin);
-    console.log(`Removed demo batch ${DEMO_BATCH_ID} from workspace "${DEMO_WORKSPACE_ID}".`);
+    console.log(
+      `Removed demo batch ${DEMO_BATCH_ID} from workspace "${DEMO_WORKSPACE_ID}".`,
+    );
     return;
   }
 
   if (command === "seed") {
+    if (shouldResetLocalDatabase()) {
+      await resetLocalDatabaseToRepoMigrations();
+      const admin = createAdminClient();
+      await seedDemoData(admin);
+      return;
+    }
+
+    const admin = createAdminClient();
     await resetDemoData(admin);
     await seedDemoData(admin);
     return;
   }
 
   if (command === "reseed") {
-    await resetDemoData(admin);
+    if (shouldResetLocalDatabase()) {
+      await resetLocalDatabaseToRepoMigrations();
+      const admin = createAdminClient();
+      await resetDemoData(admin);
+      await seedDemoData(admin);
+    } else {
+      const admin = createAdminClient();
+      await resetDemoData(admin);
+      await seedDemoData(admin);
+    }
+    return;
+  }
+
+  if (command === "baseline-local") {
+    await resetLocalDatabaseToRepoMigrations();
+    const admin = createAdminClient();
     await seedDemoData(admin);
     return;
   }
