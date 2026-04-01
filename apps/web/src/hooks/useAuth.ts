@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { UserRole } from "../lib/database.types";
+import {
+  isTransientAuthRecoveryError,
+  readCachedProfile,
+  writeCachedProfile,
+} from "../lib/auth-recovery";
 
 interface Profile {
   id: string;
@@ -17,6 +22,11 @@ interface AuthState {
   loading: boolean;
   error: string | null;
 }
+
+const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const AUTH_TIMEOUT_RETRIES = 2;
+const PROFILE_REQUEST_TIMEOUT_MS = 2500;
+const PROFILE_TIMEOUT_RETRIES = 1;
 
 export function useAuth(): AuthState {
   const [state, setState] = useState<AuthState>({
@@ -48,8 +58,29 @@ export function useAuth(): AuthState {
   useEffect(() => {
     const hadStoredToken = hadStoredTokenRef.current;
 
+    function applyProfileState(session: Session, profile: Profile | null, error: string | null): void {
+      if (profile) {
+        writeCachedProfile(profile);
+      }
+      setState({ user: session.user, session, profile, loading: false, error });
+    }
+
+    function applyCachedProfileIfAvailable(session: Session): boolean {
+      const cachedProfile = readCachedProfile(session.user.id);
+      if (!cachedProfile) {
+        return false;
+      }
+      setState({ user: session.user, session, profile: cachedProfile, loading: false, error: null });
+      return true;
+    }
+
     // Get initial session
-    supabase.auth.getSession()
+    withTimeoutRetries(
+      () => supabase.auth.getSession(),
+      AUTH_REQUEST_TIMEOUT_MS,
+      "Initial auth session load timed out",
+      AUTH_TIMEOUT_RETRIES,
+    )
       .then(async ({ data: { session }, error: sessionReadError }) => {
         if (sessionReadError) {
           await supabase.auth.signOut();
@@ -64,10 +95,11 @@ export function useAuth(): AuthState {
           return;
         }
         if (session?.user) {
-          // Validate the token with the server — getSession() only reads
-          // localStorage and does NOT verify the JWT is still valid.
-          const { error: userError } = await supabase.auth.getUser();
-          if (userError) {
+          applyCachedProfileIfAvailable(session);
+          // Validate the token with the server when possible, but do not throw
+          // away a freshly recovered local session on a transient network miss.
+          const sessionValidation = await validateSessionToken();
+          if (sessionValidation === "expired") {
             // Token is stale/invalid — sign out to clear storage and
             // surface an expiry error so App.tsx shows SessionExpiredModal.
             await supabase.auth.signOut();
@@ -80,11 +112,17 @@ export function useAuth(): AuthState {
 
           return fetchProfile(session.user.id)
             .then(({ profile, error }) => {
-              setState({ user: session.user, session, profile, loading: false, error });
+              if (!profile && error && applyCachedProfileIfAvailable(session)) {
+                return;
+              }
+              applyProfileState(session, profile, error);
             })
             .catch((err: unknown) => {
               const message = err instanceof Error ? err.message : "Failed to load your profile.";
-              setState({ user: session.user, session, profile: null, loading: false, error: message });
+              if (applyCachedProfileIfAvailable(session)) {
+                return;
+              }
+              applyProfileState(session, null, message);
             });
         } else {
           // No session — use pre-getSession() snapshot to detect tokens
@@ -111,14 +149,20 @@ export function useAuth(): AuthState {
       .catch((err: unknown) => {
         const raw = err instanceof Error ? err.message : String(err);
         const lower = raw.toLowerCase();
+        const timedOut =
+          raw === "Initial auth session load timed out" ||
+          raw === "Auth token validation timed out";
+        const transientAuthFailure = isTransientAuthRecoveryError(raw);
         const looksAuth =
           lower.includes("auth") ||
           lower.includes("jwt") ||
           lower.includes("token") ||
           lower.includes("session") ||
           lower.includes("json");
-        void supabase.auth.signOut();
-        const message = looksAuth
+        if (looksAuth && !timedOut && !transientAuthFailure) {
+          void supabase.auth.signOut();
+        }
+        const message = looksAuth && !timedOut
           ? "Your session token is invalid or expired. Please sign in again."
           : "We can't reach the authentication service. Try refreshing the page.";
         setState({ user: null, session: null, profile: null, loading: false, error: message });
@@ -138,8 +182,9 @@ export function useAuth(): AuthState {
         void (async () => {
           try {
             if (session?.user) {
-              const { error: userError } = await supabase.auth.getUser();
-              if (userError) {
+              applyCachedProfileIfAvailable(session);
+              const sessionValidation = await validateSessionToken();
+              if (sessionValidation === "expired") {
                 await supabase.auth.signOut();
                 setState({
                   user: null,
@@ -152,7 +197,10 @@ export function useAuth(): AuthState {
                 return;
               }
               const { profile, error } = await fetchProfile(session.user.id);
-              setState({ user: session.user, session, profile, loading: false, error });
+              if (!profile && error && applyCachedProfileIfAvailable(session)) {
+                return;
+              }
+              applyProfileState(session, profile, error);
             } else {
               // Preserve any existing error (e.g. corrupt-token detection) so
               // App.tsx can still trigger SessionExpiredModal.
@@ -162,8 +210,19 @@ export function useAuth(): AuthState {
               }));
             }
           } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : "We had trouble updating your session. Refresh the page or sign in again.";
-            setState({ user: null, session: null, profile: null, loading: false, error: message });
+            const raw = err instanceof Error
+              ? err.message
+              : "We had trouble updating your session. Refresh the page or sign in again.";
+            const message = raw === "Auth token validation timed out"
+              ? "We can't reach the authentication service. Try refreshing the page."
+              : raw;
+            setState((prev) => ({
+              user: prev.user,
+              session: prev.session,
+              profile: prev.profile,
+              loading: false,
+              error: message,
+            }));
           }
         })();
       }, 0);
@@ -176,23 +235,22 @@ export function useAuth(): AuthState {
 }
 
 async function fetchProfile(userId: string): Promise<{ profile: Profile | null; error: string | null }> {
-  const profileFetch = supabase
-    .from("profiles")
-    .select("id, full_name, email, role")
-    .eq("id", userId)
-    .single();
-
   // Guard against the query hanging indefinitely (e.g. RLS stall on fresh session
   // after page reload before the JWT is fully propagated to PostgREST).
-  const timeoutMs = 5000;
-  let result: Awaited<typeof profileFetch>;
+  let result: { data: Profile | null; error: { message?: string } | null };
   try {
-    result = await Promise.race([
-      profileFetch,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Profile load timed out")), timeoutMs)
+    result = await withTimeoutRetries(
+      () => Promise.resolve(
+        supabase
+          .from("profiles")
+          .select("id, full_name, email, role")
+          .eq("id", userId)
+          .single()
       ),
-    ]);
+      PROFILE_REQUEST_TIMEOUT_MS,
+      "Profile load timed out",
+      PROFILE_TIMEOUT_RETRIES,
+    );
   } catch (err) {
     const timedOut = err instanceof Error && err.message === "Profile load timed out";
     console.error("Profile fetch error:", err);
@@ -215,4 +273,69 @@ async function fetchProfile(userId: string): Promise<{ profile: Profile | null; 
   }
 
   return { profile: data, error: null };
+}
+
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
+async function withTimeoutRetries<T>(
+  factory: () => PromiseLike<T>,
+  timeoutMs: number,
+  message: string,
+  retries: number,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await withTimeout(factory(), timeoutMs, message);
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof Error) || error.message !== message || attempt === retries) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(message);
+}
+
+type SessionValidationResult = "valid" | "expired" | "unreachable";
+
+async function validateSessionToken(): Promise<SessionValidationResult> {
+  try {
+    const { error } = await withTimeoutRetries(
+      () => supabase.auth.getUser(),
+      AUTH_REQUEST_TIMEOUT_MS,
+      "Auth token validation timed out",
+      AUTH_TIMEOUT_RETRIES,
+    );
+    if (!error) {
+      return "valid";
+    }
+
+    if (isTransientAuthRecoveryError(error.message)) {
+      return "unreachable";
+    }
+    return isAuthValidationFailure(error.message) ? "expired" : "unreachable";
+  } catch (error) {
+    if (error instanceof Error && isTransientAuthRecoveryError(error.message)) {
+      return "unreachable";
+    }
+    if (error instanceof Error && isAuthValidationFailure(error.message)) {
+      return "expired";
+    }
+
+    return "unreachable";
+  }
+}
+
+function isAuthValidationFailure(message: string): boolean {
+  return /auth|jwt|token|session|expired|refresh token|invalid/i.test(message);
 }
