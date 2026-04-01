@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { AlertTriangle, Send, History, Plus, ChevronDown, Shield } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -27,7 +27,7 @@ export interface Message {
 interface ConversationSession {
   id: string;
   title: string;
-  messages: Message[];
+  messageCount: number;
   createdAt: Date;
 }
 
@@ -47,67 +47,93 @@ function autoTitle(messages: Message[]): string {
   return first.content.slice(0, 40) + (first.content.length > 40 ? "…" : "");
 }
 
-const STORAGE_KEY_HISTORY = "qep-chat-history";
-const STORAGE_KEY_CURRENT = "qep-chat-current";
-const MAX_STORED_CONVERSATIONS = 50;
-const MAX_STORAGE_BYTES = 4 * 1024 * 1024; // 4MB — well below the ~5-10MB browser limit
+// Typed Supabase client doesn't have the new chat tables yet — use untyped access
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
 
-function saveHistory(convos: ConversationSession[]): void {
-  let trimmed = convos.slice(0, MAX_STORED_CONVERSATIONS);
-  let json = JSON.stringify(trimmed);
-  // Drop oldest conversations until under the byte limit
-  while (json.length > MAX_STORAGE_BYTES && trimmed.length > 0) {
-    trimmed = trimmed.slice(0, -1);
-    json = JSON.stringify(trimmed);
-  }
-  try {
-    localStorage.setItem(STORAGE_KEY_HISTORY, json);
-  } catch {
-    // QuotaExceededError — clear rather than silently fail
-    localStorage.removeItem(STORAGE_KEY_HISTORY);
-  }
+async function dbCreateConversation(title: string, context?: Record<string, unknown>): Promise<string | null> {
+  const { data } = await db
+    .from("chat_conversations")
+    .insert({ title, context: context ?? null })
+    .select("id")
+    .single();
+  return data?.id ?? null;
 }
 
-function reviveMessages(raw: unknown[]): Message[] {
-  return raw.map((m) => {
-    const msg = m as Record<string, unknown>;
-    return { ...msg, timestamp: new Date(msg.timestamp as string) } as Message;
+async function dbSaveMessage(
+  conversationId: string,
+  msg: { role: string; content: string; sources?: Source[]; traceId?: string; retrievalMeta?: Record<string, unknown> },
+): Promise<void> {
+  await db.from("chat_messages").insert({
+    conversation_id: conversationId,
+    role: msg.role,
+    content: msg.content,
+    sources: msg.sources ? JSON.parse(JSON.stringify(msg.sources)) : null,
+    trace_id: msg.traceId ?? null,
+    retrieval_meta: msg.retrievalMeta ?? null,
   });
 }
 
-function loadHistory(): ConversationSession[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
-    return parsed.map((s) => ({
-      ...s,
-      createdAt: new Date(s.createdAt as string),
-      messages: reviveMessages(s.messages as unknown[]),
-    })) as ConversationSession[];
-  } catch {
-    return [];
+async function dbUpdateConversationTitle(id: string, title: string): Promise<void> {
+  await db.from("chat_conversations").update({ title }).eq("id", id);
+}
+
+async function dbSaveFeedback(conversationId: string, messageContent: string, feedback: "up" | "down"): Promise<void> {
+  const { data } = await db
+    .from("chat_messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("content", messageContent)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (data?.id) {
+    await db.from("chat_messages").update({ feedback }).eq("id", data.id);
   }
 }
 
-function loadCurrentMessages(): Message[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CURRENT);
-    if (!raw) return [];
-    return reviveMessages(JSON.parse(raw) as unknown[]);
-  } catch {
-    return [];
-  }
+async function dbLoadHistory(): Promise<ConversationSession[]> {
+  const { data } = await db
+    .from("chat_conversations")
+    .select("id, title, created_at, chat_messages(count)")
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (!data) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    messageCount: Array.isArray(row.chat_messages) && row.chat_messages[0]
+      ? (row.chat_messages[0] as { count: number }).count
+      : 0,
+    createdAt: new Date(row.created_at as string),
+  }));
+}
+
+async function dbLoadConversationMessages(conversationId: string): Promise<Message[]> {
+  const { data } = await db
+    .from("chat_messages")
+    .select("id, role, content, sources, feedback, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (!data) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    role: row.role as "user" | "assistant",
+    content: row.content as string,
+    timestamp: new Date(row.created_at as string),
+    sources: (row.sources as Source[] | null) ?? undefined,
+    feedback: (row.feedback as "up" | "down" | null) ?? undefined,
+  }));
 }
 
 export function ChatPage({ userEmail }: ChatPageProps) {
   const location = useLocation();
-  const [messages, setMessages] = useState<Message[]>(() => loadCurrentMessages());
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [history, setHistory] = useState<ConversationSession[]>(() => loadHistory());
+  const [history, setHistory] = useState<ConversationSession[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  /** Last successful stream diagnostics from the chat edge function (trace + retrieval). */
   const [chatDiagnostics, setChatDiagnostics] = useState<{
     traceId: string;
     embeddingDegraded: boolean;
@@ -122,6 +148,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   const chatMountedRef = useRef(true);
   const chatAbortRef = useRef<AbortController | null>(null);
   const initialQueryFiredRef = useRef(false);
+  const conversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -129,6 +156,9 @@ export function ChatPage({ userEmail }: ChatPageProps) {
 
   useEffect(() => {
     chatMountedRef.current = true;
+    dbLoadHistory().then((h) => {
+      if (chatMountedRef.current) setHistory(h);
+    });
     return () => {
       chatMountedRef.current = false;
       chatAbortRef.current?.abort();
@@ -158,19 +188,6 @@ export function ChatPage({ userEmail }: ChatPageProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Persist current messages and history to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify(messages));
-    } catch {
-      localStorage.removeItem(STORAGE_KEY_CURRENT);
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    saveHistory(history);
-  }, [history]);
 
   // Handle global search handoff: initialQuery from TopBar
   useEffect(() => {
@@ -211,40 +228,31 @@ export function ChatPage({ userEmail }: ChatPageProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [historyOpen]);
 
+  const refreshHistory = useCallback(() => {
+    dbLoadHistory().then((h) => {
+      if (chatMountedRef.current) setHistory(h);
+    });
+  }, []);
+
   function startNewChat() {
     chatAbortRef.current?.abort();
-    if (messages.length > 0) {
-      const session: ConversationSession = {
-        id: crypto.randomUUID(),
-        title: autoTitle(messages),
-        messages,
-        createdAt: new Date(),
-      };
-      setHistory((prev) => [session, ...prev]);
-    }
+    conversationIdRef.current = null;
     setMessages([]);
     setInput("");
     setHistoryOpen(false);
+    refreshHistory();
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
-  function loadSession(session: ConversationSession) {
+  async function loadSession(session: ConversationSession) {
     chatAbortRef.current?.abort();
-    // Save current conversation if it has messages
-    if (messages.length > 0) {
-      const current: ConversationSession = {
-        id: crypto.randomUUID(),
-        title: autoTitle(messages),
-        messages,
-        createdAt: new Date(),
-      };
-      setHistory((prev) => [current, ...prev.filter((s) => s.id !== session.id)]);
-    } else {
-      setHistory((prev) => prev.filter((s) => s.id !== session.id));
+    conversationIdRef.current = session.id;
+    const loaded = await dbLoadConversationMessages(session.id);
+    if (chatMountedRef.current) {
+      setMessages(loaded);
+      setHistoryOpen(false);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     }
-    setMessages(session.messages);
-    setHistoryOpen(false);
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
   async function sendMessage(text?: string) {
@@ -269,10 +277,26 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
     ]);
 
+    // Create conversation in DB if this is the first message
+    if (!conversationIdRef.current) {
+      const ctx = hasChatContext ? chatContext : undefined;
+      const convId = await dbCreateConversation(autoTitle([userMessage]), ctx as Record<string, unknown> | undefined);
+      conversationIdRef.current = convId;
+    }
+
+    // Persist user message in background
+    if (conversationIdRef.current) {
+      dbSaveMessage(conversationIdRef.current, { role: "user", content }).catch(() => {});
+    }
+
     chatAbortRef.current?.abort();
     const abortController = new AbortController();
     chatAbortRef.current = abortController;
     const { signal } = abortController;
+
+    let lastTraceId: string | undefined;
+    let lastRetrievalMeta: Record<string, unknown> | undefined;
+    let assistantSources: Source[] | undefined;
 
     try {
       const {
@@ -307,7 +331,6 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         const traceId = payload?.error?.trace_id;
         let message = payload?.error?.message ?? "Chat request failed.";
 
-        // Old chat edge returns this exact body for RATE_LIMIT_CHECK_FAILED; some proxies strip `code`.
         const legacyRateLimitCheckBody =
           message.trim() === "Chat is temporarily unavailable. Please try again shortly.";
 
@@ -316,7 +339,6 @@ export function ChatPage({ userEmail }: ChatPageProps) {
         } else if (code === "RATE_LIMITED") {
           message = "You are sending messages too quickly. Please wait a minute and try again.";
         } else if (code === "RATE_LIMIT_CHECK_FAILED" || legacyRateLimitCheckBody) {
-          // Legacy edge: 503 when check_rate_limit RPC failed (no table fallback). Fix = deploy current chat function.
           message =
             "Chat could not verify usage limits. Please try again in a minute. If this keeps happening, the chat service needs redeploying.";
         } else if (code === "EMBEDDING_FAILED") {
@@ -377,6 +399,8 @@ export function ChatPage({ userEmail }: ChatPageProps) {
               };
             };
             if (parsed.meta?.trace_id) {
+              lastTraceId = parsed.meta.trace_id;
+              lastRetrievalMeta = parsed.meta.retrieval as Record<string, unknown> | undefined;
               const r = parsed.meta.retrieval;
               if (chatMountedRef.current) {
                 setChatDiagnostics({
@@ -400,6 +424,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
               );
             }
             if (parsed.sources && chatMountedRef.current) {
+              assistantSources = parsed.sources;
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId ? { ...m, sources: parsed.sources } : m
@@ -408,6 +433,25 @@ export function ChatPage({ userEmail }: ChatPageProps) {
             }
           } catch {
             // ignore parse errors
+          }
+        }
+      }
+
+      // Persist completed assistant message to DB
+      if (conversationIdRef.current) {
+        const finalMsg = messagesRef.current.find((m) => m.id === assistantId);
+        if (finalMsg?.content) {
+          dbSaveMessage(conversationIdRef.current, {
+            role: "assistant",
+            content: finalMsg.content,
+            sources: assistantSources,
+            traceId: lastTraceId,
+            retrievalMeta: lastRetrievalMeta,
+          }).catch(() => {});
+
+          // Update conversation title to first user message
+          if (messagesRef.current.filter((m) => m.role === "user").length <= 1) {
+            dbUpdateConversationTitle(conversationIdRef.current, autoTitle(messagesRef.current)).catch(() => {});
           }
         }
       }
@@ -440,6 +484,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
       chatAbortRef.current = null;
       if (chatMountedRef.current) {
         setStreaming(false);
+        refreshHistory();
       }
     }
   }
@@ -455,6 +500,13 @@ export function ChatPage({ userEmail }: ChatPageProps) {
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, feedback } : m))
     );
+    // Persist feedback to DB
+    if (conversationIdRef.current) {
+      const msg = messagesRef.current.find((m) => m.id === id);
+      if (msg?.content) {
+        dbSaveFeedback(conversationIdRef.current, msg.content, feedback).catch(() => {});
+      }
+    }
   }
 
   // Suggestion chip click → populate input + auto-send
@@ -516,7 +568,7 @@ export function ChatPage({ userEmail }: ChatPageProps) {
                           <p className="text-sm text-foreground truncate">{session.title}</p>
                           <p className="text-xs text-qep-gray mt-0.5">
                             {session.createdAt.toLocaleDateString()} ·{" "}
-                            {session.messages.filter((m) => m.role === "user").length} messages
+                            {session.messageCount} messages
                           </p>
                         </button>
                       </li>
