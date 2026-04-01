@@ -155,6 +155,25 @@ export const CHAT_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "getEntityBriefing",
+      description: "Get a unified briefing for a company, contact, or deal — automatically pulls all related contacts, deals, equipment, activities, voice notes, and valuations into one comprehensive report. Use this when the user asks 'tell me about X' or needs a full picture of a customer/company/deal.",
+      parameters: {
+        type: "object",
+        properties: {
+          entity_type: {
+            type: "string",
+            enum: ["company", "contact", "deal"],
+            description: "What kind of entity to brief on",
+          },
+          name: { type: "string", description: "Name to search for (company name, contact name, or deal name)" },
+        },
+        required: ["entity_type", "name"],
+      },
+    },
+  },
 ] as const;
 
 // ── Tool executors ─────────────────────────────────────────────────────
@@ -501,6 +520,211 @@ async function execGetManufacturerIncentives(
   return data ?? [];
 }
 
+async function execGetEntityBriefing(
+  db: SupabaseClient,
+  args: { entity_type: "company" | "contact" | "deal"; name: string },
+): Promise<unknown> {
+  const name = (args.name ?? "").trim();
+  if (!name) return { error: "name is required" };
+  const like = `%${name}%`;
+
+  if (args.entity_type === "company") {
+    // Find the company
+    const { data: companies } = await db
+      .from("crm_companies")
+      .select("id, name, industry, city, state, country, website, phone, employee_count")
+      .ilike("name", like)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!companies?.length) return { message: `No company found matching "${name}"` };
+    const company = companies[0] as Record<string, unknown>;
+    const companyId = company.id as string;
+
+    // Pull all related data in parallel
+    const [contacts, deals, equipment, activities, voiceNotes] = await Promise.all([
+      db.from("crm_contacts").select("id, first_name, last_name, email, phone, title")
+        .eq("primary_company_id", companyId).is("deleted_at", null).limit(20),
+      db.from("crm_deals").select("id, name, amount, expected_close_on, stage_id")
+        .eq("company_id", companyId).is("deleted_at", null).order("expected_close_on", { ascending: true }).limit(15),
+      db.from("crm_equipment").select("id, name, make, model, year, condition, availability, current_market_value")
+        .is("deleted_at", null).limit(10),
+      db.from("crm_activities").select("id, activity_type, body, occurred_at")
+        .eq("company_id", companyId).is("deleted_at", null).order("occurred_at", { ascending: false }).limit(10),
+      db.from("voice_captures").select("id, transcript, created_at")
+        .not("transcript", "is", null)
+        .ilike("transcript", like)
+        .order("created_at", { ascending: false }).limit(5),
+    ]);
+
+    // Resolve deal stages
+    const stageIds = [...new Set((deals.data ?? []).map((d: Record<string, unknown>) => d.stage_id).filter(Boolean))];
+    let stageMap: Record<string, string> = {};
+    if (stageIds.length > 0) {
+      const { data: stages } = await db.from("crm_deal_stages").select("id, name").in("id", stageIds);
+      if (stages) stageMap = Object.fromEntries((stages as { id: string; name: string }[]).map((s) => [s.id, s.name]));
+    }
+
+    return {
+      company,
+      contacts: (contacts.data ?? []).map((c: Record<string, unknown>) => ({
+        name: `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim(),
+        email: c.email, phone: c.phone, title: c.title,
+      })),
+      deals: (deals.data ?? []).map((d: Record<string, unknown>) => ({
+        name: d.name, amount: d.amount, expected_close: d.expected_close_on,
+        stage: stageMap[d.stage_id as string] ?? null,
+      })),
+      recent_activities: (activities.data ?? []).map((a: Record<string, unknown>) => ({
+        type: a.activity_type,
+        body: typeof a.body === "string" ? a.body.slice(0, 300) : null,
+        date: a.occurred_at,
+      })),
+      voice_notes: (voiceNotes.data ?? []).map((v: Record<string, unknown>) => ({
+        date: v.created_at,
+        transcript_excerpt: typeof v.transcript === "string" ? v.transcript.slice(0, 400) : null,
+      })),
+    };
+  }
+
+  if (args.entity_type === "contact") {
+    const { data: contacts } = await db
+      .from("crm_contacts")
+      .select("id, first_name, last_name, email, phone, title, city, state, primary_company_id")
+      .or(`first_name.ilike.${like},last_name.ilike.${like}`)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!contacts?.length) return { message: `No contact found matching "${name}"` };
+    const contact = contacts[0] as Record<string, unknown>;
+    const contactId = contact.id as string;
+
+    // Resolve company name
+    let companyName: string | null = null;
+    if (contact.primary_company_id) {
+      const { data: comp } = await db.from("crm_companies").select("name").eq("id", contact.primary_company_id).maybeSingle();
+      companyName = (comp as { name: string } | null)?.name ?? null;
+    }
+
+    const [deals, activities, voiceNotes] = await Promise.all([
+      db.from("crm_deals").select("id, name, amount, expected_close_on, stage_id")
+        .eq("primary_contact_id", contactId).is("deleted_at", null).order("expected_close_on", { ascending: true }).limit(10),
+      db.from("crm_activities").select("id, activity_type, body, occurred_at")
+        .eq("contact_id", contactId).is("deleted_at", null).order("occurred_at", { ascending: false }).limit(10),
+      db.from("voice_captures").select("id, transcript, created_at")
+        .not("transcript", "is", null)
+        .ilike("transcript", like)
+        .order("created_at", { ascending: false }).limit(5),
+    ]);
+
+    const stageIds = [...new Set((deals.data ?? []).map((d: Record<string, unknown>) => d.stage_id).filter(Boolean))];
+    let stageMap: Record<string, string> = {};
+    if (stageIds.length > 0) {
+      const { data: stages } = await db.from("crm_deal_stages").select("id, name").in("id", stageIds);
+      if (stages) stageMap = Object.fromEntries((stages as { id: string; name: string }[]).map((s) => [s.id, s.name]));
+    }
+
+    return {
+      contact: { ...contact, company: companyName },
+      deals: (deals.data ?? []).map((d: Record<string, unknown>) => ({
+        name: d.name, amount: d.amount, expected_close: d.expected_close_on,
+        stage: stageMap[d.stage_id as string] ?? null,
+      })),
+      recent_activities: (activities.data ?? []).map((a: Record<string, unknown>) => ({
+        type: a.activity_type,
+        body: typeof a.body === "string" ? a.body.slice(0, 300) : null,
+        date: a.occurred_at,
+      })),
+      voice_notes: (voiceNotes.data ?? []).map((v: Record<string, unknown>) => ({
+        date: v.created_at,
+        transcript_excerpt: typeof v.transcript === "string" ? v.transcript.slice(0, 400) : null,
+      })),
+    };
+  }
+
+  if (args.entity_type === "deal") {
+    const { data: deals } = await db
+      .from("crm_deals")
+      .select("id, name, amount, expected_close_on, stage_id, primary_contact_id, company_id, assigned_rep_id, created_at")
+      .ilike("name", like)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!deals?.length) return { message: `No deal found matching "${name}"` };
+    const deal = deals[0] as Record<string, unknown>;
+    const dealId = deal.id as string;
+
+    // Resolve FK names
+    let contactName: string | null = null;
+    let companyName: string | null = null;
+    let stageName: string | null = null;
+    let repName: string | null = null;
+
+    const lookups = await Promise.all([
+      deal.primary_contact_id
+        ? db.from("crm_contacts").select("first_name, last_name").eq("id", deal.primary_contact_id).maybeSingle()
+        : null,
+      deal.company_id
+        ? db.from("crm_companies").select("name").eq("id", deal.company_id).maybeSingle()
+        : null,
+      deal.stage_id
+        ? db.from("crm_deal_stages").select("name").eq("id", deal.stage_id).maybeSingle()
+        : null,
+      deal.assigned_rep_id
+        ? db.from("profiles").select("full_name").eq("id", deal.assigned_rep_id).maybeSingle()
+        : null,
+    ]);
+
+    if (lookups[0]?.data) {
+      const c = lookups[0].data as { first_name: string; last_name: string };
+      contactName = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
+    }
+    companyName = (lookups[1]?.data as { name: string } | null)?.name ?? null;
+    stageName = (lookups[2]?.data as { name: string } | null)?.name ?? null;
+    repName = (lookups[3]?.data as { full_name: string } | null)?.full_name ?? null;
+
+    const [activities, dealEquipment] = await Promise.all([
+      db.from("crm_activities").select("id, activity_type, body, occurred_at")
+        .eq("deal_id", dealId).is("deleted_at", null).order("occurred_at", { ascending: false }).limit(10),
+      db.from("crm_deal_equipment").select("equipment_id, quantity, unit_price, line_total")
+        .eq("deal_id", dealId).limit(10),
+    ]);
+
+    // Resolve equipment names
+    const equipIds = (dealEquipment.data ?? []).map((e: Record<string, unknown>) => e.equipment_id).filter(Boolean);
+    let equipMap: Record<string, string> = {};
+    if (equipIds.length > 0) {
+      const { data: equips } = await db.from("crm_equipment").select("id, name, make, model, year").in("id", equipIds);
+      if (equips) {
+        equipMap = Object.fromEntries(
+          (equips as { id: string; name: string; make: string; model: string; year: number }[])
+            .map((e) => [e.id, `${e.name} (${[e.make, e.model, e.year].filter(Boolean).join(" ")})`]),
+        );
+      }
+    }
+
+    return {
+      deal: {
+        ...deal,
+        contact: contactName,
+        company: companyName,
+        stage: stageName,
+        assigned_rep: repName,
+      },
+      equipment: (dealEquipment.data ?? []).map((e: Record<string, unknown>) => ({
+        name: equipMap[e.equipment_id as string] ?? "Unknown",
+        quantity: e.quantity,
+        unit_price: e.unit_price,
+        line_total: e.line_total,
+      })),
+      recent_activities: (activities.data ?? []).map((a: Record<string, unknown>) => ({
+        type: a.activity_type,
+        body: typeof a.body === "string" ? a.body.slice(0, 300) : null,
+        date: a.occurred_at,
+      })),
+    };
+  }
+
+  return { error: `Unknown entity_type: ${args.entity_type}` };
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────
 
 type ToolExecutor = (db: SupabaseClient, args: Record<string, unknown>) => Promise<unknown>;
@@ -515,6 +739,7 @@ const EXECUTORS: Record<string, ToolExecutor> = {
   getPipelineSummary: (db, args) => execGetPipelineSummary(db, args as Parameters<typeof execGetPipelineSummary>[1]),
   getRecentActivities: (db, args) => execGetRecentActivities(db, args as Parameters<typeof execGetRecentActivities>[1]),
   getManufacturerIncentives: (db, args) => execGetManufacturerIncentives(db, args as Parameters<typeof execGetManufacturerIncentives>[1]),
+  getEntityBriefing: (db, args) => execGetEntityBriefing(db, args as Parameters<typeof execGetEntityBriefing>[1]),
 };
 
 export interface ToolCall {
