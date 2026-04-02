@@ -21,6 +21,7 @@ export interface NavItemDefinition {
   icon: React.ComponentType<{ className?: string }>;
   roles: UserRole[];
   requiresIntelliDealer?: boolean;
+  showcase?: boolean;
 }
 
 export interface NavItem extends NavItemDefinition {
@@ -28,6 +29,7 @@ export interface NavItem extends NavItemDefinition {
 }
 
 export const NAV_ITEMS: NavItemDefinition[] = [
+  // ── Live pages ──────────────────────────────────
   {
     label: "Command Center",
     href: "/dashboard",
@@ -47,49 +49,6 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
-    label: "Quotes",
-    href: "/quote",
-    icon: FileText,
-    roles: ["rep", "manager", "owner"],
-    requiresIntelliDealer: true,
-  },
-  {
-    label: "Rentals",
-    href: "/rentals",
-    icon: Truck,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Parts",
-    href: "/parts",
-    icon: Cog,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Logistics",
-    href: "/logistics",
-    icon: MapPin,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Customers",
-    href: "/customers",
-    icon: Users,
-    roles: ["rep", "admin", "manager", "owner"],
-  },
-  {
-    label: "Executive",
-    href: "/executive",
-    icon: Gauge,
-    roles: ["manager", "owner"],
-  },
-  {
-    label: "People",
-    href: "/people",
-    icon: UserPlus,
-    roles: ["manager", "owner"],
-  },
-  {
     label: "CRM",
     href: "/crm",
     icon: LayoutGrid,
@@ -106,6 +65,56 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     href: "/admin/integrations",
     icon: Plug,
     roles: ["admin", "owner"],
+  },
+  // ── Showcase pages ──────────────────────────────
+  {
+    label: "Quotes",
+    href: "/quote",
+    icon: FileText,
+    roles: ["rep", "admin", "manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "Rentals",
+    href: "/rentals",
+    icon: Truck,
+    roles: ["rep", "admin", "manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "Parts",
+    href: "/parts",
+    icon: Cog,
+    roles: ["rep", "admin", "manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "Logistics",
+    href: "/logistics",
+    icon: MapPin,
+    roles: ["rep", "admin", "manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "Customers",
+    href: "/customers",
+    icon: Users,
+    roles: ["rep", "admin", "manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "Executive",
+    href: "/executive",
+    icon: Gauge,
+    roles: ["manager", "owner"],
+    showcase: true,
+  },
+  {
+    label: "People",
+    href: "/people",
+    icon: UserPlus,
+    roles: ["manager", "owner"],
+    showcase: true,
   },
 ];
 

@@ -87,7 +87,10 @@ export function NavRail({
         {/* Nav items */}
         <div className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
           <TooltipProvider delayDuration={0}>
-            {visibleItems.map((item) => {
+            {visibleItems.map((item, idx) => {
+              const prevItem = idx > 0 ? visibleItems[idx - 1] : null;
+              const showDivider = item.showcase && (!prevItem || !prevItem.showcase);
+
               const isActive =
                 item.href === "/dashboard"
                   ? location.pathname === "/" || location.pathname === "/dashboard"
@@ -104,7 +107,6 @@ export function NavRail({
                       : "text-[#94A3B8] hover:bg-[rgba(255,255,255,0.05)] hover:text-white"
                   )}
                 >
-                  {/* Active left border accent */}
                   {isActive && (
                     <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-qep-orange rounded-r-sm" />
                   )}
@@ -117,7 +119,6 @@ export function NavRail({
                     aria-hidden="true"
                   />
 
-                  {/* Label — fades in with delay after expansion starts */}
                   <span
                     className={cn(
                       "flex-1 whitespace-nowrap overflow-hidden text-[#C5D0DB]",
@@ -137,8 +138,10 @@ export function NavRail({
                 </div>
               );
 
+              let navElement: React.ReactNode;
+
               if (item.gated) {
-                return (
+                navElement = (
                   <Tooltip key={item.href}>
                     <TooltipTrigger asChild>
                       <div
@@ -155,10 +158,8 @@ export function NavRail({
                     </TooltipContent>
                   </Tooltip>
                 );
-              }
-
-              if (!isExpanded) {
-                return (
+              } else if (!isExpanded) {
+                navElement = (
                   <Tooltip key={item.href}>
                     <TooltipTrigger asChild>
                       <NavLink
@@ -172,18 +173,39 @@ export function NavRail({
                     <TooltipContent side="right">{item.label}</TooltipContent>
                   </Tooltip>
                 );
+              } else {
+                navElement = (
+                  <NavLink
+                    key={item.href}
+                    to={item.href}
+                    className="block"
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    {itemContent}
+                  </NavLink>
+                );
               }
 
-              return (
-                <NavLink
-                  key={item.href}
-                  to={item.href}
-                  className="block"
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  {itemContent}
-                </NavLink>
-              );
+              if (showDivider) {
+                return (
+                  <div key={`section-${item.href}`}>
+                    <div className="!my-2.5 px-1">
+                      <div className="h-px bg-white/[0.08]" />
+                      <span
+                        className={cn(
+                          "block text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25 mt-2 mb-1 transition-opacity duration-150",
+                          isExpanded ? "opacity-100 px-2 [transition-delay:50ms]" : "opacity-0 [transition-delay:0ms]"
+                        )}
+                      >
+                        Showcase
+                      </span>
+                    </div>
+                    {navElement}
+                  </div>
+                );
+              }
+
+              return navElement;
             })}
           </TooltipProvider>
         </div>
