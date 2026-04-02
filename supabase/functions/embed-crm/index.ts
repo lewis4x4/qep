@@ -112,9 +112,9 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
   if (!response.ok) {
     throw new Error(`Embedding API error: ${JSON.stringify(data)}`);
   }
-  return (data.data as Array<{ embedding: number[] }>)
-    .sort((a: { index?: number }, b: { index?: number }) => (a.index ?? 0) - (b.index ?? 0))
-    .map((d: { embedding: number[] }) => d.embedding);
+  return (data.data as Array<{ embedding: number[]; index?: number }>)
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((d) => d.embedding);
 }
 
 // ── Per-entity-type fetchers ───────────────────────────────────────────

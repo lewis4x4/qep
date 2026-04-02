@@ -38,8 +38,8 @@ interface PrepData {
   competitorMentions: Record<string, unknown>[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DB = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type DB = any;
 
 async function gatherPrepData(db: DB, entityType: string, name: string): Promise<PrepData | null> {
   // Sanitize: strip PostgREST filter operators and control chars
@@ -59,7 +59,7 @@ async function gatherPrepData(db: DB, entityType: string, name: string): Promise
     const company = companies[0] as Record<string, unknown>;
     const companyId = company.id as string;
 
-    const [contacts, deals, activities, voiceNotes, equipment, valuations, competitorMentions] =
+    const [contacts, deals, activities, voiceNotes, equipment, valuations] =
       await Promise.all([
         db.from("crm_contacts")
           .select("id, first_name, last_name, email, phone, title, created_at")
@@ -105,15 +105,21 @@ async function gatherPrepData(db: DB, entityType: string, name: string): Promise
           .order("valuation_date", { ascending: false })
           .limit(5)
           .then((r: { data: unknown[] | null }) => r.data ?? []),
-
-        db.from("competitive_mentions")
-          .select("competitor_name, sentiment, context, created_at")
-          .in("voice_capture_id", (voiceNotes as Record<string, unknown>[]).map((v) => v.id).filter(Boolean) as string[])
-          .order("created_at", { ascending: false })
-          .limit(5)
-          .then((r: { data: unknown[] | null }) => r.data ?? [])
-          .catch(() => []),
       ]);
+
+    // Fetch competitive mentions separately since it depends on voiceNotes IDs
+    const voiceNoteIds = (voiceNotes as Record<string, unknown>[])
+      .map((v) => v.id)
+      .filter(Boolean) as string[];
+    let competitorMentions: unknown[] = [];
+    if (voiceNoteIds.length > 0) {
+      const { data: mentions } = await db.from("competitive_mentions")
+        .select("competitor_name, sentiment, context, created_at")
+        .in("voice_capture_id", voiceNoteIds)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      competitorMentions = mentions ?? [];
+    }
 
     return {
       entity_type: "company",
