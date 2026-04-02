@@ -35,6 +35,12 @@ const QuoteBuilderPage = lazy(() =>
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
+const RentalLabShowcase = lazy(() =>
+  import("./components/RentalLabShowcase").then((m) => ({ default: m.RentalLabShowcase }))
+);
+const PartsLabShowcase = lazy(() =>
+  import("./components/PartsLabShowcase").then((m) => ({ default: m.PartsLabShowcase }))
+);
 const IntegrationHub = lazy(() =>
   import("./components/IntegrationHub").then((m) => ({ default: m.IntegrationHub }))
 );
@@ -492,6 +498,26 @@ function App() {
                     ) : (
                       <QuoteBuilderGate />
                     )
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/rentals"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <RentalLabShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <PartsLabShowcase />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

@@ -6,6 +6,8 @@ import {
   Settings,
   Plug,
   LayoutGrid,
+  Truck,
+  Cog,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -46,6 +48,18 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     icon: FileText,
     roles: ["rep", "manager", "owner"],
     requiresIntelliDealer: true,
+  },
+  {
+    label: "Rentals",
+    href: "/rentals",
+    icon: Truck,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Parts",
+    href: "/parts",
+    icon: Cog,
+    roles: ["rep", "admin", "manager", "owner"],
   },
   {
     label: "CRM",

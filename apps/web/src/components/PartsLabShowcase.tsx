@@ -1,26 +1,35 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Zap,
-  ShieldCheck,
-  BarChart3,
-  FileText,
+  Cog,
   Users,
-  Package,
-  ClipboardCheck,
-  Rocket,
+  Search,
+  DollarSign,
+  PackageCheck,
+  MessageSquare,
+  TrendingUp,
   ArrowRight,
   CheckCircle2,
-  Lock,
-  Cpu,
-  TrendingUp,
-  Calculator,
-  PenTool,
+  ShieldCheck,
+  BarChart3,
+  Zap,
+  Eye,
+  Layers,
+  Target,
+  Repeat,
+  BrainCircuit,
+  Truck,
+  ClipboardList,
+  ShoppingCart,
+  Store,
+  Phone,
+  Wrench,
   Globe,
+  AlertTriangle,
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/* ─── Intersection Observer hook for scroll-triggered animations ────────── */
+/* ─── Intersection Observer hook ────────────────────────────────────────── */
 
 function useInView(options?: IntersectionObserverInit) {
   const ref = useRef<HTMLDivElement>(null);
@@ -43,42 +52,13 @@ function useInView(options?: IntersectionObserverInit) {
   return { ref, visible };
 }
 
-/* ─── Animated counter ──────────────────────────────────────────────────── */
-
-function AnimatedCounter({ target, suffix = "", duration = 1800 }: { target: number; suffix?: string; duration?: number }) {
-  const [count, setCount] = useState(0);
-  const { ref, visible } = useInView();
-
-  useEffect(() => {
-    if (!visible) return;
-    let start = 0;
-    const step = Math.max(1, Math.ceil(target / (duration / 16)));
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) {
-        setCount(target);
-        clearInterval(timer);
-      } else {
-        setCount(start);
-      }
-    }, 16);
-    return () => clearInterval(timer);
-  }, [visible, target, duration]);
-
-  return (
-    <span ref={ref} className="tabular-nums">
-      {count.toLocaleString()}{suffix}
-    </span>
-  );
-}
-
 /* ─── Scroll-aware sticky nav ───────────────────────────────────────────── */
 
 const NAV_SECTIONS = [
-  { id: "workflow", label: "Workflow" },
-  { id: "proof", label: "Proof" },
+  { id: "lifecycle", label: "Workflow" },
   { id: "value", label: "Value" },
-  { id: "future", label: "Next" },
+  { id: "scale", label: "Scale" },
+  { id: "future", label: "Future" },
 ] as const;
 
 function StickyNav() {
@@ -117,7 +97,7 @@ function StickyNav() {
     >
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-4 py-3.5 sm:px-6">
         <div className="text-lg font-extrabold tracking-tight">
-          Quote<span className="text-[#B87333]">Builder</span>
+          Parts<span className="text-[#B87333]">Lab</span>
         </div>
         <div className="hidden sm:flex items-center gap-1">
           {NAV_SECTIONS.map((s) => (
@@ -203,9 +183,9 @@ function GlassCard({
   );
 }
 
-/* ─── Step card for the workflow ─────────────────────────────────────────── */
+/* ─── Lifecycle step card ────────────────────────────────────────────────── */
 
-function StepCard({
+function LifecycleStep({
   number,
   title,
   description,
@@ -271,19 +251,6 @@ function ValueCard({
   );
 }
 
-/* ─── Proof pill ─────────────────────────────────────────────────────────── */
-
-function ProofPill({ children, delay }: { children: React.ReactNode; delay: number }) {
-  return (
-    <Reveal delay={delay}>
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3.5 py-2 text-[13px] font-medium text-white/65 transition-all duration-200 hover:border-[#B87333]/25 hover:text-white/80 hover:bg-[#B87333]/[0.05]">
-        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/70 flex-shrink-0" />
-        {children}
-      </span>
-    </Reveal>
-  );
-}
-
 /* ─── Future roadmap item ────────────────────────────────────────────────── */
 
 function FutureItem({
@@ -311,7 +278,7 @@ function FutureItem({
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export function QuoteBuilderGate(): React.ReactElement {
+export function PartsLabShowcase(): React.ReactElement {
   const [heroLoaded, setHeroLoaded] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 100);
@@ -327,18 +294,18 @@ export function QuoteBuilderGate(): React.ReactElement {
       className="min-h-screen text-[#EDEDED]"
       style={{
         background:
-          "radial-gradient(ellipse 80% 50% at 80% 0%, rgba(184,115,51,0.10), transparent 50%), " +
-          "radial-gradient(ellipse 60% 40% at 20% 100%, rgba(184,115,51,0.06), transparent 50%), " +
-          "linear-gradient(180deg, #1b1b1b 0%, #141414 100%)",
+          "radial-gradient(ellipse 80% 50% at 80% 0%, rgba(184,115,51,0.09), transparent 50%), " +
+          "radial-gradient(ellipse 50% 40% at 10% 100%, rgba(184,115,51,0.05), transparent 50%), " +
+          "radial-gradient(ellipse 35% 25% at 55% 45%, rgba(184,115,51,0.03), transparent 50%), " +
+          "linear-gradient(180deg, #1b1b1b 0%, #131313 100%)",
       }}
     >
       <StickyNav />
 
       {/* ── HERO ──────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden">
-        {/* Ambient glow */}
-        <div className="pointer-events-none absolute top-0 right-0 h-[600px] w-[600px] rounded-full bg-[#B87333]/[0.07] blur-[120px]" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-[400px] w-[400px] rounded-full bg-[#B87333]/[0.04] blur-[100px]" />
+        <div className="pointer-events-none absolute top-0 right-0 h-[600px] w-[600px] rounded-full bg-[#B87333]/[0.06] blur-[120px]" />
+        <div className="pointer-events-none absolute bottom-0 left-[15%] h-[350px] w-[350px] rounded-full bg-[#B87333]/[0.04] blur-[100px]" />
 
         <div className="relative mx-auto max-w-[1200px] px-4 sm:px-6 pb-16 pt-16 sm:pt-24">
           <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
@@ -355,7 +322,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B87333] opacity-75" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#B87333]" />
                   </span>
-                  QEP OS &middot; Dealer Workflow
+                  QEP OS &middot; Parts Operations
                 </span>
               </div>
 
@@ -365,11 +332,11 @@ export function QuoteBuilderGate(): React.ReactElement {
                   heroLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
                 )}
               >
-                <span className="block text-white">From quote request</span>
+                <span className="block text-white">From parts request</span>
                 <span className="block bg-gradient-to-r from-[#B87333] via-[#D4944A] to-[#B87333] bg-clip-text text-transparent">
-                  to proposal-ready
+                  to fulfilled order
                 </span>
-                <span className="block text-white">deal flow.</span>
+                <span className="block text-white">flow.</span>
               </h1>
 
               <p
@@ -378,30 +345,31 @@ export function QuoteBuilderGate(): React.ReactElement {
                   heroLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
                 )}
               >
-                Quote Builder is QEP OS's dealership-grade quoting engine — built to turn
-                customer demand, equipment selection, pricing context, and proposal creation
-                into one guided workflow.
+                Parts Operations Lab is QEP OS's future parts command center — built to
+                unify customer context, equipment history, parts lookup, quoting, order
+                handling, fulfillment, and future online parts commerce into one connected
+                operational flow.
               </p>
 
               {/* Status banner */}
               <div
                 className={cn(
-                  "mt-8 overflow-hidden rounded-2xl border border-emerald-500/20 transition-all duration-700 delay-[400ms]",
+                  "mt-8 overflow-hidden rounded-2xl border border-[#B87333]/20 transition-all duration-700 delay-[400ms]",
                   heroLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
                 )}
               >
-                <div className="bg-gradient-to-b from-emerald-500/[0.12] to-emerald-500/[0.04] px-5 py-4">
+                <div className="bg-gradient-to-b from-[#B87333]/[0.10] to-[#B87333]/[0.03] px-5 py-4">
                   <div className="flex items-center gap-2.5 mb-1.5">
                     <div className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B87333] opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#B87333]" />
                     </div>
-                    <span className="text-sm font-bold text-white">Built and ready for activation.</span>
+                    <span className="text-sm font-bold text-white">Future operating layer for QEP parts.</span>
                   </div>
                   <p className="text-[13px] leading-relaxed text-white/50 pl-[18px]">
-                    The workflow, CRM persistence, and AI insight layers are already in place.
-                    Live dealer inventory and pricing unlock when IntelliDealer or Telapath
-                    credentials are connected.
+                    Designed to be built in phases — starting with parts lookup and customer
+                    context, expanding into order handling, fulfillment workflows, and
+                    eventually a full parts intelligence and commerce engine.
                   </p>
                 </div>
               </div>
@@ -414,17 +382,17 @@ export function QuoteBuilderGate(): React.ReactElement {
                 )}
               >
                 <button
-                  onClick={() => scrollTo("workflow")}
+                  onClick={() => scrollTo("lifecycle")}
                   className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]"
                 >
                   See the workflow
                   <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </button>
                 <button
-                  onClick={() => scrollTo("proof")}
+                  onClick={() => scrollTo("value")}
                   className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]"
                 >
-                  What's already built
+                  What it unlocks
                 </button>
               </div>
             </div>
@@ -441,38 +409,38 @@ export function QuoteBuilderGate(): React.ReactElement {
                 <GlassCard className="relative rounded-[1.75rem] p-7 sm:p-8 border-white/[0.08] shadow-2xl shadow-black/40">
                   <h3 className="text-xl font-bold text-white mb-2">What owners should know</h3>
                   <p className="text-sm leading-relaxed text-white/50 mb-6">
-                    This is not a concept screen. The UI is already built. The missing step is
-                    the live inventory connection that turns this into a production quoting
-                    workflow.
+                    Parts is one of the most daily, repeatable, and relationship-defining
+                    parts of the business. Parts Operations Lab is how QEP turns daily parts
+                    activity into a connected revenue engine.
                   </p>
 
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       {
-                        icon: CheckCircle2,
-                        title: "Already built",
-                        desc: "Three-step guided flow, CRM save, AI insight surfaces.",
-                        color: "text-emerald-400",
-                        bg: "bg-emerald-400/10 border-emerald-400/15",
-                      },
-                      {
-                        icon: Lock,
-                        title: "Current blocker",
-                        desc: "No live IntelliDealer / Telapath credentials configured.",
+                        icon: AlertTriangle,
+                        title: "Already visible problem",
+                        desc: "Parts today lives across calls, memory, counters, and separate systems.",
                         color: "text-amber-400",
                         bg: "bg-amber-400/10 border-amber-400/15",
                       },
                       {
-                        icon: TrendingUp,
-                        title: "Strategic upside",
-                        desc: "Faster quotes, stronger pricing, cleaner proposals.",
+                        icon: Target,
+                        title: "Current opportunity",
+                        desc: "Connect customer context, equipment history, and parts execution in one place.",
                         color: "text-[#B87333]",
                         bg: "bg-[#B87333]/10 border-[#B87333]/15",
                       },
                       {
-                        icon: Rocket,
+                        icon: TrendingUp,
+                        title: "Strategic upside",
+                        desc: "Faster response, stronger retention, cleaner execution, better visibility.",
+                        color: "text-emerald-400",
+                        bg: "bg-emerald-400/10 border-emerald-400/15",
+                      },
+                      {
+                        icon: Layers,
                         title: "What changes next",
-                        desc: "Gate → live quoting engine the moment catalog data connects.",
+                        desc: "Parts becomes structured, visible, and scalable across every channel.",
                         color: "text-sky-400",
                         bg: "bg-sky-400/10 border-sky-400/15",
                       },
@@ -506,9 +474,8 @@ export function QuoteBuilderGate(): React.ReactElement {
                 What it is
               </h2>
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/50">
-                Quote Builder is not just a quote screen. It is the front door to faster
-                quoting, cleaner proposals, stronger pricing discipline, and better sales
-                execution.
+                Parts Operations Lab is not a parts counter screen. It is the front door to
+                a more connected, more intelligent, more scalable parts business.
               </p>
             </div>
           </Reveal>
@@ -517,13 +484,14 @@ export function QuoteBuilderGate(): React.ReactElement {
             <Reveal delay={100}>
               <GlassCard className="h-full">
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[#B87333]/10 border border-[#B87333]/20">
-                  <Zap className="h-5 w-5 text-[#B87333]" />
+                  <Cog className="h-5 w-5 text-[#B87333]" />
                 </div>
-                <h3 className="text-lg font-bold text-white mb-3">Built for dealership speed</h3>
+                <h3 className="text-lg font-bold text-white mb-3">Built for parts execution</h3>
                 <p className="text-sm leading-relaxed text-white/55">
-                  It gives reps a guided path from customer information to equipment
-                  configuration to proposal review — while surfacing AI-powered customer and
-                  market context inside the flow.
+                  Faster lookup. Cleaner handoffs. Linked customer, equipment, and parts
+                  context at every step. Whether the request comes from the counter, the
+                  phone, the service department, or eventually online — the system knows who
+                  the customer is, what they own, and what they've bought before.
                 </p>
               </GlassCard>
             </Reveal>
@@ -534,9 +502,10 @@ export function QuoteBuilderGate(): React.ReactElement {
                 </div>
                 <h3 className="text-lg font-bold text-white mb-3">Built for leadership visibility</h3>
                 <p className="text-sm leading-relaxed text-white/55">
-                  Instead of quote activity living in disconnected notes, texts, and
-                  spreadsheets, it becomes part of the CRM system of record and future
-                  commercial reporting layer.
+                  Parts activity stops being invisible. What's moving, what's stalled, what
+                  channels are performing, where fulfillment is bottlenecked — leadership
+                  gets a structured view instead of chasing updates. Parts revenue becomes
+                  visible, accountable, and reportable.
                 </p>
               </GlassCard>
             </Reveal>
@@ -544,8 +513,8 @@ export function QuoteBuilderGate(): React.ReactElement {
         </div>
       </section>
 
-      {/* ── HOW IT WORKS — 3-Step Workflow ──────────────────────────── */}
-      <section id="workflow" className="scroll-mt-16 py-16 sm:py-20">
+      {/* ── HOW IT WORKS — 6-Step Lifecycle ────────────────────────── */}
+      <section id="lifecycle" className="scroll-mt-16 py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <Reveal>
             <div className="mb-10">
@@ -553,165 +522,107 @@ export function QuoteBuilderGate(): React.ReactElement {
                 How it works
               </h2>
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/50">
-                A three-step quoting flow designed to be simple for reps and credible for
-                leadership.
+                Six connected stages that take a parts interaction from first request
+                through fulfillment and future intelligence — with customer context and
+                equipment history woven into every step.
               </p>
             </div>
           </Reveal>
 
-          {/* Connecting line */}
-          <div className="relative">
-            <div className="absolute left-[23px] top-6 bottom-6 w-px bg-gradient-to-b from-[#B87333]/30 via-[#B87333]/15 to-transparent hidden md:block lg:hidden" />
-            <div className="grid gap-5 md:grid-cols-3">
-              <StepCard
-                number={1}
-                title="Customer Info"
-                icon={Users}
-                description="Capture who the quote is for, the company, the buyer context, and deal details so the proposal starts with the right commercial frame."
-                delay={0}
-              />
-              <StepCard
-                number={2}
-                title="Equipment Selection"
-                icon={Package}
-                description="Browse machines, attachments, and categories from the catalog source and build the package around the customer's real need."
-                delay={150}
-              />
-              <StepCard
-                number={3}
-                title="Proposal / Review"
-                icon={ClipboardCheck}
-                description="Review line items, pricing, and proposal-ready structure before saving the quote into CRM for follow-through and future reporting."
-                delay={300}
-              />
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <LifecycleStep
+              number={1}
+              title="Customer & Equipment Context"
+              icon={Users}
+              description="Start with who the customer is and what machine or fleet they own. Equipment history, past purchases, and service records provide the context that makes every parts interaction faster and smarter."
+              delay={0}
+            />
+            <LifecycleStep
+              number={2}
+              title="Parts Identification"
+              icon={Search}
+              description="Find the right part with history, compatibility, and supporting context. The system surfaces what fits, what's been ordered before, and what related items are commonly needed alongside it."
+              delay={80}
+            />
+            <LifecycleStep
+              number={3}
+              title="Quote & Availability"
+              icon={DollarSign}
+              description="Surface pricing, stock status, substitutes, related items, and timing. Give the customer a clear answer with confidence — what's available, what's on order, and when it arrives."
+              delay={160}
+            />
+            <LifecycleStep
+              number={4}
+              title="Order & Fulfillment"
+              icon={PackageCheck}
+              description="Move from request to counter pickup, internal issue, shipment, or service-linked delivery. Every order has a clear path from confirmation to completion, regardless of channel."
+              delay={240}
+            />
+            <LifecycleStep
+              number={5}
+              title="Follow-Through & Communication"
+              icon={MessageSquare}
+              description="Order status, customer updates, backorder handling, and next steps. No customer should have to call back to ask where their parts are. No order should go quiet."
+              delay={320}
+            />
+            <LifecycleStep
+              number={6}
+              title="Parts Intelligence & Growth"
+              icon={BrainCircuit}
+              description="Capture what was sold, to whom, for what equipment, and what that means next. Every transaction adds to the system's understanding of demand patterns, customer needs, and future opportunities."
+              delay={400}
+            />
           </div>
         </div>
       </section>
 
-      {/* ── PROOF BAND — What exists today ─────────────────────────── */}
-      <section id="proof" className="scroll-mt-16 relative overflow-hidden">
+      {/* ── WHY THIS MATTERS — Scale band ──────────────────────────── */}
+      <section id="scale" className="scroll-mt-16 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#B87333]/[0.06] to-transparent" />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#B87333]/20 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#B87333]/20 to-transparent" />
 
         <div className="relative mx-auto max-w-[1200px] px-4 sm:px-6 py-16 sm:py-20">
-          <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+          <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div>
               <Reveal>
-                <h2 className="text-[clamp(28px,3.5vw,42px)] font-bold tracking-[-0.03em] text-white mb-3">
-                  What already exists today
+                <h2 className="text-[clamp(28px,3.5vw,42px)] font-bold tracking-[-0.03em] text-white mb-4">
+                  Parts is a revenue engine, not a side workflow
                 </h2>
-                <p className="text-base leading-relaxed text-white/50 mb-8">
-                  The foundation is already there. The product is farther along than the
-                  current lock screen makes it appear.
+                <p className="text-base leading-relaxed text-white/50 mb-4">
+                  When parts is fragmented — across calls, memory, notes, counters, and
+                  separate systems — the company loses speed, visibility, and repeat revenue.
+                  Opportunities are missed. Customers wait longer than they should. Nobody
+                  knows what's working and what's falling through the cracks.
+                </p>
+                <p className="text-base leading-relaxed text-white/50">
+                  When parts is connected, the company gets sharper, faster, and more
+                  valuable to the customer. The best parts businesses don't just sell what
+                  was asked for. They remember, guide, recommend, and follow through better
+                  than everyone else.
                 </p>
               </Reveal>
-
-              {/* Animated proof counters */}
-              <Reveal delay={150}>
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  {[
-                    { value: 1500, suffix: "+", label: "Lines of code" },
-                    { value: 3, suffix: "", label: "Workflow steps" },
-                    { value: 6, suffix: "", label: "AI integrations" },
-                  ].map((stat) => (
-                    <div key={stat.label} className="text-center">
-                      <div className="text-2xl sm:text-3xl font-black text-[#B87333]">
-                        <AnimatedCounter target={stat.value} suffix={stat.suffix} />
-                      </div>
-                      <div className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/40">
-                        {stat.label}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Reveal>
             </div>
 
-            <div className="flex flex-wrap gap-2.5">
-              {[
-                "Full QuoteBuilderPage already built",
-                "3-step wizard already implemented",
-                "Mock equipment catalog already functioning",
-                "CRM quote save / update already working",
-                "AI customer insight already integrated",
-                "AI market valuation already integrated",
-                "Print-ready PDF proposal layout",
-                "CRM deal + contact linking",
-              ].map((text, i) => (
-                <ProofPill key={text} delay={i * 60}>
-                  {text}
-                </ProofPill>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── BLOCKER SECTION ────────────────────────────────────────── */}
-      <section className="py-16 sm:py-20">
-        <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-          <Reveal>
-            <div className="mb-10">
-              <h2 className="text-[clamp(28px,3.5vw,42px)] font-bold tracking-[-0.03em] text-white">
-                What is blocking go-live
-              </h2>
-              <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/50">
-                This is a connection problem, not a product-invention problem.
-              </p>
-            </div>
-          </Reveal>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <Reveal delay={100}>
-              <GlassCard className="h-full">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400/10 border border-amber-400/15">
-                    <Lock className="h-4 w-4 text-amber-400" />
+            <Reveal delay={150}>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { icon: Store, label: "Counter walk-in", color: "text-[#B87333]" },
+                  { icon: Phone, label: "Phone orders", color: "text-sky-400" },
+                  { icon: Wrench, label: "Service-linked parts", color: "text-emerald-400" },
+                  { icon: Globe, label: "Online commerce", color: "text-violet-400" },
+                  { icon: ClipboardList, label: "Internal requests", color: "text-amber-400" },
+                  { icon: ShoppingCart, label: "Repeat purchases", color: "text-pink-400" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3.5 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.05]"
+                  >
+                    <item.icon className={cn("h-4 w-4 flex-shrink-0", item.color)} />
+                    <span className="text-[13px] font-medium text-white/65">{item.label}</span>
                   </div>
-                  <h3 className="text-lg font-bold text-white">Current blocker</h3>
-                </div>
-                <ul className="space-y-3 text-sm leading-relaxed text-white/55">
-                  <li className="flex gap-2.5">
-                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400/50" />
-                    Live IntelliDealer or Telapath catalog connection is not configured in production.
-                  </li>
-                  <li className="flex gap-2.5">
-                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400/50" />
-                    The app shows a gate instead of exposing the workflow.
-                  </li>
-                  <li className="flex gap-2.5">
-                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400/50" />
-                    Once credentials and integration mapping are in place, the gate becomes the
-                    real quoting engine.
-                  </li>
-                </ul>
-              </GlassCard>
-            </Reveal>
-
-            <Reveal delay={200}>
-              <GlassCard copper className="h-full">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/10 border border-emerald-400/15">
-                    <Rocket className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <h3 className="text-lg font-bold text-white">What activation unlocks</h3>
-                </div>
-                <ul className="space-y-3 text-sm leading-relaxed text-white/55">
-                  {[
-                    "Live inventory and availability",
-                    "Higher quoting confidence",
-                    "Cleaner internal pilot rollout",
-                    "A direct path to proposal automation and finance workflows",
-                  ].map((item) => (
-                    <li key={item} className="flex gap-2.5">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400/60" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </GlassCard>
+                ))}
+              </div>
             </Reveal>
           </div>
         </div>
@@ -726,7 +637,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                 What it unlocks
               </h2>
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/50">
-                Four outcomes that change how quoting operates at every level.
+                Four outcomes that change how parts operates at every level.
               </p>
             </div>
           </Reveal>
@@ -734,26 +645,26 @@ export function QuoteBuilderGate(): React.ReactElement {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <ValueCard
               icon={Zap}
-              title="Speed to Quote"
-              description="Reduce rep friction and quote turnaround time. Get from customer request to printable proposal in under 5 minutes."
+              title="Faster Parts Response"
+              description="Customer context and equipment history surface immediately. Every request starts with what the system already knows, not from scratch."
               delay={0}
             />
             <ValueCard
-              icon={ShieldCheck}
-              title="Pricing Confidence"
-              description="Pull quoting closer to real inventory and pricing truth. AI surfaces market valuations and customer pricing history."
+              icon={Eye}
+              title="Fewer Missed Opportunities"
+              description="Related items, past purchases, and compatible parts surface during the workflow. The system helps the team see what else the customer might need."
               delay={100}
             />
             <ValueCard
-              icon={FileText}
-              title="Proposal Quality"
-              description="Standardize how equipment packages are presented. Every quote exits the system with the same professional structure."
+              icon={PackageCheck}
+              title="Cleaner Fulfillment"
+              description="Every order has a structured path from request to completion. Backorders, substitutions, and delivery coordination stay visible and accountable."
               delay={200}
             />
             <ValueCard
-              icon={BarChart3}
-              title="Executive Visibility"
-              description="Capture quote activity inside CRM for downstream control, reporting, and commercial pattern analysis."
+              icon={Repeat}
+              title="Better Customer Memory"
+              description="The system remembers what every customer owns, what they've bought, and what they're likely to need next. Repeat business becomes a system capability, not a personal memory."
               delay={300}
             />
           </div>
@@ -763,43 +674,54 @@ export function QuoteBuilderGate(): React.ReactElement {
       {/* ── FUTURE ROADMAP ─────────────────────────────────────────── */}
       <section id="future" className="scroll-mt-16 py-16 sm:py-20">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-          <div className="grid gap-10 lg:grid-cols-2">
+          <Reveal>
+            <div className="mb-10">
+              <h2 className="text-[clamp(28px,3.5vw,42px)] font-bold tracking-[-0.03em] text-white">
+                What it becomes next
+              </h2>
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/50">
+                Parts Operations Lab is designed to expand in phases. Here's the full vision
+                once the foundation is in place.
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+            {/* Operational future */}
             <div>
               <Reveal>
-                <h2 className="text-[clamp(28px,3.5vw,42px)] font-bold tracking-[-0.03em] text-white mb-3">
-                  What it becomes next
-                </h2>
-                <p className="text-base leading-relaxed text-white/50 mb-8">
-                  Once the catalog connection is on, the path forward is straightforward.
-                </p>
+                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[#B87333] mb-5">
+                  <Cog className="h-4 w-4" />
+                  Operational future
+                </h3>
               </Reveal>
-
               <div className="space-y-3">
-                <FutureItem icon={Globe} label="Live inventory and availability" delay={0} />
-                <FutureItem icon={Cpu} label="Real-time pricing engine" delay={80} />
-                <FutureItem icon={Calculator} label="Financing calculator integration" delay={160} />
-                <FutureItem icon={FileText} label="PDF proposal generation" delay={240} />
-                <FutureItem icon={PenTool} label="E-signature workflow" delay={320} />
+                <FutureItem icon={Layers} label="Unified counter / phone / service / online workflow" delay={0} />
+                <FutureItem icon={ShoppingCart} label="Live inventory and order context" delay={60} />
+                <FutureItem icon={Wrench} label="Linked parts-to-equipment history" delay={120} />
+                <FutureItem icon={Truck} label="Fulfillment visibility across channels" delay={180} />
+                <FutureItem icon={Search} label="Related-item recommendations" delay={240} />
+                <FutureItem icon={ShieldCheck} label="Smarter handoff and exception handling" delay={300} />
               </div>
             </div>
 
-            <Reveal delay={200}>
-              <GlassCard copper className="h-fit lg:mt-16">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[#B87333]/10 border border-[#B87333]/20">
-                  <TrendingUp className="h-5 w-5 text-[#B87333]" />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-3">Executive takeaway</h3>
-                <p className="text-sm leading-relaxed text-white/55 mb-4">
-                  This is already more built than it appears. Quote Builder is not waiting to
-                  be invented. It is waiting to be connected.
-                </p>
-                <p className="text-sm leading-relaxed text-white/55">
-                  Once the dealer-system integration is turned on, QEP OS gains a quoting
-                  experience positioned to become a core revenue workflow — with AI insights,
-                  CRM persistence, and proposal generation already wired in.
-                </p>
-              </GlassCard>
-            </Reveal>
+            {/* Leadership future */}
+            <div>
+              <Reveal>
+                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[#B87333] mb-5">
+                  <BarChart3 className="h-4 w-4" />
+                  Leadership future
+                </h3>
+              </Reveal>
+              <div className="space-y-3">
+                <FutureItem icon={Store} label="Channel visibility and performance" delay={40} />
+                <FutureItem icon={TrendingUp} label="Demand insight and trend detection" delay={100} />
+                <FutureItem icon={Repeat} label="Repeat-purchase intelligence" delay={160} />
+                <FutureItem icon={Target} label="Opportunity detection and upsell signals" delay={220} />
+                <FutureItem icon={Users} label="Customer retention signals and re-engagement" delay={280} />
+                <FutureItem icon={BarChart3} label="Parts performance reporting" delay={340} />
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -818,34 +740,40 @@ export function QuoteBuilderGate(): React.ReactElement {
                 <span className="inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#B87333] mb-4">
                   Executive positioning
                 </span>
-                <h2 className="text-[clamp(24px,3vw,38px)] font-bold tracking-[-0.03em] text-white max-w-2xl mb-4">
-                  This is already more built than it appears.
+                <h2 className="text-[clamp(24px,3vw,38px)] font-bold tracking-[-0.03em] text-white max-w-3xl mb-4">
+                  Where parts sales, customer memory, and execution finally connect.
                 </h2>
+                <p className="max-w-2xl text-sm leading-relaxed text-white/50 mb-4">
+                  Parts Operations Lab is not waiting to become another software screen. It
+                  is the future foundation for how QEP can run parts with greater speed,
+                  memory, visibility, and scale.
+                </p>
                 <p className="max-w-2xl text-sm leading-relaxed text-white/50 mb-8">
-                  Quote Builder is not waiting to be invented. It is waiting to be connected.
-                  Once the dealer-system integration is turned on, QEP OS gains a quoting
-                  experience positioned to become a core revenue workflow.
+                  Every missed recommendation, every customer who has to re-explain what they
+                  own, every order that goes quiet between request and fulfillment — these
+                  are the problems that disappear when parts operations move into a connected
+                  system that remembers, guides, and follows through.
                 </p>
 
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => scrollTo("workflow")}
+                    onClick={() => scrollTo("lifecycle")}
                     className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]"
                   >
-                    View workflow
+                    View the workflow
                     <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                   </button>
                   <button
-                    onClick={() => scrollTo("proof")}
+                    onClick={() => scrollTo("value")}
                     className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]"
                   >
-                    See activation path
+                    What it unlocks
                   </button>
                   <button
                     onClick={() => scrollTo("future")}
                     className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]"
                   >
-                    Read what comes next
+                    See the full vision
                   </button>
                 </div>
               </div>
@@ -854,7 +782,7 @@ export function QuoteBuilderGate(): React.ReactElement {
         </div>
       </section>
 
-      {/* ── Scroll hint (visible only at top) ──────────────────────── */}
+      {/* ── Scroll hint ───────────────────────────────────────────── */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
         <ScrollHint />
       </div>
