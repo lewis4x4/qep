@@ -254,7 +254,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
             </Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to="/crm/duplicates">
+            <Link to="/admin/duplicates">
               <GitMerge className="mr-2 h-4 w-4" />
               Review Duplicates
             </Link>

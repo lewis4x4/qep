@@ -16,8 +16,6 @@ import {
   LayoutGrid,
   MessageSquare,
   Mic,
-  NotebookPen,
-  GitMerge,
   Snowflake,
   Swords,
   ThermometerSun,
@@ -641,13 +639,8 @@ const PRIMARY_SECTIONS: SectionCardDef[] = [
   { label: "Companies", description: "Organize accounts and company records.", href: "/crm/companies", icon: Building2 },
 ];
 
-const ADMIN_SECTIONS: SectionCardDef[] = [
-  { label: "Sequences", description: "Automated follow-up sequences.", href: "/crm/sequences", icon: NotebookPen },
-  { label: "Templates", description: "Activity and email templates.", href: "/crm/templates", icon: NotebookPen },
-  { label: "Duplicates", description: "Find and merge duplicate records.", href: "/crm/duplicates", icon: GitMerge },
-];
 
-function CrmNavGrid({ isAdmin }: { isAdmin: boolean }) {
+function CrmNavGrid() {
   return (
     <section aria-label="CRM modules">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -666,27 +659,6 @@ function CrmNavGrid({ isAdmin }: { isAdmin: boolean }) {
           </Link>
         ))}
       </div>
-      {isAdmin && (
-        <>
-          <h3 className="mt-6 mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admin Tools</h3>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {ADMIN_SECTIONS.map((s) => (
-              <Link key={s.href} to={s.href} className="group">
-                <Card className="flex items-center gap-4 border-border bg-card px-5 py-4 transition-shadow duration-150 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-qep-orange min-h-[64px]">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-qep-orange/10">
-                    <s.icon className="h-4 w-4 text-qep-orange" aria-hidden />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground">{s.label}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{s.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
     </section>
   );
 }
@@ -821,7 +793,7 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
       </div>
 
       {/* ── CRM Navigation ─────────────────────────────────────── */}
-      <CrmNavGrid isAdmin={isElevated} />
+      <CrmNavGrid />
 
       {/* ── Deal Momentum ──────────────────────────────────────── */}
       <DealMomentumSection deals={data.deals} />

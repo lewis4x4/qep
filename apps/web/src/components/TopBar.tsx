@@ -58,13 +58,14 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/quote": "Quotes",
   "/crm": "CRM",
   "/crm/activities": "Activities",
-  "/crm/templates": "Templates",
-  "/crm/sequences": "Sequences",
   "/crm/deals": "Deals",
   "/crm/contacts": "Contacts",
   "/crm/companies": "Companies",
-  "/crm/duplicates": "Duplicates",
   "/admin": "Admin",
+  "/admin/sequences": "Sequences",
+  "/admin/templates": "Templates",
+  "/admin/duplicates": "Duplicates",
+  "/admin/integrations": "Integrations",
 };
 
 const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> = {
@@ -74,13 +75,14 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/quote": { label: "New Quote", route: "/quote" },
   "/crm": { label: "CRM Hub", route: "/crm" },
   "/crm/activities": { label: "Activities", route: "/crm/activities" },
-  "/crm/templates": { label: "Templates", route: "/crm/templates" },
-  "/crm/sequences": { label: "Sequences", route: "/crm/sequences" },
   "/crm/deals": { label: "Deals", route: "/crm/deals" },
   "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },
   "/crm/companies": { label: "Companies", route: "/crm/companies" },
-  "/crm/duplicates": { label: "Duplicates", route: "/crm/duplicates" },
   "/admin": null,
+  "/admin/sequences": null,
+  "/admin/templates": null,
+  "/admin/duplicates": null,
+  "/admin/integrations": null,
 };
 
 type CrmBellRow = {
@@ -219,6 +221,8 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
 
   const isCrmSubPage =
     location.pathname.startsWith("/crm/") && location.pathname !== "/crm";
+  const isAdminSubPage =
+    location.pathname.startsWith("/admin/") && location.pathname !== "/admin";
   const breadcrumbLabel =
     BREADCRUMB_LABELS[location.pathname] ??
     (location.pathname.startsWith("/crm/deals/") ? "Deal Detail" : undefined) ??
@@ -228,8 +232,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
     QUICK_ACTION_MAP[location.pathname] ??
     (location.pathname.startsWith("/crm/deals/") ? { label: "Deals", route: "/crm/deals" } : null) ??
     (location.pathname.startsWith("/crm/contacts/") ? { label: "Contacts", route: "/crm/contacts" } : null) ??
-    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null) ??
-    (location.pathname.startsWith("/crm/templates") ? { label: "Templates", route: "/crm/templates" } : null);
+    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null);
 
   // Clear search on route change
   useEffect(() => {
@@ -289,6 +292,15 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
                   <Link to="/crm" className="text-[#8A9BAE] hover:text-white transition-colors">
                     CRM
+                  </Link>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
+                  <span className="text-white font-medium">{breadcrumbLabel}</span>
+                </>
+              ) : isAdminSubPage ? (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
+                  <Link to="/admin" className="text-[#8A9BAE] hover:text-white transition-colors">
+                    Admin
                   </Link>
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
                   <span className="text-white font-medium">{breadcrumbLabel}</span>
