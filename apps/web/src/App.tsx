@@ -41,6 +41,24 @@ const RentalLabShowcase = lazy(() =>
 const PartsLabShowcase = lazy(() =>
   import("./components/PartsLabShowcase").then((m) => ({ default: m.PartsLabShowcase }))
 );
+const LogisticsShowcase = lazy(() =>
+  import("./components/LogisticsShowcase").then((m) => ({ default: m.LogisticsShowcase }))
+);
+const ExecutiveIntelligenceShowcase = lazy(() =>
+  import("./components/ExecutiveIntelligenceShowcase").then((m) => ({
+    default: m.ExecutiveIntelligenceShowcase,
+  }))
+);
+const CustomerIntelligenceShowcase = lazy(() =>
+  import("./components/CustomerIntelligenceShowcase").then((m) => ({
+    default: m.CustomerIntelligenceShowcase,
+  }))
+);
+const PeopleOpsShowcase = lazy(() =>
+  import("./components/PeopleOpsShowcase").then((m) => ({
+    default: m.PeopleOpsShowcase,
+  }))
+);
 const IntegrationHub = lazy(() =>
   import("./components/IntegrationHub").then((m) => ({ default: m.IntegrationHub }))
 );
@@ -518,6 +536,46 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <PartsLabShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/logistics"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <LogisticsShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive"
+                element={
+                  ["manager", "owner"].includes(profile.role) ? (
+                    <ExecutiveIntelligenceShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/customers"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CustomerIntelligenceShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/people"
+                element={
+                  ["manager", "owner"].includes(profile.role) ? (
+                    <PeopleOpsShowcase />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

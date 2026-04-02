@@ -8,6 +8,10 @@ import {
   LayoutGrid,
   Truck,
   Cog,
+  MapPin,
+  Gauge,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -60,6 +64,30 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     href: "/parts",
     icon: Cog,
     roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Logistics",
+    href: "/logistics",
+    icon: MapPin,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Customers",
+    href: "/customers",
+    icon: Users,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Executive",
+    href: "/executive",
+    icon: Gauge,
+    roles: ["manager", "owner"],
+  },
+  {
+    label: "People",
+    href: "/people",
+    icon: UserPlus,
+    roles: ["manager", "owner"],
   },
   {
     label: "CRM",
