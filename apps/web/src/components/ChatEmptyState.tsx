@@ -1,8 +1,6 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
-import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/lib/database.types";
-import { X, Sparkles, Loader2 } from "lucide-react";
 
 interface ChatEmptyStateProps {
   userRole: UserRole;
@@ -74,112 +72,11 @@ function getSuggestions(role: UserRole): string[] {
   return [timeSuggestions[timeIdx], ...shuffled.slice(0, 3)];
 }
 
-interface BriefingData {
-  content: string;
-  data: Record<string, unknown>;
-  briefing_date: string;
-}
-
-function MorningBriefingCard() {
-  const [briefing, setBriefing] = useState<BriefingData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dismissed, setDismissed] = useState(false);
-  const [generating, setGenerating] = useState(false);
-
-  const loadBriefing = useCallback(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
-    const today = new Date().toISOString().split("T")[0];
-    const { data } = await db
-      .from("morning_briefings")
-      .select("content, data, briefing_date")
-      .eq("briefing_date", today)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setBriefing(data as BriefingData | null);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void loadBriefing();
-  }, [loadBriefing]);
-
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/morning-briefing`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: "{}",
-      });
-      await loadBriefing();
-    } catch {
-      // silently fail
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  if (loading) return null;
-  if (dismissed) return null;
-
-  if (!briefing) {
-    return (
-      <div className="max-w-2xl mx-auto mb-4 w-full">
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 bg-white/5 px-4 py-3 text-sm text-muted-foreground hover:border-qep-orange/40 hover:text-qep-orange transition-colors"
-        >
-          {generating ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Generating your briefing...</>
-          ) : (
-            <><Sparkles className="h-4 w-4" /> Generate today&apos;s morning briefing</>
-          )}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto mb-4 w-full">
-      <div className="rounded-lg border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-4 relative">
-        <button
-          onClick={() => setDismissed(true)}
-          className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Dismiss briefing"
-        >
-          <X className="h-4 w-4" />
-        </button>
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="h-4 w-4 text-qep-orange" />
-          <span className="text-sm font-semibold text-foreground">Morning Briefing</span>
-          <span className="text-xs text-muted-foreground">
-            {new Date(briefing.briefing_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-          </span>
-        </div>
-        <div className="prose prose-sm prose-invert max-w-none text-foreground/90 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground">
-          <div dangerouslySetInnerHTML={{ __html: briefing.content.replace(/\n/g, "<br/>") }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ChatEmptyState({ userRole, onSuggestionClick }: ChatEmptyStateProps) {
   const suggestions = useMemo(() => getSuggestions(userRole), [userRole]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center gap-4 pb-16 px-4">
-      <MorningBriefingCard />
-
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/80 p-2 ring-1 ring-border">
         <BrandLogo className="h-full w-full max-h-12 object-contain" decorative />
       </div>
