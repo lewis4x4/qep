@@ -266,6 +266,22 @@ function extractSearchTokens(message: string): string[] {
   return tokens;
 }
 
+/**
+ * Extract likely proper names (capitalized multi-word sequences) from a message.
+ * "John Smith" stays together as one search phrase instead of being split.
+ */
+function extractProperNames(message: string): string[] {
+  const names: string[] = [];
+  const matches = message.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g) ?? [];
+  for (const m of matches) {
+    const trimmed = m.trim();
+    if (trimmed.length >= 4 && trimmed.length <= 60) {
+      names.push(trimmed);
+    }
+  }
+  return names;
+}
+
 function buildKeywordCandidates(message: string): string[] {
   const candidates: string[] = [];
   const raw = message.trim();
@@ -630,8 +646,8 @@ async function retrieveDocumentEvidence(
       query_embedding: input.embedding ? `[${input.embedding.join(",")}]` : null,
       keyword_query: keywordQuery,
       user_role: input.role,
-      match_count: 6,
-      semantic_match_threshold: 0.58,
+      match_count: 8,
+      semantic_match_threshold: 0.45,
     });
 
     if (error) {
@@ -1273,6 +1289,19 @@ async function searchCrmBroadly(
   const likePattern = `%${queryText.slice(0, 80)}%`;
   const firstToken = searchTokens[0] ?? queryText;
 
+  // Build token-based OR patterns for free-text columns (body, transcript)
+  // instead of using the full question, which almost never matches verbatim
+  const meaningfulTokens = searchTokens.filter((t) => t.length >= 3);
+  const bodyOrPattern = meaningfulTokens.length > 0
+    ? meaningfulTokens.map((t) => `body.ilike.%${t}%`).join(",")
+    : `body.ilike.${likePattern}`;
+  const transcriptOrPattern = meaningfulTokens.length > 0
+    ? meaningfulTokens.map((t) => `transcript.ilike.%${t}%`).join(",")
+    : `transcript.ilike.${likePattern}`;
+
+  // Extract proper names so "John Smith" is searched as a compound phrase
+  const properNames = extractProperNames(input.message);
+
   // ── 1. Fire all searches in parallel ──────────────────────────────────────
   const contactSearches: Array<Promise<{ data: ContactRow[] | null }>> = [];
   for (const token of searchTokens) {
@@ -1285,6 +1314,23 @@ async function searchCrmBroadly(
         .is("deleted_at", null)
         .limit(5) as unknown as Promise<{ data: ContactRow[] | null }>,
     );
+  }
+  // Also search by extracted proper names (e.g. "John Smith" → first + last match)
+  for (const name of properNames) {
+    const parts = name.split(/\s+/);
+    if (parts.length >= 2) {
+      const first = parts[0];
+      const last = parts[parts.length - 1];
+      contactSearches.push(
+        callerClient
+          .from("crm_contacts")
+          .select("id, first_name, last_name, email, phone, title, primary_company_id, dge_customer_profile_id, hubspot_contact_id")
+          .ilike("first_name", `%${first}%`)
+          .ilike("last_name", `%${last}%`)
+          .is("deleted_at", null)
+          .limit(3) as unknown as Promise<{ data: ContactRow[] | null }>,
+      );
+    }
   }
 
   // Build a make/model ilike filter for equipment-centric DGE tables
@@ -1331,16 +1377,16 @@ async function searchCrmBroadly(
     callerClient
       .from("crm_activities")
       .select("id, activity_type, body, occurred_at")
-      .ilike("body", likePattern)
+      .or(bodyOrPattern)
       .is("deleted_at", null)
       .order("occurred_at", { ascending: false })
-      .limit(8),
+      .limit(10),
     callerClient
       .from("voice_captures")
       .select("id, transcript, extracted_data, created_at")
-      .ilike("transcript", likePattern)
+      .or(transcriptOrPattern)
       .order("created_at", { ascending: false })
-      .limit(5),
+      .limit(10),
     callerClient
       .from("quotes")
       .select("id, title, status, updated_at")
@@ -1539,6 +1585,46 @@ async function searchCrmBroadly(
         accessClass: "crm_context",
       });
     }
+
+    // Pull voice captures linked to this contact or mentioning their name
+    const vcSearches = await Promise.all([
+      callerClient
+        .from("voice_captures")
+        .select("id, transcript, extracted_data, created_at")
+        .eq("linked_contact_id", contact.id)
+        .order("created_at", { ascending: false })
+        .limit(3),
+      callerClient
+        .from("voice_captures")
+        .select("id, transcript, extracted_data, created_at")
+        .ilike("transcript", `%${(contact.last_name ?? contact.first_name ?? "").slice(0, 40)}%`)
+        .order("created_at", { ascending: false })
+        .limit(3),
+    ]);
+    const contactVoiceNotes = new Map<string, VoiceCaptureRow>();
+    for (const res of vcSearches) {
+      for (const row of (res.data ?? []) as VoiceCaptureRow[]) {
+        contactVoiceNotes.set(row.id, row);
+      }
+    }
+    if (contactVoiceNotes.size > 0) {
+      const vcList = [...contactVoiceNotes.values()]
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 3);
+      pushEvidence({
+        sourceType: "crm",
+        sourceId: `voice-notes-for-contact:${contact.id}`,
+        sourceTitle: `Voice Notes: ${fullName}`,
+        excerpt: truncateText(
+          vcList.map((vc) =>
+            `${vc.created_at.slice(0, 10)}: ${truncateText(vc.transcript ?? "", 200)}`
+          ).join("\n"),
+          600,
+        ),
+        confidence: 0.93,
+        accessClass: "crm_context",
+      });
+    }
   }
 
   // ── 3. Process companies ────────────────────────────────────────────────
@@ -1606,10 +1692,23 @@ async function searchCrmBroadly(
     });
   }
 
-  // ── 6. Process activities (text search on body) ─────────────────────────
-  for (const act of ((activityResult.data ?? []) as ActivityRow[]).slice(0, 5)) {
+  // ── 6. Process activities (token-scored, best matches first) ─────────────
+  const scoredActivities = ((activityResult.data ?? []) as ActivityRow[])
+    .map((act) => {
+      const bodyLower = (act.body ?? "").toLowerCase();
+      let matchCount = 0;
+      for (const t of meaningfulTokens) {
+        if (bodyLower.includes(t)) matchCount++;
+      }
+      return { act, matchCount };
+    })
+    .filter((x) => x.matchCount > 0)
+    .sort((a, b) => b.matchCount - a.matchCount);
+
+  for (const { act, matchCount } of scoredActivities.slice(0, 5)) {
+    const bestToken = meaningfulTokens.find((t) => (act.body ?? "").toLowerCase().includes(t)) ?? firstToken;
     const excerptText = act.body
-      ? excerptAroundToken(act.body, firstToken)
+      ? excerptAroundToken(act.body, bestToken)
       : "";
     if (!excerptText) continue;
     pushEvidence({
@@ -1617,15 +1716,30 @@ async function searchCrmBroadly(
       sourceId: `crm-activity:${act.id}`,
       sourceTitle: `${act.activity_type} (${act.occurred_at.slice(0, 10)})`,
       excerpt: truncateText(excerptText, 500),
-      confidence: 0.84,
+      confidence: Math.min(0.95, 0.80 + matchCount * 0.03),
       accessClass: "crm_context",
     });
   }
 
-  // ── 7. Process voice captures (transcript search) ───────────────────────
-  for (const vc of ((voiceCaptureResult.data ?? []) as VoiceCaptureRow[]).slice(0, 3)) {
+  // ── 7. Process voice captures (token-scored, best matches first) ────────
+  const scoredVoiceCaptures = ((voiceCaptureResult.data ?? []) as VoiceCaptureRow[])
+    .map((vc) => {
+      const transcriptLower = (vc.transcript ?? "").toLowerCase();
+      const extractedText = JSON.stringify(vc.extracted_data ?? {}).toLowerCase();
+      let matchCount = 0;
+      for (const t of meaningfulTokens) {
+        if (transcriptLower.includes(t)) matchCount++;
+        else if (extractedText.includes(t)) matchCount++;
+      }
+      return { vc, matchCount };
+    })
+    .filter((x) => x.matchCount > 0)
+    .sort((a, b) => b.matchCount - a.matchCount);
+
+  for (const { vc, matchCount } of scoredVoiceCaptures.slice(0, 5)) {
+    const bestToken = meaningfulTokens.find((t) => (vc.transcript ?? "").toLowerCase().includes(t)) ?? firstToken;
     const excerptText = vc.transcript
-      ? excerptAroundToken(vc.transcript, firstToken)
+      ? excerptAroundToken(vc.transcript, bestToken)
       : "";
     if (!excerptText) continue;
     pushEvidence({
@@ -1633,9 +1747,34 @@ async function searchCrmBroadly(
       sourceId: `voice-capture:${vc.id}`,
       sourceTitle: `Voice Note (${vc.created_at.slice(0, 10)})`,
       excerpt: truncateText(excerptText, 500),
-      confidence: 0.85,
+      confidence: Math.min(0.95, 0.80 + matchCount * 0.03),
       accessClass: "crm_context",
     });
+  }
+
+  // ── 7b. Fallback: search voice captures by extracted_data JSONB for proper names ──
+  if (properNames.length > 0 && scoredVoiceCaptures.length === 0) {
+    for (const name of properNames.slice(0, 2)) {
+      const { data: jsonVcs } = await callerClient
+        .from("voice_captures")
+        .select("id, transcript, extracted_data, created_at")
+        .ilike("extracted_data->>contactName" as never, `%${name}%`)
+        .order("created_at", { ascending: false })
+        .limit(3);
+      for (const vc of (jsonVcs ?? []) as VoiceCaptureRow[]) {
+        const excerptText = vc.transcript
+          ? excerptAroundToken(vc.transcript, name.split(/\s+/)[0])
+          : JSON.stringify(vc.extracted_data ?? {}).slice(0, 400);
+        pushEvidence({
+          sourceType: "crm",
+          sourceId: `voice-capture:${vc.id}`,
+          sourceTitle: `Voice Note: ${name} (${vc.created_at.slice(0, 10)})`,
+          excerpt: truncateText(excerptText, 500),
+          confidence: 0.90,
+          accessClass: "crm_context",
+        });
+      }
+    }
   }
 
   // ── 8. Process quotes ───────────────────────────────────────────────────

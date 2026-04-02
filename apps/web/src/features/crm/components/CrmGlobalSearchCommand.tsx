@@ -73,12 +73,14 @@ export function CrmGlobalSearchCommand() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden md:flex h-9 w-[320px] items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:text-foreground"
+        className="hidden md:flex h-9 w-full max-w-[400px] items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:text-foreground"
         aria-label="Open CRM search"
       >
-        <Search className="h-4 w-4" />
-        <span>Search contacts and companies</span>
-        <kbd className="ml-auto rounded border border-border px-1.5 text-[11px] text-muted-foreground">⌘/Ctrl K</kbd>
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="truncate">Search contacts and companies</span>
+        <kbd className="ml-auto shrink-0 rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground">
+          ⌘K
+        </kbd>
       </button>
 
       <Dialog

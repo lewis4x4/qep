@@ -900,6 +900,31 @@ function FieldIntelligenceSection({
 
 // ─── Morning Briefing ────────────────────────────────────────────
 
+const BRIEFING_COLLAPSED_KEY = "qep-briefing-collapsed";
+
+function isBriefingCollapsedToday(): boolean {
+  try {
+    const stored = localStorage.getItem(BRIEFING_COLLAPSED_KEY);
+    if (!stored) return false;
+    const today = new Date().toISOString().split("T")[0];
+    return stored === today;
+  } catch {
+    return false;
+  }
+}
+
+function setBriefingCollapsed(collapsed: boolean): void {
+  try {
+    if (collapsed) {
+      localStorage.setItem(BRIEFING_COLLAPSED_KEY, new Date().toISOString().split("T")[0]);
+    } else {
+      localStorage.removeItem(BRIEFING_COLLAPSED_KEY);
+    }
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 function MorningBriefingSection({
   briefing,
   onGenerated,
@@ -908,6 +933,9 @@ function MorningBriefingSection({
   onGenerated: () => void;
 }) {
   const [generating, setGenerating] = useState(false);
+  const [collapsed, setCollapsed] = useState(() =>
+    briefing ? isBriefingCollapsedToday() : false,
+  );
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
@@ -928,6 +956,8 @@ function MorningBriefingSection({
           body: "{}",
         },
       );
+      setCollapsed(false);
+      setBriefingCollapsed(false);
       onGenerated();
     } catch {
       // silently fail
@@ -936,53 +966,105 @@ function MorningBriefingSection({
     }
   }, [onGenerated]);
 
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    setBriefingCollapsed(next);
+  }
+
   return (
     <section aria-label="Morning briefing">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-        <Sparkles className="h-4 w-4" aria-hidden />
-        AI Morning Briefing
-      </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          <Sparkles className="h-4 w-4" aria-hidden />
+          AI Morning Briefing
+        </h2>
+        {briefing && (
+          <button
+            onClick={toggleCollapsed}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-qep-orange transition-colors"
+          >
+            {collapsed ? "Show briefing" : "Minimize"}
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", !collapsed && "rotate-180")} />
+          </button>
+        )}
+      </div>
 
       {briefing ? (
-        <Card className="border-border bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="h-4 w-4 text-qep-orange" aria-hidden />
-            <span className="text-xs font-medium text-qep-orange">
-              {new Date(briefing.briefing_date + "T00:00:00").toLocaleDateString(
-                "en-US",
-                { weekday: "long", month: "long", day: "numeric" },
-              )}
-            </span>
-          </div>
-          <div className="prose prose-sm prose-invert max-w-none text-foreground/90 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_ul]:pl-4 [&_ol]:pl-4">
-            <div
-              dangerouslySetInnerHTML={{
-                __html: briefing.content.replace(/\n/g, "<br/>"),
-              }}
-            />
-          </div>
-          <div className="mt-4 pt-3 border-t border-white/10">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleGenerate}
-              disabled={generating}
-              className="text-xs text-muted-foreground hover:text-qep-orange"
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                  Refreshing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-3 w-3 mr-1.5" />
-                  Refresh briefing
-                </>
-              )}
-            </Button>
-          </div>
-        </Card>
+        collapsed ? (
+          <button
+            onClick={toggleCollapsed}
+            className="w-full text-left"
+          >
+            <Card className="border-border bg-gradient-to-br from-white/[0.04] to-white/[0.01] px-5 py-3 transition-all duration-150 hover:shadow-md hover:border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-qep-orange/10">
+                  <Sparkles className="h-4 w-4 text-qep-orange" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Today's briefing ready
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(briefing.briefing_date + "T00:00:00").toLocaleDateString(
+                      "en-US",
+                      { weekday: "long", month: "long", day: "numeric" },
+                    )} — tap to expand
+                  </p>
+                </div>
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              </div>
+            </Card>
+          </button>
+        ) : (
+          <Card className="border-border bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-qep-orange" aria-hidden />
+              <span className="text-xs font-medium text-qep-orange">
+                {new Date(briefing.briefing_date + "T00:00:00").toLocaleDateString(
+                  "en-US",
+                  { weekday: "long", month: "long", day: "numeric" },
+                )}
+              </span>
+            </div>
+            <div className="prose prose-sm prose-invert max-w-none text-foreground/90 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_ul]:pl-4 [&_ol]:pl-4">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: briefing.content.replace(/\n/g, "<br/>"),
+                }}
+              />
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="text-xs text-muted-foreground hover:text-qep-orange"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3 w-3 mr-1.5" />
+                    Refresh briefing
+                  </>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={toggleCollapsed}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Minimize for today
+              </Button>
+            </div>
+          </Card>
+        )
       ) : (
         <Card className="border-dashed border-border bg-card p-6">
           <div className="flex flex-col items-center gap-3 text-center">
