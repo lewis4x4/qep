@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
+  ChevronDown,
   ChevronRight,
   Clock,
   DollarSign,
@@ -23,6 +24,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "@/features/crm/lib/crm-supabase";
 import type { UserRole } from "@/lib/database.types";
@@ -514,6 +516,50 @@ function FollowUpItem({ deal }: { deal: EnrichedDeal }) {
   );
 }
 
+type QueueCategory = "overdue" | "today" | "this_week";
+
+interface CategoryConfig {
+  key: QueueCategory;
+  label: string;
+  icon: string;
+  pillBg: string;
+  pillBorder: string;
+  pillText: string;
+  countBg: string;
+}
+
+const CATEGORIES: CategoryConfig[] = [
+  {
+    key: "overdue",
+    label: "Overdue",
+    icon: "🔴",
+    pillBg: "bg-red-500/10",
+    pillBorder: "border-red-500/30",
+    pillText: "text-red-400",
+    countBg: "bg-red-500/20",
+  },
+  {
+    key: "today",
+    label: "Today",
+    icon: "🟠",
+    pillBg: "bg-qep-orange/10",
+    pillBorder: "border-qep-orange/30",
+    pillText: "text-qep-orange",
+    countBg: "bg-qep-orange/20",
+  },
+  {
+    key: "this_week",
+    label: "This Week",
+    icon: "🟡",
+    pillBg: "bg-yellow-500/8",
+    pillBorder: "border-yellow-500/25",
+    pillText: "text-yellow-400",
+    countBg: "bg-yellow-500/20",
+  },
+];
+
+const PEEK_LIMIT = 3;
+
 function ActionQueueSection({
   overdueFollowUps,
   todayFollowUps,
@@ -523,6 +569,23 @@ function ActionQueueSection({
   todayFollowUps: EnrichedDeal[];
   weekFollowUps: EnrichedDeal[];
 }) {
+  const buckets: Record<QueueCategory, EnrichedDeal[]> = {
+    overdue: overdueFollowUps,
+    today: todayFollowUps,
+    this_week: weekFollowUps,
+  };
+
+  const defaultCategory: QueueCategory | null =
+    overdueFollowUps.length > 0
+      ? "overdue"
+      : todayFollowUps.length > 0
+        ? "today"
+        : weekFollowUps.length > 0
+          ? "this_week"
+          : null;
+
+  const [openCategory, setOpenCategory] = useState<QueueCategory | null>(defaultCategory);
+
   const totalActions =
     overdueFollowUps.length + todayFollowUps.length + weekFollowUps.length;
 
@@ -550,15 +613,16 @@ function ActionQueueSection({
     );
   }
 
+  const activeBucket = openCategory ? buckets[openCategory] : [];
+  const visibleDeals = activeBucket.slice(0, PEEK_LIMIT);
+  const remaining = activeBucket.length - PEEK_LIMIT;
+
   return (
     <section aria-label="Follow-up queue">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           <Target className="h-4 w-4" aria-hidden />
           Action Queue
-          <span className="ml-1 text-xs tabular-nums text-qep-orange">
-            ({totalActions})
-          </span>
         </h2>
         <Link
           to="/crm/deals"
@@ -567,24 +631,77 @@ function ActionQueueSection({
           View pipeline
         </Link>
       </div>
-      <div className="space-y-2">
-        {overdueFollowUps.map((deal) => (
-          <FollowUpItem key={deal.id} deal={deal} />
-        ))}
-        {todayFollowUps.map((deal) => (
-          <FollowUpItem key={deal.id} deal={deal} />
-        ))}
-        {weekFollowUps.map((deal) => (
-          <FollowUpItem key={deal.id} deal={deal} />
-        ))}
+
+      {/* Category pills — the hero of this section */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {CATEGORIES.map((cat) => {
+          const count = buckets[cat.key].length;
+          if (count === 0) return (
+            <div
+              key={cat.key}
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 opacity-40"
+            >
+              <span className="text-xs font-medium text-muted-foreground">{cat.label}</span>
+              <span className="text-[10px] tabular-nums text-muted-foreground/60">0</span>
+            </div>
+          );
+
+          const isOpen = openCategory === cat.key;
+          return (
+            <button
+              key={cat.key}
+              onClick={() => setOpenCategory(isOpen ? null : cat.key)}
+              className={cn(
+                "relative flex items-center justify-center gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-200",
+                isOpen
+                  ? `${cat.pillBg} ${cat.pillBorder} ${cat.pillText} shadow-lg shadow-black/20 scale-[1.02]`
+                  : `bg-white/[0.03] border-white/10 text-muted-foreground hover:border-white/20 hover:bg-white/[0.05]`,
+              )}
+            >
+              <span className="text-sm">{cat.icon}</span>
+              <span className="text-xs font-semibold">{cat.label}</span>
+              <span className={cn(
+                "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums",
+                isOpen ? cat.countBg : "bg-white/10",
+              )}>
+                {count}
+              </span>
+              {isOpen && (
+                <ChevronDown className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 h-3 w-3 opacity-50" />
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Expanded items for the selected category */}
+      {openCategory && activeBucket.length > 0 && (
+        <div className="space-y-2 animate-in slide-in-from-top-2 fade-in duration-200">
+          {visibleDeals.map((deal) => (
+            <FollowUpItem key={deal.id} deal={deal} />
+          ))}
+          {remaining > 0 && (
+            <Link
+              to="/crm/deals"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-qep-orange hover:border-qep-orange/30"
+            >
+              View {remaining} more in pipeline
+              <ChevronRight className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
 // ─── Deal Momentum ───────────────────────────────────────────────
 
+const MOMENTUM_PEEK = 4;
+
 function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
+  const [showAll, setShowAll] = useState(false);
+
   const topDeals = useMemo(
     () =>
       [...deals]
@@ -594,6 +711,9 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
   );
 
   if (topDeals.length === 0) return null;
+
+  const visibleDeals = showAll ? topDeals : topDeals.slice(0, MOMENTUM_PEEK);
+  const hasMore = topDeals.length > MOMENTUM_PEEK;
 
   return (
     <section aria-label="Deal momentum">
@@ -609,17 +729,17 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
           All deals
         </Link>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scrollbar-thin">
-        {topDeals.map((deal) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {visibleDeals.map((deal) => {
           const heatCfg = HEAT_CONFIG[deal.heat];
           const HeatIcon = heatCfg.icon;
           return (
             <Link
               key={deal.id}
               to={`/crm/deals/${deal.id}`}
-              className="group snap-start"
+              className="group"
             >
-              <Card className="w-[220px] shrink-0 border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
+              <Card className="h-full border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
                 <div className="flex items-start justify-between mb-2">
                   <span
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${heatCfg.badgeClass}`}
@@ -653,6 +773,15 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
           );
         })}
       </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:border-white/20"
+        >
+          {showAll ? "Show less" : `Show ${topDeals.length - MOMENTUM_PEEK} more deals`}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAll && "rotate-180")} />
+        </button>
+      )}
     </section>
   );
 }
@@ -1020,6 +1149,14 @@ export function SalesCommandCenter({
         )}
       </div>
 
+      {/* ── AI Briefing (hero position) ─────────────────────── */}
+      <div className="mb-8">
+        <MorningBriefingSection
+          briefing={data.briefing}
+          onGenerated={() => refetch()}
+        />
+      </div>
+
       {/* ── Metrics ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <MetricCard
@@ -1066,7 +1203,12 @@ export function SalesCommandCenter({
         />
       </div>
 
-      {/* ── Action Queue ───────────────────────────────────────── */}
+      {/* ── Deal Momentum ──────────────────────────────────────── */}
+      <div className="mb-8">
+        <DealMomentumSection deals={data.deals} />
+      </div>
+
+      {/* ── Action Queue (with filter pills) ───────────────────── */}
       <div className="mb-8">
         <ActionQueueSection
           overdueFollowUps={data.overdueFollowUps}
@@ -1075,18 +1217,9 @@ export function SalesCommandCenter({
         />
       </div>
 
-      {/* ── Two-column: Briefing + Voice Captures ──────────────── */}
-      <div className="grid gap-8 lg:grid-cols-2 mb-8">
-        <MorningBriefingSection
-          briefing={data.briefing}
-          onGenerated={() => refetch()}
-        />
-        <FieldIntelligenceSection voiceCaptures={data.voiceCaptures} />
-      </div>
-
-      {/* ── Deal Momentum ──────────────────────────────────────── */}
+      {/* ── Field Intelligence ─────────────────────────────────── */}
       <div className="mb-8">
-        <DealMomentumSection deals={data.deals} />
+        <FieldIntelligenceSection voiceCaptures={data.voiceCaptures} />
       </div>
     </div>
   );

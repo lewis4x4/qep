@@ -30,6 +30,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "../lib/crm-supabase";
 import type { UserRole } from "@/lib/database.types";
@@ -469,12 +470,19 @@ function DealScoreBoard({ deals }: { deals: ScoredDeal[] }) {
 
 // ─── Deal Momentum (Top Deals by Value + Heat) ──────────────────
 
+const CRM_MOMENTUM_PEEK = 4;
+
 function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
+  const [showAll, setShowAll] = useState(false);
+
   const topDeals = useMemo(
     () => [...deals].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)).slice(0, 8),
     [deals],
   );
   if (topDeals.length === 0) return null;
+
+  const visibleDeals = showAll ? topDeals : topDeals.slice(0, CRM_MOMENTUM_PEEK);
+  const hasMore = topDeals.length > CRM_MOMENTUM_PEEK;
 
   return (
     <section aria-label="Deal momentum">
@@ -484,13 +492,13 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
         </h2>
         <Link to="/crm/deals" className="text-xs text-muted-foreground hover:text-qep-orange transition-colors">All deals</Link>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory scrollbar-thin">
-        {topDeals.map((deal) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {visibleDeals.map((deal) => {
           const heatCfg = HEAT_CONFIG[deal.heat];
           const HeatIcon = heatCfg.icon;
           return (
-            <Link key={deal.id} to={`/crm/deals/${deal.id}`} className="group snap-start">
-              <Card className="w-[220px] shrink-0 border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
+            <Link key={deal.id} to={`/crm/deals/${deal.id}`} className="group">
+              <Card className="h-full border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
                 <div className="flex items-start justify-between mb-2">
                   <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${heatCfg.bg} ${heatCfg.color}`}>
                     <HeatIcon className="h-3 w-3" aria-hidden />{heatCfg.label}
@@ -512,6 +520,15 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
           );
         })}
       </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:border-white/20"
+        >
+          {showAll ? "Show less" : `Show ${topDeals.length - CRM_MOMENTUM_PEEK} more deals`}
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAll && "rotate-180")} />
+        </button>
+      )}
     </section>
   );
 }
@@ -789,6 +806,9 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
         <AnomalyAlertsBanner alerts={data.anomalyAlerts} onAcknowledge={handleAcknowledgeAlert} />
       )}
 
+      {/* ── Quick Actions ──────────────────────────────────────── */}
+      <QuickActionsBar />
+
       {/* ── Two-column: AI Scores + Intelligence ───────────────── */}
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="space-y-8">
@@ -800,14 +820,11 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
         </div>
       </div>
 
-      {/* ── Deal Momentum ──────────────────────────────────────── */}
-      <DealMomentumSection deals={data.deals} />
-
-      {/* ── Quick Actions ──────────────────────────────────────── */}
-      <QuickActionsBar />
-
       {/* ── CRM Navigation ─────────────────────────────────────── */}
       <CrmNavGrid isAdmin={isElevated} />
+
+      {/* ── Deal Momentum ──────────────────────────────────────── */}
+      <DealMomentumSection deals={data.deals} />
     </div>
   );
 }

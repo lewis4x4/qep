@@ -519,23 +519,11 @@ function App() {
               />
               <Route
                 path="/crm/templates"
-                element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmActivityTemplatesPage userId={profile.id} />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
+                element={<Navigate to="/admin/templates" replace />}
               />
               <Route
                 path="/crm/sequences"
-                element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmFollowUpSequencesPage userId={profile.id} />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
+                element={<Navigate to="/admin/sequences" replace />}
               />
               <Route
                 path="/crm/deals"
@@ -610,8 +598,32 @@ function App() {
               />
               <Route
                 path="/crm/duplicates"
+                element={<Navigate to="/admin/duplicates" replace />}
+              />
+              <Route
+                path="/admin/templates"
                 element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmActivityTemplatesPage userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/sequences"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrmFollowUpSequencesPage userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/duplicates"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmDuplicatesPage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
