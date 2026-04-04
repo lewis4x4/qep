@@ -50,6 +50,18 @@ const RentalReturnsPage = lazy(() =>
 const PaymentValidationPage = lazy(() =>
   import("./features/ops/pages/PaymentValidationPage").then((m) => ({ default: m.PaymentValidationPage }))
 );
+const PortalFleetPage = lazy(() =>
+  import("./features/portal/pages/PortalFleetPage").then((m) => ({ default: m.PortalFleetPage }))
+);
+const PortalServicePage = lazy(() =>
+  import("./features/portal/pages/PortalServicePage").then((m) => ({ default: m.PortalServicePage }))
+);
+const PortalInvoicesPage = lazy(() =>
+  import("./features/portal/pages/PortalInvoicesPage").then((m) => ({ default: m.PortalInvoicesPage }))
+);
+const PortalQuotesPage = lazy(() =>
+  import("./features/portal/pages/PortalQuotesPage").then((m) => ({ default: m.PortalQuotesPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -802,6 +814,12 @@ function App() {
                 }
               />
               {/* Branded 404 for unknown routes */}
+              {/* Customer Portal routes */}
+              <Route path="/portal" element={<PortalFleetPage />} />
+              <Route path="/portal/service" element={<PortalServicePage />} />
+              <Route path="/portal/invoices" element={<PortalInvoicesPage />} />
+              <Route path="/portal/quotes" element={<PortalQuotesPage />} />
+
               <Route path="*" element={<NotFoundPage />} />
             </AnimatedRoutes>
           </AppLayout>
