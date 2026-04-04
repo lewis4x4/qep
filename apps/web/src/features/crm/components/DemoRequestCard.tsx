@@ -45,7 +45,7 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
   const { data: demos, isLoading } = useQuery({
     queryKey: ["crm", "demos", dealId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("demos")
         .select("*")
         .eq("deal_id", dealId)

@@ -24,7 +24,7 @@ export function ProspectingKpiCounter({ userId }: ProspectingKpiCounterProps) {
   const { data: kpi, isLoading } = useQuery({
     queryKey: ["crm", "prospecting-kpi", userId, today],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("prospecting_kpis")
         .select("*")
         .eq("rep_id", userId)

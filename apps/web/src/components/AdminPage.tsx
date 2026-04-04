@@ -80,8 +80,7 @@ function ChatInsightsPanel() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = supabase as any;
+      const db = supabase;
 
       const [upRes, downRes, convoRes] = await Promise.all([
         db.from("chat_messages").select("id", { count: "exact", head: true }).eq("feedback", "up"),
@@ -210,7 +209,7 @@ function KnowledgeGapsPanel() {
 
   useEffect(() => {
     async function load() {
-      const db = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const db = supabase;
       const { data } = await db
         .from("knowledge_gaps")
         .select("id, question, created_at, resolved")
@@ -224,7 +223,7 @@ function KnowledgeGapsPanel() {
   }, []);
 
   async function resolveGap(id: string) {
-    const db = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const db = supabase;
     await db.from("knowledge_gaps").update({ resolved: true }).eq("id", id);
     setGaps((prev) => prev.filter((g) => g.id !== id));
   }
@@ -944,9 +943,9 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                                 {doc.source.replace("_", " ")}
                                 {doc.word_count ? ` · ${doc.word_count.toLocaleString()} words` : ""}
                               </p>
-                              {(doc as any).summary && (
+                              {"summary" in doc && (doc as { summary?: string }).summary && (
                                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2 italic">
-                                  {(doc as any).summary}
+                                  {(doc as { summary?: string }).summary}
                                 </p>
                               )}
                               <div className="mt-2 flex flex-wrap gap-1.5">

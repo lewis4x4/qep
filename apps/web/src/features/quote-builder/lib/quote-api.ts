@@ -53,7 +53,7 @@ export async function searchCatalog(query: string) {
   const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
   if (!sanitized) return [];
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("catalog_entries")
     .select("*")
     .eq("is_available", true)
@@ -65,7 +65,7 @@ export async function searchCatalog(query: string) {
 }
 
 export async function getTradeValuation(dealId: string) {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("trade_valuations")
     .select("*")
     .eq("deal_id", dealId)

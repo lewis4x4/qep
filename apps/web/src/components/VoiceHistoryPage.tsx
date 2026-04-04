@@ -67,7 +67,7 @@ export function VoiceHistoryPage({ userRole }: VoiceHistoryPageProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const db = supabase as any; // Columns like sentiment, manager_attention may not be in generated types yet
+      const db = supabase;
       let query = db
         .from("voice_captures")
         .select("id, created_at, duration_seconds, transcript, sync_status, sync_error, hubspot_deal_id, user_id, sentiment, manager_attention, competitor_mentions")

@@ -29,10 +29,14 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      serviceRoleKey!,
-    );
+    // Only create admin client when actually needed
+    let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+    if (isServiceRole) {
+      supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey!,
+      );
+    }
 
     if (!isServiceRole) {
       const supabase = createClient(
@@ -43,6 +47,12 @@ Deno.serve(async (req) => {
 
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user) return safeJsonError("Unauthorized", 401, origin);
+
+      // Create admin client only after user is verified
+      supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey!,
+      );
 
       const { data: profile } = await supabaseAdmin
         .from("profiles").select("role").eq("id", user.id).single();

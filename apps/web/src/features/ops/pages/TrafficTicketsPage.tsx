@@ -24,7 +24,7 @@ export function TrafficTicketsPage() {
   const { data: tickets, isLoading } = useQuery({
     queryKey: ["ops", "traffic-tickets", statusFilter],
     queryFn: async () => {
-      let query = (supabase as any)
+      let query = supabase
         .from("traffic_tickets")
         .select("*")
         .order("shipping_date", { ascending: true });

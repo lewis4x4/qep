@@ -240,8 +240,7 @@ async function fetchCommandCenterData(
   );
   const weekEnd = new Date(todayStart.getTime() + 7 * 86_400_000);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  const db = supabase;
 
   const [
     dealsResult,

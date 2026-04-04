@@ -174,8 +174,7 @@ const SEVERITY_STYLES: Record<string, string> = {
 async function fetchCrmIntelData(isElevated: boolean): Promise<CrmIntelData> {
   const weekAgo = new Date(Date.now() - 7 * 86_400_000);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  const db = supabase;
 
   const [
     dealsResult,
@@ -720,8 +719,7 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
   });
 
   const handleAcknowledgeAlert = useCallback(async (alertId: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
+    const db = supabase;
     await db.from("anomaly_alerts").update({
       acknowledged: true,
       acknowledged_at: new Date().toISOString(),

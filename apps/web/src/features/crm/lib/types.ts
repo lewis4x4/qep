@@ -101,6 +101,10 @@ export interface CrmRepSafeDeal {
   hubspotDealId: string | null;
   createdAt: string;
   updatedAt: string;
+  // Pipeline enrichment (migration 066+)
+  slaDeadlineAt: string | null;
+  depositStatus: string | null;
+  depositAmount: number | null;
 }
 
 export interface CrmDealLossFields {

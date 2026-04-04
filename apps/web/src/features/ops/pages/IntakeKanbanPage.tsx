@@ -19,7 +19,7 @@ export function IntakeKanbanPage() {
   const { data: items, isLoading } = useQuery({
     queryKey: ["ops", "intake"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("equipment_intake")
         .select("*")
         .order("current_stage")
@@ -32,7 +32,7 @@ export function IntakeKanbanPage() {
 
   const advanceMutation = useMutation({
     mutationFn: async ({ id, newStage }: { id: string; newStage: number }) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("equipment_intake")
         .update({ current_stage: newStage })
         .eq("id", id);

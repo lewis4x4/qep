@@ -53,8 +53,7 @@ export function NeedsAssessmentCard({ dealId }: NeedsAssessmentCardProps) {
   const { data: assessment, isLoading, isError } = useQuery({
     queryKey: ["crm", "needs-assessment", dealId],
     queryFn: async () => {
-      // Table added in migration 068 — not yet in generated types
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("needs_assessments")
         .select("*")
         .eq("deal_id", dealId)

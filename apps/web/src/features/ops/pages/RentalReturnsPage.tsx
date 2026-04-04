@@ -17,7 +17,7 @@ export function RentalReturnsPage() {
   const { data: returns, isLoading } = useQuery({
     queryKey: ["ops", "rental-returns"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("rental_returns")
         .select("*")
         .neq("status", "completed")

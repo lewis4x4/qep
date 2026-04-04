@@ -49,9 +49,7 @@ function autoTitle(messages: Message[]): string {
   return first.content.slice(0, 40) + (first.content.length > 40 ? "…" : "");
 }
 
-// Typed Supabase client doesn't have the new chat tables yet — use untyped access
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const db = supabase as any;
+const db = supabase;
 
 async function dbCreateConversation(title: string, context?: Record<string, unknown>): Promise<string | null> {
   const { data, error } = await db

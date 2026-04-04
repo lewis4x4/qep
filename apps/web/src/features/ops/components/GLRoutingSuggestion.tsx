@@ -31,7 +31,7 @@ export function GLRoutingSuggestion(props: GLRoutingSuggestionProps) {
   const { data: rules, isLoading } = useQuery({
     queryKey: ["ops", "gl-rules"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("gl_routing_rules")
         .select("*")
         .order("gl_code");

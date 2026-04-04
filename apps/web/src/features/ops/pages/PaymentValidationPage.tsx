@@ -22,7 +22,7 @@ export function PaymentValidationPage() {
 
   const validateMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await (supabase as any).rpc("validate_payment", {
+      const { data, error } = await (supabase as unknown as { rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> }).rpc("validate_payment", {
         p_workspace_id: "default",
         p_customer_id: null,
         p_payment_type: paymentType,

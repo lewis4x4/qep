@@ -29,10 +29,10 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().split("T")[0];
     const results = { advisors_checked: 0, nudges_sent: 0 };
 
-    // Get all Iron Advisors
+    // Get all Iron Advisors with their workspace
     const { data: advisors } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name")
+      .select("id, full_name, workspace_id")
       .eq("iron_role", "iron_advisor");
 
     if (!advisors || advisors.length === 0) {
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
         if (!existingNudge) {
           const remaining = target - positiveVisits;
           await supabaseAdmin.from("crm_in_app_notifications").insert({
-            workspace_id: "default",
+            workspace_id: advisor.workspace_id,
             user_id: advisor.id,
             kind: "prospecting_nudge",
             title: "Prospecting Target Update",

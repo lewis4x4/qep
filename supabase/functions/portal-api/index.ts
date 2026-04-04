@@ -206,7 +206,11 @@ Deno.serve(async (req) => {
           safeUpdates.status = "accepted";
           safeUpdates.signer_name = cleanName;
           safeUpdates.signed_at = new Date().toISOString();
-          safeUpdates.signer_ip = req.headers.get("x-forwarded-for") || "unknown";
+          // Use Cloudflare's trusted header, fallback chain for non-CF environments
+          safeUpdates.signer_ip = req.headers.get("cf-connecting-ip")
+            || req.headers.get("x-real-ip")
+            || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+            || "unknown";
           // signature_url would be set by a separate upload flow
         } else if (body.status === "rejected") {
           safeUpdates.status = "rejected";

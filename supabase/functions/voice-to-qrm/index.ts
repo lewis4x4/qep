@@ -119,10 +119,10 @@ Deno.serve(async (req) => {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
-    // Verify role
+    // Verify role and get workspace
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, iron_role")
+      .select("role, iron_role, workspace_id")
       .eq("id", user.id)
       .single();
 
@@ -230,13 +230,19 @@ Deno.serve(async (req) => {
       return safeJsonError("Extraction returned no content", 500, origin);
     }
 
-    const extracted = JSON.parse(rawJson);
+    let extracted: Record<string, unknown>;
+    try {
+      extracted = JSON.parse(rawJson);
+    } catch (parseErr) {
+      console.error("voice-to-qrm JSON parse failed:", parseErr, "raw:", rawJson?.substring(0, 500));
+      return safeJsonError("Data extraction returned malformed JSON", 422, origin);
+    }
     const extractionDuration = Date.now() - extractionStart;
 
     // ── 5. Entity resolution: fuzzy match or create ───────────────────────
     const entityStart = Date.now();
     const errors: string[] = [];
-    const workspace = "default";
+    const workspace = profile.workspace_id;
 
     // 5a. Company resolution
     let companyId: string | null = null;
@@ -548,7 +554,7 @@ Deno.serve(async (req) => {
     }, origin);
   } catch (err) {
     console.error("voice-to-qrm error:", err);
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return safeJsonError(message, 500, req.headers.get("origin"));
+    // Log full error server-side, return generic message to client
+    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });

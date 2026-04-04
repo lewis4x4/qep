@@ -5,7 +5,7 @@ export function useIronManagerData() {
   return useQuery({
     queryKey: ["dashboard", "iron-manager"],
     queryFn: async () => {
-      const sb = supabase as any;
+      const sb = supabase;
 
       const [
         { data: pendingDemos },
@@ -39,7 +39,7 @@ export function useIronAdvisorData(userId: string) {
   return useQuery({
     queryKey: ["dashboard", "iron-advisor", userId],
     queryFn: async () => {
-      const sb = supabase as any;
+      const sb = supabase;
       const today = new Date().toISOString().split("T")[0];
 
       const [
@@ -67,7 +67,7 @@ export function useIronWomanData() {
   return useQuery({
     queryKey: ["dashboard", "iron-woman"],
     queryFn: async () => {
-      const sb = supabase as any;
+      const sb = supabase;
 
       const [
         { data: orderProcessing },
@@ -96,7 +96,7 @@ export function useIronManData() {
   return useQuery({
     queryKey: ["dashboard", "iron-man"],
     queryFn: async () => {
-      const sb = supabase as any;
+      const sb = supabase;
 
       const [
         { data: prepQueue },

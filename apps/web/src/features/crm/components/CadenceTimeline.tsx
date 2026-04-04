@@ -52,8 +52,7 @@ export function CadenceTimeline({ dealId }: CadenceTimelineProps) {
   const { data: cadences, isLoading, isError } = useQuery({
     queryKey: ["crm", "cadences", dealId],
     queryFn: async () => {
-      // Tables added in migration 069 — not yet in generated types
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("follow_up_cadences")
         .select(`
           id, cadence_type, status, started_at,

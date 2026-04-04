@@ -85,7 +85,7 @@ export function PipelineDealCard({
         >
           {effectiveDeal.name}
         </Link>
-        <SlaCountdown deadline={(effectiveDeal as any).slaDeadlineAt ?? null} />
+        <SlaCountdown deadline={effectiveDeal.slaDeadlineAt ?? null} />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {formatMoney(effectiveDeal.amount)} • Follow-up {formatDate(effectiveDeal.nextFollowUpAt)}
@@ -93,8 +93,8 @@ export function PipelineDealCard({
       <div className="mt-2 flex flex-wrap items-center gap-1">
         <CrmDealSignalBadges deal={effectiveDeal} />
         <DepositGateBadge
-          depositStatus={(effectiveDeal as any).depositStatus ?? null}
-          depositAmount={(effectiveDeal as any).depositAmount ?? null}
+          depositStatus={effectiveDeal.depositStatus ?? null}
+          depositAmount={effectiveDeal.depositAmount ?? null}
         />
       </div>
       <div className="mt-2 flex gap-2">

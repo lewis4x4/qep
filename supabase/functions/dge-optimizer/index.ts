@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
 
       if (!deal) return safeJsonError("Deal not found", 404, origin);
 
-      const { data: assessment } = await (supabaseAdmin as any)
+      const { data: assessment } = await supabase
         .from("needs_assessments")
         .select("*")
         .eq("deal_id", dealId)
@@ -208,7 +208,7 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      const { data: tradeIn } = await (supabaseAdmin as any)
+      const { data: tradeIn } = await supabase
         .from("trade_valuations")
         .select("*")
         .eq("deal_id", dealId)
@@ -240,12 +240,15 @@ Deno.serve(async (req) => {
 
       const scenarios = await generate3Scenarios(context);
 
-      // Update deal scoring
+      // Update deal scoring — use user-scoped client so RLS enforces workspace
       const bestScenario = scenarios.find((s) => s.type === "balanced") || scenarios[0];
-      await supabaseAdmin
+      const expectedValue = typeof bestScenario?.expected_value === "number"
+        ? bestScenario.expected_value
+        : null;
+      await supabase
         .from("crm_deals")
         .update({
-          dge_score: (bestScenario?.expected_value as number) || null,
+          dge_score: expectedValue,
           dge_scenario_count: scenarios.length,
           dge_last_scored_at: new Date().toISOString(),
         })

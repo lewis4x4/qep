@@ -9,19 +9,7 @@
  * Can be called per-user (with auth) or for all users (via service role / cron).
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
-
-const ALLOWED_ORIGINS = [
-  "https://qualityequipmentparts.netlify.app",
-  "https://qep.blackrockai.co",
-  "http://localhost:5173",
-];
-function corsHeaders(origin: string | null) {
-  return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-service-secret",
-    "Vary": "Origin",
-  };
-}
+import { safeCorsHeaders as corsHeaders, optionsResponse } from "../_shared/safe-cors.ts";
 
 const BRIEFING_MODEL = "gpt-5.4-mini";
 
@@ -235,9 +223,10 @@ Keep it under 400 words. Be specific and actionable. If overdue follow-ups exist
 }
 
 Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get("origin"));
+  const origin = req.headers.get("origin");
+  const ch = corsHeaders(origin);
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: ch });
+    return optionsResponse(origin);
   }
 
   const adminClient = createAdminClient();

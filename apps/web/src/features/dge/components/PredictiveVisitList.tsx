@@ -13,7 +13,7 @@ export function PredictiveVisitList({ userId }: PredictiveVisitListProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["dge", "visit-list", userId, today],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("predictive_visit_lists")
         .select("*")
         .eq("rep_id", userId)
