@@ -35,6 +35,9 @@ const QuoteBuilderPage = lazy(() =>
 const QuoteBuilderV2Page = lazy(() =>
   import("./features/quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page }))
 );
+const DashboardRouter = lazy(() =>
+  import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -422,6 +425,15 @@ function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route
                 path="/dashboard"
+                element={
+                  <DashboardRouter
+                    userId={profile.id}
+                    userRole={profile.role}
+                  />
+                }
+              />
+              <Route
+                path="/dashboard/classic"
                 element={
                   <DashboardPage
                     userId={profile.id}

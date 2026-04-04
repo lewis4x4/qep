@@ -1,0 +1,122 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+
+export function useIronManagerData() {
+  return useQuery({
+    queryKey: ["dashboard", "iron-manager"],
+    queryFn: async () => {
+      const sb = supabase as any;
+
+      const [
+        { data: pendingDemos },
+        { data: pendingTrades },
+        { data: marginFlags },
+        { data: kpis },
+        { data: pipelineDeals },
+      ] = await Promise.all([
+        sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested"),
+        sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review"),
+        sb.from("crm_deals").select("id, name, margin_pct, margin_check_status").eq("margin_check_status", "flagged"),
+        sb.from("prospecting_kpis").select("rep_id, positive_visits, target, target_met, kpi_date").eq("kpi_date", new Date().toISOString().split("T")[0]),
+        sb.from("crm_deals").select("id, name, stage_id, amount, assigned_rep_id, last_activity_at").is("deleted_at", null).order("last_activity_at", { ascending: false }).limit(50),
+      ]);
+
+      return {
+        pendingDemos: pendingDemos ?? [],
+        pendingTrades: pendingTrades ?? [],
+        marginFlags: marginFlags ?? [],
+        kpis: kpis ?? [],
+        pipelineDeals: pipelineDeals ?? [],
+        approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
+      };
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useIronAdvisorData(userId: string) {
+  return useQuery({
+    queryKey: ["dashboard", "iron-advisor", userId],
+    queryFn: async () => {
+      const sb = supabase as any;
+      const today = new Date().toISOString().split("T")[0];
+
+      const [
+        { data: myDeals },
+        { data: dueTouchpoints },
+        { data: kpi },
+      ] = await Promise.all([
+        sb.from("crm_deals").select("id, name, stage_id, amount, sla_deadline_at, next_follow_up_at").eq("assigned_rep_id", userId).is("deleted_at", null).order("sla_deadline_at", { ascending: true, nullsFirst: false }).limit(20),
+        sb.from("follow_up_touchpoints").select("id, touchpoint_type, scheduled_date, purpose, suggested_message, status, follow_up_cadences!inner(deal_id, assigned_to)").eq("status", "pending").lte("scheduled_date", today).eq("follow_up_cadences.assigned_to", userId).limit(10),
+        sb.from("prospecting_kpis").select("*").eq("rep_id", userId).eq("kpi_date", today).maybeSingle(),
+      ]);
+
+      return {
+        myDeals: myDeals ?? [],
+        dueTouchpoints: dueTouchpoints ?? [],
+        kpi: kpi ?? { positive_visits: 0, target: 10, target_met: false, consecutive_days_met: 0 },
+      };
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useIronWomanData() {
+  return useQuery({
+    queryKey: ["dashboard", "iron-woman"],
+    queryFn: async () => {
+      const sb = supabase as any;
+
+      const [
+        { data: orderProcessing },
+        { data: pendingDeposits },
+        { data: intakeItems },
+        { data: creditApps },
+      ] = await Promise.all([
+        sb.from("crm_deals").select("id, name, amount, stage_id, crm_deal_stages!inner(sort_order, name)").gte("crm_deal_stages.sort_order", 13).lte("crm_deal_stages.sort_order", 16).is("deleted_at", null),
+        sb.from("deposits").select("id, deal_id, required_amount, status, created_at").in("status", ["pending", "requested", "received"]),
+        sb.from("equipment_intake").select("id, stock_number, current_stage, created_at").lt("current_stage", 8).order("current_stage"),
+        sb.from("crm_deals").select("id, name, amount, crm_deal_stages!inner(sort_order)").eq("crm_deal_stages.sort_order", 14).is("deleted_at", null),
+      ]);
+
+      return {
+        orderProcessing: orderProcessing ?? [],
+        pendingDeposits: pendingDeposits ?? [],
+        intakeItems: intakeItems ?? [],
+        creditApps: creditApps ?? [],
+      };
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useIronManData() {
+  return useQuery({
+    queryKey: ["dashboard", "iron-man"],
+    queryFn: async () => {
+      const sb = supabase as any;
+
+      const [
+        { data: prepQueue },
+        { data: pdiItems },
+        { data: upcomingDemos },
+        { data: returnInspections },
+      ] = await Promise.all([
+        sb.from("equipment_intake").select("id, stock_number, current_stage, created_at").gte("current_stage", 2).lte("current_stage", 4).order("created_at"),
+        sb.from("equipment_intake").select("id, stock_number, pdi_checklist, pdi_completed").eq("current_stage", 3).eq("pdi_completed", false),
+        sb.from("demos").select("id, deal_id, scheduled_date, equipment_category, max_hours, status").in("status", ["approved", "scheduled"]).order("scheduled_date"),
+        sb.from("rental_returns").select("id, equipment_id, status, inspection_date").eq("status", "inspection_pending"),
+      ]);
+
+      return {
+        prepQueue: prepQueue ?? [],
+        pdiItems: pdiItems ?? [],
+        upcomingDemos: upcomingDemos ?? [],
+        returnInspections: returnInspections ?? [],
+      };
+    },
+    staleTime: 30_000,
+  });
+}
