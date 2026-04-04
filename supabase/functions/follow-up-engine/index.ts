@@ -143,40 +143,60 @@ Deno.serve(async (req) => {
       return safeJsonOk({ ok: true, message: "No due touchpoints", results }, null);
     }
 
-    // ── 2. Process each touchpoint ────────────────────────────────────────
-    for (const tp of dueTouchpoints as unknown as TouchpointWithContext[]) {
+    // ── 2. Batch-fetch context data (eliminates N+1) ───────────────────────
+    const touchpoints = dueTouchpoints as unknown as TouchpointWithContext[];
+
+    // Collect unique IDs for batch loading
+    const dealIds = [...new Set(touchpoints.map((tp) => tp.follow_up_cadences.deal_id))];
+    const contactIds = [...new Set(
+      touchpoints
+        .map((tp) => tp.follow_up_cadences.contact_id)
+        .filter((id): id is string => id !== null),
+    )];
+
+    // Batch-fetch deals
+    const dealMap = new Map<string, { name: string; amount: number | null; margin_pct: number | null }>();
+    if (dealIds.length > 0) {
+      const { data: deals } = await supabaseAdmin
+        .from("crm_deals")
+        .select("id, name, amount, margin_pct")
+        .in("id", dealIds);
+      for (const d of deals ?? []) dealMap.set(d.id, d);
+    }
+
+    // Batch-fetch assessments (latest per deal)
+    const assessmentMap = new Map<string, Record<string, unknown>>();
+    if (dealIds.length > 0) {
+      const { data: assessments } = await supabaseAdmin
+        .from("needs_assessments")
+        .select("deal_id, application, machine_interest, budget_type, monthly_payment_target, current_equipment_issues")
+        .in("deal_id", dealIds)
+        .order("created_at", { ascending: false });
+      for (const a of assessments ?? []) {
+        if (!assessmentMap.has(a.deal_id)) assessmentMap.set(a.deal_id, a);
+      }
+    }
+
+    // Batch-fetch contacts
+    const contactMap = new Map<string, string>();
+    if (contactIds.length > 0) {
+      const { data: contacts } = await supabaseAdmin
+        .from("crm_contacts")
+        .select("id, first_name, last_name")
+        .in("id", contactIds);
+      for (const c of contacts ?? []) {
+        contactMap.set(c.id, `${c.first_name || ""} ${c.last_name || ""}`.trim());
+      }
+    }
+
+    // ── 3. Process touchpoints using pre-fetched data ────────────────────
+    for (const tp of touchpoints) {
       try {
         results.touchpoints_processed++;
         const cadence = tp.follow_up_cadences;
-
-        // Load deal context for AI content generation
-        const { data: deal } = await supabaseAdmin
-          .from("crm_deals")
-          .select("name, amount, margin_pct, metadata")
-          .eq("id", cadence.deal_id)
-          .single();
-
-        // Load needs assessment if available
-        const { data: assessment } = await supabaseAdmin
-          .from("needs_assessments")
-          .select("application, machine_interest, budget_type, monthly_payment_target, current_equipment_issues, qrm_narrative")
-          .eq("deal_id", cadence.deal_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        // Load contact name
-        let contactName = "Customer";
-        if (cadence.contact_id) {
-          const { data: contact } = await supabaseAdmin
-            .from("crm_contacts")
-            .select("first_name, last_name")
-            .eq("id", cadence.contact_id)
-            .maybeSingle();
-          if (contact) {
-            contactName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
-          }
-        }
+        const deal = dealMap.get(cadence.deal_id);
+        const assessment = assessmentMap.get(cadence.deal_id);
+        const contactName = (cadence.contact_id && contactMap.get(cadence.contact_id)) || "Customer";
 
         const dealContext = {
           deal_name: deal?.name,
@@ -192,26 +212,22 @@ Deno.serve(async (req) => {
         const suggestedMessage = await generateValueContent(tp, dealContext);
         results.content_generated++;
 
-        // Update touchpoint with generated content
+        // Update touchpoint + mark overdue if past scheduled date
+        const scheduledDate = new Date(tp.scheduled_date);
+        const todayDate = new Date(today);
+        const isOverdue = scheduledDate < todayDate;
+
         await supabaseAdmin
           .from("follow_up_touchpoints")
           .update({
             suggested_message: suggestedMessage,
             content_generated_at: new Date().toISOString(),
             content_context: dealContext,
+            ...(isOverdue ? { status: "overdue" as const } : {}),
           })
           .eq("id", tp.id);
 
-        // Mark overdue if past scheduled date
-        const scheduledDate = new Date(tp.scheduled_date);
-        const todayDate = new Date(today);
-        if (scheduledDate < todayDate) {
-          await supabaseAdmin
-            .from("follow_up_touchpoints")
-            .update({ status: "overdue" })
-            .eq("id", tp.id);
-          results.overdue_marked++;
-        }
+        if (isOverdue) results.overdue_marked++;
 
         // Create notification for assigned rep
         if (cadence.assigned_to) {
