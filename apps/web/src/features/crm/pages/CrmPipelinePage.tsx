@@ -1,18 +1,17 @@
-import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DndContext, DragOverlay, closestCenter, type DragEndEvent, type DragStartEvent, useDroppable, useDraggable } from "@dnd-kit/core";
-import { FileText, Plus } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { DndContext, closestCenter, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
-import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
-import { SlaCountdown } from "../components/SlaCountdown";
-import { DepositGateBadge } from "../components/DepositGateBadge";
-import { getDealSignalState } from "../lib/deal-signals";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
+import { PipelineDealTableRow } from "../components/PipelineDealTableRow";
+import { DraggableDealCard } from "../components/DraggableDealCard";
+import { DroppableStageColumn } from "../components/DroppableStageColumn";
 import {
   listCrmDealStages,
   listCrmOpenDealsForBoard,
@@ -20,6 +19,18 @@ import {
   patchCrmDeal,
 } from "../lib/crm-api";
 import type { CrmRepSafeDeal } from "../lib/types";
+import { getDealSignalState } from "../lib/deal-signals";
+import {
+  OPEN_DEALS_PAGE_SIZE,
+  HYDRATION_UPDATE_BATCH_PAGES,
+  formatMoney,
+  getFollowUpSortTime,
+  updateDealNextFollowUp,
+  writeCachedOpenDeals,
+  fetchOpenDealsFirstPage,
+  type DealUrgencyState,
+  type OpenDealsFirstPageResult,
+} from "../lib/pipeline-utils";
 
 interface CrmPipelinePageProps {
   userRole: UserRole;
@@ -27,136 +38,13 @@ interface CrmPipelinePageProps {
 
 type UrgencyFilter = "all" | "overdue_follow_up" | "no_follow_up" | "stalled" | "data_issues" | "attention";
 
-const OPEN_DEALS_PAGE_SIZE = 500;
-const HYDRATION_UPDATE_BATCH_PAGES = 10;
-const PIPELINE_CACHE_KEY = "qep-crm-open-deals-cache-v1";
-
-interface DealUrgencyState {
-  isOverdueFollowUp: boolean;
-  hasNoFollowUp: boolean;
-  isStalled: boolean;
-  hasDataIssue: boolean;
-  needsAttention: boolean;
-}
-
-interface CachedOpenDealsPayload {
-  items: CrmRepSafeDeal[];
-  nextCursor: string | null;
-}
-
-interface OpenDealsFirstPageResult extends CachedOpenDealsPayload {
-  fromCache: boolean;
-}
-
-function formatMoney(value: number | null): string {
-  if (value === null) {
-    return "Amount TBD";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return "Not set";
-  }
-
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) {
-    return "Invalid date";
-  }
-
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function getFollowUpSortTime(value: string | null): number {
-  if (!value) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
-}
-
-function getFutureFollowUpIso(daysAhead: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + daysAhead);
-  return date.toISOString();
-}
-
-function updateDealNextFollowUp(
-  deals: CrmRepSafeDeal[] | null,
-  dealId: string,
-  nextFollowUpAt: string | null
-): CrmRepSafeDeal[] | null {
-  return deals?.map((deal) => (deal.id === dealId ? { ...deal, nextFollowUpAt } : deal)) ?? deals;
-}
-
-function readCachedOpenDeals(): CachedOpenDealsPayload | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(PIPELINE_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<CachedOpenDealsPayload>;
-    if (!Array.isArray(parsed.items)) {
-      return null;
-    }
-
-    return {
-      items: parsed.items as CrmRepSafeDeal[],
-      nextCursor: typeof parsed.nextCursor === "string" ? parsed.nextCursor : null,
-    };
-  } catch (error) {
-    return null;
-  }
-}
-
-function writeCachedOpenDeals(payload: CachedOpenDealsPayload): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(PIPELINE_CACHE_KEY, JSON.stringify(payload));
-  } catch (error) {
-    // Ignore cache write failures; this is a best-effort resilience layer.
-  }
-}
-
-async function fetchOpenDealsFirstPage(): Promise<OpenDealsFirstPageResult> {
-  try {
-    const result = await listCrmOpenDealsForBoard({ limit: OPEN_DEALS_PAGE_SIZE });
-    writeCachedOpenDeals({ items: result.items, nextCursor: result.nextCursor });
-    return {
-      items: result.items,
-      nextCursor: result.nextCursor,
-      fromCache: false,
-    };
-  } catch (error) {
-    const cached = readCachedOpenDeals();
-    if (cached) {
-      return {
-        items: cached.items,
-        nextCursor: cached.nextCursor,
-        fromCache: true,
-      };
-    }
-    throw error;
-  }
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
+    </div>
+  );
 }
 
 export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
@@ -285,7 +173,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     if (selectedStageId === "all") {
       return deferredOpenDeals;
     }
-
     return deferredOpenDeals.filter((deal) => deal.stageId === selectedStageId);
   }, [deferredOpenDeals, selectedStageId]);
 
@@ -317,70 +204,38 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       byDealId.set(deal.id, state);
 
-      if (state.isOverdueFollowUp) {
-        counts.overdue_follow_up += 1;
-      }
-      if (state.hasNoFollowUp) {
-        counts.no_follow_up += 1;
-      }
-      if (state.isStalled) {
-        counts.stalled += 1;
-      }
-      if (state.hasDataIssue) {
-        counts.data_issues += 1;
-      }
-      if (state.needsAttention) {
-        counts.attention += 1;
-      }
+      if (state.isOverdueFollowUp) counts.overdue_follow_up += 1;
+      if (state.hasNoFollowUp) counts.no_follow_up += 1;
+      if (state.isStalled) counts.stalled += 1;
+      if (state.hasDataIssue) counts.data_issues += 1;
+      if (state.needsAttention) counts.attention += 1;
     }
 
-    return {
-      counts,
-      byDealId,
-    };
+    return { counts, byDealId };
   }, [stageFilteredDeals]);
 
   const filteredDeals = useMemo(() => {
-    if (urgencyFilter === "all") {
-      return stageFilteredDeals;
-    }
+    if (urgencyFilter === "all") return stageFilteredDeals;
 
     return stageFilteredDeals.filter((deal) => {
       const state = urgencyEvaluation.byDealId.get(deal.id);
-      if (!state) {
-        return false;
-      }
-
-      if (urgencyFilter === "overdue_follow_up") {
-        return state.isOverdueFollowUp;
-      }
-
-      if (urgencyFilter === "no_follow_up") {
-        return state.hasNoFollowUp;
-      }
-
-      if (urgencyFilter === "stalled") {
-        return state.isStalled;
-      }
-
-      if (urgencyFilter === "data_issues") {
-        return state.hasDataIssue;
-      }
-
+      if (!state) return false;
+      if (urgencyFilter === "overdue_follow_up") return state.isOverdueFollowUp;
+      if (urgencyFilter === "no_follow_up") return state.hasNoFollowUp;
+      if (urgencyFilter === "stalled") return state.isStalled;
+      if (urgencyFilter === "data_issues") return state.hasDataIssue;
       return state.needsAttention;
     });
   }, [stageFilteredDeals, urgencyFilter, urgencyEvaluation.byDealId]);
 
   const stageSummary = useMemo(() => {
     const byStage = new Map<string, { count: number; amount: number }>();
-
     for (const deal of deferredOpenDeals) {
       const current = byStage.get(deal.stageId) ?? { count: 0, amount: 0 };
       current.count += 1;
       current.amount += deal.amount ?? 0;
       byStage.set(deal.stageId, current);
     }
-
     return Array.from(byStage.entries()).map(([stageId, value]) => ({
       stageId,
       stageName: stageNameById.get(stageId) ?? "Unknown stage",
@@ -407,12 +262,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
           return (b.amount ?? 0) - (a.amount ?? 0);
         });
       const amount = deals.reduce((total, deal) => total + (deal.amount ?? 0), 0);
-      return {
-        stageId: stage.id,
-        stageName: stage.name,
-        deals,
-        amount,
-      };
+      return { stageId: stage.id, stageName: stage.name, deals, amount };
     });
   }, [filteredDeals, selectedStageId, stageOptions, stageNameById]);
 
@@ -427,11 +277,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         acc.weightedPipeline += deal.weightedAmount ?? 0;
         return acc;
       },
-      {
-        openDeals: 0,
-        pipelineAmount: 0,
-        weightedPipeline: 0,
-      }
+      { openDeals: 0, pipelineAmount: 0, weightedPipeline: 0 }
     );
   }, [weightedDealsQuery.data]);
 
@@ -474,7 +320,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const dealId = event.active.id as string;
     setActiveDragDealId(dealId);
-    // Capture original stage at drag start to avoid stale closure on revert
     const deal = hydratedDealsRef.current?.find((d) => d.id === dealId);
     if (deal) {
       dragOriginalStageRef.current.set(dealId, deal.stageId);
@@ -494,7 +339,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       if (!originalStageId || originalStageId === newStageId) return;
 
-      // Optimistic update
       setHydratedDeals((current) =>
         current?.map((d) => (d.id === dealId ? { ...d, stageId: newStageId } : d)) ?? current,
       );
@@ -503,7 +347,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         await patchCrmDeal(dealId, { stageId: newStageId });
         schedulePipelineRefresh(dealId);
       } catch (err) {
-        // Revert to captured original stage (not stale closure)
         setHydratedDeals((current) =>
           current?.map((d) => (d.id === dealId ? { ...d, stageId: originalStageId } : d)) ?? current,
         );
@@ -516,10 +359,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
     setHydratedDeals((current) => updateDealNextFollowUp(current, dealId, nextFollowUpAt));
     queryClient.setQueryData<OpenDealsFirstPageResult>(["crm", "deals", "open-table"], (current) => {
-      if (!current) {
-        return current;
-      }
-
+      if (!current) return current;
       return {
         ...current,
         items: updateDealNextFollowUp(current.items, dealId, nextFollowUpAt) ?? current.items,
@@ -722,7 +562,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "board" && (
         <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="space-y-4">
-          {/* Pipeline swim lanes: Pre-Sale (1-12), Close (13-16), Post-Sale (17-21) */}
           {[
             { label: "Pre-Sale Pipeline", range: [1, 12], color: "border-blue-500/30" },
             { label: "Close Process", range: [13, 16], color: "border-orange-500/30" },
@@ -797,321 +636,5 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     </div>
   );
 }
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function FollowUpQuickActions({
-  isPending,
-  errorMessage,
-  compact = false,
-  onSetFollowUp,
-}: {
-  isPending: boolean;
-  errorMessage: string | null;
-  compact?: boolean;
-  onSetFollowUp: (daysAhead: number) => void;
-}) {
-  const options = [
-    { daysAhead: 1, label: "Tomorrow" },
-    { daysAhead: 3, label: "3 Days" },
-    { daysAhead: 7, label: "1 Week" },
-  ];
-
-  return (
-    <div className="space-y-2">
-      <div className={`flex flex-wrap items-center gap-2 ${compact ? "justify-start" : ""}`}>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Set follow-up</span>
-        {options.map((option) => (
-          <Button
-            key={option.daysAhead}
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-[44px] px-3 text-xs"
-            disabled={isPending}
-            onClick={() => onSetFollowUp(option.daysAhead)}
-          >
-            {isPending ? "Saving..." : option.label}
-          </Button>
-        ))}
-      </div>
-      {errorMessage && (
-        <p className="text-xs text-destructive" role="status" aria-live="polite">
-          {errorMessage}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function PipelineDealTableRow({
-  deal,
-  stageName,
-  onCommitPipelineFollowUp,
-  onSchedulePipelineRefresh,
-}: {
-  deal: CrmRepSafeDeal;
-  stageName: string;
-  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
-  onSchedulePipelineRefresh: (dealId: string) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
-  const [isPending, setIsPending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDisplayFollowUpAt(deal.nextFollowUpAt);
-    setErrorMessage(null);
-  }, [deal.id, deal.nextFollowUpAt]);
-
-  const effectiveDeal = useMemo(
-    () => ({ ...deal, nextFollowUpAt: displayFollowUpAt }),
-    [deal, displayFollowUpAt]
-  );
-
-  async function handleSetFollowUp(daysAhead: number): Promise<void> {
-    const nextFollowUpAt = getFutureFollowUpIso(daysAhead);
-    const previousFollowUpAt = displayFollowUpAt;
-    const previousDetailDeal = queryClient.getQueryData<CrmRepSafeDeal | null>(["crm", "deal", deal.id]) ?? null;
-
-    setErrorMessage(null);
-    setIsPending(true);
-    setDisplayFollowUpAt(nextFollowUpAt);
-    queryClient.setQueryData(["crm", "deal", deal.id], (current: CrmRepSafeDeal | null | undefined) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        nextFollowUpAt,
-      };
-    });
-
-    try {
-      const updatedDeal = await patchCrmDeal(deal.id, {
-        nextFollowUpAt,
-        followUpReminderSource: "pipeline_quick",
-      });
-      setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
-      onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
-      queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);
-      onSchedulePipelineRefresh(deal.id);
-    } catch (error) {
-      setDisplayFollowUpAt(previousFollowUpAt);
-      if (previousDetailDeal) {
-        queryClient.setQueryData(["crm", "deal", deal.id], previousDetailDeal);
-      } else {
-        void queryClient.invalidateQueries({ queryKey: ["crm", "deal", deal.id] });
-      }
-      setErrorMessage(error instanceof Error ? error.message : "Could not update follow-up. Try again.");
-    } finally {
-      setIsPending(false);
-    }
-  }
-
-  return (
-    <tr className="border-t border-border">
-      <td className="px-4 py-3">
-        <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-foreground hover:text-primary">
-          {effectiveDeal.name}
-        </Link>
-        <p className="text-xs text-muted-foreground">Last activity: {formatDate(effectiveDeal.lastActivityAt)}</p>
-      </td>
-      <td className="px-4 py-3 text-muted-foreground">{stageName}</td>
-      <td className="px-4 py-3 text-right text-muted-foreground">{formatMoney(effectiveDeal.amount)}</td>
-      <td className="px-4 py-3 text-muted-foreground">{formatDate(effectiveDeal.expectedCloseOn)}</td>
-      <td className="px-4 py-3 text-muted-foreground">{formatDate(effectiveDeal.nextFollowUpAt)}</td>
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link
-              to={`/quote?crm_deal_id=${effectiveDeal.id}${effectiveDeal.primaryContactId ? `&crm_contact_id=${effectiveDeal.primaryContactId}` : ""}`}
-            >
-              <FileText className="mr-1 h-4 w-4" />
-              New Quote
-            </Link>
-          </Button>
-          <FollowUpQuickActions
-            isPending={isPending}
-            errorMessage={errorMessage}
-            onSetFollowUp={(daysAhead) => void handleSetFollowUp(daysAhead)}
-          />
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function PipelineDealCard({
-  deal,
-  onCommitPipelineFollowUp,
-  onSchedulePipelineRefresh,
-}: {
-  deal: CrmRepSafeDeal;
-  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
-  onSchedulePipelineRefresh: (dealId: string) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
-  const [isPending, setIsPending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDisplayFollowUpAt(deal.nextFollowUpAt);
-    setErrorMessage(null);
-  }, [deal.id, deal.nextFollowUpAt]);
-
-  const effectiveDeal = useMemo(
-    () => ({ ...deal, nextFollowUpAt: displayFollowUpAt }),
-    [deal, displayFollowUpAt]
-  );
-
-  async function handleSetFollowUp(daysAhead: number): Promise<void> {
-    const nextFollowUpAt = getFutureFollowUpIso(daysAhead);
-    const previousFollowUpAt = displayFollowUpAt;
-    const previousDetailDeal = queryClient.getQueryData<CrmRepSafeDeal | null>(["crm", "deal", deal.id]) ?? null;
-
-    setErrorMessage(null);
-    setIsPending(true);
-    setDisplayFollowUpAt(nextFollowUpAt);
-    queryClient.setQueryData(["crm", "deal", deal.id], (current: CrmRepSafeDeal | null | undefined) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        nextFollowUpAt,
-      };
-    });
-
-    try {
-      const updatedDeal = await patchCrmDeal(deal.id, {
-        nextFollowUpAt,
-        followUpReminderSource: "pipeline_quick",
-      });
-      setDisplayFollowUpAt(updatedDeal.nextFollowUpAt);
-      onCommitPipelineFollowUp(deal.id, updatedDeal.nextFollowUpAt);
-      queryClient.setQueryData(["crm", "deal", deal.id], updatedDeal);
-      onSchedulePipelineRefresh(deal.id);
-    } catch (error) {
-      setDisplayFollowUpAt(previousFollowUpAt);
-      if (previousDetailDeal) {
-        queryClient.setQueryData(["crm", "deal", deal.id], previousDetailDeal);
-      } else {
-        void queryClient.invalidateQueries({ queryKey: ["crm", "deal", deal.id] });
-      }
-      setErrorMessage(error instanceof Error ? error.message : "Could not update follow-up. Try again.");
-    } finally {
-      setIsPending(false);
-    }
-  }
-
-  return (
-    <article className="rounded-lg border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-1">
-        <Link
-          to={`/crm/deals/${deal.id}`}
-          className="text-sm font-semibold text-foreground hover:text-primary"
-        >
-          {effectiveDeal.name}
-        </Link>
-        <SlaCountdown deadline={(effectiveDeal as any).slaDeadlineAt ?? null} />
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {formatMoney(effectiveDeal.amount)} • Follow-up {formatDate(effectiveDeal.nextFollowUpAt)}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        <CrmDealSignalBadges deal={effectiveDeal} />
-        <DepositGateBadge
-          depositStatus={(effectiveDeal as any).depositStatus ?? null}
-          depositAmount={(effectiveDeal as any).depositAmount ?? null}
-        />
-      </div>
-      <div className="mt-2 flex gap-2">
-        <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
-          <Link to={`/crm/deals/${deal.id}`}>Open</Link>
-        </Button>
-        <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
-          <Link
-            to={`/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
-          >
-            <FileText className="mr-1 h-3.5 w-3.5" />
-            Quote
-          </Link>
-        </Button>
-      </div>
-      <div className="mt-2">
-        <FollowUpQuickActions
-          isPending={isPending}
-          errorMessage={errorMessage}
-          compact
-          onSetFollowUp={(daysAhead) => void handleSetFollowUp(daysAhead)}
-        />
-      </div>
-    </article>
-  );
-}
-
-// ── DnD Wrappers ────────────────────────────────────────────────────────────
-
-const DraggableDealCard = memo(function DraggableDealCard({
-  deal,
-  onCommitPipelineFollowUp,
-  onSchedulePipelineRefresh,
-}: {
-  deal: CrmRepSafeDeal;
-  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
-  onSchedulePipelineRefresh: (dealId: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: deal.id,
-    data: { deal },
-  });
-
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
-    : undefined;
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
-      <PipelineDealCard
-        deal={deal}
-        onCommitPipelineFollowUp={onCommitPipelineFollowUp}
-        onSchedulePipelineRefresh={onSchedulePipelineRefresh}
-      />
-    </div>
-  );
-});
-
-const DroppableStageColumn = memo(function DroppableStageColumn({
-  stageId,
-  children,
-}: {
-  stageId: string;
-  children: React.ReactNode;
-}) {
-  const { isOver, setNodeRef } = useDroppable({ id: stageId });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`space-y-2 p-2 min-h-[60px] rounded-b-xl transition-colors ${
-        isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""
-      }`}
-    >
-      {children}
-    </div>
-  );
-});
 
 export const CrmPipelinePage = CrmDealsPage;
