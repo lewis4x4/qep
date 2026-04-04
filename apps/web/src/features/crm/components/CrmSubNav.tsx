@@ -25,7 +25,7 @@ export function CrmSubNav() {
 
   return (
     <nav
-      aria-label="CRM sections"
+      aria-label="QRM sections"
       className="mb-5 flex gap-1 overflow-x-auto border-b border-border pb-px"
     >
       {CRM_SUB_NAV_ITEMS.map((item) => {

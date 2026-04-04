@@ -10,6 +10,9 @@ import { CrmActivityTimeline } from "../components/CrmActivityTimeline";
 import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmDealEquipmentSection } from "../components/CrmDealEquipmentSection";
 import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
+import { NeedsAssessmentCard } from "../components/NeedsAssessmentCard";
+import { CadenceTimeline } from "../components/CadenceTimeline";
+import { DemoRequestCard } from "../components/DemoRequestCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -291,6 +294,12 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
             stagesLoading={stagesQuery.isLoading}
             onSave={() => void handleSave()}
           />
+
+          <NeedsAssessmentCard dealId={dealId!} />
+
+          <CadenceTimeline dealId={dealId!} />
+
+          <DemoRequestCard dealId={dealId!} />
 
           <CrmDealEquipmentSection dealId={dealId} companyId={dealQuery.data?.companyId ?? null} />
 

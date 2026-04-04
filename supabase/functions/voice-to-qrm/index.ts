@@ -1,0 +1,552 @@
+/**
+ * Voice-to-QRM Pipeline Edge Function
+ *
+ * The crown jewel of Phase 1. Transforms a single voice note into a fully
+ * populated QRM entry: contact + company + deal + needs assessment + follow-up
+ * cadence — all in <10 seconds.
+ *
+ * Pipeline:
+ *   1. Accept audio → upload to storage → transcribe via Whisper
+ *   2. Extract ALL fields via enhanced GPT prompt (VoiceQrmExtraction schema)
+ *   3. Fuzzy match or auto-create contact + company
+ *   4. Auto-create or update deal in correct pipeline stage
+ *   5. Auto-populate needs assessment
+ *   6. Auto-set follow-up cadence
+ *   7. Generate QRM narrative in owner's format
+ *   8. Return complete result with all entity IDs
+ *
+ * Auth: rep/manager/owner
+ */
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+
+// Enhanced extraction schema per QEP-OS-Build-Roadmap-LLM.md lines 177-219
+const EXTRACTION_PROMPT_TEMPLATE = (transcript: string) => `You are a QRM (Quality Relationship Manager) data extraction assistant for QEP, a heavy equipment dealership.
+A sales rep (Iron Advisor) just recorded a field note about a customer interaction. Extract ALL available information.
+
+Transcript:
+"""
+${transcript}
+"""
+
+Rules:
+- Return ONLY valid JSON matching the schema below.
+- If something is not clearly stated, use null.
+- Do NOT fabricate data. Only extract what is explicitly mentioned or strongly implied.
+- For the qrm_narrative: write a professional first-person summary in this exact style:
+  "I spoke to [Name] with [Company] of [Location]. He/she is interested in [Equipment] for [Application]..."
+  Include all relevant details: equipment interest, current equipment issues, timeline, budget, financing preference, trade-in, decision maker status, and next steps.
+
+Return ONLY valid JSON:
+{
+  "contact": {
+    "first_name": "string or null",
+    "last_name": "string or null",
+    "role": "string or null (owner, operator, manager, etc.)",
+    "phone": "string or null",
+    "email": "string or null"
+  },
+  "company": {
+    "name": "string or null",
+    "location": "string or null"
+  },
+  "needs_assessment": {
+    "application": "string or null (land clearing, tree service, excavation, etc.)",
+    "terrain_material": "string or null",
+    "machine_interest": "string or null (Yanmar ViO 55, etc.)",
+    "attachments_needed": ["strings"],
+    "brand_preference": "string or null",
+    "current_equipment": "string or null",
+    "current_equipment_issues": "string or null",
+    "timeline": "string or null (end of month, ASAP, Q3)",
+    "timeline_urgency": "urgent | normal | flexible | null",
+    "budget_amount": "number or null",
+    "budget_type": "cash | financing | lease | null",
+    "monthly_payment_target": "number or null",
+    "financing_preference": "string or null (0% financing, etc.)",
+    "trade_in": "boolean or null",
+    "trade_in_details": "string or null",
+    "decision_maker": "boolean or null",
+    "decision_maker_name": "string or null"
+  },
+  "deal": {
+    "next_step": "quote | demo | credit_application | site_visit | follow_up | null",
+    "stage_suggestion": "number 1-21 or null",
+    "estimated_value": "number or null"
+  },
+  "intelligence": {
+    "competitor_mentions": [{"brand": "string", "context": "string"}],
+    "sentiment": "positive | neutral | negative",
+    "buying_intent": "high | medium | low"
+  },
+  "qrm_narrative": "string — professional first-person summary in the owner's format"
+}`;
+
+Deno.serve(async (req) => {
+  const origin = req.headers.get("origin");
+
+  if (req.method === "OPTIONS") {
+    return optionsResponse(origin);
+  }
+
+  if (req.method !== "POST") {
+    return safeJsonError("Method not allowed", 405, origin);
+  }
+
+  const pipelineStart = Date.now();
+
+  try {
+    const authHeader = req.headers.get("Authorization")?.trim();
+    if (!authHeader) {
+      return safeJsonError("Unauthorized", 401, origin);
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return safeJsonError("Unauthorized", 401, origin);
+    }
+
+    // Verify role
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role, iron_role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["rep", "manager", "owner"].includes(profile.role)) {
+      return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
+    }
+
+    // ── 1. Parse multipart form data ───���──────────────────────────────────
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return safeJsonError("Expected multipart/form-data", 400, origin);
+    }
+
+    const formData = await req.formData();
+    const audioFile = formData.get("audio") as File | null;
+    const dealIdParam = formData.get("deal_id") as string | null;
+
+    if (!audioFile) {
+      return safeJsonError("audio field is required", 400, origin);
+    }
+
+    if (audioFile.size > 50 * 1024 * 1024) {
+      return safeJsonError("Audio file exceeds 50MB limit", 400, origin);
+    }
+
+    // ── 2. Upload audio to storage ────────��───────────────────────────────
+    const audioBuffer = await audioFile.arrayBuffer();
+    const ext = audioFile.name?.split(".").pop() || "webm";
+    const storagePath = `voice-qrm/${user.id}/${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("voice-captures")
+      .upload(storagePath, audioBuffer, {
+        contentType: audioFile.type || "audio/webm",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
+      return safeJsonError("Failed to store audio file", 500, origin);
+    }
+
+    // ── 3. Transcribe via Whisper ─────────────��───────────────────────────
+    const openAiKey = OPENAI_API_KEY || Deno.env.get("OPENAI_KEY");
+    if (!openAiKey) {
+      return safeJsonError("OpenAI API key not configured", 500, origin);
+    }
+
+    const whisperForm = new FormData();
+    whisperForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioFile.type || "audio/webm" }));
+    whisperForm.append("model", "whisper-1");
+
+    const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openAiKey}` },
+      body: whisperForm,
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!whisperRes.ok) {
+      const errText = await whisperRes.text();
+      console.error("Whisper error:", errText);
+      return safeJsonError("Transcription failed", 500, origin);
+    }
+
+    const whisperData = await whisperRes.json();
+    const transcript = whisperData.text?.trim() ?? "";
+
+    if (!transcript) {
+      return safeJsonError("No speech detected in the recording.", 422, origin);
+    }
+
+    // ── 4. Extract structured data via enhanced GPT prompt ────────────────
+    const extractionStart = Date.now();
+
+    const extractionRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: "Extract QRM-ready dealership field-note data. Return valid JSON only.",
+          },
+          { role: "user", content: EXTRACTION_PROMPT_TEMPLATE(transcript) },
+        ],
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!extractionRes.ok) {
+      const errText = await extractionRes.text();
+      console.error("Extraction error:", errText);
+      return safeJsonError("Data extraction failed", 500, origin);
+    }
+
+    const extractionData = await extractionRes.json();
+    const rawJson = extractionData.choices?.[0]?.message?.content?.trim();
+    if (!rawJson) {
+      return safeJsonError("Extraction returned no content", 500, origin);
+    }
+
+    const extracted = JSON.parse(rawJson);
+    const extractionDuration = Date.now() - extractionStart;
+
+    // ── 5. Entity resolution: fuzzy match or create ───────────────────────
+    const entityStart = Date.now();
+    const errors: string[] = [];
+    const workspace = "default";
+
+    // 5a. Company resolution
+    let companyId: string | null = null;
+    let companyMatchMethod: string | null = null;
+    let companyConfidence: number | null = null;
+
+    if (extracted.company?.name) {
+      const { data: companyMatches } = await supabaseAdmin
+        .rpc("fuzzy_match_company", {
+          p_workspace_id: workspace,
+          p_company_name: extracted.company.name,
+        });
+
+      if (companyMatches && companyMatches.length > 0 && companyMatches[0].name_similarity >= 0.5) {
+        companyId = companyMatches[0].company_id;
+        companyMatchMethod = companyMatches[0].match_method;
+        companyConfidence = companyMatches[0].name_similarity;
+      } else {
+        // Auto-create company
+        const { data: newCompany, error: companyError } = await supabaseAdmin
+          .from("crm_companies")
+          .insert({
+            workspace_id: workspace,
+            name: extracted.company.name,
+            metadata: extracted.company.location
+              ? { location: extracted.company.location }
+              : {},
+          })
+          .select("id")
+          .single();
+
+        if (companyError) {
+          errors.push(`Company creation failed: ${companyError.message}`);
+        } else {
+          companyId = newCompany.id;
+          companyMatchMethod = "created";
+          companyConfidence = 1.0;
+        }
+      }
+    }
+
+    // 5b. Contact resolution
+    let contactId: string | null = null;
+    let contactMatchMethod: string | null = null;
+    let contactConfidence: number | null = null;
+
+    if (extracted.contact?.first_name || extracted.contact?.last_name) {
+      const { data: contactMatches } = await supabaseAdmin
+        .rpc("fuzzy_match_contact", {
+          p_workspace_id: workspace,
+          p_first_name: extracted.contact.first_name || "",
+          p_last_name: extracted.contact.last_name || "",
+        });
+
+      if (contactMatches && contactMatches.length > 0 && contactMatches[0].name_similarity >= 0.5) {
+        contactId = contactMatches[0].contact_id;
+        contactMatchMethod = contactMatches[0].match_method;
+        contactConfidence = contactMatches[0].name_similarity;
+      } else {
+        // Auto-create contact
+        const { data: newContact, error: contactError } = await supabaseAdmin
+          .from("crm_contacts")
+          .insert({
+            workspace_id: workspace,
+            first_name: extracted.contact.first_name,
+            last_name: extracted.contact.last_name,
+            company_id: companyId,
+            metadata: {
+              ...(extracted.contact.role ? { role: extracted.contact.role } : {}),
+              ...(extracted.contact.phone ? { phone: extracted.contact.phone } : {}),
+              ...(extracted.contact.email ? { email: extracted.contact.email } : {}),
+            },
+          })
+          .select("id")
+          .single();
+
+        if (contactError) {
+          errors.push(`Contact creation failed: ${contactError.message}`);
+        } else {
+          contactId = newContact.id;
+          contactMatchMethod = "created";
+          contactConfidence = 1.0;
+        }
+      }
+    }
+
+    // 5c. Deal resolution
+    let dealId: string | null = dealIdParam;
+    let dealAction: string | null = null;
+
+    if (!dealId) {
+      // Determine pipeline stage
+      let stageId: string | null = null;
+      const suggestedStage = extracted.deal?.stage_suggestion || 3; // Default to Needs Assessment
+
+      const { data: stage } = await supabaseAdmin
+        .from("crm_deal_stages")
+        .select("id")
+        .eq("workspace_id", workspace)
+        .eq("sort_order", suggestedStage)
+        .single();
+
+      if (stage) stageId = stage.id;
+
+      if (stageId) {
+        const dealName = extracted.company?.name
+          ? `${extracted.company.name} - ${extracted.needs_assessment?.machine_interest || "New Opportunity"}`
+          : `${extracted.contact?.first_name || "New"} ${extracted.contact?.last_name || "Deal"}`;
+
+        const { data: newDeal, error: dealError } = await supabaseAdmin
+          .from("crm_deals")
+          .insert({
+            workspace_id: workspace,
+            name: dealName,
+            stage_id: stageId,
+            primary_contact_id: contactId,
+            company_id: companyId,
+            assigned_rep_id: user.id,
+            amount: extracted.deal?.estimated_value || null,
+          })
+          .select("id")
+          .single();
+
+        if (dealError) {
+          errors.push(`Deal creation failed: ${dealError.message}`);
+        } else {
+          dealId = newDeal.id;
+          dealAction = "created";
+        }
+      }
+    } else {
+      dealAction = "matched";
+      // Update existing deal with any new info
+      const updates: Record<string, unknown> = {};
+      if (contactId && !dealIdParam) updates.primary_contact_id = contactId;
+      if (companyId) updates.company_id = companyId;
+      if (extracted.deal?.estimated_value) updates.amount = extracted.deal.estimated_value;
+
+      if (Object.keys(updates).length > 0) {
+        await supabaseAdmin
+          .from("crm_deals")
+          .update(updates)
+          .eq("id", dealId);
+        dealAction = "updated";
+      }
+    }
+
+    // ── 6. Create needs assessment ───────────��────────────────────────────
+    let needsAssessmentId: string | null = null;
+    const na = extracted.needs_assessment;
+
+    if (dealId && na) {
+      const { data: assessment, error: naError } = await supabaseAdmin
+        .from("needs_assessments")
+        .insert({
+          workspace_id: workspace,
+          deal_id: dealId,
+          contact_id: contactId,
+          application: na.application,
+          work_type: na.application, // Alias
+          terrain_material: na.terrain_material,
+          current_equipment: na.current_equipment,
+          current_equipment_issues: na.current_equipment_issues,
+          machine_interest: na.machine_interest,
+          attachments_needed: na.attachments_needed || [],
+          brand_preference: na.brand_preference,
+          timeline_description: na.timeline,
+          timeline_urgency: na.timeline_urgency,
+          budget_type: na.budget_type,
+          budget_amount: na.budget_amount,
+          monthly_payment_target: na.monthly_payment_target,
+          financing_preference: na.financing_preference,
+          has_trade_in: na.trade_in || false,
+          trade_in_details: na.trade_in_details,
+          is_decision_maker: na.decision_maker,
+          decision_maker_name: na.decision_maker_name,
+          next_step: na.next_step || extracted.deal?.next_step,
+          entry_method: "voice",
+          qrm_narrative: extracted.qrm_narrative,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+
+      if (naError) {
+        errors.push(`Needs assessment creation failed: ${naError.message}`);
+      } else {
+        needsAssessmentId = assessment.id;
+
+        // Link to deal
+        await supabaseAdmin
+          .from("crm_deals")
+          .update({ needs_assessment_id: assessment.id })
+          .eq("id", dealId);
+      }
+    }
+
+    // ── 7. Create follow-up cadence ──────────���────────────────────────────
+    let cadenceId: string | null = null;
+
+    if (dealId) {
+      const { data: cadenceResult } = await supabaseAdmin
+        .rpc("create_sales_cadence", {
+          p_deal_id: dealId,
+          p_contact_id: contactId,
+          p_assigned_to: user.id,
+          p_workspace_id: workspace,
+        });
+
+      if (cadenceResult) {
+        cadenceId = cadenceResult;
+      }
+    }
+
+    // ── 8. Save voice capture record ───────────��──────────────────────────
+    const { data: capture } = await supabaseAdmin
+      .from("voice_captures")
+      .insert({
+        user_id: user.id,
+        workspace_id: workspace,
+        audio_url: storagePath,
+        transcript,
+        extracted_data: extracted,
+        sync_status: "completed",
+        deal_id: dealId,
+      })
+      .select("id")
+      .single();
+
+    // ── 9. Save QRM result audit trail ─────────────���──────────────────────
+    const entityDuration = Date.now() - entityStart;
+    const totalDuration = Date.now() - pipelineStart;
+
+    if (capture) {
+      await supabaseAdmin.from("voice_qrm_results").insert({
+        workspace_id: workspace,
+        voice_capture_id: capture.id,
+        contact_id: contactId,
+        contact_match_method: contactMatchMethod,
+        contact_match_confidence: contactConfidence,
+        company_id: companyId,
+        company_match_method: companyMatchMethod,
+        company_match_confidence: companyConfidence,
+        deal_id: dealId,
+        deal_action: dealAction,
+        needs_assessment_id: needsAssessmentId,
+        cadence_id: cadenceId,
+        qrm_narrative: extracted.qrm_narrative,
+        extraction_duration_ms: extractionDuration,
+        entity_creation_duration_ms: entityDuration,
+        total_duration_ms: totalDuration,
+        errors: errors.length > 0 ? errors : [],
+      });
+    }
+
+    // ── 10. Create CRM activity note ──────────────────────────────────────
+    if (dealId) {
+      await supabaseAdmin.from("crm_activities").insert({
+        workspace_id: workspace,
+        activity_type: "note",
+        body: extracted.qrm_narrative || `Voice capture: ${transcript.substring(0, 500)}`,
+        deal_id: dealId,
+        contact_id: contactId,
+        company_id: companyId,
+        created_by: user.id,
+        metadata: {
+          source: "voice_to_qrm",
+          voice_capture_id: capture?.id,
+          buying_intent: extracted.intelligence?.buying_intent,
+          sentiment: extracted.intelligence?.sentiment,
+        },
+      });
+    }
+
+    return safeJsonOk({
+      success: true,
+      pipeline_duration_ms: totalDuration,
+      transcript,
+      qrm_narrative: extracted.qrm_narrative,
+      entities: {
+        contact: {
+          id: contactId,
+          match_method: contactMatchMethod,
+          confidence: contactConfidence,
+          name: `${extracted.contact?.first_name || ""} ${extracted.contact?.last_name || ""}`.trim(),
+        },
+        company: {
+          id: companyId,
+          match_method: companyMatchMethod,
+          confidence: companyConfidence,
+          name: extracted.company?.name,
+        },
+        deal: {
+          id: dealId,
+          action: dealAction,
+          stage_suggestion: extracted.deal?.stage_suggestion,
+        },
+        needs_assessment: {
+          id: needsAssessmentId,
+          completeness: na ? Object.values(na).filter(v => v != null && v !== false && !(Array.isArray(v) && v.length === 0)).length : 0,
+        },
+        cadence: { id: cadenceId },
+      },
+      intelligence: extracted.intelligence,
+      voice_capture_id: capture?.id,
+      errors: errors.length > 0 ? errors : undefined,
+    }, origin);
+  } catch (err) {
+    console.error("voice-to-qrm error:", err);
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return safeJsonError(message, 500, req.headers.get("origin"));
+  }
+});

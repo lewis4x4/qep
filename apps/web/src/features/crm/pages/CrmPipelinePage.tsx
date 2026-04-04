@@ -1,5 +1,6 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DndContext, DragOverlay, closestCenter, type DragEndEvent, type DragStartEvent, useDroppable, useDraggable } from "@dnd-kit/core";
 import { FileText, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,8 @@ import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmDealSignalBadges } from "../components/CrmDealSignalBadges";
+import { SlaCountdown } from "../components/SlaCountdown";
+import { DepositGateBadge } from "../components/DepositGateBadge";
 import { getDealSignalState } from "../lib/deal-signals";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
@@ -463,6 +466,44 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     }, 2000);
   }
 
+  const [activeDragDealId, setActiveDragDealId] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragDealId(event.active.id as string);
+  }, []);
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      setActiveDragDealId(null);
+      const { active, over } = event;
+      if (!over || !active) return;
+
+      const dealId = active.id as string;
+      const newStageId = over.id as string;
+
+      // Find the deal's current stage
+      const deal = hydratedDeals?.find((d) => d.id === dealId);
+      if (!deal || deal.stageId === newStageId) return;
+
+      // Optimistic update
+      setHydratedDeals((current) =>
+        current?.map((d) => (d.id === dealId ? { ...d, stageId: newStageId } : d)) ?? current,
+      );
+
+      try {
+        await patchCrmDeal(dealId, { stageId: newStageId });
+        schedulePipelineRefresh(dealId);
+      } catch (err) {
+        // Revert on failure
+        setHydratedDeals((current) =>
+          current?.map((d) => (d.id === dealId ? { ...d, stageId: deal.stageId } : d)) ?? current,
+        );
+        console.error("Stage transition failed:", err);
+      }
+    },
+    [hydratedDeals, schedulePipelineRefresh],
+  );
+
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
     setHydratedDeals((current) => updateDealNextFollowUp(current, dealId, nextFollowUpAt));
     queryClient.setQueryData<OpenDealsFirstPageResult>(["crm", "deals", "open-table"], (current) => {
@@ -480,8 +521,8 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Deals"
-        subtitle="Table-first pipeline view with role-safe CRM reads and quote entry points."
+        title="QRM Pipeline"
+        subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
       />
       <CrmSubNav />
 
@@ -642,7 +683,7 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "table" && (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm" aria-label="CRM deals table">
+            <table className="min-w-full text-sm" aria-label="QRM deals table">
               <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2 text-left">Deal</th>
@@ -670,45 +711,73 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       )}
 
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "board" && (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto" aria-label="CRM deals board">
-            <div className="flex min-w-max gap-3 p-3">
-              {stageColumns.map((column) => (
-                <section
-                  key={column.stageId}
-                  className="w-[300px] shrink-0 rounded-xl border border-border bg-muted/30"
-                >
-                  <header className="border-b border-border px-3 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-foreground">{column.stageName}</h3>
-                      <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.07] dark:to-white/[0.02]">
-                        {column.deals.length}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{formatMoney(column.amount)}</p>
-                  </header>
+        <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="space-y-4">
+          {/* Pipeline swim lanes: Pre-Sale (1-12), Close (13-16), Post-Sale (17-21) */}
+          {[
+            { label: "Pre-Sale Pipeline", range: [1, 12], color: "border-blue-500/30" },
+            { label: "Close Process", range: [13, 16], color: "border-orange-500/30" },
+            { label: "Post-Sale", range: [17, 21], color: "border-emerald-500/30" },
+          ].map((lane) => {
+            const laneColumns = stageColumns.filter((col) => {
+              const stage = (stagesQuery.data ?? []).find((s) => s.id === col.stageId);
+              const order = stage?.sortOrder ?? 0;
+              return order >= lane.range[0] && order <= lane.range[1];
+            });
+            if (laneColumns.length === 0) return null;
+            const laneDeals = laneColumns.reduce((sum, c) => sum + c.deals.length, 0);
+            const laneAmount = laneColumns.reduce((sum, c) => sum + c.amount, 0);
+            return (
+              <Card key={lane.label} className={`overflow-hidden border-l-2 ${lane.color}`}>
+                <header className="flex items-center justify-between border-b border-border px-4 py-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{lane.label}</h2>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>{laneDeals} deals</span>
+                    <span>{formatMoney(laneAmount)}</span>
+                  </div>
+                </header>
+                <div className="overflow-x-auto" aria-label={`${lane.label} deals board`}>
+                  <div className="flex min-w-max gap-3 p-3">
+                    {laneColumns.map((column) => (
+                      <section
+                        key={column.stageId}
+                        className="w-[280px] shrink-0 rounded-xl border border-border bg-muted/30"
+                      >
+                        <header className="border-b border-border px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold text-foreground">{column.stageName}</h3>
+                            <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.07] dark:to-white/[0.02]">
+                              {column.deals.length}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">{formatMoney(column.amount)}</p>
+                        </header>
 
-                  <div className="space-y-2 p-2">
-                    {column.deals.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
-                        No open deals in this stage.
-                      </div>
-                    )}
+                        <DroppableStageColumn stageId={column.stageId}>
+                          {column.deals.length === 0 && (
+                            <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
+                              No deals
+                            </div>
+                          )}
 
-                    {column.deals.map((deal) => (
-                      <PipelineDealCard
-                        key={deal.id}
-                        deal={deal}
-                        onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
-                        onSchedulePipelineRefresh={schedulePipelineRefresh}
-                      />
+                          {column.deals.map((deal) => (
+                            <DraggableDealCard
+                              key={deal.id}
+                              deal={deal}
+                              onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+                              onSchedulePipelineRefresh={schedulePipelineRefresh}
+                            />
+                          ))}
+                        </DroppableStageColumn>
+                      </section>
                     ))}
                   </div>
-                </section>
-              ))}
-            </div>
-          </div>
-        </Card>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+        </DndContext>
       )}
 
       <CrmDealEditorSheet
@@ -940,17 +1009,24 @@ function PipelineDealCard({
 
   return (
     <article className="rounded-lg border border-border bg-card p-3 shadow-sm">
-      <Link
-        to={`/crm/deals/${deal.id}`}
-        className="text-sm font-semibold text-foreground hover:text-primary"
-      >
-        {effectiveDeal.name}
-      </Link>
+      <div className="flex items-start justify-between gap-1">
+        <Link
+          to={`/crm/deals/${deal.id}`}
+          className="text-sm font-semibold text-foreground hover:text-primary"
+        >
+          {effectiveDeal.name}
+        </Link>
+        <SlaCountdown deadline={(effectiveDeal as any).slaDeadlineAt ?? null} />
+      </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {formatMoney(effectiveDeal.amount)} • Follow-up {formatDate(effectiveDeal.nextFollowUpAt)}
       </p>
-      <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-1">
         <CrmDealSignalBadges deal={effectiveDeal} />
+        <DepositGateBadge
+          depositStatus={(effectiveDeal as any).depositStatus ?? null}
+          depositAmount={(effectiveDeal as any).depositAmount ?? null}
+        />
       </div>
       <div className="mt-2 flex gap-2">
         <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
@@ -974,6 +1050,58 @@ function PipelineDealCard({
         />
       </div>
     </article>
+  );
+}
+
+// ── DnD Wrappers ────────────────────────────────────────────────────────────
+
+function DraggableDealCard({
+  deal,
+  onCommitPipelineFollowUp,
+  onSchedulePipelineRefresh,
+}: {
+  deal: CrmRepSafeDeal;
+  onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
+  onSchedulePipelineRefresh: (dealId: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: deal.id,
+    data: { deal },
+  });
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
+    : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
+      <PipelineDealCard
+        deal={deal}
+        onCommitPipelineFollowUp={onCommitPipelineFollowUp}
+        onSchedulePipelineRefresh={onSchedulePipelineRefresh}
+      />
+    </div>
+  );
+}
+
+function DroppableStageColumn({
+  stageId,
+  children,
+}: {
+  stageId: string;
+  children: React.ReactNode;
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: stageId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`space-y-2 p-2 min-h-[60px] rounded-b-xl transition-colors ${
+        isOver ? "bg-primary/5 ring-1 ring-primary/30" : ""
+      }`}
+    >
+      {children}
+    </div>
   );
 }
 

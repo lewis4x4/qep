@@ -61,7 +61,7 @@ export function CrmContactsPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Contacts"
+        title="QRM Contacts"
         subtitle="Search and open contact timelines quickly from the field."
       />
       <CrmSubNav />

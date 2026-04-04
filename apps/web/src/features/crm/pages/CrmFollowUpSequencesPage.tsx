@@ -219,7 +219,7 @@ export function CrmFollowUpSequencesPage({ userId }: CrmFollowUpSequencesPagePro
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Sequences"
+        title="QRM Sequences"
         subtitle="Own the follow-up automation that keeps deals moving after the first quote goes out."
       />
 

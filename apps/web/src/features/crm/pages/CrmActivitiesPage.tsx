@@ -1174,7 +1174,7 @@ export function CrmActivitiesPage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Activities"
+        title="QRM Activities"
         subtitle="Run calls, texts, emails, and task follow-through from one rep-safe activity feed."
       />
       <CrmSubNav />
@@ -1449,7 +1449,7 @@ export function CrmActivitiesPage() {
       )}
 
       {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length > 0 && (
-        <div className="space-y-3" aria-label="CRM activity feed">
+        <div className="space-y-3" aria-label="QRM activity feed">
           {filteredActivities.map((activity) => {
             const meta = ACTIVITY_META[activity.activityType];
             const Icon = meta.icon;

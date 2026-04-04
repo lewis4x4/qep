@@ -207,7 +207,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         <>
           <CrmPageHeader
             title={`${contactQuery.data.firstName} ${contactQuery.data.lastName}`}
-            subtitle={contactQuery.data.title || "CRM Contact"}
+            subtitle={contactQuery.data.title || "QRM Contact"}
           />
 
           {contactQuery.data.dgeCustomerProfileId && (

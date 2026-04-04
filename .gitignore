@@ -30,3 +30,6 @@ supabase/.branches/
 
 # Supabase temp
 supabase/.temp/
+
+# Working documents — local only, never pushed to GitHub
+_workspace/

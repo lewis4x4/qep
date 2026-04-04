@@ -73,7 +73,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote" },
-  "/crm": { label: "CRM Hub", route: "/crm" },
+  "/crm": { label: "QRM Hub", route: "/crm" },
   "/crm/activities": { label: "Activities", route: "/crm/activities" },
   "/crm/deals": { label: "Deals", route: "/crm/deals" },
   "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },

@@ -94,7 +94,7 @@ export function CrmGlobalSearchCommand() {
       >
         <DialogContent className="p-0 sm:max-w-2xl">
           <DialogHeader className="sr-only">
-            <DialogTitle>CRM Search</DialogTitle>
+            <DialogTitle>QRM Search</DialogTitle>
             <DialogDescription>Search contacts and companies using keyboard navigation.</DialogDescription>
           </DialogHeader>
 

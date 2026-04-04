@@ -44,7 +44,7 @@ export function CrmCompaniesPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Companies"
+        title="QRM Companies"
         subtitle="Browse accounts and log activities by organization."
       />
       <CrmSubNav />

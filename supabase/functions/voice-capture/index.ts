@@ -23,24 +23,12 @@ import {
   type VoiceCaptureExtractedDealData,
 } from "../_shared/voice-capture-crm.ts";
 import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
-
-const ALLOWED_ORIGINS = [
-  "https://qualityequipmentparts.netlify.app",
-  "https://qep.blackrockai.co",
-  "http://localhost:5173",
-];
-function corsHeaders(origin: string | null) {
-  return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Vary": "Origin",
-  };
-}
+import { safeCorsHeaders } from "../_shared/safe-cors.ts";
 
 type ExtractedDealData = VoiceCaptureExtractedDealData;
 
 Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get("origin"));
+  const ch = safeCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: ch });
   }

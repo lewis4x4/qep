@@ -33,6 +33,7 @@ import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "../lib/crm-supabase";
 import type { UserRole } from "@/lib/database.types";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { getIronRole } from "../lib/iron-roles";
 
 // ─── Props ──────────────────────────────────────────────────────
 
@@ -642,7 +643,7 @@ const PRIMARY_SECTIONS: SectionCardDef[] = [
 
 function CrmNavGrid() {
   return (
-    <section aria-label="CRM modules">
+    <section aria-label="QRM modules">
       <div className="grid gap-3 sm:grid-cols-2">
         {PRIMARY_SECTIONS.map((s) => (
           <Link key={s.href} to={s.href} className="group">
@@ -709,6 +710,7 @@ function CrmSkeleton() {
 export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
   const queryClient = useQueryClient();
   const isElevated = ["admin", "manager", "owner"].includes(userRole);
+  const ironRole = getIronRole(userRole);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["crm-intel", userId],
@@ -751,10 +753,15 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <CrmPageHeader
-        title="CRM Intelligence"
-        subtitle="AI-powered pipeline analytics, deal scoring, and competitive intelligence"
-      />
+      <div className="flex items-center justify-between">
+        <CrmPageHeader
+          title="QRM Intelligence"
+          subtitle="AI-powered pipeline analytics, deal scoring, and competitive intelligence"
+        />
+        <Badge variant="outline" className="shrink-0 border-qep-orange/30 text-qep-orange">
+          {ironRole.display}
+        </Badge>
+      </div>
 
       {/* ── Pipeline Stats ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

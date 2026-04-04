@@ -161,7 +161,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
-        title="CRM Templates"
+        title="QRM Templates"
         subtitle="Own the language your reps use across calls, tasks, email, SMS, and meetings."
       />
 
