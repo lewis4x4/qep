@@ -22,14 +22,16 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Validate service role auth — cron-only function
     const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return safeJsonError("Unauthorized", 401, null);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!authHeader || authHeader !== `Bearer ${serviceRoleKey}`) {
+      return safeJsonError("Unauthorized — service role required", 401, null);
     }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      serviceRoleKey!,
     );
 
     const results = {

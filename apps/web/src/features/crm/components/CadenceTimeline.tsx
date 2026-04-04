@@ -49,7 +49,7 @@ function daysUntil(dateStr: string): number {
 }
 
 export function CadenceTimeline({ dealId }: CadenceTimelineProps) {
-  const { data: cadences, isLoading } = useQuery({
+  const { data: cadences, isLoading, isError } = useQuery({
     queryKey: ["crm", "cadences", dealId],
     queryFn: async () => {
       // Tables added in migration 069 — not yet in generated types
@@ -74,6 +74,14 @@ export function CadenceTimeline({ dealId }: CadenceTimelineProps) {
     return (
       <Card className="animate-pulse p-4">
         <div className="h-4 w-32 rounded bg-muted" />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-red-500/20 p-4">
+        <p className="text-sm text-red-400">Unable to load follow-up cadence.</p>
       </Card>
     );
   }

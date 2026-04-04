@@ -467,9 +467,18 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   }
 
   const [activeDragDealId, setActiveDragDealId] = useState<string | null>(null);
+  const dragOriginalStageRef = useRef<Map<string, string>>(new Map());
+  const hydratedDealsRef = useRef(hydratedDeals);
+  hydratedDealsRef.current = hydratedDeals;
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveDragDealId(event.active.id as string);
+    const dealId = event.active.id as string;
+    setActiveDragDealId(dealId);
+    // Capture original stage at drag start to avoid stale closure on revert
+    const deal = hydratedDealsRef.current?.find((d) => d.id === dealId);
+    if (deal) {
+      dragOriginalStageRef.current.set(dealId, deal.stageId);
+    }
   }, []);
 
   const handleDragEnd = useCallback(
@@ -480,10 +489,10 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
 
       const dealId = active.id as string;
       const newStageId = over.id as string;
+      const originalStageId = dragOriginalStageRef.current.get(dealId);
+      dragOriginalStageRef.current.delete(dealId);
 
-      // Find the deal's current stage
-      const deal = hydratedDeals?.find((d) => d.id === dealId);
-      if (!deal || deal.stageId === newStageId) return;
+      if (!originalStageId || originalStageId === newStageId) return;
 
       // Optimistic update
       setHydratedDeals((current) =>
@@ -494,14 +503,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         await patchCrmDeal(dealId, { stageId: newStageId });
         schedulePipelineRefresh(dealId);
       } catch (err) {
-        // Revert on failure
+        // Revert to captured original stage (not stale closure)
         setHydratedDeals((current) =>
-          current?.map((d) => (d.id === dealId ? { ...d, stageId: deal.stageId } : d)) ?? current,
+          current?.map((d) => (d.id === dealId ? { ...d, stageId: originalStageId } : d)) ?? current,
         );
         console.error("Stage transition failed:", err);
       }
     },
-    [hydratedDeals, schedulePipelineRefresh],
+    [schedulePipelineRefresh],
   );
 
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {

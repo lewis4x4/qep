@@ -50,7 +50,7 @@ function formatMoney(value: number | null): string | null {
 }
 
 export function NeedsAssessmentCard({ dealId }: NeedsAssessmentCardProps) {
-  const { data: assessment, isLoading } = useQuery({
+  const { data: assessment, isLoading, isError } = useQuery({
     queryKey: ["crm", "needs-assessment", dealId],
     queryFn: async () => {
       // Table added in migration 068 — not yet in generated types
@@ -71,6 +71,14 @@ export function NeedsAssessmentCard({ dealId }: NeedsAssessmentCardProps) {
     return (
       <Card className="animate-pulse p-4">
         <div className="h-4 w-32 rounded bg-muted" />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-red-500/20 p-4">
+        <p className="text-sm text-red-400">Unable to load needs assessment.</p>
       </Card>
     );
   }

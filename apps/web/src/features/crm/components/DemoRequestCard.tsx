@@ -56,6 +56,8 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
     staleTime: 30_000,
   });
 
+  const [mutationError, setMutationError] = useState<string | null>(null);
+
   const requestMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/demo-manager`, {
@@ -70,11 +72,19 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
           buying_intent_confirmed: true,
         }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(errData.error || `Request failed (${res.status})`);
+      }
       return res.json();
     },
     onSuccess: () => {
+      setMutationError(null);
       queryClient.invalidateQueries({ queryKey: ["crm", "demos", dealId] });
       setShowForm(false);
+    },
+    onError: (err: Error) => {
+      setMutationError(err.message);
     },
   });
 
@@ -108,6 +118,9 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
               <option value="forestry">Forestry (4hr max)</option>
             </select>
           </div>
+          {mutationError && (
+            <p className="text-xs text-red-400">{mutationError}</p>
+          )}
           <Button
             size="sm"
             onClick={() => requestMutation.mutate()}

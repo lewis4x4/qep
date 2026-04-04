@@ -438,7 +438,7 @@ Deno.serve(async (req) => {
     let cadenceId: string | null = null;
 
     if (dealId) {
-      const { data: cadenceResult } = await supabaseAdmin
+      const { data: cadenceResult, error: cadenceError } = await supabaseAdmin
         .rpc("create_sales_cadence", {
           p_deal_id: dealId,
           p_contact_id: contactId,
@@ -446,7 +446,9 @@ Deno.serve(async (req) => {
           p_workspace_id: workspace,
         });
 
-      if (cadenceResult) {
+      if (cadenceError) {
+        errors.push(`Cadence creation failed: ${cadenceError.message}`);
+      } else if (cadenceResult) {
         cadenceId = cadenceResult;
       }
     }

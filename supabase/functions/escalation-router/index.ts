@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
         .from("crm_contacts")
         .select("first_name, last_name")
         .eq("id", body.contact_id)
-        .single();
+        .maybeSingle();
       if (contact) {
         contactName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
       }
