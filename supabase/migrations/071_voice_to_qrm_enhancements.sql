@@ -103,8 +103,8 @@ as $$
     select
       c.id as contact_id,
       coalesce(c.first_name, '') || ' ' || coalesce(c.last_name, '') as contact_name,
-      c.company_id,
-      similarity(
+      c.primary_company_id as company_id,
+      public.similarity(
         lower(coalesce(c.first_name, '') || ' ' || coalesce(c.last_name, '')),
         lower(coalesce(p_first_name, '') || ' ' || coalesce(p_last_name, ''))
       ) as name_sim
@@ -153,16 +153,16 @@ as $$
   select
     c.id as company_id,
     c.name as company_name,
-    similarity(lower(c.name), lower(p_company_name)) as name_similarity,
+    public.similarity(lower(c.name), lower(p_company_name)) as name_similarity,
     case
-      when similarity(lower(c.name), lower(p_company_name)) >= 0.8 then 'exact'
-      when similarity(lower(c.name), lower(p_company_name)) >= p_threshold then 'fuzzy'
+      when public.similarity(lower(c.name), lower(p_company_name)) >= 0.8 then 'exact'
+      when public.similarity(lower(c.name), lower(p_company_name)) >= p_threshold then 'fuzzy'
     end as match_method
   from public.crm_companies c
   where c.workspace_id = p_workspace_id
     and c.deleted_at is null
-    and similarity(lower(c.name), lower(p_company_name)) >= p_threshold
-  order by similarity(lower(c.name), lower(p_company_name)) desc
+    and public.similarity(lower(c.name), lower(p_company_name)) >= p_threshold
+  order by public.similarity(lower(c.name), lower(p_company_name)) desc
   limit 5;
 $$;
 

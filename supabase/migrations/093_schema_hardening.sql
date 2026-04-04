@@ -69,35 +69,47 @@ as $$
 $$;
 
 -- ── 6. Cron NULL guards ────────────────────────────────────────────────────
--- The 2PM nudge cron (088) uses current_setting() without NULL checks.
--- If settings are unset, the cron silently fails.
--- We re-create the cron job with a NULL guard.
 
-select cron.unschedule('prospecting-nudge-2pm');
+do $cron$
+declare
+  _base_url text;
+  _service_key text;
+begin
+  if not exists (select 1 from pg_namespace where nspname = 'cron') then
+    raise notice 'Skipping cron hardening: pg_cron not available.';
+    return;
+  end if;
 
-select cron.schedule(
-  'prospecting-nudge-2pm',
-  '0 19 * * 1-5',
-  $$
-  do $$
-  declare
-    v_url text;
-    v_key text;
-  begin
-    v_url := current_setting('app.settings.supabase_url', true);
-    v_key := current_setting('app.settings.service_role_key', true);
-    if v_url is null or v_key is null then
-      raise notice 'nudge-scheduler: app.settings not configured, skipping';
-      return;
-    end if;
-    perform net.http_post(
-      url := v_url || '/functions/v1/nudge-scheduler',
-      headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || v_key,
-        'Content-Type', 'application/json'
-      ),
-      body := '{"source": "cron"}'::jsonb
-    );
-  end $$;
-  $$
-);
+  if not exists (select 1 from pg_namespace where nspname = 'net') then
+    raise notice 'Skipping cron hardening: pg_net not available.';
+    return;
+  end if;
+
+  _base_url := current_setting('app.settings.supabase_url', true);
+  _service_key := current_setting('app.settings.service_role_key', true);
+  if _base_url is null or _base_url = '' or _service_key is null or _service_key = '' then
+    raise notice 'Skipping cron hardening: app.settings not configured.';
+    return;
+  end if;
+
+  perform cron.unschedule('prospecting-nudge-2pm')
+    where exists (select 1 from cron.job where jobname = 'prospecting-nudge-2pm');
+
+  perform cron.schedule(
+    'prospecting-nudge-2pm',
+    '0 19 * * 1-5',
+    format(
+      $sql$select net.http_post(
+        url := '%s/functions/v1/nudge-scheduler',
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer %s',
+          'Content-Type', 'application/json'
+        ),
+        body := '{"source":"cron"}'::jsonb
+      );$sql$,
+      _base_url,
+      _service_key
+    )
+  );
+end;
+$cron$;

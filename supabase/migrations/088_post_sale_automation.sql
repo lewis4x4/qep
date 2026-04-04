@@ -1,28 +1,51 @@
 -- ============================================================================
 -- Migration 088: Post-Sale Automation Wiring
---
--- 1. Add email_draft_subject to escalation_tickets
--- 2. 2 PM nudge cron schedule for prospecting KPI enforcement
 -- ============================================================================
-
--- ── 1. Escalation ticket email subject ──────────────────────────────────────
 
 alter table public.escalation_tickets
   add column if not exists email_draft_subject text;
 
--- ── 2. 2 PM nudge cron (daily at 19:00 UTC = 2 PM ET) ──────────────────────
+do $cron$
+declare
+  _base_url text;
+  _service_key text;
+begin
+  if not exists (select 1 from pg_namespace where nspname = 'cron') then
+    raise notice 'Skipping prospecting nudge cron: pg_cron not available.';
+    return;
+  end if;
 
-select cron.schedule(
-  'prospecting-nudge-2pm',
-  '0 19 * * 1-5',
-  $$
-  select net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/nudge-scheduler',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
-      'Content-Type', 'application/json'
-    ),
-    body := '{"source": "cron"}'::jsonb
+  if not exists (select 1 from pg_namespace where nspname = 'net') then
+    raise notice 'Skipping prospecting nudge cron: pg_net not available.';
+    return;
+  end if;
+
+  _base_url := current_setting('app.settings.supabase_url', true);
+  _service_key := coalesce(current_setting('app.settings.service_role_key', true), '');
+
+  if _base_url is null or _base_url = '' or _service_key = '' then
+    raise notice 'Skipping prospecting nudge cron: app settings not configured.';
+    return;
+  end if;
+
+  perform cron.unschedule('prospecting-nudge-2pm')
+    where exists (select 1 from cron.job where jobname = 'prospecting-nudge-2pm');
+
+  perform cron.schedule(
+    'prospecting-nudge-2pm',
+    '0 19 * * 1-5',
+    format(
+      $sql$select net.http_post(
+        url := '%s/functions/v1/nudge-scheduler',
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer %s',
+          'Content-Type', 'application/json'
+        ),
+        body := '{"source":"cron"}'::jsonb
+      );$sql$,
+      _base_url,
+      _service_key
+    )
   );
-  $$
-);
+end;
+$cron$;
