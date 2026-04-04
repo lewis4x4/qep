@@ -13,6 +13,7 @@ import { CrmDealUpdateCard } from "../components/CrmDealUpdateCard";
 import { NeedsAssessmentCard } from "../components/NeedsAssessmentCard";
 import { CadenceTimeline } from "../components/CadenceTimeline";
 import { DemoRequestCard } from "../components/DemoRequestCard";
+import { DgeScenarioPanel } from "../../dge/components/DgeScenarioPanel";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -300,6 +301,8 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           <CadenceTimeline dealId={dealId!} />
 
           <DemoRequestCard dealId={dealId!} />
+
+          <DgeScenarioPanel dealId={dealId!} />
 
           <CrmDealEquipmentSection dealId={dealId} companyId={dealQuery.data?.companyId ?? null} />
 
