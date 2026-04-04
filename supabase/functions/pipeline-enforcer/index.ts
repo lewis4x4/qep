@@ -42,6 +42,13 @@ Deno.serve(async (req) => {
       stale_deals: 0,
     };
 
+    // Pre-fetch Iron Managers once (avoids N+1 per-deal lookup)
+    const { data: managers } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("iron_role", "iron_manager");
+    const managerIds = (managers ?? []).map((m) => m.id);
+
     // ── 1. SLA Violations ─────────────────────────────────────────────────
     // Find deals with expired SLA deadlines that haven't been alerted yet
 
@@ -97,16 +104,11 @@ Deno.serve(async (req) => {
 
         // Escalate to Iron Managers if significantly past SLA
         if (minutesPast >= (stage.sla_minutes || 15)) {
-          const { data: managers } = await supabaseAdmin
-            .from("profiles")
-            .select("id")
-            .eq("iron_role", "iron_manager");
-
-          if (managers) {
-            for (const mgr of managers) {
+          if (managerIds.length > 0) {
+            for (const mgrId of managerIds) {
               await supabaseAdmin.from("crm_in_app_notifications").insert({
                 workspace_id: "default",
-                user_id: mgr.id,
+                user_id: mgrId,
                 kind: "sla_escalation",
                 title: `SLA Escalation: ${deal.name}`,
                 body: `${stage.name} SLA exceeded by ${minutesPast} minutes. Assigned rep has been alerted.`,

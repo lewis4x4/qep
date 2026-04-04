@@ -34,6 +34,20 @@ Deno.serve(async (req) => {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
+    // Verify caller is a portal customer (not internal staff using wrong API)
+    const { data: portalCustomer } = await supabase
+      .from("portal_customers")
+      .select("id, is_active")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (!portalCustomer) {
+      return safeJsonError("Not a portal customer. Use internal QRM API.", 403, origin);
+    }
+    if (!portalCustomer.is_active) {
+      return safeJsonError("Portal account is deactivated.", 403, origin);
+    }
+
     const url = new URL(req.url);
     const route = url.pathname.replace(/^\/functions\/v1\/portal-api\/?/, "").split("/")[0] || "";
 
@@ -68,9 +82,31 @@ Deno.serve(async (req) => {
           return safeJsonError("request_type and description required", 400, origin);
         }
 
+        const validTypes = ["repair", "maintenance", "warranty", "parts", "inspection", "emergency"];
+        if (!validTypes.includes(body.request_type)) {
+          return safeJsonError(`request_type must be one of: ${validTypes.join(", ")}`, 400, origin);
+        }
+
+        const validUrgencies = ["low", "normal", "high", "emergency"];
+        if (body.urgency && !validUrgencies.includes(body.urgency)) {
+          return safeJsonError(`urgency must be one of: ${validUrgencies.join(", ")}`, 400, origin);
+        }
+
+        // Whitelist safe fields — block billing/status manipulation
+        const safeBody = {
+          portal_customer_id: portalCustomer.id,
+          fleet_id: body.fleet_id || null,
+          request_type: body.request_type,
+          description: body.description,
+          urgency: body.urgency || "normal",
+          photos: Array.isArray(body.photos) ? body.photos : [],
+          preferred_date: body.preferred_date || null,
+          preferred_branch: body.preferred_branch || null,
+        };
+
         const { data, error } = await supabase
           .from("service_requests")
-          .insert(body)
+          .insert(safeBody)
           .select()
           .single();
 
@@ -93,9 +129,23 @@ Deno.serve(async (req) => {
 
       if (req.method === "POST") {
         const body = await req.json();
+
+        if (!body.line_items || !Array.isArray(body.line_items) || body.line_items.length === 0) {
+          return safeJsonError("line_items array is required with at least one item", 400, origin);
+        }
+
+        // Whitelist safe fields — totals computed server-side, not customer-provided
+        const safeBody = {
+          portal_customer_id: portalCustomer.id,
+          fleet_id: body.fleet_id || null,
+          status: "draft", // Always start as draft
+          line_items: body.line_items,
+          shipping_address: body.shipping_address || null,
+        };
+
         const { data, error } = await supabase
           .from("parts_orders")
-          .insert(body)
+          .insert(safeBody)
           .select()
           .single();
 
@@ -133,22 +183,41 @@ Deno.serve(async (req) => {
         const body = await req.json();
         if (!body.id) return safeJsonError("id required", 400, origin);
 
-        const { id, ...updates } = body;
-
-        // Track signature
-        if (updates.status === "accepted" && updates.signer_name) {
-          updates.signed_at = new Date().toISOString();
-          updates.signer_ip = req.headers.get("x-forwarded-for") || "unknown";
+        const validStatuses = ["viewed", "accepted", "rejected", "countered"];
+        if (body.status && !validStatuses.includes(body.status)) {
+          return safeJsonError(`status must be one of: ${validStatuses.join(", ")}`, 400, origin);
         }
 
-        if (updates.status === "viewed" && !updates.viewed_at) {
-          updates.viewed_at = new Date().toISOString();
+        // Build safe update — customers cannot set signature fields directly
+        const safeUpdates: Record<string, unknown> = {};
+
+        if (body.status === "viewed") {
+          safeUpdates.status = "viewed";
+          safeUpdates.viewed_at = new Date().toISOString();
+        } else if (body.status === "accepted") {
+          if (!body.signer_name) {
+            return safeJsonError("signer_name required when accepting", 400, origin);
+          }
+          safeUpdates.status = "accepted";
+          safeUpdates.signer_name = body.signer_name;
+          safeUpdates.signed_at = new Date().toISOString();
+          safeUpdates.signer_ip = req.headers.get("x-forwarded-for") || "unknown";
+          // signature_url would be set by a separate upload flow
+        } else if (body.status === "rejected") {
+          safeUpdates.status = "rejected";
+        } else if (body.status === "countered") {
+          safeUpdates.status = "countered";
+          safeUpdates.counter_notes = body.counter_notes || null;
+        }
+
+        if (Object.keys(safeUpdates).length === 0) {
+          return safeJsonError("No valid fields to update", 400, origin);
         }
 
         const { data, error } = await supabase
           .from("portal_quote_reviews")
-          .update(updates)
-          .eq("id", id)
+          .update(safeUpdates)
+          .eq("id", body.id)
           .select()
           .single();
 

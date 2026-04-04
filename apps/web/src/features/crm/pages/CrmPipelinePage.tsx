@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, DragOverlay, closestCenter, type DragEndEvent, type DragStartEvent, useDroppable, useDraggable } from "@dnd-kit/core";
 import { FileText, Plus } from "lucide-react";
@@ -1064,7 +1064,7 @@ function PipelineDealCard({
 
 // ── DnD Wrappers ────────────────────────────────────────────────────────────
 
-function DraggableDealCard({
+const DraggableDealCard = memo(function DraggableDealCard({
   deal,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
@@ -1091,9 +1091,9 @@ function DraggableDealCard({
       />
     </div>
   );
-}
+});
 
-function DroppableStageColumn({
+const DroppableStageColumn = memo(function DroppableStageColumn({
   stageId,
   children,
 }: {
@@ -1112,6 +1112,6 @@ function DroppableStageColumn({
       {children}
     </div>
   );
-}
+});
 
 export const CrmPipelinePage = CrmDealsPage;
