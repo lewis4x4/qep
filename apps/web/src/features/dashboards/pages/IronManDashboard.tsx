@@ -4,10 +4,14 @@ import { useIronManData } from "../hooks/useDashboardData";
 import { Wrench, ClipboardCheck, Truck, RotateCcw } from "lucide-react";
 
 export function IronManDashboard() {
-  const { data, isLoading } = useIronManData();
+  const { data, isLoading, isError } = useIronManData();
 
   if (isLoading) {
     return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}</div>;
+  }
+
+  if (isError) {
+    return <Card className="border-red-500/20 p-6 text-center"><p className="text-sm text-red-400">Failed to load dashboard. Please refresh.</p></Card>;
   }
 
   return (

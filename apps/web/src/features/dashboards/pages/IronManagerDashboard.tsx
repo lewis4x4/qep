@@ -5,10 +5,14 @@ import { useIronManagerData } from "../hooks/useDashboardData";
 import { Users, TrendingUp, AlertTriangle, DollarSign } from "lucide-react";
 
 export function IronManagerDashboard() {
-  const { data, isLoading } = useIronManagerData();
+  const { data, isLoading, isError } = useIronManagerData();
 
   if (isLoading) {
     return <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}</div>;
+  }
+
+  if (isError) {
+    return <Card className="border-red-500/20 p-6 text-center"><p className="text-sm text-red-400">Failed to load dashboard. Please refresh.</p></Card>;
   }
 
   const approvalItems = [

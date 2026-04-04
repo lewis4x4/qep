@@ -195,11 +195,16 @@ Deno.serve(async (req) => {
           safeUpdates.status = "viewed";
           safeUpdates.viewed_at = new Date().toISOString();
         } else if (body.status === "accepted") {
-          if (!body.signer_name) {
+          if (!body.signer_name || typeof body.signer_name !== "string") {
             return safeJsonError("signer_name required when accepting", 400, origin);
           }
+          // Sanitize: strip HTML tags, limit length
+          const cleanName = body.signer_name.replace(/<[^>]*>/g, "").trim().substring(0, 100);
+          if (!cleanName) {
+            return safeJsonError("signer_name cannot be empty", 400, origin);
+          }
           safeUpdates.status = "accepted";
-          safeUpdates.signer_name = body.signer_name;
+          safeUpdates.signer_name = cleanName;
           safeUpdates.signed_at = new Date().toISOString();
           safeUpdates.signer_ip = req.headers.get("x-forwarded-for") || "unknown";
           // signature_url would be set by a separate upload flow

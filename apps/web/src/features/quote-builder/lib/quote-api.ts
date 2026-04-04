@@ -49,11 +49,15 @@ export async function saveQuotePackage(data: Record<string, unknown>) {
 }
 
 export async function searchCatalog(query: string) {
+  // Sanitize query: strip PostgREST filter metacharacters to prevent injection
+  const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
+  if (!sanitized) return [];
+
   const { data, error } = await (supabase as any)
     .from("catalog_entries")
     .select("*")
     .eq("is_available", true)
-    .or(`make.ilike.%${query}%,model.ilike.%${query}%,category.ilike.%${query}%`)
+    .or(`make.ilike.%${sanitized}%,model.ilike.%${sanitized}%,category.ilike.%${sanitized}%`)
     .order("make", { ascending: true })
     .limit(20);
   if (error) throw error;

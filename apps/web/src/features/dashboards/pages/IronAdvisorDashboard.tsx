@@ -10,10 +10,14 @@ interface IronAdvisorDashboardProps {
 }
 
 export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
-  const { data, isLoading } = useIronAdvisorData(userId);
+  const { data, isLoading, isError } = useIronAdvisorData(userId);
 
   if (isLoading) {
     return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}</div>;
+  }
+
+  if (isError) {
+    return <Card className="border-red-500/20 p-6 text-center"><p className="text-sm text-red-400">Failed to load dashboard. Please refresh.</p></Card>;
   }
 
   const slaDeals = (data?.myDeals ?? []).filter((d: any) => d.sla_deadline_at && new Date(d.sla_deadline_at) < new Date());

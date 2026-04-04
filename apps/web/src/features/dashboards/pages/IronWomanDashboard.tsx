@@ -5,10 +5,14 @@ import { useIronWomanData } from "../hooks/useDashboardData";
 import { Package, DollarSign, Boxes, CreditCard } from "lucide-react";
 
 export function IronWomanDashboard() {
-  const { data, isLoading } = useIronWomanData();
+  const { data, isLoading, isError } = useIronWomanData();
 
   if (isLoading) {
     return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-24 animate-pulse" />)}</div>;
+  }
+
+  if (isError) {
+    return <Card className="border-red-500/20 p-6 text-center"><p className="text-sm text-red-400">Failed to load dashboard. Please refresh.</p></Card>;
   }
 
   const pendingDepositTotal = (data?.pendingDeposits ?? []).reduce((sum: number, d: any) => sum + (d.required_amount ?? 0), 0);
