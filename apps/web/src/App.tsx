@@ -32,6 +32,9 @@ const VoiceHistoryPage = lazy(() =>
 const QuoteBuilderPage = lazy(() =>
   import("./components/QuoteBuilderPage").then((m) => ({ default: m.QuoteBuilderPage }))
 );
+const QuoteBuilderV2Page = lazy(() =>
+  import("./features/quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -516,6 +519,16 @@ function App() {
                     ) : (
                       <QuoteBuilderGate />
                     )
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/quote-v2"
+                element={
+                  ["rep", "manager", "owner"].includes(profile.role) ? (
+                    <QuoteBuilderV2Page />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
