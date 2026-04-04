@@ -38,6 +38,18 @@ const QuoteBuilderV2Page = lazy(() =>
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
+const IntakeKanbanPage = lazy(() =>
+  import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
+);
+const TrafficTicketsPage = lazy(() =>
+  import("./features/ops/pages/TrafficTicketsPage").then((m) => ({ default: m.TrafficTicketsPage }))
+);
+const RentalReturnsPage = lazy(() =>
+  import("./features/ops/pages/RentalReturnsPage").then((m) => ({ default: m.RentalReturnsPage }))
+);
+const PaymentValidationPage = lazy(() =>
+  import("./features/ops/pages/PaymentValidationPage").then((m) => ({ default: m.PaymentValidationPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -541,6 +553,46 @@ function App() {
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
                     <QuoteBuilderV2Page />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/intake"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <IntakeKanbanPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/traffic"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <TrafficTicketsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/returns"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <RentalReturnsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/payments"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <PaymentValidationPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
