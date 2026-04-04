@@ -27,7 +27,7 @@ All engineering decisions, schema designs, edge function contracts, and UI behav
 | 2 | Field Operations & Revenue Engine | HIGH | **COMPLETE** |
 | 3 | Operational Intelligence & Logistics | HIGH | **COMPLETE** |
 | 4 | Deal Genome Engine & Predictive Intelligence | HIGH | **COMPLETE** |
-| 5 | Customer Portal & Autonomous Operations | MEDIUM | **NEXT** |
+| 5 | Customer Portal & Autonomous Operations | MEDIUM | **COMPLETE** |
 
 Phases execute sequentially. No phase starts until the prior phase passes all acceptance criteria.
 
@@ -74,7 +74,7 @@ If a change does not pass all four gates, it does not ship.
 - `deleted_at timestamptz` for soft-delete where applicable
 - RLS required on every user-facing table using `get_my_role()` and `get_my_workspace()`
 - Indexes with explicit purpose; no unbounded scans on list views
-- Migration naming: `NNN_snake_case_name.sql` (3-digit prefix, next after 080)
+- Migration naming: `NNN_snake_case_name.sql` (3-digit prefix, next after 084)
 
 ## Edge Function Conventions
 
