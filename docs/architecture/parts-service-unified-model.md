@@ -1,5 +1,7 @@
 # Parts & Service — Unified Fulfillment Model (ADR)
 
+**See also:** [parts-service-unified-spec.md](./parts-service-unified-spec.md) — canonical object model, status machines, workspace routing, and integration boundaries.
+
 ## Purpose
 
 Align **portal parts demand** (`parts_orders`) with **internal service parts execution** (`service_parts_requirements`, `service_parts_actions`, inventory) under one auditable fulfillment lifecycle without replacing the existing service engine.

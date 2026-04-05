@@ -1,0 +1,48 @@
+# Parts Service — Schema & API Surface (Deliverable 2)
+
+Companion: [parts-service-unified-spec.md](./parts-service-unified-spec.md), [parts-service-unified-model.md](./parts-service-unified-model.md).
+
+## Tables (PK / FK)
+
+- **`parts_fulfillment_runs`** — PK `id`; `workspace_id`; RLS in migration `115_parts_fulfillment_and_profile_workspaces.sql`.
+- **`parts_fulfillment_events`** — PK `id`; FK `fulfillment_run_id` → `parts_fulfillment_runs(id)` ON DELETE CASCADE; `workspace_id`, `event_type`, `payload` JSONB; indexes in `115`, `118_parts_fulfillment_events_workspace_index.sql`.
+- **`profile_workspaces`** — PK `(profile_id, workspace_id)`; migration `115`.
+- **`parts_orders.fulfillment_run_id`** — optional FK → `parts_fulfillment_runs`; migration `115`.
+- **`service_jobs.fulfillment_run_id`** — optional FK → `parts_fulfillment_runs`; migration `115`.
+- **`service_parts_requirements` / `service_parts_actions`** — core service parts model; `095_service_parts_vendor_tables.sql` and follow-ons; planner uses `plan_batch_id` on `service_parts_actions` metadata/column per implementation.
+- **Triggers:** `117_parts_orders_fulfillment_status_trigger.sql` — syncs `parts_orders.status` changes into run status and `order_status_*` events.
+
+## Event / audit model
+
+### `parts_fulfillment_events.event_type` (conventions)
+
+Reserved prefixes (documented contract; not all enforced in DB CHECK):
+
+| Prefix | Source | Examples |
+|--------|--------|----------|
+| `portal_*` | Portal API | `portal_submitted`, customer-facing submit flow |
+| `order_status_*` | DB trigger on `parts_orders` | Shipped, delivered, cancelled alignment |
+| `service_job_*` | `service-job-router` | `service_job_linked`, `service_job_unlinked` |
+| `shop_*` | Shop bridge | `shop_parts_action`, `shop_parts_plan_batch` (from `parts-fulfillment-mirror` + edge functions) |
+
+### `service_job_events`
+
+Job-scoped timeline (`event_type` e.g. `parts_action`); separate from fulfillment-run audit.
+
+## API surface (by mechanism)
+
+| Area | Mechanism | Key routes / actions |
+|------|-----------|----------------------|
+| Portal customer | Edge | `portal-api`: `/parts`, `/parts/submit`, `/parts/suggest-pm-kit` |
+| Staff ship email | Edge | `parts-order-customer-notify` |
+| Service job ↔ run link | Edge | `service-job-router`: `link_fulfillment_run` |
+| Parts CRUD / fulfillment | Edge | `service-parts-manager`: `add`, `pick`, `receive`, `stage`, `consume`, … |
+| Planning | Edge | `service-parts-planner`: `job_id` |
+
+## Permissions (summary)
+
+- **Staff JWT:** `get_my_workspace()`-scoped SELECT/INSERT where policies allow (e.g. `parts_fulfillment_events_insert_staff` in `116_parts_fulfillment_staff_event_rls.sql`).
+- **`service_role`:** Full access policies on fulfillment tables for edge functions that use the service key.
+- **Portal:** Anonymous/customer paths via `portal-api` only; no direct table access from the browser.
+
+See migration files above for authoritative SQL rather than duplicating policies here.

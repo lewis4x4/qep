@@ -22,6 +22,7 @@
     "supabase:push": "supabase db push",
     "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
     "supabase:types:remote": "sh -c 'supabase gen types typescript --project-id xbfzymdhlfhfhaqhawzs --schema public 2>/dev/null > apps/web/src/lib/database.types.ts && printf \"\\nexport type UserRole = Database[\\\"public\\\"][\\\"Enums\\\"][\\\"user_role\\\"]\\n\" >> apps/web/src/lib/database.types.ts'",
-    "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs"
+    "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs",
+    "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs"
   }
 }

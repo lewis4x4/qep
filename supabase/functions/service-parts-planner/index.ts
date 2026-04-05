@@ -4,13 +4,13 @@
  *
  * Auth: user JWT only
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 
 interface PlanRequest {
   job_id: string;
@@ -32,7 +32,9 @@ Deno.serve(async (req) => {
     // Fetch job and its parts requirements
     const { data: job, error: jobErr } = await supabase
       .from("service_jobs")
-      .select("id, workspace_id, branch_id, haul_required, scheduled_start_at, status_flags")
+      .select(
+        "id, workspace_id, branch_id, haul_required, scheduled_start_at, status_flags, fulfillment_run_id",
+      )
       .eq("id", body.job_id)
       .single();
 
@@ -220,6 +222,18 @@ Deno.serve(async (req) => {
       if (insertErr) {
         console.error("parts actions insert error:", insertErr);
         return safeJsonError(insertErr.message, 400, origin);
+      }
+      if (job.fulfillment_run_id) {
+        await mirrorToFulfillmentRun(supabase, {
+          jobId: body.job_id,
+          workspaceId: job.workspace_id as string,
+          eventType: "shop_parts_plan_batch",
+          payload: {
+            plan_batch_id: planBatchId,
+            actions_created: actionsToInsert.length,
+            is_machine_down: isMachineDown,
+          },
+        });
       }
     }
 

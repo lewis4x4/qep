@@ -91,6 +91,7 @@ export function PortalPartsOrdersPage() {
   const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
   const [shipTracking, setShipTracking] = useState<Record<string, string>>({});
   const [shipEta, setShipEta] = useState<Record<string, string>>({});
+  const [shipNotifyError, setShipNotifyError] = useState<string | null>(null);
 
   const { data: rows = [], isLoading, isError } = useQuery({
     queryKey: ["portal-parts-orders-internal"],
@@ -154,11 +155,16 @@ export function PortalPartsOrdersPage() {
     },
     onSuccess: async (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["portal-parts-orders-internal"] });
-      if (variables.status === "shipped") {
-        const { error } = await supabase.functions.invoke("parts-order-customer-notify", {
-          body: { parts_order_id: variables.id, event: "parts_shipped" },
-        });
-        if (error) console.warn("parts-order-customer-notify:", error.message);
+      if (variables.status !== "shipped") {
+        setShipNotifyError(null);
+        return;
+      }
+      setShipNotifyError(null);
+      const { error: fnErr } = await supabase.functions.invoke("parts-order-customer-notify", {
+        body: { parts_order_id: variables.id, event: "parts_shipped" },
+      });
+      if (fnErr) {
+        setShipNotifyError(fnErr.message ?? "Shipment notification request failed.");
       }
     },
   });
@@ -208,6 +214,19 @@ export function PortalPartsOrdersPage() {
           </Link>
         </div>
       </div>
+
+      {shipNotifyError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive flex flex-wrap items-center justify-between gap-2"
+        >
+          <span>Shipment email: {shipNotifyError}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => setShipNotifyError(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {(

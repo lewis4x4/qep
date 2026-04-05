@@ -4,13 +4,14 @@
  *
  * Auth: user JWT only
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 
 type Action =
   | "add"
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
 });
 
 async function loadJob(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   jobId: string,
 ) {
   const { data, error } = await supabase
@@ -97,7 +98,7 @@ async function loadJob(
 
 /** pick/receive/return adjust parts_inventory; consume does not (stock left shelf at pick). */
 async function adjustInventoryForAction(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   opts: {
     workspaceId: string;
     branchId: string | null;
@@ -150,7 +151,7 @@ async function adjustInventoryForAction(
 }
 
 async function logEvent(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   workspaceId: string,
   jobId: string,
   actorId: string,
@@ -166,7 +167,7 @@ async function logEvent(
 }
 
 async function handleAdd(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   actorId: string,
   origin: string | null,
@@ -205,7 +206,7 @@ async function handleAdd(
 }
 
 async function handleUpdate(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   origin: string | null,
 ) {
@@ -228,7 +229,7 @@ async function handleUpdate(
 }
 
 async function handleRemove(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   actorId: string,
   origin: string | null,
@@ -249,7 +250,7 @@ async function handleRemove(
 }
 
 async function handleBulkAdd(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   actorId: string,
   origin: string | null,
@@ -314,7 +315,7 @@ function validatePartTransition(
 }
 
 async function completeOpenActions(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   requirementId: string,
   jobId: string,
 ) {
@@ -328,7 +329,7 @@ async function completeOpenActions(
 }
 
 async function handleFulfillment(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   actorId: string,
   actionType: string,
@@ -390,11 +391,22 @@ async function handleFulfillment(
     new_status: nextStatus,
   });
 
+  await mirrorToFulfillmentRun(supabase, {
+    jobId: req.job_id as string,
+    workspaceId: req.workspace_id as string,
+    eventType: "shop_parts_action",
+    payload: {
+      action_type: actionType,
+      requirement_id: req.id,
+      part_number: partNumber,
+    },
+  });
+
   return safeJsonOk({ requirement: updated }, origin);
 }
 
 async function handleStage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: Body,
   actorId: string,
   origin: string | null,
@@ -403,7 +415,7 @@ async function handleStage(
 
   const { data: req, error: rErr } = await supabase
     .from("service_parts_requirements")
-    .select("id, job_id, workspace_id")
+    .select("id, job_id, workspace_id, part_number")
     .eq("id", body.requirement_id)
     .single();
   if (rErr || !req) return safeJsonError("Requirement not found", 404, origin);
@@ -411,6 +423,7 @@ async function handleStage(
   await completeOpenActions(supabase, req.id, req.job_id);
 
   const bin = body.bin_location?.trim() || "STAGING";
+  const partNumber = String(req.part_number ?? "").trim();
 
   await supabase.from("service_parts_actions").insert({
     workspace_id: req.workspace_id,
@@ -442,6 +455,18 @@ async function handleStage(
     action: "stage",
     requirement_id: req.id,
     bin_location: bin,
+  });
+
+  await mirrorToFulfillmentRun(supabase, {
+    jobId: req.job_id as string,
+    workspaceId: req.workspace_id as string,
+    eventType: "shop_parts_action",
+    payload: {
+      action_type: "stage",
+      requirement_id: req.id,
+      part_number: partNumber,
+      bin_location: bin,
+    },
   });
 
   return safeJsonOk({ requirement: updated }, origin);

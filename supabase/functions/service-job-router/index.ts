@@ -13,6 +13,13 @@ import {
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuidString(s: string): boolean {
+  return UUID_RE.test(s.trim());
+}
+
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   request_received: ["triaging"],
   triaging: ["diagnosis_selected"],
@@ -910,6 +917,9 @@ async function handleLinkFulfillmentRun(
   if (!job_id) {
     return safeJsonError("job_id required", 400, origin);
   }
+  if (!isUuidString(job_id)) {
+    return safeJsonError("job_id must be a valid UUID", 400, origin);
+  }
 
   let fulfillment_run_id: string | null;
   if (!hasKey) {
@@ -933,6 +943,10 @@ async function handleLinkFulfillmentRun(
 
   const ws = job.workspace_id as string;
   const previousRun = job.fulfillment_run_id as string | null;
+
+  if (fulfillment_run_id !== null && !isUuidString(fulfillment_run_id)) {
+    return safeJsonError("fulfillment_run_id must be a valid UUID", 400, origin);
+  }
 
   if (fulfillment_run_id !== null && fulfillment_run_id === previousRun) {
     const { data: full } = await supabase
