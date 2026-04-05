@@ -578,18 +578,18 @@ Full backend:
 - Field whitelisting on all mutation endpoints (audit round 2)
 - Quote review state machine: sent → viewed → accepted (audit round 2)
 
-### What Is Missing
+### What Is Missing / Partial
 
-All customer-facing React pages. The handoff explicitly states: "the customer-facing React pages need to be created (separate app or route group with portal auth flow)."
+The handoff originally assumed **no** customer-facing React. The app now includes a **portal route group** with real flows for several areas; gaps remain for full Section 5.1 coverage.
 
 | Component | Status |
 |-----------|--------|
-| Portal auth flow (login/register for customers) | Not built |
-| Fleet dashboard | Not built |
-| Service request submission with photo upload | Not built |
-| Parts ordering flow with AI PM kit suggestions | Not built |
-| Invoice/payment view | Not built |
-| Quote review/e-signature frontend | Not built |
+| Portal auth flow (login/register for customers) | Partial — portal session exists where implemented |
+| Fleet dashboard | Partial — see portal fleet routes |
+| Service request submission with photo upload | Partial — portal service + storage patterns |
+| Parts ordering flow with AI PM kit suggestions | **Built** — `PortalPartsPage`, PM kit suggest API, draft/submit, staff queue `PortalPartsOrdersPage` |
+| Invoice/payment view | Partial — backend + portal pay migration 113; UI coverage varies |
+| Quote review/e-signature frontend | Not built (backend exists) |
 | Rental self-service (availability, booking) | Not built |
 
 ### Acceptance Criteria (implied by Section 5.1)

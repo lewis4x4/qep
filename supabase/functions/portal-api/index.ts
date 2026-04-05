@@ -7,7 +7,7 @@
  * Auth: Portal customer (via auth_user_id → portal_customers mapping)
  * OR internal staff with workspace access.
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import {
@@ -27,6 +27,43 @@ function safePortalDisplayLabel(raw: string): string {
 }
 
 const STAFF_NOTIFY_CHUNK = 80;
+
+const STAFF_NOTIFY_ROLES = ["rep", "admin", "manager", "owner"] as const;
+
+/** Internal users in profile_workspaces for this tenant + eligible roles (no cross-workspace blast). */
+async function workspaceStaffRecipientIds(
+  admin: SupabaseClient,
+  portalWorkspaceId: string,
+): Promise<string[]> {
+  const { data: pwRows, error: pwErr } = await admin
+    .from("profile_workspaces")
+    .select("profile_id")
+    .eq("workspace_id", portalWorkspaceId);
+  if (pwErr) {
+    console.warn("portal-api profile_workspaces:", pwErr);
+    return [];
+  }
+  const profileIds = [
+    ...new Set(((pwRows ?? []) as { profile_id: string }[]).map((r) => r.profile_id)),
+  ];
+  if (profileIds.length === 0) {
+    console.warn("portal-api: no profile_workspaces for workspace", portalWorkspaceId);
+    return [];
+  }
+  const out: string[] = [];
+  for (let i = 0; i < profileIds.length; i += STAFF_NOTIFY_CHUNK) {
+    const chunk = profileIds.slice(i, i + STAFF_NOTIFY_CHUNK);
+    const { data: rec } = await admin
+      .from("profiles")
+      .select("id")
+      .in("id", chunk)
+      .in("role", [...STAFF_NOTIFY_ROLES]);
+    for (const r of (rec as { id: string }[] | null) ?? []) {
+      out.push(r.id);
+    }
+  }
+  return [...new Set(out)];
+}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -304,9 +341,20 @@ Deno.serve(async (req) => {
           return safeJsonError("Only draft orders can be submitted to the dealership.", 400, origin);
         }
 
+        const { data: run, error: runErr } = await admin
+          .from("parts_fulfillment_runs")
+          .insert({ workspace_id: portalWorkspaceId, status: "submitted" })
+          .select("id")
+          .single();
+
+        if (runErr || !run?.id) {
+          console.error("portal-api parts fulfillment run:", runErr);
+          return safeJsonError("Failed to submit order", 500, origin);
+        }
+
         const { data: updated, error: upErr } = await admin
           .from("parts_orders")
-          .update({ status: "submitted" })
+          .update({ status: "submitted", fulfillment_run_id: run.id })
           .eq("id", orderId)
           .select()
           .single();
@@ -314,6 +362,16 @@ Deno.serve(async (req) => {
         if (upErr) {
           console.error("portal-api parts submit:", upErr);
           return safeJsonError("Failed to submit order", 500, origin);
+        }
+
+        const { error: evErr } = await admin.from("parts_fulfillment_events").insert({
+          workspace_id: portalWorkspaceId,
+          fulfillment_run_id: run.id,
+          event_type: "portal_submitted",
+          payload: { parts_order_id: orderId },
+        });
+        if (evErr) {
+          console.warn("portal-api fulfillment event:", evErr);
         }
 
         const shortRef = orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
@@ -342,19 +400,17 @@ Deno.serve(async (req) => {
             });
           }
 
-          const { data: recipients } = await admin
-            .from("profiles")
-            .select("id")
-            .in("role", ["rep", "admin", "manager", "owner"]);
-          const rows = (recipients ?? []).map((r) => ({
+          const recipientIds = await workspaceStaffRecipientIds(admin, portalWorkspaceId);
+          const rows = recipientIds.map((uid) => ({
             workspace_id: portalWorkspaceId,
-            user_id: r.id as string,
+            user_id: uid,
             kind: "service_portal_parts_submitted",
             title: "Portal parts order submitted",
             body:
               `${custLabel} submitted a parts order (${shortRef}). Open Service → Portal orders to process.`,
             metadata: {
               parts_order_id: orderId,
+              fulfillment_run_id: run.id,
               notification_type: "portal_parts_submitted",
             },
           }));
