@@ -92,6 +92,32 @@ if (!planner.includes("is_machine_down") || !planner.includes("fulfillment_run_i
   fail("planner: expected is_machine_down + fulfillment_run_id in select/wiring");
 } else ok("planner: machine-down + run link present");
 
+// §15 vendor ETA / escalation — static wiring (planner uses vendor_profiles.avg_lead_time_hours; escalator seeds from late/missing PO)
+if (!planner.includes("avg_lead_time_hours")) {
+  fail("planner: expected avg_lead_time_hours for vendor lead / ETA heuristic");
+} else ok("planner: vendor ETA (avg_lead_time_hours) present");
+
+mustContain(
+  "supabase/functions/service-vendor-escalator/index.ts",
+  "seedEscalationsFromLateOrders",
+  "escalator seeds late/missing PO",
+);
+mustContain(
+  "supabase/functions/service-vendor-escalator/index.ts",
+  "expected_date",
+  "escalator uses expected_date for late detection",
+);
+mustContain(
+  "supabase/functions/service-vendor-escalator/index.ts",
+  "shop_vendor_escalation_step",
+  "escalator fulfillment mirror event",
+);
+mustContain(
+  "supabase/functions/service-vendor-inbound/index.ts",
+  "shop_vendor_inbound",
+  "vendor inbound fulfillment mirror event",
+);
+
 const base = (
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
@@ -129,6 +155,20 @@ if (!base || !serviceKey) {
       }
     } else {
       fail(`live: parts_fulfillment_events select HTTP ${res.status}`);
+    }
+
+    const vp = await fetch(
+      `${base}/rest/v1/vendor_profiles?select=id,avg_lead_time_hours&limit=1`,
+      { headers },
+    );
+    if (vp.ok) {
+      ok("live: vendor_profiles reachable (planner ETA source)");
+    } else if (vp.status === 404) {
+      ok(
+        "live: vendor_profiles 404 on remote — migration 095+ not applied; planner ETA column may be missing",
+      );
+    } else {
+      fail(`live: vendor_profiles probe HTTP ${vp.status}`);
     }
   } catch (e) {
     fail(`live fetch error: ${e?.message ?? e}`);

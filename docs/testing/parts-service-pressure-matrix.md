@@ -6,11 +6,11 @@ Maps handoff §15-style scenarios to automated checks, manual/SQL follow-ups, or
 |--------------|------------------|
 | Machine-down urgency | **Automated:** `service-parts-planner` JSON includes `is_machine_down`; pressure script greps/asserts response shape in code paths. |
 | Partial stock | Planner + inventory heuristic (`parts_inventory` stock-first); **doc** + optional live assert when DB credentials present. |
-| Wrong vendor ETA | Vendor escalator / `vendor_profiles.avg_lead_time_hours`; **document gap** — no dedicated automated assert yet. |
+| Wrong vendor ETA | **Automated (static):** `pressure:parts` asserts planner references `avg_lead_time_hours`, escalator seeds on `expected_date` / late PO, and vendor edges emit `shop_vendor_*` mirror events. **Optional live:** script probes `vendor_profiles` REST when credentials set. Deeper “wrong ETA” business scenarios remain manual / future integration tests. |
 | Portal order + internal job collision | Same `fulfillment_run_id` on job + portal order allowed; **manual/SQL:** verify two `service_jobs` or job + `parts_orders` can share a run; no unique constraint today. |
 | Internal billing routes | **P2 / not built** — skip automated; document only. |
 | Completed but uninvoiced | **P2** — service invoice path; skip or spot-check `invoice_ready` / billing flags when that surface exists. |
-| Notification dedupe | **Doc:** current behavior in `portal-api` / notify edges; recommend unique constraint on idempotent notification keys as follow-up. |
+| Notification dedupe | **Implemented:** `parts_order_notification_sends` unique `(parts_order_id, event_type)` (migration 119) + `parts-order-customer-notify` dedupe / retry behavior. |
 | Branch-scoped routing | **Checklist:** `profile_workspaces` + `get_my_workspace()` + `portalWorkspaceId` patterns; grep/review in pressure script + code review. |
 
 ## Running checks
