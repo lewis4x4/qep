@@ -42,9 +42,7 @@ Deno.serve(async (req) => {
     .from("parts_orders")
     .select(`
       id,
-      workspace_id,
       status,
-      fulfillment_run_id,
       tracking_number,
       estimated_delivery,
       portal_customers ( email, notification_preferences )
@@ -63,32 +61,6 @@ Deno.serve(async (req) => {
   const tr = row.tracking_number ? String(row.tracking_number).trim() : "";
   const eta = row.estimated_delivery ? String(row.estimated_delivery).trim() : "";
   const shortId = orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
-  const ws = typeof row.workspace_id === "string" ? row.workspace_id : "default";
-  const runId = row.fulfillment_run_id as string | null | undefined;
-
-  if (runId) {
-    const ev = await supabase.from("parts_fulfillment_events").insert({
-      workspace_id: ws,
-      fulfillment_run_id: runId,
-      event_type: "portal_shipped",
-      payload: {
-        parts_order_id: orderId,
-        tracking_number: tr || null,
-        estimated_delivery: eta || null,
-      },
-    });
-    if (ev.error) {
-      console.warn("parts-order-customer-notify fulfillment event:", ev.error);
-    }
-    const up = await supabase
-      .from("parts_fulfillment_runs")
-      .update({ status: "shipped" })
-      .eq("id", runId)
-      .eq("workspace_id", ws);
-    if (up.error) {
-      console.warn("parts-order-customer-notify fulfillment run status:", up.error);
-    }
-  }
 
   type PortalCustRow = { email?: string; notification_preferences?: unknown };
   const cust = one(row.portal_customers as PortalCustRow | PortalCustRow[] | null) as PortalCustRow | null;
