@@ -13,6 +13,8 @@ import { Truck, AlertTriangle, Shield, Clock } from "lucide-react";
 interface Props {
   job: ServiceJobWithRelations;
   onClick?: () => void;
+  /** Nested inside Kanban drag shell — no outer chrome (border handled by row). */
+  variant?: "default" | "kanban";
 }
 
 function getTatHealth(job: ServiceJobWithRelations): "green" | "yellow" | "red" {
@@ -34,7 +36,7 @@ const TAT_DOT: Record<string, string> = {
   red: "bg-red-500",
 };
 
-export function ServiceJobCard({ job, onClick }: Props) {
+export function ServiceJobCard({ job, onClick, variant = "default" }: Props) {
   const stage = job.current_stage as ServiceStage;
   const isMachineDown = job.status_flags?.includes("machine_down");
   const isWarranty = job.status_flags?.includes("warranty_recall");
@@ -56,12 +58,30 @@ export function ServiceJobCard({ job, onClick }: Props) {
     ? job.active_blockers.reduce((sum, b) => sum + (b.count ?? 0), 0)
     : 0;
 
+  const shell =
+    variant === "kanban"
+      ? `rounded-r-lg bg-transparent p-2.5 cursor-pointer transition-colors hover:bg-muted/20 ${
+          isMachineDown ? "ring-1 ring-inset ring-red-500/30" : ""
+        }`
+      : `rounded-lg border bg-card p-3 cursor-pointer shadow-sm transition-all hover:border-primary/20 hover:shadow-md ${
+          isMachineDown ? "border-red-400/50 ring-1 ring-red-500/20 dark:border-red-500/40" : "border-border/80"
+        }`;
+
   return (
     <div
-      onClick={onClick}
-      className={`rounded-lg border bg-card p-3 cursor-pointer hover:shadow-md transition-shadow ${
-        isMachineDown ? "border-red-300 ring-1 ring-red-200" : ""
-      }`}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={shell}
     >
       {/* Header: customer + priority */}
       <div className="flex items-start justify-between gap-2 mb-1.5">

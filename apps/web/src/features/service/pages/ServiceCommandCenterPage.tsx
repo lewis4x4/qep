@@ -74,12 +74,12 @@ export function ServiceCommandCenterPage() {
   }, [jobs, view]);
 
   return (
-    <div className="space-y-4 py-4 px-4">
+    <div className="mx-auto max-w-[1920px] space-y-5 px-4 py-6 md:px-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Service Command Center</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Service Command Center</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {data?.total ?? 0} active service jobs
           </p>
         </div>
@@ -146,47 +146,54 @@ export function ServiceCommandCenterPage() {
         </div>
       </div>
 
-      {showCronHealth && cronFetched && (
-        <Card className="p-3 border-dashed">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Recent cron worker runs</p>
-          {cronError && (
-            <p className="text-xs text-destructive">
-              {cronErr instanceof Error ? cronErr.message : "Could not load cron history"}
-            </p>
-          )}
-          {!cronError && cronRuns.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No rows in <code className="text-[10px]">service_cron_runs</code> yet, or logging disabled via env.
-            </p>
-          ) : !cronError ? (
-            <ul className="text-xs space-y-1 font-mono">
-              {cronRuns.map((r: { job_name: string; started_at: string; ok: boolean; error: string | null }) => (
-                <li key={`${r.job_name}-${r.started_at}`} className="flex flex-wrap gap-x-2 gap-y-0.5">
-                  <span className={r.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
-                    {r.ok ? "ok" : "err"}
-                  </span>
-                  <span className="text-foreground">{r.job_name}</span>
-                  <span className="text-muted-foreground">
-                    {new Date(r.started_at).toLocaleString()}
-                  </span>
-                  {!r.ok && r.error && <span className="text-destructive truncate max-w-full">{r.error}</span>}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+      {showCronHealth && cronFetched && (cronError || cronRuns.length > 0) && (
+        <Card className="overflow-hidden border-border/60 bg-muted/15 p-0 shadow-sm">
+          <div className="border-b border-border/50 bg-muted/30 px-4 py-2.5">
+            <p className="text-xs font-medium text-foreground">Cron worker health</p>
+            <p className="text-[11px] text-muted-foreground">Recent runs (ops)</p>
+          </div>
+          <div className="px-4 py-3">
+            {cronError && (
+              <p className="text-xs text-destructive">
+                {cronErr instanceof Error ? cronErr.message : "Could not load cron history"}
+              </p>
+            )}
+            {!cronError && cronRuns.length > 0 ? (
+              <ul className="space-y-2 font-mono text-[11px]">
+                {cronRuns.map((r: { job_name: string; started_at: string; ok: boolean; error: string | null }) => (
+                  <li
+                    key={`${r.job_name}-${r.started_at}`}
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border/30 pb-2 last:border-0 last:pb-0"
+                  >
+                    <span className={r.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                      {r.ok ? "ok" : "err"}
+                    </span>
+                    <span className="text-foreground">{r.job_name}</span>
+                    <span className="text-muted-foreground">
+                      {new Date(r.started_at).toLocaleString()}
+                    </span>
+                    {!r.ok && r.error && (
+                      <span className="w-full truncate text-destructive">{r.error}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </Card>
       )}
 
       {/* View tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto border-b pb-px">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/50 bg-muted/20 p-1 dark:bg-muted/10">
         {VIEWS.map(({ key, label }) => (
           <button
             key={key}
+            type="button"
             onClick={() => setView(key)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-t transition whitespace-nowrap ${
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-all ${
               view === key
-                ? "bg-primary/10 text-primary border-b-2 border-primary"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
             }`}
           >
             {label}
