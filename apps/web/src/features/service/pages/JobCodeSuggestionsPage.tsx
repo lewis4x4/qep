@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 type JobCodeEmbed = {
   job_name?: string;
@@ -69,6 +70,7 @@ export function JobCodeSuggestionsPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+      <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Job code suggestions</h1>
         <p className="text-sm text-muted-foreground">

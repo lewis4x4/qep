@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 export function PartsInventoryPage() {
   const qc = useQueryClient();
@@ -75,6 +76,7 @@ export function PartsInventoryPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
+      <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Parts inventory</h1>
         <p className="text-sm text-muted-foreground">

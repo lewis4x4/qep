@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 const SUPPLIER_TYPES = ["oem", "aftermarket", "general", "specialty", "internal"] as const;
 
@@ -145,6 +146,7 @@ export function VendorProfilesPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+      <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Vendor profiles</h1>
         <p className="text-sm text-muted-foreground">

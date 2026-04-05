@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useServiceJobList } from "../hooks/useServiceJobs";
 import { ServiceJobCard } from "../components/ServiceJobCard";
 import { ServiceJobDetailDrawer } from "../components/ServiceJobDetailDrawer";
 import { ServiceCommandFilters } from "../components/ServiceCommandFilters";
 import { ServiceKanbanBoard } from "../components/ServiceKanbanBoard";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 import type { ServiceListFilters } from "../lib/types";
 import {
   Plus,
@@ -17,13 +18,6 @@ import {
   Package,
   Receipt,
   Wrench,
-  ShoppingCart,
-  Truck,
-  BarChart3,
-  GitBranch,
-  Boxes,
-  Lightbulb,
-  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -42,24 +36,9 @@ const VIEWS: { key: ViewMode; label: string; icon: React.ElementType }[] = [
   { key: "invoice_ready", label: "Invoice", icon: Receipt },
 ];
 
-const SUB_NAV_LINKS = [
-  { to: "/service/parts", label: "Parts Queue", icon: Package },
-  { to: "/service/portal-parts", label: "Portal Orders", icon: ShoppingCart },
-  { to: "/service/vendors", label: "Vendors", icon: Truck },
-  { to: "/service/efficiency", label: "Efficiency", icon: BarChart3 },
-] as const;
-
-const ADMIN_LINKS = [
-  { to: "/service/branches", label: "Branches", icon: GitBranch },
-  { to: "/service/inventory", label: "Inventory", icon: Boxes },
-  { to: "/service/job-code-suggestions", label: "Job Codes", icon: Lightbulb },
-] as const;
-
 export function ServiceCommandCenterPage() {
   const { profile } = useAuth();
-  const location = useLocation();
   const showCronHealth = ["admin", "manager", "owner"].includes(profile?.role ?? "");
-  const isAdmin = ["admin", "manager", "owner"].includes(profile?.role ?? "");
   const [view, setView] = useState<ViewMode>("kanban");
   const [filters, setFilters] = useState<ServiceListFilters>({ per_page: 100 });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -135,50 +114,8 @@ export function ServiceCommandCenterPage() {
           </Link>
         </div>
 
-        {/* Sub-navigation pills */}
-        <div className="relative mt-5 flex flex-wrap items-center gap-2">
-          {SUB_NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                location.pathname === link.to
-                  ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                  : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:bg-white/[0.06] dark:hover:bg-white/[0.1]"
-              )}
-            >
-              <link.icon className="h-3.5 w-3.5" />
-              {link.label}
-            </Link>
-          ))}
-          {isAdmin && (
-            <>
-              <div className="mx-1 h-4 w-px bg-border/60 dark:bg-white/10" />
-              {ADMIN_LINKS.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                    location.pathname === link.to
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/20"
-                      : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:bg-white/[0.06] dark:hover:bg-white/[0.1]"
-                  )}
-                >
-                  <link.icon className="h-3.5 w-3.5" />
-                  {link.label}
-                </Link>
-              ))}
-            </>
-          )}
-          <Link
-            to="/service/track"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-all dark:bg-white/[0.06] dark:hover:bg-white/[0.1]"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Track Job
-          </Link>
+        <div className="relative mt-5">
+          <ServiceSubNav />
         </div>
       </div>
 

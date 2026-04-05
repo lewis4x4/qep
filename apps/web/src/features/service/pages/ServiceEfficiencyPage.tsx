@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 export function ServiceEfficiencyPage() {
   const { data: openMetrics = [], isLoading: loadingOpen } = useQuery({
@@ -61,6 +62,7 @@ export function ServiceEfficiencyPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
+      <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Service efficiency</h1>
         <p className="text-sm text-muted-foreground">

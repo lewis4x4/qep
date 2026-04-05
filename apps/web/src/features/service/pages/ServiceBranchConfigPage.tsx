@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { reassignFromBranchPool } from "../lib/api";
 import { SERVICE_STAGES } from "../lib/constants";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 export function ServiceBranchConfigPage() {
   const qc = useQueryClient();
@@ -142,6 +143,7 @@ export function ServiceBranchConfigPage() {
 
   return (
     <div className="max-w-3xl mx-auto py-6 px-4 space-y-6">
+      <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Branch service routing</h1>
         <p className="text-sm text-muted-foreground">

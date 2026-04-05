@@ -1,5 +1,4 @@
 import { Fragment, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
@@ -14,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Sparkles } from "lucide-react";
+import { ServiceSubNav } from "../components/ServiceSubNav";
 
 type OrderStatus =
   | "draft"
@@ -192,27 +192,12 @@ export function PortalPartsOrdersPage() {
 
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Portal parts orders</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Customer portal drafts and shipments — confirm, pick, ship, track.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <Link
-            to="/service"
-            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-          >
-            Command center
-          </Link>
-          <Link
-            to="/service/parts"
-            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-          >
-            Parts queue
-          </Link>
-        </div>
+      <ServiceSubNav />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Portal parts orders</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Customer portal drafts and shipments — confirm, pick, ship, track.
+        </p>
       </div>
 
       {shipNotifyError && (
