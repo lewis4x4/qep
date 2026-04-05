@@ -166,3 +166,7 @@ verify_jwt = false
 
 [functions.portal-api]
 verify_jwt = false
+
+# Email to portal customer when parts order ships (JWT validated in function).
+[functions.parts-order-customer-notify]
+verify_jwt = false

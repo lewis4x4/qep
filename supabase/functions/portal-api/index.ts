@@ -19,6 +19,7 @@ import {
   type CustomerFleetRow,
   type JobCodePmRow,
 } from "../_shared/portal-pm-kit.ts";
+import { sendResendEmail } from "../_shared/resend-email.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -307,6 +308,31 @@ Deno.serve(async (req) => {
           console.error("portal-api parts submit:", upErr);
           return safeJsonError("Failed to submit order", 500, origin);
         }
+
+        try {
+          const { data: pc } = await admin
+            .from("portal_customers")
+            .select("email, notification_preferences")
+            .eq("id", portalCustomer.id)
+            .maybeSingle();
+          const prefs = pc?.notification_preferences as { email?: boolean } | undefined;
+          const em = typeof pc?.email === "string" ? pc.email.trim() : "";
+          if (prefs?.email !== false && em.includes("@")) {
+            const shortId = orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
+            await sendResendEmail({
+              to: em,
+              subject: `QEP — Parts order submitted (${shortId})`,
+              text:
+                `Your parts order request was submitted to the dealership.\n\n` +
+                `Reference: ${shortId}\n\n` +
+                `We will confirm availability and contact you if anything changes.\n\n` +
+                `— Quality Equipment & Parts`,
+            });
+          }
+        } catch (e) {
+          console.warn("portal-api submit email notify:", e);
+        }
+
         return safeJsonOk({ order: updated }, origin);
       }
 

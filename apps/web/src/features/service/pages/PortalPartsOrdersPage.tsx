@@ -150,8 +150,14 @@ export function PortalPartsOrdersPage() {
       const { error } = await supabase.from("parts_orders").update(patch).eq("id", payload.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["portal-parts-orders-internal"] });
+      if (variables.status === "shipped") {
+        const { error } = await supabase.functions.invoke("parts-order-customer-notify", {
+          body: { parts_order_id: variables.id, event: "parts_shipped" },
+        });
+        if (error) console.warn("parts-order-customer-notify:", error.message);
+      }
     },
   });
 
