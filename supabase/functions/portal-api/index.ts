@@ -309,28 +309,52 @@ Deno.serve(async (req) => {
           return safeJsonError("Failed to submit order", 500, origin);
         }
 
+        const shortRef = orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
+
         try {
           const { data: pc } = await admin
             .from("portal_customers")
-            .select("email, notification_preferences")
+            .select("email, notification_preferences, first_name, last_name")
             .eq("id", portalCustomer.id)
             .maybeSingle();
+          const custLabel = [pc?.first_name, pc?.last_name].filter(Boolean).join(" ").trim() || "Portal customer";
+
           const prefs = pc?.notification_preferences as { email?: boolean } | undefined;
           const em = typeof pc?.email === "string" ? pc.email.trim() : "";
           if (prefs?.email !== false && em.includes("@")) {
-            const shortId = orderId.replace(/-/g, "").slice(0, 8).toUpperCase();
             await sendResendEmail({
               to: em,
-              subject: `QEP — Parts order submitted (${shortId})`,
+              subject: `QEP — Parts order submitted (${shortRef})`,
               text:
                 `Your parts order request was submitted to the dealership.\n\n` +
-                `Reference: ${shortId}\n\n` +
+                `Reference: ${shortRef}\n\n` +
                 `We will confirm availability and contact you if anything changes.\n\n` +
                 `— Quality Equipment & Parts`,
             });
           }
+
+          const { data: recipients } = await admin
+            .from("profiles")
+            .select("id")
+            .in("role", ["admin", "manager", "owner"]);
+          const rows = (recipients ?? []).map((r) => ({
+            workspace_id: portalWorkspaceId,
+            user_id: r.id as string,
+            kind: "service_portal_parts_submitted",
+            title: "Portal parts order submitted",
+            body:
+              `${custLabel} submitted a parts order (${shortRef}). Open Service → Portal orders to process.`,
+            metadata: {
+              parts_order_id: orderId,
+              notification_type: "portal_parts_submitted",
+            },
+          }));
+          if (rows.length > 0) {
+            const { error: niErr } = await admin.from("crm_in_app_notifications").insert(rows);
+            if (niErr) console.warn("portal-api staff in-app notify:", niErr);
+          }
         } catch (e) {
-          console.warn("portal-api submit email notify:", e);
+          console.warn("portal-api submit notify:", e);
         }
 
         return safeJsonOk({ order: updated }, origin);
