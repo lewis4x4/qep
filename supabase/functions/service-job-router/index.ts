@@ -77,6 +77,42 @@ interface RouterPayload {
   [key: string]: unknown;
 }
 
+/** Single source of truth for job detail + relations (drawer, link mutations). */
+const SERVICE_JOB_ENRICHED_SELECT = `
+      *,
+      customer:crm_companies(id, name),
+      contact:crm_contacts(id, first_name, last_name, email, phone),
+      machine:crm_equipment(id, make, model, serial_number, year),
+      advisor:profiles!service_jobs_advisor_id_fkey(id, full_name, email),
+      technician:profiles!service_jobs_technician_id_fkey(id, full_name, email),
+      job_code:job_codes(id, job_name, make, model_family, manufacturer_estimated_hours),
+      events:service_job_events(id, event_type, actor_id, old_stage, new_stage, metadata, created_at),
+      blockers:service_job_blockers(id, blocker_type, description, resolved_at, created_at),
+      parts:service_parts_requirements(id, part_number, description, quantity, status, need_by_date),
+      quotes:service_quotes(id, version, total, status, sent_at),
+      fulfillment_run:parts_fulfillment_runs(id, status, created_at),
+      portal_request:service_requests!service_jobs_portal_request_id_fkey(
+        id,
+        status,
+        request_type,
+        urgency,
+        description,
+        created_at,
+        portal_customer:portal_customers(first_name, last_name, email)
+      )
+    `;
+
+async function fetchJobEnriched(
+  supabase: ReturnType<typeof createClient>,
+  jobId: string,
+) {
+  return await supabase
+    .from("service_jobs")
+    .select(SERVICE_JOB_ENRICHED_SELECT)
+    .eq("id", jobId)
+    .single();
+}
+
 function buildPartsRowsFromTemplate(
   tpl: unknown,
   workspaceId: string,
@@ -232,6 +268,10 @@ Deno.serve(async (req) => {
         return await handleAssignTechnician(supabase, body, actorId, origin);
       case "link_portal_request":
         return await handleLinkPortalRequest(supabase, body, actorId, origin);
+      case "unlink_portal_request":
+        return await handleUnlinkPortalRequest(supabase, body, actorId, origin);
+      case "search_portal_orders":
+        return await handleSearchPortalOrders(supabase, body, origin);
       case "link_fulfillment_run":
         return await handleLinkFulfillmentRun(supabase, body, actorId, origin);
       default:
@@ -573,24 +613,7 @@ async function handleGet(
   const { id } = body;
   if (!id) return safeJsonError("Missing job id", 400, origin);
 
-  const { data: job, error } = await supabase
-    .from("service_jobs")
-    .select(`
-      *,
-      customer:crm_companies(id, name),
-      contact:crm_contacts(id, first_name, last_name, email, phone),
-      machine:crm_equipment(id, make, model, serial_number, year),
-      advisor:profiles!service_jobs_advisor_id_fkey(id, full_name, email),
-      technician:profiles!service_jobs_technician_id_fkey(id, full_name, email),
-      job_code:job_codes(id, job_name, make, model_family, manufacturer_estimated_hours),
-      events:service_job_events(id, event_type, actor_id, old_stage, new_stage, metadata, created_at),
-      blockers:service_job_blockers(id, blocker_type, description, resolved_at, created_at),
-      parts:service_parts_requirements(id, part_number, description, quantity, status, need_by_date),
-      quotes:service_quotes(id, version, total, status, sent_at),
-      fulfillment_run:parts_fulfillment_runs(id, status, created_at)
-    `)
-    .eq("id", id)
-    .single();
+  const { data: job, error } = await fetchJobEnriched(supabase, id as string);
 
   if (error) {
     console.error("get error:", error);
@@ -873,6 +896,145 @@ async function handleLinkPortalRequest(
   if (!job_id || !portal_request_id) {
     return safeJsonError("job_id and portal_request_id required", 400, origin);
   }
+  if (!isUuidString(job_id) || !isUuidString(portal_request_id)) {
+    return safeJsonError("job_id and portal_request_id must be valid UUIDs", 400, origin);
+  }
+
+  const { data: job, error: jErr } = await supabase
+    .from("service_jobs")
+    .select("id, workspace_id, portal_request_id")
+    .eq("id", job_id)
+    .single();
+  if (jErr || !job) return safeJsonError("Job not found", 404, origin);
+
+  const { data: portalReq, error: pErr } = await supabase
+    .from("service_requests")
+    .select("id, workspace_id, service_job_id")
+    .eq("id", portal_request_id)
+    .single();
+  if (pErr || !portalReq) {
+    return safeJsonError("Portal service request not found", 404, origin);
+  }
+  if (portalReq.workspace_id !== job.workspace_id) {
+    return safeJsonError(
+      "Portal request is not in the same workspace as this job",
+      400,
+      origin,
+    );
+  }
+
+  const prevOnJob = job.portal_request_id as string | null;
+  const prevJobForPortal = portalReq.service_job_id as string | null;
+
+  if (prevJobForPortal && prevJobForPortal !== job_id) {
+    await supabase
+      .from("service_jobs")
+      .update({ portal_request_id: null })
+      .eq("id", prevJobForPortal)
+      .eq("portal_request_id", portal_request_id);
+  }
+
+  if (prevOnJob && prevOnJob !== portal_request_id) {
+    await supabase
+      .from("service_requests")
+      .update({ service_job_id: null })
+      .eq("id", prevOnJob);
+  }
+
+  const { error: uJob } = await supabase
+    .from("service_jobs")
+    .update({ portal_request_id })
+    .eq("id", job_id);
+  if (uJob) return safeJsonError(uJob.message, 400, origin);
+
+  const { error: uPortal } = await supabase
+    .from("service_requests")
+    .update({ service_job_id: job_id })
+    .eq("id", portal_request_id);
+  if (uPortal) return safeJsonError(uPortal.message, 400, origin);
+
+  await supabase.from("service_job_events").insert({
+    workspace_id: job.workspace_id,
+    job_id,
+    event_type: "portal_request_linked",
+    actor_id: actorId,
+    metadata: {
+      portal_request_id,
+      previous_portal_request_id_on_job: prevOnJob,
+      previous_job_for_portal_request: prevJobForPortal,
+    },
+  });
+
+  const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
+  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  return safeJsonOk({ job: full }, origin);
+}
+
+async function handleUnlinkPortalRequest(
+  supabase: ReturnType<typeof createClient>,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const job_id = body.job_id as string | undefined;
+  if (!job_id) return safeJsonError("job_id required", 400, origin);
+  if (!isUuidString(job_id)) {
+    return safeJsonError("job_id must be a valid UUID", 400, origin);
+  }
+
+  const { data: job, error: jErr } = await supabase
+    .from("service_jobs")
+    .select("id, workspace_id, portal_request_id")
+    .eq("id", job_id)
+    .single();
+  if (jErr || !job) return safeJsonError("Job not found", 404, origin);
+
+  const prev = job.portal_request_id as string | null;
+  if (!prev) {
+    const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
+    if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+    return safeJsonOk({ job: full }, origin);
+  }
+
+  await supabase
+    .from("service_requests")
+    .update({ service_job_id: null })
+    .eq("id", prev);
+
+  const { error: uErr } = await supabase
+    .from("service_jobs")
+    .update({ portal_request_id: null })
+    .eq("id", job_id);
+  if (uErr) return safeJsonError(uErr.message, 400, origin);
+
+  await supabase.from("service_job_events").insert({
+    workspace_id: job.workspace_id,
+    job_id,
+    event_type: "portal_request_unlinked",
+    actor_id: actorId,
+    metadata: { portal_request_id: prev },
+  });
+
+  const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
+  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
+  return safeJsonOk({ job: full }, origin);
+}
+
+async function handleSearchPortalOrders(
+  supabase: ReturnType<typeof createClient>,
+  body: RouterPayload,
+  origin: string | null,
+) {
+  const job_id = body.job_id as string | undefined;
+  const q = typeof body.q === "string" ? body.q : "";
+  const term = sanitizeIlikeTerm(q);
+  if (!job_id) return safeJsonError("job_id required", 400, origin);
+  if (!isUuidString(job_id)) {
+    return safeJsonError("job_id must be a valid UUID", 400, origin);
+  }
+  if (term.length < 2) {
+    return safeJsonError("q must be at least 2 characters", 400, origin);
+  }
 
   const { data: job, error: jErr } = await supabase
     .from("service_jobs")
@@ -881,28 +1043,28 @@ async function handleLinkPortalRequest(
     .single();
   if (jErr || !job) return safeJsonError("Job not found", 404, origin);
 
-  const { error: u1 } = await supabase
-    .from("service_jobs")
-    .update({ portal_request_id })
-    .eq("id", job_id);
-  if (u1) return safeJsonError(u1.message, 400, origin);
+  const { data: rows, error: rErr } = await supabase.rpc(
+    "search_parts_orders_for_link",
+    { p_workspace: job.workspace_id, p_term: term },
+  );
+  if (rErr) {
+    console.error("search_parts_orders_for_link:", rErr);
+    return safeJsonError(rErr.message, 400, origin);
+  }
 
-  const { error: u2 } = await supabase
-    .from("service_requests")
-    .update({ service_job_id: job_id })
-    .eq("id", portal_request_id);
-  if (u2) return safeJsonError(u2.message, 400, origin);
+  const mapped = (rows as Record<string, unknown>[] | null ?? []).map((row) => ({
+    id: row.id as string,
+    status: row.status as string,
+    fulfillment_run_id: row.fulfillment_run_id as string | null,
+    created_at: row.created_at as string,
+    portal_customers: {
+      first_name: row.customer_first_name as string,
+      last_name: row.customer_last_name as string,
+      email: row.customer_email as string,
+    },
+  }));
 
-  await supabase.from("service_job_events").insert({
-    workspace_id: job.workspace_id,
-    job_id,
-    event_type: "portal_request_linked",
-    actor_id: actorId,
-    metadata: { portal_request_id },
-  });
-
-  const { data: full } = await supabase.from("service_jobs").select("*").eq("id", job_id).single();
-  return safeJsonOk({ job: full }, origin);
+  return safeJsonOk({ orders: mapped }, origin);
 }
 
 async function handleLinkFulfillmentRun(
@@ -949,14 +1111,10 @@ async function handleLinkFulfillmentRun(
   }
 
   if (fulfillment_run_id !== null && fulfillment_run_id === previousRun) {
-    const { data: full } = await supabase
-      .from("service_jobs")
-      .select(`
-        *,
-        fulfillment_run:parts_fulfillment_runs(id, status, created_at)
-      `)
-      .eq("id", job_id)
-      .single();
+    const { data: full, error: sameErr } = await fetchJobEnriched(supabase, job_id);
+    if (sameErr || !full) {
+      return safeJsonError(sameErr?.message ?? "Failed to load job", 400, origin);
+    }
     return safeJsonOk({ job: full }, origin);
   }
 
@@ -982,15 +1140,8 @@ async function handleLinkFulfillmentRun(
       actor_id: actorId,
       metadata: { previous_fulfillment_run_id: previousRun },
     });
-    const { data: full, error: gErr } = await supabase
-      .from("service_jobs")
-      .select(`
-        *,
-        fulfillment_run:parts_fulfillment_runs(id, status, created_at)
-      `)
-      .eq("id", job_id)
-      .single();
-    if (gErr) return safeJsonError(gErr.message, 400, origin);
+    const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
+    if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
     return safeJsonOk({ job: full }, origin);
   }
 
@@ -1031,14 +1182,7 @@ async function handleLinkFulfillmentRun(
     metadata: { fulfillment_run_id, previous_fulfillment_run_id: previousRun },
   });
 
-  const { data: full, error: gErr } = await supabase
-    .from("service_jobs")
-    .select(`
-      *,
-      fulfillment_run:parts_fulfillment_runs(id, status, created_at)
-    `)
-    .eq("id", job_id)
-    .single();
-  if (gErr) return safeJsonError(gErr.message, 400, origin);
+  const { data: full, error: gErr } = await fetchJobEnriched(supabase, job_id);
+  if (gErr || !full) return safeJsonError(gErr?.message ?? "Failed to load job", 400, origin);
   return safeJsonOk({ job: full }, origin);
 }

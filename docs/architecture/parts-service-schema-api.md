@@ -37,6 +37,8 @@ Job-scoped timeline (`event_type` e.g. `parts_action`); separate from fulfillmen
 | Portal customer | Edge | `portal-api`: `/parts`, `/parts/submit`, `/parts/suggest-pm-kit` |
 | Staff ship email | Edge | `parts-order-customer-notify` |
 | Service job ↔ run link | Edge | `service-job-router`: `link_fulfillment_run` |
+| Portal request ↔ job bridge | Edge | `service-job-router`: `link_portal_request`, `unlink_portal_request` |
+| Portal order search (staff) | DB + Edge | `search_parts_orders_for_link` (migration `120`) via `service-job-router`: `search_portal_orders` |
 | Parts CRUD / fulfillment | Edge | `service-parts-manager`: `add`, `pick`, `receive`, `stage`, `consume`, … |
 | Planning | Edge | `service-parts-planner`: `job_id` |
 | Vendor inbound / escalation | Edge | `service-vendor-inbound`, `service-vendor-escalator` (cron); mirror to run when `service_jobs.fulfillment_run_id` set |

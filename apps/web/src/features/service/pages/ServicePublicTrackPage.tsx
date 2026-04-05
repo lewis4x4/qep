@@ -88,12 +88,27 @@ export function ServicePublicTrackPage() {
       </form>
       {err && <p className="text-sm text-destructive mt-4">{err}</p>}
       {job && (
-        <div className="mt-6 rounded-lg border p-4 text-sm space-y-1">
-          <p><span className="font-medium">Stage:</span> {String(job.current_stage)}</p>
+        <div className="mt-6 rounded-lg border p-4 text-sm space-y-2">
+          {job.public_status && typeof job.public_status === "object" && job.public_status !== null ? (
+            <>
+              <p className="text-base font-semibold">
+                {String((job.public_status as { headline?: string }).headline ?? "")}
+              </p>
+              <p className="text-muted-foreground">
+                {String((job.public_status as { detail?: string }).detail ?? "")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Milestone:</span>{" "}
+                {String((job.public_status as { friendly_stage?: string }).friendly_stage ?? "")}
+              </p>
+            </>
+          ) : (
+            <p><span className="font-medium">Stage:</span> {String(job.current_stage)}</p>
+          )}
           {job.customer_problem_summary != null &&
             String(job.customer_problem_summary).trim().length > 0 && (
             <p>
-              <span className="font-medium">Request:</span>{" "}
+              <span className="font-medium">Your request:</span>{" "}
               {String(job.customer_problem_summary)}
             </p>
           )}

@@ -46,6 +46,11 @@ const DEMO_IDS = {
   fulfillmentRun: "b2000000-0000-4000-8000-000000000001",
   partsOrder: "c3000000-0000-4000-8000-000000000001",
   serviceJob: "d4000000-0000-4000-8000-000000000001",
+  /** QRM company + equipment so Customer & Machine in job drawer are populated */
+  crmCompany: "e5000000-0000-4000-8000-000000000001",
+  crmEquipment: "e6000000-0000-4000-8000-000000000001",
+  /** Portal service_requests row bridged to the shop job */
+  portalServiceRequest: "e7000000-0000-4000-8000-000000000001",
 };
 
 const SEED_EMAIL = `fulfillment-link-seed@${WORKSPACE}.qep.local`;
@@ -66,11 +71,14 @@ function client() {
 
 async function reset(supabase) {
   await supabase.from("service_jobs").delete().eq("id", DEMO_IDS.serviceJob);
+  await supabase.from("service_requests").delete().eq("id", DEMO_IDS.portalServiceRequest);
   await supabase.from("parts_orders").delete().eq("id", DEMO_IDS.partsOrder);
   await supabase
     .from("parts_fulfillment_runs")
     .delete()
     .eq("id", DEMO_IDS.fulfillmentRun);
+  await supabase.from("crm_equipment").delete().eq("id", DEMO_IDS.crmEquipment);
+  await supabase.from("crm_companies").delete().eq("id", DEMO_IDS.crmCompany);
   await supabase
     .from("portal_customers")
     .delete()
@@ -92,6 +100,31 @@ async function seed(supabase) {
     { onConflict: "id" },
   );
   if (e1) throw new Error(`portal_customers: ${e1.message}`);
+
+  const { error: ec } = await supabase.from("crm_companies").upsert(
+    {
+      id: DEMO_IDS.crmCompany,
+      workspace_id: WORKSPACE,
+      name: "Demo Seed Equipment Co",
+    },
+    { onConflict: "id" },
+  );
+  if (ec) throw new Error(`crm_companies: ${ec.message}`);
+
+  const { error: ee } = await supabase.from("crm_equipment").upsert(
+    {
+      id: DEMO_IDS.crmEquipment,
+      workspace_id: WORKSPACE,
+      company_id: DEMO_IDS.crmCompany,
+      name: "Demo Shop Machine",
+      make: "DemoMake",
+      model: "DX-100",
+      serial_number: "SEED-SN-001",
+      year: 2024,
+    },
+    { onConflict: "id" },
+  );
+  if (ee) throw new Error(`crm_equipment: ${ee.message}`);
 
   const { error: e2 } = await supabase.from("parts_fulfillment_runs").upsert(
     {
@@ -135,22 +168,48 @@ async function seed(supabase) {
       source_type: "walk_in",
       request_type: "repair",
       priority: "normal",
-      current_stage: "request_received",
+      current_stage: "quote_sent",
       status_flags: ["shop_job"],
       shop_or_field: "shop",
       haul_required: false,
       fulfillment_run_id: null,
-      customer_problem_summary: "Demo job for fulfillment run link UX",
+      customer_id: DEMO_IDS.crmCompany,
+      machine_id: DEMO_IDS.crmEquipment,
+      portal_request_id: null,
+      customer_problem_summary: "Demo job — customer access, portal bridge, and fulfillment link UX",
     },
     { onConflict: "id" },
   );
   if (e4) throw new Error(`service_jobs: ${e4.message}`);
+
+  const { error: eSr } = await supabase.from("service_requests").upsert(
+    {
+      id: DEMO_IDS.portalServiceRequest,
+      workspace_id: WORKSPACE,
+      portal_customer_id: DEMO_IDS.portalCustomer,
+      request_type: "repair",
+      description: "Demo portal intake linked to shop job (seed)",
+      urgency: "normal",
+      status: "acknowledged",
+      service_job_id: DEMO_IDS.serviceJob,
+    },
+    { onConflict: "id" },
+  );
+  if (eSr) throw new Error(`service_requests: ${eSr.message}`);
+
+  const { error: eLink } = await supabase
+    .from("service_jobs")
+    .update({ portal_request_id: DEMO_IDS.portalServiceRequest })
+    .eq("id", DEMO_IDS.serviceJob);
+  if (eLink) throw new Error(`service_jobs portal_request_id: ${eLink.message}`);
 
   console.log("seed: OK");
   console.log(`  workspace_id: ${WORKSPACE}`);
   console.log(`  service_job_id (open job — link from drawer): ${DEMO_IDS.serviceJob}`);
   console.log(`  parts_order_id: ${DEMO_IDS.partsOrder}`);
   console.log(`  fulfillment_run_id (on order — use search / link): ${DEMO_IDS.fulfillmentRun}`);
+  console.log(`  portal_service_request_id (portal bridge): ${DEMO_IDS.portalServiceRequest}`);
+  console.log(`  crm_company_id / crm_equipment_id: ${DEMO_IDS.crmCompany} / ${DEMO_IDS.crmEquipment}`);
   console.log(`  portal customer email (search in drawer): ${SEED_EMAIL}`);
 }
 

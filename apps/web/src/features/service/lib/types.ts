@@ -43,6 +43,21 @@ export interface ServiceJob {
   deleted_at: string | null;
 }
 
+/** Linked portal service_requests row (customer portal intake). */
+export interface PortalServiceRequestSummary {
+  id: string;
+  status: string;
+  request_type: string;
+  urgency: string;
+  description: string;
+  created_at: string;
+  portal_customer?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+}
+
 export interface ServiceJobWithRelations extends ServiceJob {
   customer?: { id: string; name: string } | null;
   contact?: { id: string; first_name: string; last_name: string; email: string; phone: string } | null;
@@ -59,6 +74,8 @@ export interface ServiceJobWithRelations extends ServiceJob {
   active_blockers?: { count: number }[];
   latest_quote?: ServiceQuoteSummary[];
   fulfillment_run?: { id: string; status: string; created_at: string } | null;
+  /** Populated when portal_request_id is set (see service-job-router handleGet). */
+  portal_request?: PortalServiceRequestSummary | null;
 }
 
 export interface ServiceJobEvent {

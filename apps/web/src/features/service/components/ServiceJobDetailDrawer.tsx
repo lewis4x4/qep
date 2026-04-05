@@ -5,14 +5,16 @@ import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
 import { VoiceFieldNotes } from "./VoiceFieldNotes";
 import { PartsRequirementEditor } from "./PartsRequirementEditor";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   assignTechnicianToJob,
   linkFulfillmentRunToJob,
   linkPortalRequestToJob,
   scanUpsell,
+  searchPortalOrdersForJob,
   suggestCalendarSlots,
   suggestTechnicians,
+  unlinkPortalRequestFromJob,
   updateServiceJob,
 } from "../lib/api";
 import {
@@ -26,7 +28,7 @@ import {
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
 import { Link } from "react-router-dom";
-import { searchPortalPartsOrdersForFulfillmentLink } from "../lib/portalPartsSearch";
+import { getPublicServiceStatus } from "../lib/publicServiceStatus";
 import { Check, Copy, X } from "lucide-react";
 
 interface Props {
@@ -52,12 +54,12 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   }, [fulfillmentOrderSearch]);
 
   const fulfillmentOrderHits = useQuery({
-    queryKey: ["portal-orders-fulfillment-search", job?.workspace_id, debouncedOrderSearch],
+    queryKey: ["portal-orders-fulfillment-search", job?.id, debouncedOrderSearch],
     queryFn: () => {
-      if (!job?.workspace_id) throw new Error("No workspace");
-      return searchPortalPartsOrdersForFulfillmentLink(job.workspace_id, debouncedOrderSearch);
+      if (!job?.id) throw new Error("No job");
+      return searchPortalOrdersForJob(job.id, debouncedOrderSearch);
     },
-    enabled: !!job?.workspace_id && debouncedOrderSearch.length >= 2,
+    enabled: !!job?.id && debouncedOrderSearch.length >= 2,
   });
 
   useEffect(() => {
@@ -67,7 +69,15 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     setSchedStartLocal(s ? s.slice(0, 16) : "");
     setSchedEndLocal(e ? e.slice(0, 16) : "");
     setFulfillmentRunId(job.fulfillment_run_id ?? "");
-  }, [job?.id, job?.scheduled_start_at, job?.scheduled_end_at, job?.fulfillment_run_id]);
+    setPortalRequestId(job.portal_request_id ?? job.portal_request?.id ?? "");
+  }, [
+    job?.id,
+    job?.scheduled_start_at,
+    job?.scheduled_end_at,
+    job?.fulfillment_run_id,
+    job?.portal_request_id,
+    job?.portal_request?.id,
+  ]);
 
   const upsell = useMutation({
     mutationFn: async () => {
@@ -90,6 +100,17 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     },
     onSuccess: () => {
       if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
+
+  const unlinkPortal = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) throw new Error("No job");
+      return unlinkPortalRequestFromJob(job.id);
+    },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+      setPortalRequestId("");
     },
   });
 
@@ -141,6 +162,10 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   if (!jobId) return null;
 
   const stage = (job?.current_stage ?? "request_received") as ServiceStage;
+  const publicPreview = useMemo(
+    () => (job ? getPublicServiceStatus(job.current_stage) : null),
+    [job?.current_stage],
+  );
   const nextStages = [
     ...(ALLOWED_TRANSITIONS[stage] ?? []),
     ...(BLOCKED_ALLOWED_FROM.has(stage) ? ["blocked_waiting"] : []),
@@ -180,20 +205,25 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
               ))}
             </div>
 
-            {/* Tracking + portal bridge */}
+            {/* 1) Customer access — public track link (opaque token) */}
             <section className="space-y-2 rounded-lg border p-3 bg-muted/20">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Customer tracking</h3>
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Customer access
+              </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                The token powers the public{" "}
+                Share the track link or token so the customer can see high-level status on the public{" "}
                 <Link to="/service/track" className="text-primary underline-offset-2 hover:underline">
                   track page
                 </Link>
-                . Portal request and fulfillment run are optional internal links; customer and machine below come from CRM fields on this job.
+                . This does not replace CRM customer/machine on the job — those are set below.
               </p>
+              <div className="rounded-md border bg-background/50 p-2 text-[11px] text-muted-foreground">
+                <p className="font-medium text-foreground mb-0.5">Customer preview</p>
+                <p>{publicPreview?.headline}</p>
+                <p className="mt-1">{publicPreview?.detail}</p>
+              </div>
               <p className="text-xs font-mono break-all flex items-start gap-2">
-                <span className="min-w-0 flex-1">
-                  Job ID: {job.id}
-                </span>
+                <span className="min-w-0 flex-1">Job ID: {job.id}</span>
                 <button
                   type="button"
                   className="shrink-0 rounded border border-input px-1.5 py-0.5 hover:bg-muted"
@@ -252,9 +282,38 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   </button>
                 </div>
               ) : null}
-              <p className="text-xs text-muted-foreground">
-                Portal request: {job.portal_request_id ?? "—"}
+            </section>
+
+            {/* 2) Portal request bridge — customer portal intake */}
+            <section className="space-y-2 rounded-lg border p-3 bg-muted/15">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Portal request link
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Links this shop job to a customer portal <span className="font-mono">service_requests</span> row
+                (intake from the portal). Use when the job was created from or should mirror portal intake.
               </p>
+              {job.portal_request ? (
+                <div className="rounded-md border bg-background/50 p-2 text-[11px] space-y-1">
+                  <p>
+                    <span className="font-medium text-foreground">Linked request</span>{" "}
+                    <span className="font-mono break-all">{job.portal_request.id}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    Status: {job.portal_request.status} · Type: {job.portal_request.request_type} · Urgency:{" "}
+                    {job.portal_request.urgency}
+                  </p>
+                  {job.portal_request.portal_customer ? (
+                    <p className="text-muted-foreground">
+                      Portal customer: {job.portal_request.portal_customer.first_name}{" "}
+                      {job.portal_request.portal_customer.last_name} · {job.portal_request.portal_customer.email}
+                    </p>
+                  ) : null}
+                  <p className="line-clamp-3 text-muted-foreground">{job.portal_request.description}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No portal request linked.</p>
+              )}
               <div className="flex flex-col gap-2">
                 <input
                   value={portalRequestId}
@@ -262,23 +321,54 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   placeholder="Portal service_request UUID"
                   className="text-xs rounded border px-2 py-1 font-mono"
                 />
-                <button
-                  type="button"
-                  disabled={linkPortal.isPending || !portalRequestId.trim()}
-                  onClick={() => linkPortal.mutate()}
-                  className="text-xs rounded bg-secondary px-2 py-1 w-fit"
-                >
-                  {linkPortal.isPending ? "Linking…" : "Link portal request to job"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={linkPortal.isPending || !portalRequestId.trim()}
+                    onClick={() => linkPortal.mutate()}
+                    className="text-xs rounded bg-secondary px-2 py-1 w-fit"
+                  >
+                    {linkPortal.isPending ? "Linking…" : "Link portal request"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={unlinkPortal.isPending || !job.portal_request_id}
+                    onClick={() => unlinkPortal.mutate()}
+                    className="text-xs rounded border border-input px-2 py-1"
+                  >
+                    {unlinkPortal.isPending ? "Unlinking…" : "Unlink portal request"}
+                  </button>
+                </div>
                 {linkPortal.isError && (
                   <p className="text-xs text-destructive">{(linkPortal.error as Error).message}</p>
                 )}
+                {unlinkPortal.isError && (
+                  <p className="text-xs text-destructive">{(unlinkPortal.error as Error).message}</p>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Fulfillment run:{" "}
-                {job.fulfillment_run?.id
-                  ? `${job.fulfillment_run.status} · ${job.fulfillment_run.id}`
-                  : job.fulfillment_run_id ?? "—"}
+            </section>
+
+            {/* 3) Parts fulfillment bridge — shared run with portal/counter orders */}
+            <section className="space-y-2 rounded-lg border p-3 bg-muted/10">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Parts fulfillment link
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Links this job to the same <span className="font-mono">parts_fulfillment_runs</span> record as a
+                portal parts order so shop picks and shipping share one audit trail.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Linked run:{" "}
+                {job.fulfillment_run?.id ? (
+                  <>
+                    <span className="font-medium text-foreground">{job.fulfillment_run.status}</span>
+                    <span className="font-mono break-all"> · {job.fulfillment_run.id}</span>
+                  </>
+                ) : job.fulfillment_run_id ? (
+                  <span className="font-mono break-all">{job.fulfillment_run_id}</span>
+                ) : (
+                  "—"
+                )}
               </p>
               <p className="text-xs">
                 <Link
@@ -287,11 +377,11 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 >
                   Open portal parts orders
                 </Link>
-                <span className="text-muted-foreground"> — find an order, then search below by order id, email, or name.</span>
+                <span className="text-muted-foreground"> — search by order id, email, or name.</span>
               </p>
-              <div className="flex flex-col gap-2 mt-2 rounded-md border bg-muted/30 p-2">
+              <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2">
                 <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  Find portal order (same workspace)
+                  Find portal order (this workspace)
                 </label>
                 <input
                   value={fulfillmentOrderSearch}
@@ -326,7 +416,9 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                           {o.fulfillment_run_id ? (
                             <span className="font-mono break-all">{o.fulfillment_run_id}</span>
                           ) : (
-                            <span className="text-amber-700 dark:text-amber-400">none — order needs a run (portal submit)</span>
+                            <span className="text-amber-700 dark:text-amber-400">
+                              none — order needs a run (portal submit)
+                            </span>
                           )}
                         </span>
                         <button
@@ -362,7 +454,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   )}
               </div>
               <p className="text-[11px] text-muted-foreground">Or paste run UUID manually:</p>
-              <div className="flex flex-col gap-2 mt-2">
+              <div className="flex flex-col gap-2">
                 <input
                   value={fulfillmentRunId}
                   onChange={(e) => setFulfillmentRunId(e.target.value)}

@@ -163,6 +163,41 @@ export async function linkPortalRequestToJob(
   return result.job;
 }
 
+export async function unlinkPortalRequestFromJob(
+  jobId: string,
+): Promise<ServiceJobWithRelations> {
+  const result = await invoke<{ job: ServiceJobWithRelations }>({
+    action: "unlink_portal_request",
+    job_id: jobId,
+  });
+  return result.job;
+}
+
+export type PortalOrderSearchRow = {
+  id: string;
+  status: string;
+  fulfillment_run_id: string | null;
+  created_at: string;
+  portal_customers: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+};
+
+/** Server-backed search (RPC); requires job context for workspace. */
+export async function searchPortalOrdersForJob(
+  jobId: string,
+  q: string,
+): Promise<PortalOrderSearchRow[]> {
+  const result = await invoke<{ orders: PortalOrderSearchRow[] }>({
+    action: "search_portal_orders",
+    job_id: jobId,
+    q: q.trim(),
+  });
+  return result.orders ?? [];
+}
+
 /** Link shop job to an existing parts_fulfillment_run (e.g. portal order run). Pass null to unlink. */
 export async function linkFulfillmentRunToJob(
   jobId: string,

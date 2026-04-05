@@ -6,6 +6,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { publicServiceStatusFromStage } from "../_shared/public-service-status.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
@@ -56,7 +57,19 @@ Deno.serve(async (req) => {
       return safeJsonError("Invalid token", 403, null);
     }
 
-    const { tracking_token: _t, ...safeJob } = job;
+    const { tracking_token: _t, current_stage, ...rest } = job;
+    const pub = publicServiceStatusFromStage(
+      typeof current_stage === "string" ? current_stage : undefined,
+    );
+    const safeJob = {
+      ...rest,
+      current_stage,
+      public_status: {
+        headline: pub.headline,
+        detail: pub.detail,
+        friendly_stage: pub.friendly_stage,
+      },
+    };
     return safeJsonOk({ job: safeJob }, null);
   } catch (e) {
     console.error("service-public-job-status:", e);
