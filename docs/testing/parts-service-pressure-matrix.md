@@ -13,6 +13,10 @@ Maps handoff §15-style scenarios to automated checks, manual/SQL follow-ups, or
 | Notification dedupe | **Implemented:** `parts_order_notification_sends` unique `(parts_order_id, event_type)` (migration 119) + `parts-order-customer-notify` dedupe / retry behavior. |
 | Branch-scoped routing | **Checklist:** `profile_workspaces` + `get_my_workspace()` + `portalWorkspaceId` patterns; grep/review in pressure script + code review. |
 
+## Service job ↔ portal run UX (empty environments)
+
+If there is **no seed data** for service/parts, use **[service-fulfillment-link-demo.md](./service-fulfillment-link-demo.md)** and `bun run demo:service-fulfillment seed` (service role) to create a minimal portal order + run + unlinked service job.
+
 ## Running checks
 
 - Always (no secrets): `bun run pressure:parts` — filesystem, `migrations:check`, grep guards.
