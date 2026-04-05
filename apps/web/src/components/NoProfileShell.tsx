@@ -3,7 +3,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { OfflineBanner } from "./OfflineBanner";
 import { NotFoundPage } from "./NotFoundPage";
 import { Toaster } from "@/components/ui/toaster";
-import { PortalRoutes } from "@/features/portal/PortalRoutes";
+import { portalRouteElements } from "@/features/portal/PortalRoutes";
 import { supabase } from "@/lib/supabase";
 
 function RouteFallback() {
@@ -36,7 +36,7 @@ export function NoProfileShell({ authError }: { authError: string | null }) {
         <OfflineBanner />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            <PortalRoutes />
+            {portalRouteElements()}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>

@@ -17,7 +17,7 @@ import {
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
-import { PortalRoutes } from "./features/portal/PortalRoutes";
+import { portalRouteElements } from "./features/portal/PortalRoutes";
 
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
@@ -905,7 +905,7 @@ function App() {
               />
               {/* Branded 404 for unknown routes */}
               {/* Customer Portal routes */}
-              <PortalRoutes />
+              {portalRouteElements()}
 
               <Route path="*" element={<NotFoundPage />} />
             </AnimatedRoutes>
