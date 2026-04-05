@@ -3,6 +3,7 @@
  * verify_jwt false; protect with shared secret header in production.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 Deno.serve(async (req) => {
@@ -13,8 +14,16 @@ Deno.serve(async (req) => {
     return safeJsonError("Unauthorized", 401, null);
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    return safeJsonError("Service misconfigured", 503, null);
+  }
+
   try {
-    const body = await req.json() as {
+    const parsed = await parseJsonBody(req, null);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body as {
       raw_text?: string;
       po_reference?: string;
       expected_date?: string;
@@ -41,8 +50,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey!);
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     const text = body.raw_text ?? "";
     const po = body.po_reference ??

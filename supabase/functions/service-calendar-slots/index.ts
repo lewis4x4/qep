@@ -2,6 +2,7 @@
  * Suggest appointment start times from branch business_hours + slot length.
  * Auth: user JWT (internal staff).
  */
+import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
@@ -85,7 +86,9 @@ Deno.serve(async (req) => {
       return safeJsonError("POST required", 405, origin);
     }
 
-    const body = await req.json() as {
+    const parsed = await parseJsonBody(req, origin);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body as {
       branch_id?: string;
       from?: string;
       count?: number;

@@ -8,21 +8,8 @@
  * OR internal staff with workspace access.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
-
-async function parseJsonBody(
-  req: Request,
-  origin: string | null,
-): Promise<{ ok: true; body: unknown } | { ok: false; response: Response }> {
-  const text = await req.text();
-  const trimmed = text.trim();
-  if (!trimmed) return { ok: true, body: {} };
-  try {
-    return { ok: true, body: JSON.parse(trimmed) as unknown };
-  } catch {
-    return { ok: false, response: safeJsonError("Invalid JSON body", 400, origin) };
-  }
-}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
