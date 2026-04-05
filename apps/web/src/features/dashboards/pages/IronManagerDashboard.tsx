@@ -4,6 +4,14 @@ import { ApprovalQueue } from "../components/ApprovalQueue";
 import { useIronManagerData } from "../hooks/useDashboardData";
 import { Users, TrendingUp, AlertTriangle, DollarSign } from "lucide-react";
 
+/** PostgREST may return numeric columns as strings; calling .toFixed on a string throws. */
+function formatPercentLabel(value: unknown): string {
+  if (value === null || value === undefined) return "N/A";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "N/A";
+  return `${n.toFixed(1)}`;
+}
+
 export function IronManagerDashboard() {
   const { data, isLoading, isError } = useIronManagerData();
 
@@ -18,7 +26,13 @@ export function IronManagerDashboard() {
   const approvalItems = [
     ...(data?.pendingDemos ?? []).map((d: any) => ({ id: d.id, deal_id: d.deal_id, type: "demo" as const, label: `Demo Request`, detail: `${d.equipment_category} demo` })),
     ...(data?.pendingTrades ?? []).map((t: any) => ({ id: t.id, deal_id: t.deal_id, type: "trade" as const, label: `${t.make} ${t.model}`, detail: `Preliminary: $${t.preliminary_value?.toLocaleString() ?? "N/A"}` })),
-    ...(data?.marginFlags ?? []).map((m: any) => ({ id: m.id, deal_id: m.id, type: "margin" as const, label: m.name, detail: `Margin: ${m.margin_pct?.toFixed(1) ?? "N/A"}%` })),
+    ...(data?.marginFlags ?? []).map((m: any) => ({
+      id: m.id,
+      deal_id: m.id,
+      type: "margin" as const,
+      label: m.name,
+      detail: `Margin: ${formatPercentLabel(m.margin_pct)}%`,
+    })),
   ];
 
   const totalPipeline = (data?.pipelineDeals ?? []).reduce((sum: number, d: any) => sum + (d.amount ?? 0), 0);

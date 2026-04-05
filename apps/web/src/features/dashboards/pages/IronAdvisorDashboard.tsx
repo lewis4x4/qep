@@ -9,6 +9,15 @@ interface IronAdvisorDashboardProps {
   userId: string;
 }
 
+function touchpointDealId(tp: {
+  follow_up_cadences?: { deal_id?: string } | Array<{ deal_id?: string }> | null;
+}): string | undefined {
+  const c = tp.follow_up_cadences;
+  if (!c) return undefined;
+  if (Array.isArray(c)) return c[0]?.deal_id;
+  return c.deal_id;
+}
+
 export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
   const { data, isLoading, isError } = useIronAdvisorData(userId);
 
@@ -45,24 +54,36 @@ export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
           <p className="text-sm text-muted-foreground">No follow-ups due today.</p>
         ) : (
           <div className="space-y-2">
-            {(data?.dueTouchpoints ?? []).map((tp: any) => (
-              <Link
-                key={tp.id}
-                to={`/crm/deals/${tp.follow_up_cadences?.deal_id}`}
-                className="block rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">
-                    {String(tp.touchpoint_type ?? "touchpoint").replace(/_/g, " ")}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">{tp.scheduled_date}</span>
+            {(data?.dueTouchpoints ?? []).map((tp: any) => {
+              const dealId = touchpointDealId(tp);
+              const row = (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">
+                      {String(tp.touchpoint_type ?? "touchpoint").replace(/_/g, " ")}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{tp.scheduled_date}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{tp.purpose}</p>
+                  {tp.suggested_message && (
+                    <p className="text-xs italic text-foreground/70 mt-1">{tp.suggested_message}</p>
+                  )}
+                </>
+              );
+              const shellClass =
+                "block rounded-lg border border-border p-2.5 hover:border-foreground/20 transition";
+              return (
+                <div key={tp.id}>
+                  {dealId ? (
+                    <Link to={`/crm/deals/${dealId}`} className={shellClass}>
+                      {row}
+                    </Link>
+                  ) : (
+                    <div className={shellClass}>{row}</div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{tp.purpose}</p>
-                {tp.suggested_message && (
-                  <p className="text-xs italic text-foreground/70 mt-1">{tp.suggested_message}</p>
-                )}
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

@@ -95,8 +95,10 @@ verify_jwt = false
 [functions.integration-test-connection]
 verify_jwt = true
 
+# JWT is validated inside the function (Bearer + getUser). Gateway verify_jwt can 401
+# valid clients when token shape/version differs; keep off like other app-scoped functions.
 [functions.integration-availability]
-verify_jwt = true
+verify_jwt = false
 
 # Service engine: JWT validated in _shared/service-auth.ts (requireServiceUser).
 [functions.service-job-router]

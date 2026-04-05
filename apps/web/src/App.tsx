@@ -216,6 +216,7 @@ function App() {
           queries: {
             refetchOnWindowFocus: false,
             retry: 1,
+            throwOnError: false,
           },
         },
       })
@@ -280,11 +281,27 @@ function App() {
 
     async function loadQuoteBuilderAccess(): Promise<void> {
       try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          if (!cancelled) {
+            setQuoteBuilderAccess({
+              connected: envIntelliDealerConnected,
+              loading: false,
+            });
+          }
+          return;
+        }
+
         const { data, error: invokeError } =
           await supabase.functions.invoke<IntegrationAvailabilityResponse>(
             "integration-availability",
             {
               body: { integration_key: "intellidealer" },
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+              },
             }
           );
 
