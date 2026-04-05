@@ -61,6 +61,9 @@ const ServiceBranchConfigPage = lazy(() =>
 const PartsInventoryPage = lazy(() =>
   import("./features/service/pages/PartsInventoryPage").then((m) => ({ default: m.PartsInventoryPage }))
 );
+const PortalPartsOrdersPage = lazy(() =>
+  import("./features/service/pages/PortalPartsOrdersPage").then((m) => ({ default: m.PortalPartsOrdersPage }))
+);
 const JobCodeSuggestionsPage = lazy(() =>
   import("./features/service/pages/JobCodeSuggestionsPage").then((m) => ({ default: m.JobCodeSuggestionsPage }))
 );
@@ -604,6 +607,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <PartsWorkQueuePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/portal-parts"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <PortalPartsOrdersPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

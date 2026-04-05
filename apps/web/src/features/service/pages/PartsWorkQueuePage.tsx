@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { invokePartsManager } from "../lib/api";
 import { usePartsQueue } from "../hooks/usePartsQueue";
@@ -145,11 +146,19 @@ export function PartsWorkQueuePage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Parts Work Queue</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Queue-driven parts workflow — {items.length} active items
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Parts Work Queue</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Queue-driven parts workflow — {items.length} active items
+          </p>
+        </div>
+        <Link
+          to="/service/portal-parts"
+          className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+        >
+          Portal parts orders
+        </Link>
       </div>
 
       {isLoading ? (

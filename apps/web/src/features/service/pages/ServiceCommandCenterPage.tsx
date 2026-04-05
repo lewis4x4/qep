@@ -98,6 +98,12 @@ export function ServiceCommandCenterPage() {
             Parts queue
           </Link>
           <Link
+            to="/service/portal-parts"
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Portal orders
+          </Link>
+          <Link
             to="/service/vendors"
             className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
           >
