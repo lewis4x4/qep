@@ -27,6 +27,7 @@ type OrderStatus =
 type PortalPartsOrderRow = {
   id: string;
   status: string;
+  fulfillment_run_id: string | null;
   line_items: unknown;
   ai_suggested_pm_kit: boolean | null;
   ai_suggestion_reason: string | null;
@@ -100,6 +101,7 @@ export function PortalPartsOrdersPage() {
           `
           id,
           status,
+          fulfillment_run_id,
           line_items,
           ai_suggested_pm_kit,
           ai_suggestion_reason,
@@ -354,6 +356,11 @@ export function PortalPartsOrdersPage() {
                           {row.ai_suggestion_reason && (
                             <p className="text-xs text-amber-800 dark:text-amber-200/90 mb-2 border-l-2 border-amber-500 pl-2">
                               {row.ai_suggestion_reason}
+                            </p>
+                          )}
+                          {row.fulfillment_run_id && (
+                            <p className="text-[11px] text-muted-foreground mb-2 font-mono">
+                              Fulfillment run: {row.fulfillment_run_id}
                             </p>
                           )}
                           <pre className="text-[11px] overflow-x-auto p-2 rounded bg-muted/50 max-h-48">

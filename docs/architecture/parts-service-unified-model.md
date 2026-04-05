@@ -40,6 +40,7 @@ flowchart LR
 ```
 
 - **Phase 1:** Create `parts_fulfillment_runs` on portal submit; set `parts_orders.fulfillment_run_id`; append `parts_fulfillment_events` (`portal_submitted`, …).
+- **Phase 2 (shipped):** When staff marks the order shipped and `parts-order-customer-notify` runs, append `portal_shipped` and set the run’s status to `shipped` (migration `116`, JWT RLS for staff inserts/updates).
 - **Later:** Optional `service_jobs.fulfillment_run_id` when a job and portal order should share one run (e.g. counter pickup + job consumption).
 
 ## Staff notifications
