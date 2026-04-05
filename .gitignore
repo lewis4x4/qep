@@ -33,3 +33,11 @@ supabase/.temp/
 
 # Working documents — local only, never pushed to GitHub
 _workspace/
+
+# Local planning artifacts / nested copies (sign-off hygiene; adjust if you need these tracked)
+/QEP-OS-*.pdf
+/QEP-OS-*.docx
+/QEP-OS-*.pptx
+/QEP Main Repo and Project/
+.omx/
+/qep/

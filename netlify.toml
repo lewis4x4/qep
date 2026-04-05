@@ -1,3 +1,4 @@
+# Env: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Netlify UI (see docs/SERVICE_ENGINE_PRODUCTION_SIGNOFF.md).
 [build]
   base = "apps/web"
   command = "bun run build"

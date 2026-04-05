@@ -36,6 +36,8 @@ Add a workflow step for `service-customer-notify-dispatch` if `pg_cron` is unava
 
 No trailing slash on `SUPABASE_URL`.
 
+**Production sign-off (scheduling, GitHub secrets, Netlify, verification):** [SERVICE_ENGINE_PRODUCTION_SIGNOFF.md](./SERVICE_ENGINE_PRODUCTION_SIGNOFF.md).
+
 ## Optional execution log (`service_cron_runs`)
 
 Migration **109** adds `service_cron_runs` (workspace, job name, timestamps, ok/error). Workers record rows by default. Set **`SERVICE_CRON_RUNS_DISABLED=true`** in the Edge Function environment to skip writes (see `_shared/service-cron-run.ts`). Admins and managers can `select` via RLS; inserts use `service_role`.
