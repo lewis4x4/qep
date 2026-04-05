@@ -1,9 +1,35 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { invokePartsManager } from "../lib/api";
 import { usePartsQueue } from "../hooks/usePartsQueue";
 import { PartsQueueBucket } from "../components/PartsQueueBucket";
 import type { PartsQueueItem } from "../hooks/usePartsQueue";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+
+function latestBin(item: PartsQueueItem): string {
+  const rows = item.staging ?? [];
+  if (rows.length === 0) return "";
+  const sorted = [...rows].sort((a, b) =>
+    String(b.staged_at).localeCompare(String(a.staged_at)),
+  );
+  return sorted[0]?.bin_location?.trim() ?? "";
+}
+
+function sortByBinThenPart(items: PartsQueueItem[]) {
+  return [...items].sort((a, b) => {
+    const ba = latestBin(a);
+    const bb = latestBin(b);
+    if (ba !== bb) return ba.localeCompare(bb);
+    return a.part_number.localeCompare(b.part_number);
+  });
+}
 
 function bucketize(items: PartsQueueItem[]) {
   const today = new Date().toISOString().slice(0, 10);
@@ -49,23 +75,45 @@ function bucketize(items: PartsQueueItem[]) {
     }
   }
 
-  return { machineDown, pullNow, orderNow, waitingVendor, receivingToday, stageForTomorrow, other };
+  return {
+    machineDown: sortByBinThenPart(machineDown),
+    pullNow: sortByBinThenPart(pullNow),
+    orderNow: sortByBinThenPart(orderNow),
+    waitingVendor: sortByBinThenPart(waitingVendor),
+    receivingToday: sortByBinThenPart(receivingToday),
+    stageForTomorrow: sortByBinThenPart(stageForTomorrow),
+    other: sortByBinThenPart(other),
+  };
 }
 
 export function PartsWorkQueuePage() {
   const { data: items = [], isLoading } = usePartsQueue();
   const qc = useQueryClient();
+  const [stageDialogOpen, setStageDialogOpen] = useState(false);
+  const [pendingRequirementId, setPendingRequirementId] = useState<string | null>(null);
+  const [binValue, setBinValue] = useState("STAGING-A");
 
   const buckets = useMemo(() => bucketize(items), [items]);
 
-  const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      // Table not in generated types until next type generation
-      const result: { error: { message: string } | null } = await (supabase as any)
-        .from("service_parts_requirements")
-        .update({ status })
-        .eq("id", id);
-      if (result.error) throw new Error(result.error.message);
+  const fulfill = useMutation({
+    mutationFn: async (opts: {
+      requirementId: string;
+      action: string;
+      bin?: string;
+    }) => {
+      const map: Record<string, string> = {
+        pick: "pick",
+        receive: "receive",
+        stage: "stage",
+      };
+      const a = map[opts.action];
+      if (!a) throw new Error("Unknown action");
+      const body: Record<string, unknown> = {
+        action: a,
+        requirement_id: opts.requirementId,
+      };
+      if (opts.action === "stage" && opts.bin) body.bin_location = opts.bin;
+      return invokePartsManager(body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["parts-queue"] });
@@ -75,16 +123,25 @@ export function PartsWorkQueuePage() {
 
   const handleAction = useCallback(
     (requirementId: string, action: string) => {
-      const statusMap: Record<string, string> = {
-        pick: "picking",
-        receive: "received",
-        stage: "staged",
-      };
-      const newStatus = statusMap[action];
-      if (newStatus) updateStatus.mutate({ id: requirementId, status: newStatus });
+      if (action === "stage") {
+        setPendingRequirementId(requirementId);
+        setBinValue("STAGING-A");
+        setStageDialogOpen(true);
+        return;
+      }
+      fulfill.mutate({ requirementId, action });
     },
-    [updateStatus],
+    [fulfill],
   );
+
+  const confirmStage = useCallback(() => {
+    const id = pendingRequirementId;
+    const bin = binValue.trim();
+    if (!id || !bin) return;
+    setStageDialogOpen(false);
+    setPendingRequirementId(null);
+    fulfill.mutate({ requirementId: id, action: "stage", bin });
+  }, [pendingRequirementId, binValue, fulfill]);
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
@@ -103,6 +160,31 @@ export function PartsWorkQueuePage() {
         <p className="text-sm text-muted-foreground text-center py-12 italic">No active parts requirements</p>
       ) : (
         <div className="space-y-4">
+          <Dialog open={stageDialogOpen} onOpenChange={setStageDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Stage to bin</DialogTitle>
+              </DialogHeader>
+              <label className="text-sm text-muted-foreground block">
+                Bin location
+                <input
+                  value={binValue}
+                  onChange={(e) => setBinValue(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="e.g. STAGING-A"
+                  autoFocus
+                />
+              </label>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setStageDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={confirmStage} disabled={!binValue.trim()}>
+                  Stage
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <PartsQueueBucket title="Machine-Down Critical" items={buckets.machineDown} accentColor="bg-red-100" onAction={handleAction} />
           <PartsQueueBucket title="Pull Now" items={buckets.pullNow} accentColor="bg-blue-100" onAction={handleAction} />
           <PartsQueueBucket title="Order Now" items={buckets.orderNow} accentColor="bg-amber-100" onAction={handleAction} />

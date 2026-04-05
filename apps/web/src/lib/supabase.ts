@@ -1,5 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-import type { ExtendedDatabase } from "./database-extensions.types";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -8,9 +7,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables");
 }
 
-// Uses ExtendedDatabase which includes all tables from migrations 068-091.
-// After running `supabase gen types`, switch back to Database and delete database-extensions.types.ts.
-export const supabase = createClient<ExtendedDatabase>(supabaseUrl, supabaseAnonKey);
+/**
+ * Narrow table merges (extensions + generated) still break PostgREST Insert inference for many tables.
+ * Prefer `import type { ExtendedDatabase }` / row interfaces at call sites until `database.types.ts` is regenerated from the full schema.
+ */
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 /** Hostname from VITE_SUPABASE_URL (for operator diagnostics when sign-in fails). */
 export function getSupabaseUrlHostname(): string {

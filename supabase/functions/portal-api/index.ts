@@ -8,7 +8,21 @@
  * OR internal staff with workspace access.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+
+async function parseJsonBody(
+  req: Request,
+  origin: string | null,
+): Promise<{ ok: true; body: unknown } | { ok: false; response: Response }> {
+  const text = await req.text();
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: true, body: {} };
+  try {
+    return { ok: true, body: JSON.parse(trimmed) as unknown };
+  } catch {
+    return { ok: false, response: safeJsonError("Invalid JSON body", 400, origin) };
+  }
+}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -18,14 +32,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !supabaseAnon) {
+      return safeJsonError("Service misconfigured", 503, origin);
+    }
+
     const authHeader = req.headers.get("Authorization")?.trim();
     if (!authHeader) {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
+      supabaseUrl,
+      supabaseAnon,
       { global: { headers: { Authorization: authHeader } } },
     );
 
@@ -37,7 +57,7 @@ Deno.serve(async (req) => {
     // Verify caller is a portal customer (not internal staff using wrong API)
     const { data: portalCustomer } = await supabase
       .from("portal_customers")
-      .select("id, is_active")
+      .select("id, is_active, workspace_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -48,8 +68,13 @@ Deno.serve(async (req) => {
       return safeJsonError("Portal account is deactivated.", 403, origin);
     }
 
+    const portalWorkspaceId = portalCustomer.workspace_id as string;
+
     const url = new URL(req.url);
-    const route = url.pathname.replace(/^\/functions\/v1\/portal-api\/?/, "").split("/")[0] || "";
+    const rawPath = url.pathname.replace(/^\/functions\/v1\/portal-api\/?/, "");
+    const pathParts = rawPath.split("/").filter(Boolean);
+    const route = pathParts[0] ?? "";
+    const subRoute = pathParts[1] ?? "";
 
     // ── /fleet — Customer equipment fleet ──────────────────────────────
     if (route === "fleet") {
@@ -69,7 +94,16 @@ Deno.serve(async (req) => {
       if (req.method === "GET") {
         const { data, error } = await supabase
           .from("service_requests")
-          .select("*")
+          .select(`
+            *,
+            internal_job:service_jobs (
+              id,
+              current_stage,
+              priority,
+              updated_at,
+              closed_at
+            )
+          `)
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load requests", 500, origin);
@@ -77,31 +111,34 @@ Deno.serve(async (req) => {
       }
 
       if (req.method === "POST") {
-        const body = await req.json();
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
         if (!body.request_type || !body.description) {
           return safeJsonError("request_type and description required", 400, origin);
         }
 
         const validTypes = ["repair", "maintenance", "warranty", "parts", "inspection", "emergency"];
-        if (!validTypes.includes(body.request_type)) {
+        if (!validTypes.includes(String(body.request_type))) {
           return safeJsonError(`request_type must be one of: ${validTypes.join(", ")}`, 400, origin);
         }
 
         const validUrgencies = ["low", "normal", "high", "emergency"];
-        if (body.urgency && !validUrgencies.includes(body.urgency)) {
+        if (body.urgency && !validUrgencies.includes(String(body.urgency))) {
           return safeJsonError(`urgency must be one of: ${validUrgencies.join(", ")}`, 400, origin);
         }
 
         // Whitelist safe fields — block billing/status manipulation
         const safeBody = {
+          workspace_id: portalWorkspaceId,
           portal_customer_id: portalCustomer.id,
-          fleet_id: body.fleet_id || null,
+          fleet_id: body.fleet_id ?? null,
           request_type: body.request_type,
           description: body.description,
-          urgency: body.urgency || "normal",
+          urgency: (body.urgency as string) || "normal",
           photos: Array.isArray(body.photos) ? body.photos : [],
-          preferred_date: body.preferred_date || null,
-          preferred_branch: body.preferred_branch || null,
+          preferred_date: body.preferred_date ?? null,
+          preferred_branch: body.preferred_branch ?? null,
         };
 
         const { data, error } = await supabase
@@ -128,7 +165,9 @@ Deno.serve(async (req) => {
       }
 
       if (req.method === "POST") {
-        const body = await req.json();
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
 
         if (!body.line_items || !Array.isArray(body.line_items) || body.line_items.length === 0) {
           return safeJsonError("line_items array is required with at least one item", 400, origin);
@@ -156,14 +195,48 @@ Deno.serve(async (req) => {
 
     // ── /invoices — Payment portal ─────────────────────────────────────
     if (route === "invoices") {
-      if (req.method === "GET") {
+      if (req.method === "GET" && !subRoute) {
         const { data, error } = await supabase
           .from("customer_invoices")
-          .select("*")
+          .select("*, customer_invoice_line_items(*)")
           .order("invoice_date", { ascending: false });
 
         if (error) return safeJsonError("Failed to load invoices", 500, origin);
         return safeJsonOk({ invoices: data }, origin);
+      }
+
+      if (req.method === "POST" && subRoute === "pay") {
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as {
+          invoice_id?: string;
+          amount?: number;
+          payment_method?: string;
+          payment_reference?: string;
+        };
+        if (!body.invoice_id || body.amount == null) {
+          return safeJsonError("invoice_id and amount required", 400, origin);
+        }
+        const amt = Number(body.amount);
+        if (!Number.isFinite(amt) || amt <= 0) {
+          return safeJsonError("amount must be a positive number", 400, origin);
+        }
+
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+          "portal_record_invoice_payment",
+          {
+            p_invoice_id: body.invoice_id,
+            p_amount: amt,
+            p_payment_method: body.payment_method ?? null,
+            p_payment_reference: body.payment_reference ?? null,
+          },
+        );
+        if (rpcErr) return safeJsonError(rpcErr.message, 400, origin);
+        const res = rpcResult as { ok?: boolean; error?: string };
+        if (!res?.ok) {
+          return safeJsonError(res?.error ?? "payment_failed", 400, origin);
+        }
+        return safeJsonOk({ ok: true, result: rpcResult }, origin);
       }
     }
 
@@ -180,11 +253,13 @@ Deno.serve(async (req) => {
       }
 
       if (req.method === "PUT") {
-        const body = await req.json();
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
         if (!body.id) return safeJsonError("id required", 400, origin);
 
         const validStatuses = ["viewed", "accepted", "rejected", "countered"];
-        if (body.status && !validStatuses.includes(body.status)) {
+        if (body.status && !validStatuses.includes(String(body.status))) {
           return safeJsonError(`status must be one of: ${validStatuses.join(", ")}`, 400, origin);
         }
 
@@ -206,6 +281,16 @@ Deno.serve(async (req) => {
           safeUpdates.status = "accepted";
           safeUpdates.signer_name = cleanName;
           safeUpdates.signed_at = new Date().toISOString();
+          if (body.signature_png_base64 && typeof body.signature_png_base64 === "string") {
+            const raw = String(body.signature_png_base64).replace(/\s/g, "");
+            if (raw.length > 400_000) {
+              return safeJsonError("signature image too large", 400, origin);
+            }
+            if (!/^[A-Za-z0-9+/=]+$/.test(raw)) {
+              return safeJsonError("signature must be base64 PNG", 400, origin);
+            }
+            safeUpdates.signature_url = `data:image/png;base64,${raw}`;
+          }
           // Use Cloudflare's trusted header, fallback chain for non-CF environments
           safeUpdates.signer_ip = req.headers.get("cf-connecting-ip")
             || req.headers.get("x-real-ip")

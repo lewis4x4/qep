@@ -9,6 +9,7 @@ import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { NotFoundPage } from "./components/NotFoundPage";
+import { NoProfileShell } from "./components/NoProfileShell";
 import { Toaster } from "@/components/ui/toaster";
 import { supabase } from "./lib/supabase";
 import {
@@ -16,6 +17,7 @@ import {
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
+import { PortalRoutes } from "./features/portal/PortalRoutes";
 
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
@@ -47,6 +49,24 @@ const ServiceIntakePage = lazy(() =>
 const PartsWorkQueuePage = lazy(() =>
   import("./features/service/pages/PartsWorkQueuePage").then((m) => ({ default: m.PartsWorkQueuePage }))
 );
+const VendorProfilesPage = lazy(() =>
+  import("./features/service/pages/VendorProfilesPage").then((m) => ({ default: m.VendorProfilesPage }))
+);
+const ServiceEfficiencyPage = lazy(() =>
+  import("./features/service/pages/ServiceEfficiencyPage").then((m) => ({ default: m.ServiceEfficiencyPage }))
+);
+const ServiceBranchConfigPage = lazy(() =>
+  import("./features/service/pages/ServiceBranchConfigPage").then((m) => ({ default: m.ServiceBranchConfigPage }))
+);
+const PartsInventoryPage = lazy(() =>
+  import("./features/service/pages/PartsInventoryPage").then((m) => ({ default: m.PartsInventoryPage }))
+);
+const JobCodeSuggestionsPage = lazy(() =>
+  import("./features/service/pages/JobCodeSuggestionsPage").then((m) => ({ default: m.JobCodeSuggestionsPage }))
+);
+const ServicePublicTrackPage = lazy(() =>
+  import("./features/service/pages/ServicePublicTrackPage").then((m) => ({ default: m.ServicePublicTrackPage }))
+);
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
@@ -58,18 +78,6 @@ const RentalReturnsPage = lazy(() =>
 );
 const PaymentValidationPage = lazy(() =>
   import("./features/ops/pages/PaymentValidationPage").then((m) => ({ default: m.PaymentValidationPage }))
-);
-const PortalFleetPage = lazy(() =>
-  import("./features/portal/pages/PortalFleetPage").then((m) => ({ default: m.PortalFleetPage }))
-);
-const PortalServicePage = lazy(() =>
-  import("./features/portal/pages/PortalServicePage").then((m) => ({ default: m.PortalServicePage }))
-);
-const PortalInvoicesPage = lazy(() =>
-  import("./features/portal/pages/PortalInvoicesPage").then((m) => ({ default: m.PortalInvoicesPage }))
-);
-const PortalQuotesPage = lazy(() =>
-  import("./features/portal/pages/PortalQuotesPage").then((m) => ({ default: m.PortalQuotesPage }))
 );
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
@@ -363,25 +371,35 @@ function App() {
 
   if (!user) {
     return (
-      <>
-        <OfflineBanner />
-        <LoginPage authError={error} />
-        <SessionExpiredModal
-          open={showSessionExpiredModal}
-          onSignIn={() => setSessionExpired(false)}
-        />
-        <Toaster />
-      </>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <OfflineBanner />
+          <Suspense
+            fallback={
+              <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/service/track" element={<ServicePublicTrackPage />} />
+              <Route path="*" element={<LoginPage authError={error} />} />
+            </Routes>
+          </Suspense>
+          <SessionExpiredModal
+            open={showSessionExpiredModal}
+            onSignIn={() => setSessionExpired(false)}
+          />
+          <Toaster />
+        </BrowserRouter>
+      </QueryClientProvider>
     );
   }
 
   if (!profile) {
-    const profileLoadFailed = Boolean(error);
-
     return (
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <OfflineBanner />
           <SessionExpiredModal
             open={showSessionExpiredModal}
             onSignIn={() => {
@@ -389,43 +407,7 @@ function App() {
               void supabase.auth.signOut();
             }}
           />
-          <div className="min-h-screen bg-background flex items-center justify-center px-6">
-            <div className="text-center max-w-md" role="status" aria-live="polite">
-              {profileLoadFailed ? (
-                <>
-                  <div className="w-8 h-8 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto mb-3 text-sm font-semibold">
-                    !
-                  </div>
-                  <p className="text-sm font-medium text-foreground">
-                    We could not load your workspace access
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSessionExpired(false);
-                      void supabase.auth.signOut();
-                    }}
-                    className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    Sign in again
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div
-                    className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                    aria-hidden="true"
-                  />
-                  <p className="text-sm font-medium text-foreground">Finishing sign-in...</p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    We're loading your workspace access and route permissions.
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-          <Toaster />
+          <NoProfileShell authError={error} />
         </BrowserRouter>
       </QueryClientProvider>
     );
@@ -610,6 +592,57 @@ function App() {
                   )
                 }
               />
+              <Route
+                path="/service/vendors"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VendorProfilesPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/efficiency"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceEfficiencyPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/branches"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceBranchConfigPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/inventory"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <PartsInventoryPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/job-code-suggestions"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <JobCodeSuggestionsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route path="/service/track" element={<ServicePublicTrackPage />} />
               <Route
                 path="/ops/intake"
                 element={
@@ -855,10 +888,7 @@ function App() {
               />
               {/* Branded 404 for unknown routes */}
               {/* Customer Portal routes */}
-              <Route path="/portal" element={<PortalFleetPage />} />
-              <Route path="/portal/service" element={<PortalServicePage />} />
-              <Route path="/portal/invoices" element={<PortalInvoicesPage />} />
-              <Route path="/portal/quotes" element={<PortalQuotesPage />} />
+              <PortalRoutes />
 
               <Route path="*" element={<NotFoundPage />} />
             </AnimatedRoutes>

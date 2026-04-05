@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useServiceJobList } from "../hooks/useServiceJobs";
 import { ServiceJobCard } from "../components/ServiceJobCard";
 import { ServiceJobDetailDrawer } from "../components/ServiceJobDetailDrawer";
@@ -9,6 +10,9 @@ import { STAGE_LABELS, STAGE_COLORS } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
 import type { ServiceListFilters, ServiceJobWithRelations } from "../lib/types";
 import { Plus } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { Card } from "@/components/ui/card";
 
 type ViewMode = "kanban" | "table" | "machine_down" | "today" | "delayed" | "parts_pending" | "invoice_ready";
 
@@ -23,6 +27,8 @@ const VIEWS: { key: ViewMode; label: string }[] = [
 ];
 
 export function ServiceCommandCenterPage() {
+  const { profile } = useAuth();
+  const showCronHealth = ["admin", "manager", "owner"].includes(profile?.role ?? "");
   const [view, setView] = useState<ViewMode>("kanban");
   const [filters, setFilters] = useState<ServiceListFilters>({ per_page: 100 });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -37,6 +43,27 @@ export function ServiceCommandCenterPage() {
 
   const { data, isLoading } = useServiceJobList(queryFilters);
   const jobs = data?.jobs ?? [];
+
+  const {
+    data: cronRuns = [],
+    isFetched: cronFetched,
+    isError: cronError,
+    error: cronErr,
+  } = useQuery({
+    queryKey: ["service-cron-runs"],
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from("service_cron_runs")
+        .select("job_name, started_at, ok, error")
+        .order("started_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return rows ?? [];
+    },
+    enabled: showCronHealth,
+    staleTime: 45_000,
+    retry: 1,
+  });
 
   const filteredJobs = useMemo(() => {
     if (view === "today") {
@@ -56,14 +83,93 @@ export function ServiceCommandCenterPage() {
             {data?.total ?? 0} active service jobs
           </p>
         </div>
-        <Link
-          to="/service/intake"
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition"
-        >
-          <Plus className="w-4 h-4" />
-          New Request
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/service/intake"
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition"
+          >
+            <Plus className="w-4 h-4" />
+            New Request
+          </Link>
+          <Link
+            to="/service/parts"
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Parts queue
+          </Link>
+          <Link
+            to="/service/vendors"
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Vendors
+          </Link>
+          <Link
+            to="/service/efficiency"
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Efficiency
+          </Link>
+          {["admin", "manager", "owner"].includes(profile?.role ?? "") && (
+            <>
+              <Link
+                to="/service/branches"
+                className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Branch config
+              </Link>
+              <Link
+                to="/service/inventory"
+                className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Inventory
+              </Link>
+              <Link
+                to="/service/job-code-suggestions"
+                className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Job code suggestions
+              </Link>
+            </>
+          )}
+          <Link
+            to="/service/track"
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Track job (customer)
+          </Link>
+        </div>
       </div>
+
+      {showCronHealth && cronFetched && (
+        <Card className="p-3 border-dashed">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Recent cron worker runs</p>
+          {cronError && (
+            <p className="text-xs text-destructive">
+              {cronErr instanceof Error ? cronErr.message : "Could not load cron history"}
+            </p>
+          )}
+          {!cronError && cronRuns.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No rows in <code className="text-[10px]">service_cron_runs</code> yet, or logging disabled via env.
+            </p>
+          ) : !cronError ? (
+            <ul className="text-xs space-y-1 font-mono">
+              {cronRuns.map((r: { job_name: string; started_at: string; ok: boolean; error: string | null }) => (
+                <li key={`${r.job_name}-${r.started_at}`} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span className={r.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}>
+                    {r.ok ? "ok" : "err"}
+                  </span>
+                  <span className="text-foreground">{r.job_name}</span>
+                  <span className="text-muted-foreground">
+                    {new Date(r.started_at).toLocaleString()}
+                  </span>
+                  {!r.ok && r.error && <span className="text-destructive truncate max-w-full">{r.error}</span>}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Card>
+      )}
 
       {/* View tabs */}
       <div className="flex items-center gap-1 overflow-x-auto border-b pb-px">

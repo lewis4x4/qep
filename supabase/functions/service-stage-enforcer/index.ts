@@ -21,6 +21,14 @@ Deno.serve(async (req) => {
       return safeJsonError("Unauthorized — service role required", 401, null);
     }
 
+    if (req.method === "GET") {
+      return safeJsonOk({
+        ok: true,
+        function: "service-stage-enforcer",
+        ts: new Date().toISOString(),
+      }, null);
+    }
+
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey!);
 
     const results = {
@@ -49,10 +57,14 @@ Deno.serve(async (req) => {
       const allStaged = parts.every((p) => p.status === "staged" || p.status === "consumed");
 
       if (allStaged) {
+        const stageNow = new Date().toISOString();
         // Advance to parts_staged
         await supabase
           .from("service_jobs")
-          .update({ current_stage: "parts_staged" })
+          .update({
+            current_stage: "parts_staged",
+            current_stage_entered_at: stageNow,
+          })
           .eq("id", job.id);
 
         await supabase.from("service_job_events").insert({

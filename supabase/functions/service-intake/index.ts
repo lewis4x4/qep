@@ -105,9 +105,73 @@ Deno.serve(async (req) => {
     const haulRequired = false; // Default; UI allows override
 
     // Confidence based on match quality
-    const confidence = suggestedJobCodes.length > 0
+    let confidence = suggestedJobCodes.length > 0
       ? suggestedJobCodes[0].confidence_score ?? 0.3
       : 0.1;
+
+    let knowledge_notes: Array<{ id: string; content: string; note_type: string }> = [];
+    if (machine?.id) {
+      const { data: kn } = await supabase
+        .from("machine_knowledge_notes")
+        .select("id, content, note_type")
+        .eq("equipment_id", machine.id as string)
+        .order("created_at", { ascending: false })
+        .limit(12);
+      knowledge_notes = (kn ?? []) as typeof knowledge_notes;
+    }
+
+    let llm_diagnosis: Record<string, unknown> | null = null;
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (apiKey && suggestedJobCodes.length > 0 && body.symptom && String(body.symptom).trim().length > 0) {
+      try {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You assist heavy equipment service intake. Given a symptom and job code list, return compact JSON: { ranked_job_code_ids: string[], reasoning: string, confidence_0_to_1: number }",
+              },
+              {
+                role: "user",
+                content: JSON.stringify({
+                  symptom: body.symptom,
+                  machine,
+                  job_codes: suggestedJobCodes.map((j) => ({
+                    id: j.id,
+                    job_name: j.job_name,
+                    hours: j.shop_average_hours ?? j.manufacturer_estimated_hours,
+                  })),
+                  prior_service_history: serviceHistory,
+                  institutional_notes: knowledge_notes.map((k) => k.content).slice(0, 6),
+                }),
+              },
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.2,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const text = json.choices?.[0]?.message?.content;
+          if (text) {
+            llm_diagnosis = JSON.parse(text) as Record<string, unknown>;
+            const c = Number(llm_diagnosis.confidence_0_to_1);
+            if (!Number.isNaN(c)) confidence = Math.min(1, Math.max(0.05, c));
+          }
+        }
+      } catch (e) {
+        console.warn("service-intake LLM skipped:", e);
+      }
+    }
+
+    const knowledgeNoteIds = knowledge_notes.map((k) => k.id).filter(Boolean);
 
     return safeJsonOk({
       machine,
@@ -117,6 +181,9 @@ Deno.serve(async (req) => {
       estimated_hours: estimatedHours,
       haul_required: haulRequired,
       confidence,
+      knowledge_notes,
+      knowledge_note_ids: knowledgeNoteIds,
+      llm_diagnosis,
       suggested_next_step: suggestedJobCodes.length > 0
         ? "Select job code and create service request"
         : "Manual diagnosis required — no matching job codes found",

@@ -23,22 +23,30 @@ type CrmRepSafeDealRow = CrmDatabase["public"]["Views"]["crm_deals_rep_safe"]["R
 type CrmWeightedDealRow = CrmDatabase["public"]["Views"]["crm_deals_weighted"]["Row"];
 
 function toRepSafeDeal(row: CrmRepSafeDealRow): CrmRepSafeDeal {
+  const r = row as CrmRepSafeDealRow & {
+    sla_deadline_at?: string | null;
+    deposit_status?: string | null;
+    deposit_amount?: number | null;
+  };
   return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    name: row.name,
-    stageId: row.stage_id,
-    primaryContactId: row.primary_contact_id,
-    companyId: row.company_id,
-    assignedRepId: row.assigned_rep_id,
-    amount: row.amount,
-    expectedCloseOn: row.expected_close_on,
-    nextFollowUpAt: row.next_follow_up_at,
-    lastActivityAt: row.last_activity_at,
-    closedAt: row.closed_at,
-    hubspotDealId: row.hubspot_deal_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    id: r.id,
+    workspaceId: r.workspace_id,
+    name: r.name,
+    stageId: r.stage_id,
+    primaryContactId: r.primary_contact_id,
+    companyId: r.company_id,
+    assignedRepId: r.assigned_rep_id,
+    amount: r.amount,
+    expectedCloseOn: r.expected_close_on,
+    nextFollowUpAt: r.next_follow_up_at,
+    lastActivityAt: r.last_activity_at,
+    closedAt: r.closed_at,
+    hubspotDealId: r.hubspot_deal_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    slaDeadlineAt: r.sla_deadline_at ?? null,
+    depositStatus: r.deposit_status ?? null,
+    depositAmount: r.deposit_amount ?? null,
   };
 }
 

@@ -128,3 +128,39 @@ verify_jwt = false
 
 [functions.service-stage-enforcer]
 verify_jwt = false
+
+[functions.service-parts-manager]
+verify_jwt = false
+
+[functions.service-vendor-escalator]
+verify_jwt = false
+
+[functions.service-invoice-generator]
+verify_jwt = false
+
+[functions.service-jobcode-learner]
+verify_jwt = false
+
+[functions.service-jobcode-suggestion-merge]
+verify_jwt = false
+
+[functions.service-scheduler]
+verify_jwt = false
+
+[functions.service-calendar-slots]
+verify_jwt = false
+
+[functions.service-upsell-scanner]
+verify_jwt = false
+
+[functions.service-public-job-status]
+verify_jwt = false
+
+[functions.service-vendor-inbound]
+verify_jwt = false
+
+[functions.service-customer-notify-dispatch]
+verify_jwt = false
+
+[functions.portal-api]
+verify_jwt = false

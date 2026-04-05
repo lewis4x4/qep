@@ -10,6 +10,7 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 
 interface HaulRequest {
   action: string;
@@ -149,9 +150,13 @@ async function handleSyncStatus(
   const jobId = job.id;
 
   if (ticket.status === "completed" && job.current_stage === "haul_scheduled") {
+    const stageNow = new Date().toISOString();
     await supabase
       .from("service_jobs")
-      .update({ current_stage: "scheduled" })
+      .update({
+        current_stage: "scheduled",
+        current_stage_entered_at: stageNow,
+      })
       .eq("id", jobId);
 
     await supabase.from("service_job_events").insert({
@@ -163,15 +168,22 @@ async function handleSyncStatus(
       metadata: { trigger: "haul_completed", traffic_ticket_id: ticket.id },
     });
 
+    const { data: fullJob } = await supabase.from("service_jobs").select("*").eq("id", jobId).single();
+    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "scheduled");
+
     return safeJsonOk({ synced: true, advanced_to: "scheduled" }, origin);
   }
 
   if ((ticket.status === "scheduled" || ticket.status === "being_shipped") &&
     job.current_stage !== "haul_scheduled" &&
     job.current_stage === "parts_staged") {
+    const stageNow = new Date().toISOString();
     await supabase
       .from("service_jobs")
-      .update({ current_stage: "haul_scheduled" })
+      .update({
+        current_stage: "haul_scheduled",
+        current_stage_entered_at: stageNow,
+      })
       .eq("id", jobId);
 
     await supabase.from("service_job_events").insert({
@@ -182,6 +194,11 @@ async function handleSyncStatus(
       new_stage: "haul_scheduled",
       metadata: { trigger: "haul_scheduled", traffic_ticket_id: ticket.id },
     });
+
+    const { data: fullJobHaul } = await supabase.from("service_jobs").select("*").eq("id", jobId).single();
+    if (fullJobHaul) {
+      await notifyAfterStageChange(supabase, fullJobHaul as Record<string, unknown>, "haul_scheduled");
+    }
 
     return safeJsonOk({ synced: true, advanced_to: "haul_scheduled" }, origin);
   }

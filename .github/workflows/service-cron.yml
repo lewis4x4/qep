@@ -1,0 +1,61 @@
+# Fallback scheduler when pg_cron is unavailable: hits service edge functions with the service role.
+# Configure repository secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+name: Service engine cron
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # Every 5 minutes (UTC)
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: service-cron
+  cancel-in-progress: false
+
+jobs:
+  run-workers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: service-tat-monitor
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -sS -f -X POST "${SUPABASE_URL}/functions/v1/service-tat-monitor" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | head -c 2000
+          echo
+
+      - name: service-stage-enforcer
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -sS -f -X POST "${SUPABASE_URL}/functions/v1/service-stage-enforcer" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | head -c 2000
+          echo
+
+      - name: service-vendor-escalator
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -sS -f -X POST "${SUPABASE_URL}/functions/v1/service-vendor-escalator" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' | head -c 2000
+          echo
+
+      - name: service-customer-notify-dispatch
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -sS -f -X POST "${SUPABASE_URL}/functions/v1/service-customer-notify-dispatch" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"source":"github_actions"}' | head -c 2000
+          echo

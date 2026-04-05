@@ -26,6 +26,7 @@ export interface PartsQueueItem {
     expected_date: string | null;
     po_reference: string | null;
   }[];
+  staging?: { bin_location: string | null; staged_at: string }[];
 }
 
 export function usePartsQueue() {
@@ -33,7 +34,7 @@ export function usePartsQueue() {
     queryKey: ["parts-queue"],
     queryFn: async () => {
       // Table not in generated types until next type generation
-      const result: { data: PartsQueueItem[] | null; error: { message: string } | null } = await (supabase as any)
+      const result = await supabase
         .from("service_parts_requirements")
         .select(`
           *,
@@ -42,7 +43,8 @@ export function usePartsQueue() {
             customer:crm_companies(id, name),
             machine:crm_equipment(id, make, model, serial_number)
           ),
-          actions:service_parts_actions(id, action_type, completed_at, expected_date, po_reference)
+          actions:service_parts_actions(id, action_type, completed_at, expected_date, po_reference),
+          staging:service_parts_staging(bin_location, staged_at)
         `)
         .not("status", "in", '("consumed","returned","cancelled")')
         .order("need_by_date", { ascending: true, nullsFirst: false });

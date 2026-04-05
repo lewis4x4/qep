@@ -1,19 +1,60 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
-import { Plus } from "lucide-react";
+import { Plus, ImagePlus } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const REQUEST_TYPES = ["repair", "maintenance", "warranty", "parts", "inspection", "emergency"];
 
+/** Customer-safe labels — no internal codes or employee names. */
+const JOB_STAGE_LABEL: Record<string, string> = {
+  request_received: "Request received",
+  triaging: "Being reviewed",
+  diagnosis_selected: "Diagnosis confirmed",
+  quote_drafted: "Quote in progress",
+  quote_sent: "Quote sent",
+  approved: "Approved",
+  parts_pending: "Waiting on parts",
+  parts_staged: "Parts ready",
+  haul_scheduled: "Transport scheduled",
+  scheduled: "Appointment scheduled",
+  in_progress: "In progress",
+  blocked_waiting: "Waiting",
+  quality_check: "Quality review",
+  ready_for_pickup: "Ready for pickup",
+  invoice_ready: "Invoice ready",
+  invoiced: "Invoiced",
+  paid_closed: "Completed",
+};
+
 export function PortalServicePage() {
   const queryClient = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [requestType, setRequestType] = useState("");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState("normal");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [uploadBusy, setUploadBusy] = useState(false);
+
+  const { data: portalRow } = useQuery({
+    queryKey: ["portal", "customer-self"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("portal_customers")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 60_000,
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["portal", "service-requests"],
@@ -28,8 +69,32 @@ export function PortalServicePage() {
       setShowForm(false);
       setRequestType("");
       setDescription("");
+      setPhotoUrls([]);
     },
   });
+
+  const onPickFiles = async (files: FileList | null) => {
+    if (!files?.length || !portalRow?.id) return;
+    setUploadBusy(true);
+    try {
+      const next: string[] = [...photoUrls];
+      for (const file of Array.from(files).slice(0, 6)) {
+        const ext = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "") || "jpg";
+        const path = `${portalRow.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("portal-service-photos")
+          .upload(path, file, { upsert: false, contentType: file.type || undefined });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from("portal-service-photos").getPublicUrl(path);
+        if (pub?.publicUrl) next.push(pub.publicUrl);
+      }
+      setPhotoUrls(next);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUploadBusy(false);
+    }
+  };
 
   return (
     <PortalLayout>
@@ -51,8 +116,41 @@ export function PortalServicePage() {
             <option value="high">High</option>
             <option value="emergency">Emergency</option>
           </select>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => onPickFiles(e.target.files)}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!portalRow?.id || uploadBusy}
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImagePlus className="mr-1 h-4 w-4" />
+              {uploadBusy ? "Uploading…" : "Add photos"}
+            </Button>
+            {photoUrls.length > 0 && (
+              <span className="text-xs text-muted-foreground">{photoUrls.length} photo(s)</span>
+            )}
+          </div>
           {createMutation.isError && <p className="text-xs text-red-400">Failed to submit. Try again.</p>}
-          <Button size="sm" onClick={() => createMutation.mutate({ request_type: requestType, description, urgency })} disabled={!requestType || !description || createMutation.isPending}>
+          <Button
+            size="sm"
+            onClick={() =>
+              createMutation.mutate({
+                request_type: requestType,
+                description,
+                urgency,
+                photos: photoUrls.map((url) => ({ url })),
+              })}
+            disabled={!requestType || !description || createMutation.isPending}
+          >
             {createMutation.isPending ? "Submitting..." : "Submit Request"}
           </Button>
         </Card>
@@ -61,21 +159,38 @@ export function PortalServicePage() {
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
 
       <div className="space-y-2">
-        {(data?.requests ?? []).map((req: any) => (
-          <Card key={req.id} className="p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground mr-2">{req.request_type}</span>
-                <span className="text-sm font-medium text-foreground">{req.description?.substring(0, 60)}{req.description?.length > 60 ? "..." : ""}</span>
+        {(data?.requests ?? []).map((req: {
+          id: string;
+          request_type: string;
+          description: string;
+          status: string;
+          internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
+        }) => {
+          const ij = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
+          const shopStage = ij?.current_stage
+            ? (JOB_STAGE_LABEL[ij.current_stage] ?? "In progress")
+            : null;
+          return (
+            <Card key={req.id} className="p-3 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground mr-2">{req.request_type}</span>
+                  <span className="text-sm font-medium text-foreground">{req.description?.substring(0, 60)}{req.description && req.description.length > 60 ? "..." : ""}</span>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
+                  req.status === "completed" ? "bg-emerald-500/10 text-emerald-400" :
+                  req.status === "submitted" ? "bg-blue-500/10 text-blue-400" :
+                  "bg-amber-500/10 text-amber-400"
+                }`}>{req.status}</span>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                req.status === "completed" ? "bg-emerald-500/10 text-emerald-400" :
-                req.status === "submitted" ? "bg-blue-500/10 text-blue-400" :
-                "bg-amber-500/10 text-amber-400"
-              }`}>{req.status}</span>
-            </div>
-          </Card>
-        ))}
+              {shopStage && (
+                <p className="text-xs text-muted-foreground">
+                  Shop status: <span className="text-foreground font-medium">{shopStage}</span>
+                </p>
+              )}
+            </Card>
+          );
+        })}
       </div>
     </PortalLayout>
   );

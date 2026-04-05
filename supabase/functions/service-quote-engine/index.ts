@@ -10,6 +10,7 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 
 interface QuoteRequest {
   action: string;
@@ -230,6 +231,14 @@ async function handleUpdate(
   if (!body.quote_id) return safeJsonError("quote_id required", 400, origin);
   if (!body.lines) return safeJsonError("lines required", 400, origin);
 
+  const { data: quoteHeader, error: qhErr } = await supabase
+    .from("service_quotes")
+    .select("workspace_id")
+    .eq("id", body.quote_id)
+    .single();
+  if (qhErr || !quoteHeader) return safeJsonError("Quote not found", 404, origin);
+  const wsId = quoteHeader.workspace_id as string;
+
   // Delete old lines and re-insert
   await supabase.from("service_quote_lines").delete().eq("quote_id", body.quote_id);
 
@@ -246,7 +255,7 @@ async function handleUpdate(
     if (l.line_type === "haul") haulTotal += ext;
     if (l.line_type === "shop_supply") shopSupplies += ext;
     return {
-      workspace_id: "default",
+      workspace_id: wsId,
       quote_id: body.quote_id,
       line_type: l.line_type,
       description: l.description,
@@ -284,12 +293,24 @@ async function handleSend(
 
   if (error) return safeJsonError(error.message, 400, origin);
 
+  const stageNow = new Date().toISOString();
+
   // Transition job to quote_sent if at quote_drafted
   if (quote.job?.current_stage === "quote_drafted") {
     await supabase
       .from("service_jobs")
-      .update({ current_stage: "quote_sent" })
+      .update({
+        current_stage: "quote_sent",
+        current_stage_entered_at: stageNow,
+      })
       .eq("id", quote.job_id);
+
+    const { data: fullJob } = await supabase
+      .from("service_jobs")
+      .select("*")
+      .eq("id", quote.job_id)
+      .single();
+    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "quote_sent");
   }
 
   return safeJsonOk({ quote }, origin);
@@ -311,9 +332,11 @@ async function handleApprove(
 
   if (error) return safeJsonError(error.message, 400, origin);
 
+  const ws = quote.workspace_id as string;
+
   // Record approval
   await supabase.from("service_quote_approvals").insert({
-    workspace_id: "default",
+    workspace_id: ws,
     quote_id: body.quote_id,
     approved_by: body.approved_by || "customer",
     approval_type: body.approval_type || "customer",
@@ -322,12 +345,24 @@ async function handleApprove(
     notes: body.notes || null,
   });
 
+  const stageNow = new Date().toISOString();
+
   // Transition job to approved if at quote_sent
   if (quote.job?.current_stage === "quote_sent") {
     await supabase
       .from("service_jobs")
-      .update({ current_stage: "approved" })
+      .update({
+        current_stage: "approved",
+        current_stage_entered_at: stageNow,
+      })
       .eq("id", quote.job_id);
+
+    const { data: fullJob } = await supabase
+      .from("service_jobs")
+      .select("*")
+      .eq("id", quote.job_id)
+      .single();
+    if (fullJob) await notifyAfterStageChange(supabase, fullJob as Record<string, unknown>, "approved");
   }
 
   return safeJsonOk({ quote }, origin);

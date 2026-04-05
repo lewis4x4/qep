@@ -9,6 +9,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
 const DEFAULT_TARGETS: Record<string, number> = {
   request_received: 2,
@@ -58,14 +59,29 @@ Deno.serve(async (req) => {
       return safeJsonError("Unauthorized — service role required", 401, null);
     }
 
+    if (req.method === "GET") {
+      return safeJsonOk({
+        ok: true,
+        function: "service-tat-monitor",
+        ts: new Date().toISOString(),
+      }, null);
+    }
+
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey!);
 
-    const results = { jobs_checked: 0, warnings_created: 0, escalations_created: 0 };
+    const results = {
+      jobs_checked: 0,
+      warnings_created: 0,
+      escalations_created: 0,
+      customer_delay_notices: 0,
+    };
 
     // Fetch all active (non-closed, non-terminal) service jobs
     const { data: jobs } = await supabase
       .from("service_jobs")
-      .select("id, workspace_id, current_stage, status_flags, advisor_id, service_manager_id, updated_at")
+      .select(
+        "id, workspace_id, current_stage, status_flags, advisor_id, service_manager_id, current_stage_entered_at, updated_at",
+      )
       .is("closed_at", null)
       .is("deleted_at", null)
       .neq("current_stage", "paid_closed");
@@ -73,6 +89,39 @@ Deno.serve(async (req) => {
     if (!jobs || jobs.length === 0) {
       return safeJsonOk({ ok: true, results }, null);
     }
+
+    const workspaceIds = [...new Set(jobs.map((j) => j.workspace_id as string))];
+    const { data: tatRows } = await supabase
+      .from("service_tat_targets")
+      .select("workspace_id, current_stage, target_hours, machine_down_target_hours")
+      .in("workspace_id", workspaceIds);
+
+    const tatKey = (ws: string, stage: string) => `${ws}::${stage}`;
+    const tatMap = new Map<
+      string,
+      { target_hours: number; machine_down_target_hours: number }
+    >();
+    for (const r of tatRows ?? []) {
+      tatMap.set(tatKey(r.workspace_id as string, r.current_stage as string), {
+        target_hours: Number(r.target_hours),
+        machine_down_target_hours: Number(r.machine_down_target_hours),
+      });
+    }
+
+    const targetHoursFor = (
+      workspaceId: string,
+      stage: string,
+      isMachineDown: boolean,
+    ): number | undefined => {
+      const row = tatMap.get(tatKey(workspaceId, stage));
+      if (row) {
+        return isMachineDown
+          ? row.machine_down_target_hours
+          : row.target_hours;
+      }
+      const fallback = isMachineDown ? MACHINE_DOWN_TARGETS : DEFAULT_TARGETS;
+      return fallback[stage];
+    };
 
     // Fetch managers for escalation
     const { data: managers } = await supabase
@@ -87,11 +136,15 @@ Deno.serve(async (req) => {
       results.jobs_checked++;
       const isMachineDown = Array.isArray(job.status_flags) &&
         job.status_flags.includes("machine_down");
-      const targets = isMachineDown ? MACHINE_DOWN_TARGETS : DEFAULT_TARGETS;
-      const targetHours = targets[job.current_stage];
-      if (!targetHours) continue;
+      const targetHours = targetHoursFor(
+        job.workspace_id as string,
+        job.current_stage as string,
+        isMachineDown,
+      );
+      if (targetHours == null || Number.isNaN(targetHours)) continue;
 
-      const elapsedHours = (now - new Date(job.updated_at).getTime()) / 3_600_000;
+      const stageStart = job.current_stage_entered_at ?? job.updated_at;
+      const elapsedHours = (now - new Date(stageStart as string).getTime()) / 3_600_000;
       if (elapsedHours <= targetHours) continue;
 
       // Check for existing recent warning
@@ -124,6 +177,34 @@ Deno.serve(async (req) => {
           },
         });
         results.warnings_created++;
+      }
+
+      // Customer-facing delay advisory at 1.5x target (portal notification log)
+      if (elapsedHours > targetHours * 1.5) {
+        const { data: dup } = await supabase
+          .from("service_customer_notifications")
+          .select("id")
+          .eq("job_id", job.id)
+          .eq("notification_type", "tat_delay_advisory")
+          .gte("sent_at", new Date(now - 24 * 3_600_000).toISOString())
+          .maybeSingle();
+        if (!dup) {
+          await supabase.from("service_customer_notifications").insert({
+            workspace_id: job.workspace_id,
+            job_id: job.id,
+            notification_type: "tat_delay_advisory",
+            channel: "portal",
+            recipient: null,
+            metadata: {
+              stage: job.current_stage,
+              elapsed_hours: Math.round(elapsedHours * 10) / 10,
+              target_hours: targetHours,
+              message:
+                "Your service may be taking longer than expected. Our team is working on it.",
+            },
+          });
+          results.customer_delay_notices++;
+        }
       }
 
       // Escalate if critically over (2x target)
@@ -175,7 +256,7 @@ Deno.serve(async (req) => {
           workspace_id: job.workspace_id,
           job_id: job.id,
           segment_name: job.current_stage,
-          started_at: job.updated_at,
+          started_at: job.current_stage_entered_at ?? job.updated_at,
           target_duration_hours: targetHours,
           actual_duration_hours: Math.round(elapsedHours * 100) / 100,
           is_machine_down: isMachineDown,
@@ -183,9 +264,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logServiceCronRun(supabase, {
+      jobName: "service-tat-monitor",
+      ok: true,
+      metadata: { results },
+    });
+
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
     console.error("service-tat-monitor error:", err);
+    try {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (serviceKey) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+        await logServiceCronRun(supabase, {
+          jobName: "service-tat-monitor",
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } catch {
+      /* ignore secondary logging failures */
+    }
     return safeJsonError("Internal server error", 500, null);
   }
 });

@@ -1,0 +1,22 @@
+# Nightly service-jobcode-learner when pg_cron is unavailable.
+name: Service engine nightly
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  jobcode-learner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: service-jobcode-learner
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          curl -sS -f -X POST "${SUPABASE_URL}/functions/v1/service-jobcode-learner" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"source":"github_actions"}' | head -c 4000
+          echo

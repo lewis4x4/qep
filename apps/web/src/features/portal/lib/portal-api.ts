@@ -31,6 +31,8 @@ export const portalApi = {
   createPartsOrder: (data: Record<string, unknown>) =>
     portalFetch("parts", { method: "POST", body: JSON.stringify(data) }),
   getInvoices: () => portalFetch("invoices"),
+  recordInvoicePayment: (data: Record<string, unknown>) =>
+    portalFetch("invoices/pay", { method: "POST", body: JSON.stringify(data) }),
   getQuotes: () => portalFetch("quotes"),
   updateQuote: (data: Record<string, unknown>) =>
     portalFetch("quotes", { method: "PUT", body: JSON.stringify(data) }),

@@ -41,10 +41,27 @@ Deno.serve(async (req) => {
       return safeJsonError(`Invalid note_type. Must be one of: ${validTypes.join(", ")}`, 400, origin);
     }
 
+    let workspaceId = "default";
+    if (body.job_id) {
+      const { data: j } = await supabase
+        .from("service_jobs")
+        .select("workspace_id")
+        .eq("id", body.job_id)
+        .maybeSingle();
+      if (j?.workspace_id) workspaceId = j.workspace_id as string;
+    } else if (body.equipment_id) {
+      const { data: eq } = await supabase
+        .from("crm_equipment")
+        .select("workspace_id")
+        .eq("id", body.equipment_id)
+        .maybeSingle();
+      if (eq?.workspace_id) workspaceId = eq.workspace_id as string;
+    }
+
     const { data: note, error } = await supabase
       .from("machine_knowledge_notes")
       .insert({
-        workspace_id: "default",
+        workspace_id: workspaceId,
         equipment_id: body.equipment_id || null,
         job_id: body.job_id || null,
         note_type: body.note_type,

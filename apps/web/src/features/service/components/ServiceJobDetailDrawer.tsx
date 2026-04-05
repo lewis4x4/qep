@@ -2,6 +2,18 @@ import { useServiceJob } from "../hooks/useServiceJobs";
 import { useTransitionServiceJob } from "../hooks/useServiceJobMutation";
 import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
 import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
+import { VoiceFieldNotes } from "./VoiceFieldNotes";
+import { PartsRequirementEditor } from "./PartsRequirementEditor";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import {
+  assignTechnicianToJob,
+  linkPortalRequestToJob,
+  scanUpsell,
+  suggestCalendarSlots,
+  suggestTechnicians,
+  updateServiceJob,
+} from "../lib/api";
 import {
   STAGE_LABELS,
   STAGE_COLORS,
@@ -20,8 +32,78 @@ interface Props {
 }
 
 export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
+  const qc = useQueryClient();
   const { data: job, isLoading } = useServiceJob(jobId ?? undefined);
   const transition = useTransitionServiceJob();
+  const [portalRequestId, setPortalRequestId] = useState("");
+  const [schedStartLocal, setSchedStartLocal] = useState("");
+  const [schedEndLocal, setSchedEndLocal] = useState("");
+
+  useEffect(() => {
+    if (!job) return;
+    const s = job.scheduled_start_at;
+    const e = job.scheduled_end_at;
+    setSchedStartLocal(s ? s.slice(0, 16) : "");
+    setSchedEndLocal(e ? e.slice(0, 16) : "");
+  }, [job?.id, job?.scheduled_start_at, job?.scheduled_end_at]);
+
+  const upsell = useMutation({
+    mutationFn: async () => {
+      if (!job?.machine_id) throw new Error("No machine on job");
+      return scanUpsell(job.machine_id, job.id);
+    },
+  });
+
+  const sched = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) throw new Error("No job");
+      return suggestTechnicians(job.id);
+    },
+  });
+
+  const linkPortal = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) throw new Error("No job");
+      return linkPortalRequestToJob(job.id, portalRequestId.trim());
+    },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
+
+  const assignTech = useMutation({
+    mutationFn: async (technicianUserId: string) => {
+      if (!job?.id) throw new Error("No job");
+      return assignTechnicianToJob(job.id, technicianUserId);
+    },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
+
+  const loadSlots = useMutation({
+    mutationFn: async () => {
+      if (!job?.branch_id) throw new Error("Set branch on the job to load calendar slots");
+      return suggestCalendarSlots({ branch_id: job.branch_id, count: 16 });
+    },
+  });
+
+  const saveSchedule = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) throw new Error("No job");
+      return updateServiceJob(job.id, {
+        scheduled_start_at: schedStartLocal
+          ? new Date(schedStartLocal).toISOString()
+          : null,
+        scheduled_end_at: schedEndLocal
+          ? new Date(schedEndLocal).toISOString()
+          : null,
+      });
+    },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
 
   if (!jobId) return null;
 
@@ -65,6 +147,113 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
               ))}
             </div>
 
+            {/* Tracking + portal bridge */}
+            <section className="space-y-2 rounded-lg border p-3 bg-muted/20">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Customer tracking</h3>
+              <p className="text-xs font-mono break-all">
+                Token: {job.tracking_token ?? "—"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Portal request: {job.portal_request_id ?? "—"}
+              </p>
+              <div className="flex flex-col gap-2">
+                <input
+                  value={portalRequestId}
+                  onChange={(e) => setPortalRequestId(e.target.value)}
+                  placeholder="Portal service_request UUID"
+                  className="text-xs rounded border px-2 py-1 font-mono"
+                />
+                <button
+                  type="button"
+                  disabled={linkPortal.isPending || !portalRequestId.trim()}
+                  onClick={() => linkPortal.mutate()}
+                  className="text-xs rounded bg-secondary px-2 py-1 w-fit"
+                >
+                  {linkPortal.isPending ? "Linking…" : "Link portal request to job"}
+                </button>
+                {linkPortal.isError && (
+                  <p className="text-xs text-destructive">{(linkPortal.error as Error).message}</p>
+                )}
+              </div>
+            </section>
+
+            {/* Scheduling — branch business hours drive suggested slots */}
+            <section className="space-y-2 rounded-lg border p-3 bg-muted/10">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Schedule</h3>
+              <p className="text-xs text-muted-foreground">
+                Branch: {job.branch_id ?? "—"} · Slots follow branch config (Service → Branch config).
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="text-xs block">
+                  Start
+                  <input
+                    type="datetime-local"
+                    value={schedStartLocal}
+                    onChange={(e) => setSchedStartLocal(e.target.value)}
+                    className="mt-0.5 w-full rounded border px-2 py-1 text-sm bg-background"
+                  />
+                </label>
+                <label className="text-xs block">
+                  End
+                  <input
+                    type="datetime-local"
+                    value={schedEndLocal}
+                    onChange={(e) => setSchedEndLocal(e.target.value)}
+                    className="mt-0.5 w-full rounded border px-2 py-1 text-sm bg-background"
+                  />
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="text-xs rounded bg-secondary px-2 py-1"
+                  disabled={loadSlots.isPending || !job.branch_id}
+                  onClick={() => loadSlots.mutate()}
+                >
+                  {loadSlots.isPending ? "Loading slots…" : "Suggest open slots"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs rounded bg-primary text-primary-foreground px-2 py-1"
+                  disabled={saveSchedule.isPending}
+                  onClick={() => saveSchedule.mutate()}
+                >
+                  {saveSchedule.isPending ? "Saving…" : "Save schedule"}
+                </button>
+              </div>
+              {loadSlots.data?.slots && loadSlots.data.slots.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {loadSlots.data.slots.map((iso) => (
+                    <button
+                      key={iso}
+                      type="button"
+                      className="text-[10px] rounded border px-1.5 py-0.5 bg-card hover:bg-muted"
+                      onClick={() => {
+                        const start = iso.slice(0, 16);
+                        setSchedStartLocal(start);
+                        const endDate = new Date(iso);
+                        endDate.setMinutes(endDate.getMinutes() + (loadSlots.data?.slot_minutes ?? 60));
+                        setSchedEndLocal(endDate.toISOString().slice(0, 16));
+                      }}
+                    >
+                      {new Date(iso).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {loadSlots.isError && (
+                <p className="text-xs text-destructive">{(loadSlots.error as Error).message}</p>
+              )}
+              {saveSchedule.isError && (
+                <p className="text-xs text-destructive">{(saveSchedule.error as Error).message}</p>
+              )}
+            </section>
+
             {/* Customer / Machine */}
             <section className="space-y-2">
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Customer &amp; Machine</h3>
@@ -95,6 +284,61 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 <p className="text-sm">{job.ai_diagnosis_summary}</p>
               </section>
             )}
+
+            <PartsRequirementEditor
+              jobId={job.id}
+              selectedJobCodeId={job.selected_job_code_id}
+            />
+
+            <section className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => upsell.mutate()}
+                  disabled={!job.machine_id || upsell.isPending}
+                  className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-900"
+                >
+                  {upsell.isPending ? "Scanning…" : "PM / upsell scan"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sched.mutate()}
+                  disabled={sched.isPending}
+                  className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-900"
+                >
+                  {sched.isPending ? "Ranking…" : "Suggest technicians"}
+                </button>
+              </div>
+              {upsell.data && typeof upsell.data === "object" && upsell.data !== null && "recommendations" in upsell.data ? (
+                <ul className="text-xs space-y-1 border rounded p-2 bg-muted/20">
+                  {(upsell.data as { recommendations: Array<{ message: string }> }).recommendations.map((r, i) => (
+                    <li key={i}>{r.message}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {sched.data && typeof sched.data === "object" && sched.data !== null && "suggestions" in sched.data ? (
+                <ul className="text-xs space-y-1 border rounded p-2 bg-muted/20">
+                  {(sched.data as {
+                    suggestions: Array<{ name: string; score: number; user_id: string }>;
+                  }).suggestions.map((s, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2">
+                      <span>{s.name} — score {s.score}</span>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded bg-primary/15 px-2 py-0.5 text-[10px]"
+                        disabled={assignTech.isPending}
+                        onClick={() => assignTech.mutate(s.user_id)}
+                      >
+                        Assign
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {assignTech.isError && (
+                <p className="text-xs text-destructive">{(assignTech.error as Error).message}</p>
+              )}
+            </section>
 
             {/* Parts Status */}
             {job.parts && job.parts.length > 0 && (
@@ -167,6 +411,11 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 jobId={job.id}
                 existingQuoteId={job.quotes?.[0]?.id}
               />
+            )}
+
+            {/* Field / voice notes during active repair */}
+            {stage === "in_progress" && (
+              <VoiceFieldNotes jobId={job.id} machineId={job.machine_id} />
             )}
 
             {/* Completion Feedback — show at quality_check stage */}

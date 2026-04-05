@@ -364,6 +364,179 @@ interface SocialAccountsRow {
   updated_at: string;
 }
 
+/** service_jobs (094 + 099 migrations) */
+interface ServiceJobsRow {
+  id: string;
+  workspace_id: string;
+  customer_id: string | null;
+  contact_id: string | null;
+  machine_id: string | null;
+  source_type: string;
+  request_type: string;
+  priority: string;
+  current_stage: string;
+  current_stage_entered_at: string;
+  status_flags: string[];
+  branch_id: string | null;
+  advisor_id: string | null;
+  service_manager_id: string | null;
+  technician_id: string | null;
+  requested_by_name: string | null;
+  customer_problem_summary: string | null;
+  ai_diagnosis_summary: string | null;
+  selected_job_code_id: string | null;
+  haul_required: boolean;
+  shop_or_field: string;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  quote_total: number | null;
+  invoice_total: number | null;
+  traffic_ticket_id: string | null;
+  portal_request_id: string | null;
+  tracking_token: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  deleted_at: string | null;
+}
+
+interface ServicePartsRequirementsRow {
+  id: string;
+  workspace_id: string;
+  job_id: string;
+  part_number: string;
+  description: string | null;
+  quantity: number;
+  unit_cost: number | null;
+  source: string;
+  status: string;
+  need_by_date: string | null;
+  confidence: string;
+  vendor_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ServicePartsActionsRow {
+  id: string;
+  workspace_id: string;
+  requirement_id: string;
+  job_id: string;
+  action_type: string;
+  actor_id: string | null;
+  from_branch: string | null;
+  to_branch: string | null;
+  vendor_id: string | null;
+  po_reference: string | null;
+  expected_date: string | null;
+  completed_at: string | null;
+  superseded_at: string | null;
+  plan_batch_id: string | null;
+  metadata: Json;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ServicePartsStagingRow {
+  id: string;
+  workspace_id: string;
+  requirement_id: string;
+  job_id: string;
+  bin_location: string | null;
+  staged_by: string | null;
+  staged_at: string;
+  created_at: string;
+}
+
+interface ServiceBranchConfigRow {
+  id: string;
+  workspace_id: string;
+  branch_id: string;
+  default_advisor_pool: Json;
+  default_technician_pool: Json;
+  parts_team_notify_user_ids: Json;
+  planner_rules: Json;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ServiceTatTargetsRow {
+  id: string;
+  workspace_id: string;
+  current_stage: string;
+  target_hours: number;
+  machine_down_target_hours: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PartsInventoryRow {
+  id: string;
+  workspace_id: string;
+  branch_id: string;
+  part_number: string;
+  qty_on_hand: number;
+  bin_location: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface JobCodeTemplateSuggestionsRow {
+  id: string;
+  workspace_id: string;
+  job_code_id: string;
+  suggested_parts_template: Json;
+  suggested_common_add_ons: Json;
+  observation_count: number;
+  review_status: "pending" | "approved" | "rejected";
+  created_at: string;
+  updated_at: string;
+}
+
+interface ServiceCronRunsRow {
+  id: string;
+  workspace_id: string;
+  job_name: string;
+  started_at: string;
+  finished_at: string | null;
+  ok: boolean;
+  error: string | null;
+  metadata: Json;
+  created_at: string;
+}
+
+interface ServiceTatMetricsRow {
+  id: string;
+  workspace_id: string;
+  job_id: string;
+  segment_name: string;
+  started_at: string;
+  completed_at: string | null;
+  target_duration_hours: number | null;
+  actual_duration_hours: number | null;
+  is_machine_down: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface VendorProfilesRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  supplier_type: string;
+  category_support: Json;
+  avg_lead_time_hours: number | null;
+  responsiveness_score: number | null;
+  after_hours_contact: string | null;
+  machine_down_escalation_path: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Helper to build Insert/Update from Row ────────────────────────────────
 
 type MakeInsert<T> = { [K in keyof T]?: T[K] };
@@ -378,7 +551,42 @@ interface TableDef<R> {
 
 // ── Extended Tables type ──────────────────────────────────────────────────
 
+/** Chat / RAG persistence (not always present in generated database.types snapshot). */
+interface ChatConversationsRow {
+  id: string;
+  title: string | null;
+  context: Json | null;
+  user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChatMessagesRow {
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  sources: Json | null;
+  trace_id: string | null;
+  retrieval_meta: Json | null;
+  feedback: string | null;
+  created_at: string;
+}
+
 type NewTables = {
+  chat_conversations: TableDef<ChatConversationsRow>;
+  chat_messages: TableDef<ChatMessagesRow>;
+  service_jobs: TableDef<ServiceJobsRow>;
+  service_parts_requirements: TableDef<ServicePartsRequirementsRow>;
+  service_parts_actions: TableDef<ServicePartsActionsRow>;
+  service_parts_staging: TableDef<ServicePartsStagingRow>;
+  service_branch_config: TableDef<ServiceBranchConfigRow>;
+  service_tat_metrics: TableDef<ServiceTatMetricsRow>;
+  service_tat_targets: TableDef<ServiceTatTargetsRow>;
+  parts_inventory: TableDef<PartsInventoryRow>;
+  job_code_template_suggestions: TableDef<JobCodeTemplateSuggestionsRow>;
+  service_cron_runs: TableDef<ServiceCronRunsRow>;
+  vendor_profiles: TableDef<VendorProfilesRow>;
   needs_assessments: TableDef<NeedsAssessmentsRow>;
   follow_up_cadences: TableDef<FollowUpCadencesRow>;
   follow_up_touchpoints: TableDef<FollowUpTouchpointsRow>;
@@ -397,21 +605,25 @@ type NewTables = {
   predictive_visit_lists: TableDef<PredictiveVisitListsRow>;
   telematics_readings: TableDef<TelematicsReadingsRow>;
   telematics_feeds: TableDef<TelematisFeedsRow>;
-  deal_scenarios: TableDef<DealScenariosRow>;
-  margin_waterfalls: TableDef<MarginWaterfallsRow>;
+  // deal_scenarios + margin_waterfalls: use generated definitions in database.types.ts only —
+  // re-declaring here intersects with Base and collapses supabase insert types to `never`.
   social_accounts: TableDef<SocialAccountsRow>;
 };
 
 // ── Merged Database type ──────────────────────────────────────────────────
+// Explicit `public` shape keeps `createClient<ExtendedDatabase>()` compatible with
+// `DatabaseWithoutInternals` / `DefaultSchema` inference (Omit<Base, "public"> & … can break it).
+
+/** Overlap with `NewTables` must not use `&` (intersection collapses Row/Insert to `never`). */
+type MergedPublicTables = Omit<BaseDatabase["public"]["Tables"], keyof NewTables> & NewTables;
 
 export type ExtendedDatabase = {
-  [K in keyof BaseDatabase]: K extends "public"
-    ? {
-        Tables: BaseDatabase["public"]["Tables"] & NewTables;
-        Views: BaseDatabase["public"]["Views"];
-        Functions: BaseDatabase["public"]["Functions"];
-        Enums: BaseDatabase["public"]["Enums"];
-        CompositeTypes: BaseDatabase["public"]["CompositeTypes"];
-      }
-    : BaseDatabase[K];
+  __InternalSupabase: BaseDatabase["__InternalSupabase"];
+  public: {
+    Tables: MergedPublicTables;
+    Views: BaseDatabase["public"]["Views"];
+    Functions: BaseDatabase["public"]["Functions"];
+    Enums: BaseDatabase["public"]["Enums"];
+    CompositeTypes: BaseDatabase["public"]["CompositeTypes"];
+  };
 };

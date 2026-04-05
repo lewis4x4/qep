@@ -135,6 +135,12 @@ pushCheck({
 });
 
 pushCheck({
+  id: "qa.service-engine-deno-tests",
+  command: "deno test supabase/functions/_shared/service-engine-smoke.test.ts --allow-read --allow-env",
+  required: true,
+});
+
+pushCheck({
   id: "chaos.stress-suite",
   command: "bun run stress:test",
   required: options.chaos,

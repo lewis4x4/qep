@@ -33,7 +33,10 @@ export function PaymentValidationPage() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => setResult(data),
+    onSuccess: (data) =>
+      setResult(
+        data as { passed: boolean; rule_applied: string | null; reason: string | null },
+      ),
   });
 
   return (

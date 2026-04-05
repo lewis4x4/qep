@@ -33,6 +33,8 @@ export interface ServiceJob {
   scheduled_end_at: string | null;
   quote_total: number | null;
   invoice_total: number | null;
+  portal_request_id: string | null;
+  tracking_token: string;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
