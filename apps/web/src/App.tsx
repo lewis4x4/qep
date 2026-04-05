@@ -38,6 +38,15 @@ const QuoteBuilderV2Page = lazy(() =>
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
+const ServiceCommandCenterPage = lazy(() =>
+  import("./features/service/pages/ServiceCommandCenterPage").then((m) => ({ default: m.ServiceCommandCenterPage }))
+);
+const ServiceIntakePage = lazy(() =>
+  import("./features/service/pages/ServiceIntakePage").then((m) => ({ default: m.ServiceIntakePage }))
+);
+const PartsWorkQueuePage = lazy(() =>
+  import("./features/service/pages/PartsWorkQueuePage").then((m) => ({ default: m.PartsWorkQueuePage }))
+);
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
@@ -565,6 +574,37 @@ function App() {
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
                     <QuoteBuilderV2Page />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              {/* Service Engine routes */}
+              <Route
+                path="/service"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/intake"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceIntakePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/parts"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <PartsWorkQueuePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

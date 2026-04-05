@@ -97,3 +97,34 @@ verify_jwt = true
 
 [functions.integration-availability]
 verify_jwt = true
+
+# Service engine: JWT validated in _shared/service-auth.ts (requireServiceUser).
+[functions.service-job-router]
+verify_jwt = false
+
+[functions.service-intake]
+verify_jwt = false
+
+[functions.service-knowledge-capture]
+verify_jwt = false
+
+[functions.service-parts-planner]
+verify_jwt = false
+
+[functions.service-quote-engine]
+verify_jwt = false
+
+[functions.service-notifications]
+verify_jwt = false
+
+[functions.service-completion-feedback]
+verify_jwt = false
+
+[functions.service-haul-router]
+verify_jwt = false
+
+[functions.service-tat-monitor]
+verify_jwt = false
+
+[functions.service-stage-enforcer]
+verify_jwt = false

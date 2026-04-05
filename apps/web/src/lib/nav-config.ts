@@ -12,6 +12,7 @@ import {
   Gauge,
   Users,
   UserPlus,
+  Wrench,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -46,6 +47,12 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Field Note",
     href: "/voice",
     icon: Mic,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
+    label: "Service",
+    href: "/service",
+    icon: Wrench,
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
@@ -118,7 +125,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
 ];
 
-export const BOTTOM_TAB_HREFS = ["/dashboard", "/chat", "/voice", "/quote"];
+export const BOTTOM_TAB_HREFS = ["/dashboard", "/service", "/chat", "/voice", "/quote"];
 
 export function resolveNavItems(
   quoteBuilderEnabled: boolean,

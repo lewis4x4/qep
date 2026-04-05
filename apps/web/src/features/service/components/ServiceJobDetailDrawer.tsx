@@ -1,0 +1,209 @@
+import { useServiceJob } from "../hooks/useServiceJobs";
+import { useTransitionServiceJob } from "../hooks/useServiceJobMutation";
+import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
+import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
+import {
+  STAGE_LABELS,
+  STAGE_COLORS,
+  PRIORITY_LABELS,
+  PRIORITY_COLORS,
+  ALLOWED_TRANSITIONS,
+  BLOCKED_ALLOWED_FROM,
+  STATUS_FLAG_LABELS,
+} from "../lib/constants";
+import type { ServiceStage } from "../lib/constants";
+import { X } from "lucide-react";
+
+interface Props {
+  jobId: string | null;
+  onClose: () => void;
+}
+
+export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
+  const { data: job, isLoading } = useServiceJob(jobId ?? undefined);
+  const transition = useTransitionServiceJob();
+
+  if (!jobId) return null;
+
+  const stage = (job?.current_stage ?? "request_received") as ServiceStage;
+  const nextStages = [
+    ...(ALLOWED_TRANSITIONS[stage] ?? []),
+    ...(BLOCKED_ALLOWED_FROM.has(stage) ? ["blocked_waiting"] : []),
+  ];
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-background border-l shadow-xl z-50 flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+        <h2 className="text-lg font-semibold">Service Job Detail</h2>
+        <button onClick={onClose} className="p-1 rounded hover:bg-muted transition">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+
+        {job && (
+          <>
+            {/* Stage + Priority */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${STAGE_COLORS[stage]}`}>
+                {STAGE_LABELS[stage]}
+              </span>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${PRIORITY_COLORS[job.priority]}`}>
+                {PRIORITY_LABELS[job.priority]}
+              </span>
+              {job.status_flags?.map((flag) => (
+                <span key={flag} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] bg-muted text-muted-foreground">
+                  {STATUS_FLAG_LABELS[flag] ?? flag}
+                </span>
+              ))}
+            </div>
+
+            {/* Customer / Machine */}
+            <section className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Customer &amp; Machine</h3>
+              <div className="text-sm">
+                <p><span className="font-medium">Customer:</span> {job.customer?.name ?? job.requested_by_name ?? "—"}</p>
+                {job.contact && (
+                  <p><span className="font-medium">Contact:</span> {job.contact.first_name} {job.contact.last_name} ({job.contact.phone})</p>
+                )}
+                <p>
+                  <span className="font-medium">Machine:</span>{" "}
+                  {job.machine ? `${job.machine.make} ${job.machine.model} (S/N: ${job.machine.serial_number})` : "—"}
+                </p>
+              </div>
+            </section>
+
+            {/* Problem */}
+            {job.customer_problem_summary && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">Problem</h3>
+                <p className="text-sm">{job.customer_problem_summary}</p>
+              </section>
+            )}
+
+            {/* AI Diagnosis */}
+            {job.ai_diagnosis_summary && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-1">AI Diagnosis</h3>
+                <p className="text-sm">{job.ai_diagnosis_summary}</p>
+              </section>
+            )}
+
+            {/* Parts Status */}
+            {job.parts && job.parts.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Parts ({job.parts.length})</h3>
+                <div className="space-y-1">
+                  {job.parts.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between text-sm border rounded px-2 py-1.5">
+                      <span className="truncate">{p.part_number} — {p.description ?? "No desc"}</span>
+                      <span className="text-xs bg-muted px-1.5 py-0.5 rounded ml-2 shrink-0">{p.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Quote Status */}
+            {job.quotes && job.quotes.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Quotes</h3>
+                {job.quotes.map((q) => (
+                  <div key={q.id} className="flex items-center justify-between text-sm border rounded px-2 py-1.5">
+                    <span>v{q.version} — ${Number(q.total).toLocaleString()}</span>
+                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{q.status}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Blockers */}
+            {job.blockers && job.blockers.filter((b) => !b.resolved_at).length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium text-red-600 uppercase tracking-wide mb-2">Active Blockers</h3>
+                {job.blockers.filter((b) => !b.resolved_at).map((b) => (
+                  <div key={b.id} className="text-sm border border-red-200 bg-red-50 rounded px-2 py-1.5 mb-1">
+                    <span className="font-medium">{b.blocker_type}</span>
+                    {b.description && <span className="text-muted-foreground"> — {b.description}</span>}
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Event Timeline */}
+            {job.events && job.events.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Timeline</h3>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {[...job.events].reverse().map((e) => (
+                    <div key={e.id} className="flex items-start gap-2 text-xs">
+                      <span className="text-muted-foreground shrink-0 w-28">
+                        {new Date(e.created_at).toLocaleString(undefined, {
+                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </span>
+                      <span className="font-medium">{e.event_type}</span>
+                      {e.old_stage && e.new_stage && (
+                        <span className="text-muted-foreground">
+                          {STAGE_LABELS[e.old_stage as ServiceStage]} → {STAGE_LABELS[e.new_stage as ServiceStage]}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Quote Builder — show when at diagnosis_selected or quote_drafted */}
+            {(stage === "diagnosis_selected" || stage === "quote_drafted") && (
+              <ServiceQuoteBuilder
+                jobId={job.id}
+                existingQuoteId={job.quotes?.[0]?.id}
+              />
+            )}
+
+            {/* Completion Feedback — show at quality_check stage */}
+            {stage === "quality_check" && (
+              <CompletionFeedbackForm jobId={job.id} />
+            )}
+
+            {/* Stage Transitions */}
+            {nextStages.length > 0 && (
+              <section>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Advance Stage</h3>
+                <div className="flex flex-wrap gap-2">
+                  {nextStages.map((s) => (
+                    <button
+                      key={s}
+                      disabled={transition.isPending}
+                      onClick={() => transition.mutate({ id: job.id, toStage: s })}
+                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                        s === "blocked_waiting"
+                          ? "bg-red-100 text-red-700 hover:bg-red-200"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                      } disabled:opacity-50`}
+                    >
+                      → {STAGE_LABELS[s as ServiceStage] ?? s}
+                    </button>
+                  ))}
+                </div>
+                {transition.isError && (
+                  <p className="text-xs text-destructive mt-1">
+                    {(transition.error as Error)?.message ?? "Transition failed"}
+                  </p>
+                )}
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
