@@ -35,14 +35,14 @@ flowchart LR
   end
   PO -->|fulfillment_run_id| FR
   FR --> EV
-  SJ -.->|fulfillment_run_id future| FR
+  SJ -->|fulfillment_run_id optional| FR
   SPR --> SJ
 ```
 
 - **Phase 1:** Create `parts_fulfillment_runs` on portal submit; set `parts_orders.fulfillment_run_id`; append `parts_fulfillment_events` (`portal_submitted`, …).
 - **Phase 2 (shipped):** Migration `116` allows JWT staff to append events / update runs from edge code when needed.
 - **Phase 3 (status sync):** Migration `117` — trigger `parts_orders_fulfillment_on_status_trg` records `order_status_*` events and updates `parts_fulfillment_runs` (shipped → run `shipped`, delivered → run `closed`, cancelled → run `cancelled`) whenever `parts_orders.status` changes with a linked run. Skips `draft`→`submitted` (portal-api keeps `portal_submitted`). Shipment email stays in `parts-order-customer-notify` only.
-- **Later:** Optional `service_jobs.fulfillment_run_id` when a job and portal order should share one run (e.g. counter pickup + job consumption).
+- **Shop ↔ run:** `service_jobs.fulfillment_run_id` (migration 115) is set by staff via `service-job-router` action `link_fulfillment_run` (same workspace as `parts_fulfillment_runs`). Appends `service_job_linked` / `service_job_unlinked` on `parts_fulfillment_events` and timeline events on the job. UI: Service job drawer — paste UUID from portal parts order detail (`fulfillment_run`).
 
 ## Staff notifications
 

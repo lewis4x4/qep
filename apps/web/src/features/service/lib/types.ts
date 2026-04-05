@@ -34,6 +34,8 @@ export interface ServiceJob {
   quote_total: number | null;
   invoice_total: number | null;
   portal_request_id: string | null;
+  /** Same parts fulfillment run as a portal/counter order when shop shares picks/shipping. */
+  fulfillment_run_id: string | null;
   tracking_token: string;
   created_at: string;
   updated_at: string;
@@ -56,6 +58,7 @@ export interface ServiceJobWithRelations extends ServiceJob {
   parts_staged_count?: { count: number }[];
   active_blockers?: { count: number }[];
   latest_quote?: ServiceQuoteSummary[];
+  fulfillment_run?: { id: string; status: string; created_at: string } | null;
 }
 
 export interface ServiceJobEvent {

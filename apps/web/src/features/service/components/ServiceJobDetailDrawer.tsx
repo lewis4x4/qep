@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import {
   assignTechnicianToJob,
+  linkFulfillmentRunToJob,
   linkPortalRequestToJob,
   scanUpsell,
   suggestCalendarSlots,
@@ -36,6 +37,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const { data: job, isLoading } = useServiceJob(jobId ?? undefined);
   const transition = useTransitionServiceJob();
   const [portalRequestId, setPortalRequestId] = useState("");
+  const [fulfillmentRunId, setFulfillmentRunId] = useState("");
   const [schedStartLocal, setSchedStartLocal] = useState("");
   const [schedEndLocal, setSchedEndLocal] = useState("");
 
@@ -45,7 +47,8 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     const e = job.scheduled_end_at;
     setSchedStartLocal(s ? s.slice(0, 16) : "");
     setSchedEndLocal(e ? e.slice(0, 16) : "");
-  }, [job?.id, job?.scheduled_start_at, job?.scheduled_end_at]);
+    setFulfillmentRunId(job.fulfillment_run_id ?? "");
+  }, [job?.id, job?.scheduled_start_at, job?.scheduled_end_at, job?.fulfillment_run_id]);
 
   const upsell = useMutation({
     mutationFn: async () => {
@@ -65,6 +68,16 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     mutationFn: async () => {
       if (!job?.id) throw new Error("No job");
       return linkPortalRequestToJob(job.id, portalRequestId.trim());
+    },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
+
+  const linkFulfillment = useMutation({
+    mutationFn: async (runId: string | null) => {
+      if (!job?.id) throw new Error("No job");
+      return linkFulfillmentRunToJob(job.id, runId);
     },
     onSuccess: () => {
       if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
@@ -173,6 +186,43 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 </button>
                 {linkPortal.isError && (
                   <p className="text-xs text-destructive">{(linkPortal.error as Error).message}</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Fulfillment run:{" "}
+                {job.fulfillment_run?.id
+                  ? `${job.fulfillment_run.status} · ${job.fulfillment_run.id}`
+                  : job.fulfillment_run_id ?? "—"}
+              </p>
+              <div className="flex flex-col gap-2 mt-2">
+                <input
+                  value={fulfillmentRunId}
+                  onChange={(e) => setFulfillmentRunId(e.target.value)}
+                  placeholder="parts_fulfillment_runs UUID (from portal order)"
+                  className="text-xs rounded border px-2 py-1 font-mono"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={linkFulfillment.isPending || !fulfillmentRunId.trim()}
+                    onClick={() => linkFulfillment.mutate(fulfillmentRunId.trim())}
+                    className="text-xs rounded bg-secondary px-2 py-1"
+                  >
+                    {linkFulfillment.isPending ? "Linking…" : "Link shop job to fulfillment run"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      linkFulfillment.isPending || !(job.fulfillment_run_id ?? job.fulfillment_run?.id)
+                    }
+                    onClick={() => linkFulfillment.mutate(null)}
+                    className="text-xs rounded border border-input px-2 py-1"
+                  >
+                    Unlink
+                  </button>
+                </div>
+                {linkFulfillment.isError && (
+                  <p className="text-xs text-destructive">{(linkFulfillment.error as Error).message}</p>
                 )}
               </div>
             </section>

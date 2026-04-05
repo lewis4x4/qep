@@ -225,6 +225,8 @@ Deno.serve(async (req) => {
         return await handleAssignTechnician(supabase, body, actorId, origin);
       case "link_portal_request":
         return await handleLinkPortalRequest(supabase, body, actorId, origin);
+      case "link_fulfillment_run":
+        return await handleLinkFulfillmentRun(supabase, body, actorId, origin);
       default:
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
@@ -577,7 +579,8 @@ async function handleGet(
       events:service_job_events(id, event_type, actor_id, old_stage, new_stage, metadata, created_at),
       blockers:service_job_blockers(id, blocker_type, description, resolved_at, created_at),
       parts:service_parts_requirements(id, part_number, description, quantity, status, need_by_date),
-      quotes:service_quotes(id, version, total, status, sent_at)
+      quotes:service_quotes(id, version, total, status, sent_at),
+      fulfillment_run:parts_fulfillment_runs(id, status, created_at)
     `)
     .eq("id", id)
     .single();
@@ -892,5 +895,136 @@ async function handleLinkPortalRequest(
   });
 
   const { data: full } = await supabase.from("service_jobs").select("*").eq("id", job_id).single();
+  return safeJsonOk({ job: full }, origin);
+}
+
+async function handleLinkFulfillmentRun(
+  supabase: ReturnType<typeof createClient>,
+  body: RouterPayload,
+  actorId: string,
+  origin: string | null,
+) {
+  const job_id = body.job_id as string | undefined;
+  const rawRun = body.fulfillment_run_id;
+  const hasKey = Object.prototype.hasOwnProperty.call(body, "fulfillment_run_id");
+  if (!job_id) {
+    return safeJsonError("job_id required", 400, origin);
+  }
+
+  let fulfillment_run_id: string | null;
+  if (!hasKey) {
+    return safeJsonError("fulfillment_run_id required (UUID or null to unlink)", 400, origin);
+  }
+  if (rawRun === null || rawRun === "") {
+    fulfillment_run_id = null;
+  } else if (typeof rawRun === "string") {
+    fulfillment_run_id = rawRun.trim();
+    if (!fulfillment_run_id) fulfillment_run_id = null;
+  } else {
+    return safeJsonError("fulfillment_run_id must be a string UUID or null", 400, origin);
+  }
+
+  const { data: job, error: jErr } = await supabase
+    .from("service_jobs")
+    .select("id, workspace_id, fulfillment_run_id")
+    .eq("id", job_id)
+    .single();
+  if (jErr || !job) return safeJsonError("Job not found", 404, origin);
+
+  const ws = job.workspace_id as string;
+  const previousRun = job.fulfillment_run_id as string | null;
+
+  if (fulfillment_run_id !== null && fulfillment_run_id === previousRun) {
+    const { data: full } = await supabase
+      .from("service_jobs")
+      .select(`
+        *,
+        fulfillment_run:parts_fulfillment_runs(id, status, created_at)
+      `)
+      .eq("id", job_id)
+      .single();
+    return safeJsonOk({ job: full }, origin);
+  }
+
+  if (fulfillment_run_id === null) {
+    const { error: uErr } = await supabase
+      .from("service_jobs")
+      .update({ fulfillment_run_id: null })
+      .eq("id", job_id);
+    if (uErr) return safeJsonError(uErr.message, 400, origin);
+
+    if (previousRun) {
+      await supabase.from("parts_fulfillment_events").insert({
+        workspace_id: ws,
+        fulfillment_run_id: previousRun,
+        event_type: "service_job_unlinked",
+        payload: { service_job_id: job_id, actor_id: actorId },
+      });
+    }
+    await supabase.from("service_job_events").insert({
+      workspace_id: ws,
+      job_id,
+      event_type: "fulfillment_run_unlinked",
+      actor_id: actorId,
+      metadata: { previous_fulfillment_run_id: previousRun },
+    });
+    const { data: full, error: gErr } = await supabase
+      .from("service_jobs")
+      .select(`
+        *,
+        fulfillment_run:parts_fulfillment_runs(id, status, created_at)
+      `)
+      .eq("id", job_id)
+      .single();
+    if (gErr) return safeJsonError(gErr.message, 400, origin);
+    return safeJsonOk({ job: full }, origin);
+  }
+
+  const { data: run, error: rErr } = await supabase
+    .from("parts_fulfillment_runs")
+    .select("id, workspace_id, status")
+    .eq("id", fulfillment_run_id)
+    .maybeSingle();
+  if (rErr || !run) {
+    return safeJsonError("Fulfillment run not found", 404, origin);
+  }
+  if (run.workspace_id !== ws) {
+    return safeJsonError("Fulfillment run is not in the same workspace as this job", 400, origin);
+  }
+
+  const { error: uErr } = await supabase
+    .from("service_jobs")
+    .update({ fulfillment_run_id })
+    .eq("id", job_id);
+  if (uErr) return safeJsonError(uErr.message, 400, origin);
+
+  await supabase.from("parts_fulfillment_events").insert({
+    workspace_id: ws,
+    fulfillment_run_id,
+    event_type: "service_job_linked",
+    payload: {
+      service_job_id: job_id,
+      actor_id: actorId,
+      previous_fulfillment_run_id: previousRun,
+    },
+  });
+
+  await supabase.from("service_job_events").insert({
+    workspace_id: ws,
+    job_id,
+    event_type: "fulfillment_run_linked",
+    actor_id: actorId,
+    metadata: { fulfillment_run_id, previous_fulfillment_run_id: previousRun },
+  });
+
+  const { data: full, error: gErr } = await supabase
+    .from("service_jobs")
+    .select(`
+      *,
+      fulfillment_run:parts_fulfillment_runs(id, status, created_at)
+    `)
+    .eq("id", job_id)
+    .single();
+  if (gErr) return safeJsonError(gErr.message, 400, origin);
   return safeJsonOk({ job: full }, origin);
 }

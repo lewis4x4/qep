@@ -163,6 +163,19 @@ export async function linkPortalRequestToJob(
   return result.job;
 }
 
+/** Link shop job to an existing parts_fulfillment_run (e.g. portal order run). Pass null to unlink. */
+export async function linkFulfillmentRunToJob(
+  jobId: string,
+  fulfillmentRunId: string | null,
+): Promise<ServiceJobWithRelations> {
+  const result = await invoke<{ job: ServiceJobWithRelations }>({
+    action: "link_fulfillment_run",
+    job_id: jobId,
+    fulfillment_run_id: fulfillmentRunId,
+  });
+  return result.job;
+}
+
 /** Admin/manager: reassign open jobs from a user to the next UUID in branch pool (service_branch_config). */
 export async function reassignFromBranchPool(payload: {
   branch_id: string;
