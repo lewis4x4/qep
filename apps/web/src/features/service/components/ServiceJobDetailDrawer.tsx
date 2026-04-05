@@ -4,7 +4,7 @@ import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
 import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
 import { VoiceFieldNotes } from "./VoiceFieldNotes";
 import { PartsRequirementEditor } from "./PartsRequirementEditor";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import {
   assignTechnicianToJob,
@@ -25,6 +25,8 @@ import {
   STATUS_FLAG_LABELS,
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
+import { Link } from "react-router-dom";
+import { searchPortalPartsOrdersForFulfillmentLink } from "../lib/portalPartsSearch";
 import { X } from "lucide-react";
 
 interface Props {
@@ -38,8 +40,24 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const transition = useTransitionServiceJob();
   const [portalRequestId, setPortalRequestId] = useState("");
   const [fulfillmentRunId, setFulfillmentRunId] = useState("");
+  const [fulfillmentOrderSearch, setFulfillmentOrderSearch] = useState("");
+  const [debouncedOrderSearch, setDebouncedOrderSearch] = useState("");
   const [schedStartLocal, setSchedStartLocal] = useState("");
   const [schedEndLocal, setSchedEndLocal] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedOrderSearch(fulfillmentOrderSearch.trim()), 350);
+    return () => clearTimeout(t);
+  }, [fulfillmentOrderSearch]);
+
+  const fulfillmentOrderHits = useQuery({
+    queryKey: ["portal-orders-fulfillment-search", job?.workspace_id, debouncedOrderSearch],
+    queryFn: () => {
+      if (!job?.workspace_id) throw new Error("No workspace");
+      return searchPortalPartsOrdersForFulfillmentLink(job.workspace_id, debouncedOrderSearch);
+    },
+    enabled: !!job?.workspace_id && debouncedOrderSearch.length >= 2,
+  });
 
   useEffect(() => {
     if (!job) return;
@@ -81,6 +99,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     },
     onSuccess: () => {
       if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+      qc.invalidateQueries({ queryKey: ["portal-orders-fulfillment-search"] });
     },
   });
 
@@ -194,6 +213,88 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   ? `${job.fulfillment_run.status} · ${job.fulfillment_run.id}`
                   : job.fulfillment_run_id ?? "—"}
               </p>
+              <p className="text-xs">
+                <Link
+                  to="/service/portal-parts"
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  Open portal parts orders
+                </Link>
+                <span className="text-muted-foreground"> — find an order, then search below by order id, email, or name.</span>
+              </p>
+              <div className="flex flex-col gap-2 mt-2 rounded-md border bg-muted/30 p-2">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Find portal order (same workspace)
+                </label>
+                <input
+                  value={fulfillmentOrderSearch}
+                  onChange={(e) => setFulfillmentOrderSearch(e.target.value)}
+                  placeholder="Order UUID, customer email, or name (min 2 characters)"
+                  className="text-xs rounded border px-2 py-1 bg-background"
+                />
+                {fulfillmentOrderHits.isFetching && (
+                  <p className="text-[11px] text-muted-foreground">Searching…</p>
+                )}
+                {fulfillmentOrderHits.isError && (
+                  <p className="text-[11px] text-destructive">
+                    {(fulfillmentOrderHits.error as Error).message}
+                  </p>
+                )}
+                {fulfillmentOrderHits.data && fulfillmentOrderHits.data.length > 0 && (
+                  <ul className="max-h-40 overflow-y-auto space-y-1.5 text-[11px]">
+                    {fulfillmentOrderHits.data.map((o) => (
+                      <li
+                        key={o.id}
+                        className="flex flex-col gap-1 rounded border border-border/60 bg-background p-2"
+                      >
+                        <span className="font-mono text-[10px] break-all">{o.id}</span>
+                        <span className="text-muted-foreground">
+                          {o.portal_customers
+                            ? `${o.portal_customers.first_name} ${o.portal_customers.last_name} · ${o.portal_customers.email}`
+                            : "—"}{" "}
+                          · {o.status}
+                        </span>
+                        <span className="text-muted-foreground">
+                          Run:{" "}
+                          {o.fulfillment_run_id ? (
+                            <span className="font-mono break-all">{o.fulfillment_run_id}</span>
+                          ) : (
+                            <span className="text-amber-700 dark:text-amber-400">none — order needs a run (portal submit)</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={
+                            linkFulfillment.isPending ||
+                            !o.fulfillment_run_id ||
+                            o.fulfillment_run_id === (job.fulfillment_run_id ?? job.fulfillment_run?.id)
+                          }
+                          onClick={() => {
+                            if (o.fulfillment_run_id) {
+                              setFulfillmentRunId(o.fulfillment_run_id);
+                              linkFulfillment.mutate(o.fulfillment_run_id);
+                            }
+                          }}
+                          className="w-fit rounded bg-secondary px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          {o.fulfillment_run_id
+                            ? linkFulfillment.isPending
+                              ? "Linking…"
+                              : "Link shop job to this run"
+                            : "Cannot link — no fulfillment run on order"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {debouncedOrderSearch.length >= 2 &&
+                  fulfillmentOrderHits.data?.length === 0 &&
+                  !fulfillmentOrderHits.isFetching &&
+                  !fulfillmentOrderHits.isError && (
+                    <p className="text-[11px] text-muted-foreground">No matching orders.</p>
+                  )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Or paste run UUID manually:</p>
               <div className="flex flex-col gap-2 mt-2">
                 <input
                   value={fulfillmentRunId}

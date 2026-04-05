@@ -11,6 +11,7 @@ Companion: [parts-service-unified-spec.md](./parts-service-unified-spec.md), [pa
 - **`service_jobs.fulfillment_run_id`** — optional FK → `parts_fulfillment_runs`; migration `115`.
 - **`service_parts_requirements` / `service_parts_actions`** — core service parts model; `095_service_parts_vendor_tables.sql` and follow-ons; planner uses `plan_batch_id` on `service_parts_actions` metadata/column per implementation.
 - **Triggers:** `117_parts_orders_fulfillment_status_trigger.sql` — syncs `parts_orders.status` changes into run status and `order_status_*` events.
+- **`parts_order_notification_sends`** — unique `(parts_order_id, event_type)` for idempotent staff shipment emails; migration `119_parts_order_ship_notification_dedupe.sql`.
 
 ## Event / audit model
 
@@ -23,7 +24,7 @@ Reserved prefixes (documented contract; not all enforced in DB CHECK):
 | `portal_*` | Portal API | `portal_submitted`, customer-facing submit flow |
 | `order_status_*` | DB trigger on `parts_orders` | Shipped, delivered, cancelled alignment |
 | `service_job_*` | `service-job-router` | `service_job_linked`, `service_job_unlinked` |
-| `shop_*` | Shop bridge | `shop_parts_action`, `shop_parts_plan_batch` (from `parts-fulfillment-mirror` + edge functions) |
+| `shop_*` | Shop bridge | `shop_parts_action`, `shop_parts_plan_batch`, `shop_vendor_inbound`, `shop_vendor_escalation_seeded`, `shop_vendor_escalation_step` (`parts-fulfillment-mirror` + `service-parts-*`, `service-vendor-*`) |
 
 ### `service_job_events`
 
@@ -38,6 +39,7 @@ Job-scoped timeline (`event_type` e.g. `parts_action`); separate from fulfillmen
 | Service job ↔ run link | Edge | `service-job-router`: `link_fulfillment_run` |
 | Parts CRUD / fulfillment | Edge | `service-parts-manager`: `add`, `pick`, `receive`, `stage`, `consume`, … |
 | Planning | Edge | `service-parts-planner`: `job_id` |
+| Vendor inbound / escalation | Edge | `service-vendor-inbound`, `service-vendor-escalator` (cron); mirror to run when `service_jobs.fulfillment_run_id` set |
 
 ## Permissions (summary)
 

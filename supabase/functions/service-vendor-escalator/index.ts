@@ -4,6 +4,7 @@
  * Cron: service_role every 15 minutes (or GitHub Actions).
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 type EscalationRow = {
@@ -127,17 +128,35 @@ async function seedEscalationsFromLateOrders(supabase: SupabaseClient): Promise<
     }
     if (!pol?.id) continue;
 
-    const { error: insErr } = await supabase.from("vendor_escalations").insert({
-      workspace_id: job.workspace_id as string,
-      vendor_id: vendorId,
-      job_id: jobId,
-      policy_id: pol.id,
-      po_reference: (a.po_reference as string | null) ?? null,
-      current_step: 1,
-      next_action_at: nowIso,
-      resolution_notes: late ? "Opened — order past expected date" : "Opened — PO missing past grace period",
-    });
-    if (!insErr) seeded++;
+    const { data: insertedEsc, error: insErr } = await supabase
+      .from("vendor_escalations")
+      .insert({
+        workspace_id: job.workspace_id as string,
+        vendor_id: vendorId,
+        job_id: jobId,
+        policy_id: pol.id,
+        po_reference: (a.po_reference as string | null) ?? null,
+        current_step: 1,
+        next_action_at: nowIso,
+        resolution_notes: late
+          ? "Opened — order past expected date"
+          : "Opened — PO missing past grace period",
+      })
+      .select("id")
+      .maybeSingle();
+    if (!insErr && insertedEsc?.id) {
+      seeded++;
+      await mirrorToFulfillmentRun(supabase, {
+        jobId: jobId,
+        workspaceId: job.workspace_id as string,
+        eventType: "shop_vendor_escalation_seeded",
+        payload: {
+          vendor_escalation_id: insertedEsc.id,
+          vendor_id: vendorId,
+          source: "service-vendor-escalator",
+        },
+      });
+    }
   }
   return seeded;
 }
@@ -244,6 +263,19 @@ async function runStepActions(
         });
       }
     }
+
+    await mirrorToFulfillmentRun(supabase, {
+      jobId: row.job_id,
+      workspaceId: row.workspace_id,
+      eventType: "shop_vendor_escalation_step",
+      payload: {
+        vendor_escalation_id: row.id,
+        step_index: stepIndex1,
+        action,
+        policy_name: policyName,
+        source: "service-vendor-escalator",
+      },
+    });
   }
 }
 

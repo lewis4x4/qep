@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
     .from("parts_orders")
     .select(`
       id,
+      workspace_id,
       status,
       tracking_number,
       estimated_delivery,
@@ -73,6 +74,19 @@ Deno.serve(async (req) => {
     return safeJsonOk({ ok: true, email: "skipped_no_address" }, origin);
   }
 
+  const workspaceId = typeof row.workspace_id === "string" ? row.workspace_id : "default";
+  const { error: dedupeErr } = await supabase.from("parts_order_notification_sends").insert({
+    workspace_id: workspaceId,
+    parts_order_id: orderId,
+    event_type: event,
+  });
+  if (dedupeErr?.code === "23505") {
+    return safeJsonOk({ ok: true, email: "deduped_already_sent" }, origin);
+  }
+  if (dedupeErr) {
+    return safeJsonError(dedupeErr.message, 400, origin);
+  }
+
   const text =
     `Your parts order (${shortId}) has shipped.\n\n` +
     (tr ? `Tracking number: ${tr}\n` : "") +
@@ -86,7 +100,19 @@ Deno.serve(async (req) => {
   });
 
   if (result.skipped) {
+    await supabase
+      .from("parts_order_notification_sends")
+      .delete()
+      .eq("parts_order_id", orderId)
+      .eq("event_type", event);
     return safeJsonOk({ ok: true, email: "skipped_resend_unconfigured" }, origin);
+  }
+  if (!result.ok) {
+    await supabase
+      .from("parts_order_notification_sends")
+      .delete()
+      .eq("parts_order_id", orderId)
+      .eq("event_type", event);
   }
   return safeJsonOk(
     { ok: true, email: result.ok ? "sent" : "failed" },

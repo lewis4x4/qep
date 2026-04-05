@@ -3,6 +3,7 @@
  * verify_jwt false; protect with shared secret header in production.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
@@ -78,7 +79,7 @@ Deno.serve(async (req) => {
       }
       const { data: reqMeta } = await supabase
         .from("service_parts_requirements")
-        .select("vendor_id")
+        .select("vendor_id, job_id, workspace_id")
         .eq("id", body.requirement_id)
         .maybeSingle();
       if (reqMeta?.vendor_id) {
@@ -97,6 +98,19 @@ Deno.serve(async (req) => {
             })
             .eq("id", reqMeta.vendor_id);
         }
+      }
+      if (reqMeta?.job_id && reqMeta.workspace_id) {
+        await mirrorToFulfillmentRun(supabase, {
+          jobId: reqMeta.job_id as string,
+          workspaceId: reqMeta.workspace_id as string,
+          eventType: "shop_vendor_inbound",
+          payload: {
+            requirement_id: body.requirement_id,
+            po_reference: po,
+            service_parts_action_id: row.id,
+            source: "service-vendor-inbound",
+          },
+        });
       }
       return safeJsonOk({ ok: true, po_reference: po, updated: row?.id ?? null }, null);
     }
@@ -120,6 +134,24 @@ Deno.serve(async (req) => {
           .select("id")
           .maybeSingle();
         if (error) return safeJsonError(error.message, 400, null);
+        const { data: sj } = await supabase
+          .from("service_jobs")
+          .select("workspace_id")
+          .eq("id", body.job_id)
+          .maybeSingle();
+        if (sj?.workspace_id) {
+          await mirrorToFulfillmentRun(supabase, {
+            jobId: body.job_id,
+            workspaceId: sj.workspace_id as string,
+            eventType: "shop_vendor_inbound",
+            payload: {
+              part_number: body.part_number,
+              po_reference: po,
+              service_parts_action_id: row?.id,
+              source: "service-vendor-inbound",
+            },
+          });
+        }
         return safeJsonOk({ ok: true, po_reference: po, updated: row?.id ?? null }, null);
       }
     }
@@ -128,7 +160,7 @@ Deno.serve(async (req) => {
     if (po && allowOpenOrderMatch && !strictInbound) {
       const { data: open } = await supabase
         .from("service_parts_actions")
-        .select("id")
+        .select("id, job_id, workspace_id")
         .eq("action_type", "order")
         .is("po_reference", null)
         .is("completed_at", null)
@@ -143,6 +175,19 @@ Deno.serve(async (req) => {
           .update(patch)
           .eq("id", open.id);
         if (error) return safeJsonError(error.message, 400, null);
+        if (open.job_id && open.workspace_id) {
+          await mirrorToFulfillmentRun(supabase, {
+            jobId: open.job_id as string,
+            workspaceId: open.workspace_id as string,
+            eventType: "shop_vendor_inbound",
+            payload: {
+              service_parts_action_id: open.id,
+              po_reference: po,
+              match: "open_order",
+              source: "service-vendor-inbound",
+            },
+          });
+        }
         return safeJsonOk({ ok: true, po_reference: po, updated: open.id }, null);
       }
     }
