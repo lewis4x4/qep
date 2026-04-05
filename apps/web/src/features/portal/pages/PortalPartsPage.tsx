@@ -85,6 +85,13 @@ export function PortalPartsPage() {
     },
   });
 
+  const submitToDealerMutation = useMutation({
+    mutationFn: (orderId: string) => portalApi.submitPartsOrder(orderId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portal", "parts-orders"] });
+    },
+  });
+
   const suggestMutation = useMutation({
     mutationFn: async () => {
       if (!fleetId) throw new Error("Select a machine from your fleet first.");
@@ -150,8 +157,8 @@ export function PortalPartsPage() {
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Parts orders</h1>
       <p className="text-sm text-muted-foreground mb-4">
-        Request parts for your fleet. Use AI-suggested PM kits grounded in dealership service templates, then review
-        lines before submitting a draft.
+        Build a cart, save it as a draft, then submit it to the dealership when you are ready. AI-suggested PM kits use
+        the same service templates your shop relies on.
       </p>
 
       {fleet.length > 0 && (
@@ -271,7 +278,7 @@ export function PortalPartsPage() {
             <Plus className="h-4 w-4 mr-1" /> Add line
           </Button>
           <Button size="sm" onClick={submit} disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Submitting…" : "Submit draft order"}
+            {createMutation.isPending ? "Saving…" : "Save as draft"}
           </Button>
         </div>
         {createMutation.isError && (
@@ -291,22 +298,48 @@ export function PortalPartsPage() {
       )}
 
       <div className="space-y-2">
-        {orders.map((o: Record<string, unknown>) => (
-          <Card key={o.id as string} className="p-4">
-            <div className="flex justify-between gap-2 flex-wrap">
-              <span className="text-sm font-semibold text-foreground capitalize">{String(o.status ?? "")}</span>
-              <span className="text-xs text-muted-foreground">
-                {o.created_at ? new Date(String(o.created_at)).toLocaleString() : ""}
-              </span>
-            </div>
-            {o.ai_suggested_pm_kit === true && typeof o.ai_suggestion_reason === "string" && (
-              <p className="mt-2 text-xs text-amber-200/90 border-l-2 border-amber-500/60 pl-2">{o.ai_suggestion_reason}</p>
-            )}
-            <pre className="mt-2 text-[10px] bg-muted/40 rounded p-2 overflow-x-auto max-h-32">
-              {JSON.stringify(o.line_items, null, 2)}
-            </pre>
-          </Card>
-        ))}
+        {orders.map((o: Record<string, unknown>) => {
+          const oid = o.id as string;
+          const isDraft = String(o.status ?? "") === "draft";
+          const submitting =
+            submitToDealerMutation.isPending && submitToDealerMutation.variables === oid;
+          return (
+            <Card key={oid} className="p-4">
+              <div className="flex justify-between gap-2 flex-wrap items-start">
+                <span className="text-sm font-semibold text-foreground capitalize">{String(o.status ?? "")}</span>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {o.created_at ? new Date(String(o.created_at)).toLocaleString() : ""}
+                  </span>
+                  {isDraft && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      disabled={submitting}
+                      onClick={() => submitToDealerMutation.mutate(oid)}
+                    >
+                      {submitting ? "Submitting…" : "Submit to dealership"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {submitToDealerMutation.isError && submitToDealerMutation.variables === oid && (
+                <p className="text-sm text-destructive mt-2">
+                  {submitToDealerMutation.error instanceof Error
+                    ? submitToDealerMutation.error.message
+                    : "Could not submit"}
+                </p>
+              )}
+              {o.ai_suggested_pm_kit === true && typeof o.ai_suggestion_reason === "string" && (
+                <p className="mt-2 text-xs text-amber-200/90 border-l-2 border-amber-500/60 pl-2">{o.ai_suggestion_reason}</p>
+              )}
+              <pre className="mt-2 text-[10px] bg-muted/40 rounded p-2 overflow-x-auto max-h-32">
+                {JSON.stringify(o.line_items, null, 2)}
+              </pre>
+            </Card>
+          );
+        })}
         {!isLoading && orders.length === 0 && (
           <Card className="border-dashed p-6 text-center">
             <p className="text-sm text-muted-foreground">No parts orders yet.</p>

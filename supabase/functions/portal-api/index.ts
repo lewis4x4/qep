@@ -262,6 +262,54 @@ Deno.serve(async (req) => {
         }, origin);
       }
 
+      // POST /parts/submit — draft → submitted (validated here; RLS blocks naive status bumps)
+      if (subRoute === "submit" && req.method === "POST") {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("Order submission is not configured on this environment.", 503, origin);
+        }
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
+        if (!orderId) {
+          return safeJsonError("order_id is required", 400, origin);
+        }
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: row, error: fetchErr } = await admin
+          .from("parts_orders")
+          .select("id, portal_customer_id, status, workspace_id")
+          .eq("id", orderId)
+          .maybeSingle();
+
+        if (fetchErr || !row) {
+          return safeJsonError("Order not found.", 404, origin);
+        }
+        if (row.portal_customer_id !== portalCustomer.id || row.workspace_id !== portalWorkspaceId) {
+          return safeJsonError("Order not found.", 404, origin);
+        }
+        if (row.status !== "draft") {
+          return safeJsonError("Only draft orders can be submitted to the dealership.", 400, origin);
+        }
+
+        const { data: updated, error: upErr } = await admin
+          .from("parts_orders")
+          .update({ status: "submitted" })
+          .eq("id", orderId)
+          .select()
+          .single();
+
+        if (upErr) {
+          console.error("portal-api parts submit:", upErr);
+          return safeJsonError("Failed to submit order", 500, origin);
+        }
+        return safeJsonOk({ order: updated }, origin);
+      }
+
       if (req.method === "GET") {
         const { data, error } = await supabase
           .from("parts_orders")

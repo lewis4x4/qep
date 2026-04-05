@@ -36,6 +36,12 @@ export const portalApi = {
       method: "POST",
       body: JSON.stringify({ fleet_id: fleetId }),
     }),
+  /** draft → submitted for parts counter (portal-api + service role). */
+  submitPartsOrder: (orderId: string) =>
+    portalFetch("parts/submit", {
+      method: "POST",
+      body: JSON.stringify({ order_id: orderId }),
+    }),
   getInvoices: () => portalFetch("invoices"),
   recordInvoicePayment: (data: Record<string, unknown>) =>
     portalFetch("invoices/pay", { method: "POST", body: JSON.stringify(data) }),
