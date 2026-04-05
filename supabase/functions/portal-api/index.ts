@@ -336,7 +336,7 @@ Deno.serve(async (req) => {
           const { data: recipients } = await admin
             .from("profiles")
             .select("id")
-            .in("role", ["admin", "manager", "owner"]);
+            .in("role", ["rep", "admin", "manager", "owner"]);
           const rows = (recipients ?? []).map((r) => ({
             workspace_id: portalWorkspaceId,
             user_id: r.id as string,
