@@ -10,16 +10,32 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function portalFetch(route: string, options?: RequestInit) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- portal-api returns heterogeneous JSON payloads
+async function portalFetch(route: string, options?: RequestInit): Promise<any> {
   const res = await fetch(`${PORTAL_API_URL}/${route}`, {
     ...options,
     headers: { ...(await getAuthHeaders()), ...options?.headers },
   });
+  const text = await res.text();
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(err.error || `Request failed (${res.status})`);
+    let message = `Request failed (${res.status})`;
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (typeof parsed?.error === "string" && parsed.error.trim()) {
+        message = parsed.error.trim();
+      }
+    } catch {
+      const t = text.trim().slice(0, 240);
+      if (t) message = t;
+    }
+    throw new Error(message);
   }
-  return res.json();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text) as any;
+  } catch {
+    throw new Error("Invalid response from portal API");
+  }
 }
 
 export const portalApi = {

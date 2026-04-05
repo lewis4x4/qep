@@ -21,6 +21,13 @@ import {
 } from "../_shared/portal-pm-kit.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
 
+/** Strip angle brackets for safe notification copy (names are still escaped in UI). */
+function safePortalDisplayLabel(raw: string): string {
+  return raw.replace(/[<>]/g, "").trim().slice(0, 120);
+}
+
+const STAFF_NOTIFY_CHUNK = 80;
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -317,7 +324,9 @@ Deno.serve(async (req) => {
             .select("email, notification_preferences, first_name, last_name")
             .eq("id", portalCustomer.id)
             .maybeSingle();
-          const custLabel = [pc?.first_name, pc?.last_name].filter(Boolean).join(" ").trim() || "Portal customer";
+          const custLabel = safePortalDisplayLabel(
+            [pc?.first_name, pc?.last_name].filter(Boolean).join(" ").trim() || "Portal customer",
+          );
 
           const prefs = pc?.notification_preferences as { email?: boolean } | undefined;
           const em = typeof pc?.email === "string" ? pc.email.trim() : "";
@@ -349,9 +358,13 @@ Deno.serve(async (req) => {
               notification_type: "portal_parts_submitted",
             },
           }));
-          if (rows.length > 0) {
-            const { error: niErr } = await admin.from("crm_in_app_notifications").insert(rows);
-            if (niErr) console.warn("portal-api staff in-app notify:", niErr);
+          for (let i = 0; i < rows.length; i += STAFF_NOTIFY_CHUNK) {
+            const slice = rows.slice(i, i + STAFF_NOTIFY_CHUNK);
+            const { error: niErr } = await admin.from("crm_in_app_notifications").insert(slice);
+            if (niErr) {
+              console.warn("portal-api staff in-app notify:", niErr);
+              break;
+            }
           }
         } catch (e) {
           console.warn("portal-api submit notify:", e);
