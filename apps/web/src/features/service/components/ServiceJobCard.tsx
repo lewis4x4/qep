@@ -8,12 +8,12 @@ import {
 } from "../lib/constants";
 import type { ServiceStage } from "../lib/constants";
 import type { ServiceJobWithRelations } from "../lib/types";
-import { Truck, AlertTriangle, Shield, Clock } from "lucide-react";
+import { Truck, AlertTriangle, Shield, Clock, Package, User2, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Props {
   job: ServiceJobWithRelations;
   onClick?: () => void;
-  /** Nested inside Kanban drag shell — no outer chrome (border handled by row). */
   variant?: "default" | "kanban";
 }
 
@@ -30,10 +30,10 @@ function getTatHealth(job: ServiceJobWithRelations): "green" | "yellow" | "red" 
   return "green";
 }
 
-const TAT_DOT: Record<string, string> = {
-  green: "bg-green-500",
-  yellow: "bg-amber-500",
-  red: "bg-red-500",
+const TAT_INDICATOR: Record<string, { dot: string; label: string }> = {
+  green: { dot: "bg-emerald-500 shadow-emerald-500/30", label: "On track" },
+  yellow: { dot: "bg-amber-400 shadow-amber-400/30", label: "At risk" },
+  red: { dot: "bg-red-500 shadow-red-500/30 animate-pulse", label: "Overdue" },
 };
 
 export function ServiceJobCard({ job, onClick, variant = "default" }: Props) {
@@ -58,14 +58,8 @@ export function ServiceJobCard({ job, onClick, variant = "default" }: Props) {
     ? job.active_blockers.reduce((sum, b) => sum + (b.count ?? 0), 0)
     : 0;
 
-  const shell =
-    variant === "kanban"
-      ? `rounded-r-lg bg-transparent p-2.5 cursor-pointer transition-colors hover:bg-muted/20 ${
-          isMachineDown ? "ring-1 ring-inset ring-red-500/30" : ""
-        }`
-      : `rounded-lg border bg-card p-3 cursor-pointer shadow-sm transition-all hover:border-primary/20 hover:shadow-md ${
-          isMachineDown ? "border-red-400/50 ring-1 ring-red-500/20 dark:border-red-500/40" : "border-border/80"
-        }`;
+  const isKanban = variant === "kanban";
+  const tatInfo = TAT_INDICATOR[tatHealth];
 
   return (
     <div
@@ -81,57 +75,122 @@ export function ServiceJobCard({ job, onClick, variant = "default" }: Props) {
           onClick();
         }
       }}
-      className={shell}
+      className={cn(
+        "cursor-pointer transition-all duration-150",
+        isKanban
+          ? cn(
+              "rounded-r-xl p-3",
+              "hover:bg-muted/20 dark:hover:bg-white/[0.03]",
+              isMachineDown && "ring-1 ring-inset ring-red-500/25 bg-red-500/[0.03]"
+            )
+          : cn(
+              "rounded-xl border bg-card p-4 shadow-sm",
+              "hover:border-primary/20 hover:shadow-md hover:-translate-y-px",
+              "dark:border-white/[0.06] dark:hover:border-primary/20",
+              isMachineDown
+                ? "border-red-400/40 ring-1 ring-red-500/15 dark:border-red-500/30"
+                : "border-border/50"
+            )
+      )}
     >
-      {/* Header: customer + priority */}
-      <div className="flex items-start justify-between gap-2 mb-1.5">
+      {/* Row 1: Customer + Priority */}
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium truncate">{customerName}</p>
-          <p className="text-xs text-muted-foreground truncate">{machineSummary}</p>
+          <p className={cn(
+            "font-semibold truncate text-foreground",
+            isKanban ? "text-[13px]" : "text-sm"
+          )}>
+            {customerName}
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground truncate leading-tight">
+            {machineSummary}
+          </p>
         </div>
-        <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${PRIORITY_COLORS[job.priority]}`}>
+        <span className={cn(
+          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold shrink-0 leading-tight",
+          PRIORITY_COLORS[job.priority]
+        )}>
           {PRIORITY_LABELS[job.priority]}
         </span>
       </div>
 
-      {/* Job summary */}
+      {/* Row 2: Problem summary */}
       {job.customer_problem_summary && (
-        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground line-clamp-2">
           {job.customer_problem_summary}
         </p>
       )}
 
-      {/* Stage badge + TAT */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${STAGE_COLORS[stage]}`}>
+      {/* Row 3: Stage + TAT indicator */}
+      <div className="mt-2.5 flex items-center gap-2">
+        <span className={cn(
+          "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight",
+          STAGE_COLORS[stage]
+        )}>
           {STAGE_LABELS[stage]}
         </span>
-        <span className={`w-2 h-2 rounded-full shrink-0 ${TAT_DOT[tatHealth]}`} title={`TAT: ${tatHealth}`} />
+        <span
+          className={cn("h-1.5 w-1.5 rounded-full shrink-0 shadow-[0_0_4px]", tatInfo.dot)}
+          title={tatInfo.label}
+        />
       </div>
 
-      {/* Status row */}
-      <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+      {/* Row 4: Meta chips */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
         {partsTotal > 0 && (
-          <span>Parts: {partsReady}/{partsTotal}</span>
+          <span className="inline-flex items-center gap-1">
+            <Package className="h-3 w-3" />
+            <span className="tabular-nums">{partsReady}/{partsTotal}</span>
+          </span>
         )}
         {job.technician?.full_name && (
-          <span>Tech: {job.technician.full_name}</span>
+          <span className="inline-flex items-center gap-1 truncate max-w-[7rem]">
+            <User2 className="h-3 w-3 shrink-0" />
+            {job.technician.full_name.split(" ")[0]}
+          </span>
         )}
         {quoteStatus && (
-          <span>Quote: {quoteStatus}{quoteTotal != null ? ` $${Number(quoteTotal).toLocaleString()}` : ""}</span>
+          <span className="inline-flex items-center gap-1">
+            <FileText className="h-3 w-3" />
+            {quoteStatus}
+            {quoteTotal != null && (
+              <span className="font-medium text-foreground/70">${Number(quoteTotal).toLocaleString()}</span>
+            )}
+          </span>
         )}
         {blockerCount > 0 && (
-          <span className="text-red-600 font-medium">{blockerCount} blocker{blockerCount > 1 ? "s" : ""}</span>
+          <span className="inline-flex items-center gap-1 font-semibold text-red-500 dark:text-red-400">
+            <AlertTriangle className="h-3 w-3" />
+            {blockerCount} blocker{blockerCount > 1 ? "s" : ""}
+          </span>
         )}
       </div>
 
-      {/* Icons */}
-      <div className="flex items-center gap-1.5 mt-2">
-        {job.haul_required && <Truck className="w-3.5 h-3.5 text-cyan-600" />}
-        {isMachineDown && <AlertTriangle className="w-3.5 h-3.5 text-red-600" />}
-        {isWarranty && <Shield className="w-3.5 h-3.5 text-purple-600" />}
-        {tatHealth === "red" && <Clock className="w-3.5 h-3.5 text-red-500" />}
-      </div>
+      {/* Row 5: Flag icons */}
+      {(job.haul_required || isMachineDown || isWarranty || tatHealth === "red") && (
+        <div className="mt-2 flex items-center gap-2">
+          {job.haul_required && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-medium text-cyan-600 dark:text-cyan-400">
+              <Truck className="h-3 w-3" /> Haul
+            </span>
+          )}
+          {isMachineDown && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[9px] font-medium text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-3 w-3" /> Down
+            </span>
+          )}
+          {isWarranty && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-600 dark:text-purple-400">
+              <Shield className="h-3 w-3" /> Warranty
+            </span>
+          )}
+          {tatHealth === "red" && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[9px] font-medium text-red-600 dark:text-red-400">
+              <Clock className="h-3 w-3" /> Overdue
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
