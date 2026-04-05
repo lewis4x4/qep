@@ -27,7 +27,7 @@ import {
 import type { ServiceStage } from "../lib/constants";
 import { Link } from "react-router-dom";
 import { searchPortalPartsOrdersForFulfillmentLink } from "../lib/portalPartsSearch";
-import { X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 
 interface Props {
   jobId: string | null;
@@ -44,6 +44,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const [debouncedOrderSearch, setDebouncedOrderSearch] = useState("");
   const [schedStartLocal, setSchedStartLocal] = useState("");
   const [schedEndLocal, setSchedEndLocal] = useState("");
+  const [copiedHint, setCopiedHint] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedOrderSearch(fulfillmentOrderSearch.trim()), 350);
@@ -182,9 +183,75 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
             {/* Tracking + portal bridge */}
             <section className="space-y-2 rounded-lg border p-3 bg-muted/20">
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Customer tracking</h3>
-              <p className="text-xs font-mono break-all">
-                Token: {job.tracking_token ?? "—"}
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The token powers the public{" "}
+                <Link to="/service/track" className="text-primary underline-offset-2 hover:underline">
+                  track page
+                </Link>
+                . Portal request and fulfillment run are optional internal links; customer and machine below come from CRM fields on this job.
               </p>
+              <p className="text-xs font-mono break-all flex items-start gap-2">
+                <span className="min-w-0 flex-1">
+                  Job ID: {job.id}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded border border-input px-1.5 py-0.5 hover:bg-muted"
+                  title="Copy job ID"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(job.id).then(() => {
+                      setCopiedHint("job");
+                      setTimeout(() => setCopiedHint(null), 2000);
+                    });
+                  }}
+                >
+                  {copiedHint === "job" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-mono break-all min-w-0 flex-1">
+                  Token: {job.tracking_token ?? "—"}
+                </p>
+                {job.tracking_token ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-input px-1.5 py-0.5 text-[11px] hover:bg-muted"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(job.tracking_token!).then(() => {
+                        setCopiedHint("token");
+                        setTimeout(() => setCopiedHint(null), 2000);
+                      });
+                    }}
+                  >
+                    {copiedHint === "token" ? "Copied" : "Copy token"}
+                  </button>
+                ) : null}
+              </div>
+              {job.tracking_token ? (
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    to={`/service/track?job_id=${encodeURIComponent(job.id)}&token=${encodeURIComponent(job.tracking_token)}`}
+                    className="text-xs rounded bg-secondary px-2 py-1 w-fit"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open track page (customer view)
+                  </Link>
+                  <button
+                    type="button"
+                    className="text-xs rounded border border-input px-2 py-1"
+                    onClick={() => {
+                      const u = `${window.location.origin}/service/track?job_id=${encodeURIComponent(job.id)}&token=${encodeURIComponent(job.tracking_token!)}`;
+                      void navigator.clipboard.writeText(u).then(() => {
+                        setCopiedHint("link");
+                        setTimeout(() => setCopiedHint(null), 2000);
+                      });
+                    }}
+                  >
+                    {copiedHint === "link" ? "Copied link" : "Copy track link"}
+                  </button>
+                </div>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 Portal request: {job.portal_request_id ?? "—"}
               </p>

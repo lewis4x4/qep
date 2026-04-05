@@ -1,23 +1,35 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { fetchPublicJobStatus } from "../lib/api";
 
 /**
  * Customer-facing status lookup using job UUID + opaque tracking token (preferred)
  * or legacy 4-char PIN (last hex chars of UUID without dashes).
+ *
+ * Supports shareable links: `/service/track?job_id=<uuid>&token=<token>` (also accepts `id` and `pin`).
  */
 export function ServicePublicTrackPage() {
+  const [searchParams] = useSearchParams();
+  const autoFetchKey = useRef<string | null>(null);
+
   const [jobId, setJobId] = useState("");
   const [secret, setSecret] = useState("");
   const [result, setResult] = useState<unknown>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    const jid = (searchParams.get("job_id") ?? searchParams.get("id") ?? "").trim();
+    const tok = (searchParams.get("token") ?? searchParams.get("pin") ?? "").trim();
+    if (jid) setJobId(jid);
+    if (tok) setSecret(tok);
+  }, [searchParams]);
+
+  const runLookup = useCallback(async (jid: string, sec: string) => {
     setErr(null);
     setLoading(true);
     try {
-      const data = await fetchPublicJobStatus(jobId.trim(), secret.trim());
+      const data = await fetchPublicJobStatus(jid.trim(), sec.trim());
       setResult(data);
     } catch (e) {
       setErr((e as Error).message);
@@ -25,6 +37,21 @@ export function ServicePublicTrackPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const jid = (searchParams.get("job_id") ?? searchParams.get("id") ?? "").trim();
+    const tok = (searchParams.get("token") ?? searchParams.get("pin") ?? "").trim();
+    if (!jid || tok.length < 4) return;
+    const key = `${jid}:${tok}`;
+    if (autoFetchKey.current === key) return;
+    autoFetchKey.current = key;
+    void runLookup(jid, tok);
+  }, [searchParams, runLookup]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await runLookup(jobId, secret);
   };
 
   const job = result && typeof result === "object" && result !== null && "job" in result
@@ -35,7 +62,7 @@ export function ServicePublicTrackPage() {
     <div className="max-w-md mx-auto py-12 px-4">
       <h1 className="text-xl font-semibold mb-2">Track service job</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Enter the full job ID and the tracking token from your confirmation message (32-character code), or the legacy 4-character PIN.
+        Enter the full job ID and the tracking token from your confirmation message (32-character code), or the legacy 4-character PIN. If you opened a shared link, status loads automatically.
       </p>
       <form onSubmit={submit} className="space-y-3">
         <input
@@ -63,6 +90,13 @@ export function ServicePublicTrackPage() {
       {job && (
         <div className="mt-6 rounded-lg border p-4 text-sm space-y-1">
           <p><span className="font-medium">Stage:</span> {String(job.current_stage)}</p>
+          {job.customer_problem_summary != null &&
+            String(job.customer_problem_summary).trim().length > 0 && (
+            <p>
+              <span className="font-medium">Request:</span>{" "}
+              {String(job.customer_problem_summary)}
+            </p>
+          )}
           {job.quote_total != null && (
             <p><span className="font-medium">Quote:</span> ${Number(job.quote_total).toLocaleString()}</p>
           )}

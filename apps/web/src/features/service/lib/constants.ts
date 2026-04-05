@@ -41,23 +41,23 @@ export const STAGE_LABELS: Record<ServiceStage, string> = {
 };
 
 export const STAGE_COLORS: Record<ServiceStage, string> = {
-  request_received: "bg-slate-100 text-slate-700",
-  triaging: "bg-blue-100 text-blue-700",
-  diagnosis_selected: "bg-indigo-100 text-indigo-700",
-  quote_drafted: "bg-purple-100 text-purple-700",
-  quote_sent: "bg-violet-100 text-violet-700",
-  approved: "bg-green-100 text-green-700",
-  parts_pending: "bg-amber-100 text-amber-700",
-  parts_staged: "bg-lime-100 text-lime-700",
-  haul_scheduled: "bg-cyan-100 text-cyan-700",
-  scheduled: "bg-teal-100 text-teal-700",
-  in_progress: "bg-sky-100 text-sky-700",
-  blocked_waiting: "bg-red-100 text-red-700",
-  quality_check: "bg-orange-100 text-orange-700",
-  ready_for_pickup: "bg-emerald-100 text-emerald-700",
-  invoice_ready: "bg-yellow-100 text-yellow-700",
-  invoiced: "bg-stone-100 text-stone-700",
-  paid_closed: "bg-green-200 text-green-800",
+  request_received: "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300",
+  triaging: "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300",
+  diagnosis_selected: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-300",
+  quote_drafted: "bg-purple-500/15 text-purple-600 dark:bg-purple-400/15 dark:text-purple-300",
+  quote_sent: "bg-violet-500/15 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300",
+  approved: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300",
+  parts_pending: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
+  parts_staged: "bg-lime-500/15 text-lime-600 dark:bg-lime-400/15 dark:text-lime-300",
+  haul_scheduled: "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300",
+  scheduled: "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300",
+  in_progress: "bg-sky-500/15 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300",
+  blocked_waiting: "bg-red-500/15 text-red-600 dark:bg-red-400/15 dark:text-red-300",
+  quality_check: "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300",
+  ready_for_pickup: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300",
+  invoice_ready: "bg-yellow-500/15 text-yellow-600 dark:bg-yellow-400/15 dark:text-yellow-300",
+  invoiced: "bg-stone-500/15 text-stone-600 dark:bg-stone-400/15 dark:text-stone-300",
+  paid_closed: "bg-green-500/20 text-green-600 dark:bg-green-400/20 dark:text-green-300",
 };
 
 export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
@@ -94,9 +94,9 @@ export const PRIORITY_LABELS = {
 } as const;
 
 export const PRIORITY_COLORS = {
-  normal: "bg-slate-100 text-slate-600",
-  urgent: "bg-amber-100 text-amber-700",
-  critical: "bg-red-100 text-red-700",
+  normal: "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300",
+  urgent: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
+  critical: "bg-red-500/15 text-red-600 dark:bg-red-400/15 dark:text-red-300",
 } as const;
 
 export const SOURCE_TYPE_LABELS = {
