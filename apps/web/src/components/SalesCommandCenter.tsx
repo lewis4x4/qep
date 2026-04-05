@@ -275,7 +275,25 @@ async function fetchCommandCenterData(
       .maybeSingle(),
   ]);
 
-  if (dealsResult.error) throw dealsResult.error;
+  if (dealsResult.error) {
+    console.warn("[command-center] crm_deals_weighted:", dealsResult.error);
+    return {
+      deals: [],
+      totalPipelineValue: 0,
+      weightedPipelineValue: 0,
+      openDealCount: 0,
+      overdueFollowUps: [],
+      todayFollowUps: [],
+      weekFollowUps: [],
+      activitiesThisWeek: activitiesResult.count ?? 0,
+      dealsClosingThisWeek: [],
+      voiceCaptures: (voiceResult.data ?? []) as VoiceCaptureRow[],
+      briefing: briefingResult.data as {
+        content: string;
+        briefing_date: string;
+      } | null,
+    };
+  }
 
   const rawDeals = (dealsResult.data ?? []) as WeightedDeal[];
 

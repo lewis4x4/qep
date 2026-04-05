@@ -52,7 +52,9 @@ export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
                 className="block rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">{tp.touchpoint_type.replace(/_/g, " ")}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {String(tp.touchpoint_type ?? "touchpoint").replace(/_/g, " ")}
+                  </span>
                   <span className="text-[10px] text-muted-foreground">{tp.scheduled_date}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{tp.purpose}</p>

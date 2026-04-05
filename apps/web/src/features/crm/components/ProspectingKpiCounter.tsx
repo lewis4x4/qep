@@ -30,7 +30,16 @@ export function ProspectingKpiCounter({ userId }: ProspectingKpiCounterProps) {
         .eq("rep_id", userId)
         .eq("kpi_date", today)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        console.warn("[prospecting-kpi]", error);
+        return {
+          total_visits: 0,
+          positive_visits: 0,
+          target: 10,
+          target_met: false,
+          consecutive_days_met: 0,
+        } as KpiData;
+      }
       return (data ?? {
         total_visits: 0,
         positive_visits: 0,

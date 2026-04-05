@@ -28,9 +28,8 @@ export function ErrorPage({ onRetry }: ErrorPageProps): React.ReactElement {
         <HardHat className="w-12 h-12 text-qep-orange" />
       </div>
 
-      {/* 500 label */}
       <p className="text-sm font-semibold text-qep-orange-hover mb-2 tracking-widest uppercase">
-        500 — Server Error
+        Application error
       </p>
 
       {/* Heading */}
