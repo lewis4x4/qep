@@ -10,6 +10,15 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import {
+  buildPmKitLinesFromJobCode,
+  deterministicPmReason,
+  explainPmKitWithLlm,
+  sanitizePortalLineItemsForOrder,
+  scoreJobCodeForFleet,
+  type CustomerFleetRow,
+  type JobCodePmRow,
+} from "../_shared/portal-pm-kit.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -141,6 +150,118 @@ Deno.serve(async (req) => {
 
     // ── /parts — Parts orders ──────────────────────────────────────────
     if (route === "parts") {
+      // POST /parts/suggest-pm-kit — AI-assisted PM kit from job_codes + optional LLM narrative
+      if (subRoute === "suggest-pm-kit" && req.method === "POST") {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("PM kit suggestions are not configured on this environment.", 503, origin);
+        }
+
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const fleetId = typeof body.fleet_id === "string" ? body.fleet_id.trim() : "";
+        if (!fleetId) {
+          return safeJsonError("fleet_id is required", 400, origin);
+        }
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: fleetRow, error: fleetErr } = await admin
+          .from("customer_fleet")
+          .select(
+            "id, make, model, serial_number, current_hours, next_service_due, service_interval_hours, workspace_id, portal_customer_id",
+          )
+          .eq("id", fleetId)
+          .eq("portal_customer_id", portalCustomer.id)
+          .eq("workspace_id", portalWorkspaceId)
+          .maybeSingle();
+
+        if (fleetErr || !fleetRow) {
+          return safeJsonError("Fleet machine not found for this account.", 404, origin);
+        }
+
+        const fleet = fleetRow as CustomerFleetRow;
+        const makeTrim = fleet.make?.trim() ?? "";
+        if (!makeTrim) {
+          return safeJsonError("Fleet record is missing equipment make.", 400, origin);
+        }
+
+        let { data: jobCodes } = await admin
+          .from("job_codes")
+          .select("id, job_name, make, model_family, parts_template, common_add_ons, confidence_score")
+          .eq("workspace_id", portalWorkspaceId)
+          .eq("make", makeTrim)
+          .order("confidence_score", { ascending: false })
+          .limit(25);
+
+        if (!jobCodes?.length) {
+          const { data: fuzzy } = await admin
+            .from("job_codes")
+            .select("id, job_name, make, model_family, parts_template, common_add_ons, confidence_score")
+            .eq("workspace_id", portalWorkspaceId)
+            .ilike("make", `%${makeTrim}%`)
+            .order("confidence_score", { ascending: false })
+            .limit(25);
+          jobCodes = fuzzy ?? [];
+        }
+
+        const codes = (jobCodes ?? []) as JobCodePmRow[];
+        if (codes.length === 0) {
+          return safeJsonOk({
+            ok: false,
+            error: "no_job_code_match",
+            message:
+              "No dealership PM template is on file for this equipment make yet. Enter part numbers manually or contact parts.",
+          }, origin);
+        }
+
+        const sorted = [...codes].sort(
+          (a, b) => scoreJobCodeForFleet(b, fleet) - scoreJobCodeForFleet(a, fleet),
+        );
+        const chosen = sorted[0];
+        const lineItems = buildPmKitLinesFromJobCode(chosen);
+        if (lineItems.length === 0) {
+          return safeJsonOk({
+            ok: false,
+            error: "empty_template",
+            message:
+              "A job code matched your machine but its PM parts list is empty. Add lines manually or ask your dealer to publish templates.",
+            matched_job_code: {
+              id: chosen.id,
+              job_name: chosen.job_name,
+              make: chosen.make,
+              model_family: chosen.model_family,
+            },
+          }, origin);
+        }
+
+        const apiKey = Deno.env.get("OPENAI_API_KEY");
+        const fallbackReason = deterministicPmReason(fleet, chosen, lineItems.length);
+        const aiReason = (await explainPmKitWithLlm(apiKey, fleet, chosen, lineItems)) ?? fallbackReason;
+
+        return safeJsonOk({
+          ok: true,
+          ai_suggested_pm_kit: true,
+          ai_suggestion_reason: aiReason,
+          line_items: lineItems.map((l) => ({
+            part_number: l.part_number,
+            quantity: l.quantity,
+            description: l.description,
+            unit_price: l.unit_price,
+            is_ai_suggested: true,
+          })),
+          matched_job_code: {
+            id: chosen.id,
+            job_name: chosen.job_name,
+            make: chosen.make,
+            model_family: chosen.model_family,
+          },
+        }, origin);
+      }
+
       if (req.method === "GET") {
         const { data, error } = await supabase
           .from("parts_orders")
@@ -156,18 +277,30 @@ Deno.serve(async (req) => {
         if (!parsed.ok) return parsed.response;
         const body = parsed.body as Record<string, unknown>;
 
-        if (!body.line_items || !Array.isArray(body.line_items) || body.line_items.length === 0) {
-          return safeJsonError("line_items array is required with at least one item", 400, origin);
+        const line_items = sanitizePortalLineItemsForOrder(body.line_items);
+        if (line_items.length === 0) {
+          return safeJsonError("line_items array is required with at least one valid item", 400, origin);
         }
 
+        const aiReason =
+          typeof body.ai_suggestion_reason === "string"
+            ? body.ai_suggestion_reason.trim().slice(0, 2000)
+            : null;
+
         // Whitelist safe fields — totals computed server-side, not customer-provided
-        const safeBody = {
+        const safeBody: Record<string, unknown> = {
+          workspace_id: portalWorkspaceId,
           portal_customer_id: portalCustomer.id,
           fleet_id: body.fleet_id || null,
           status: "draft", // Always start as draft
-          line_items: body.line_items,
+          line_items,
           shipping_address: body.shipping_address || null,
         };
+
+        if (body.ai_suggested_pm_kit === true) {
+          safeBody.ai_suggested_pm_kit = true;
+          safeBody.ai_suggestion_reason = aiReason;
+        }
 
         const { data, error } = await supabase
           .from("parts_orders")

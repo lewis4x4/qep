@@ -1,16 +1,72 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Sparkles, Trash2 } from "lucide-react";
 
 type LineDraft = { part_number: string; quantity: number };
+
+type FleetRow = {
+  id: string;
+  make: string;
+  model: string;
+  serial_number?: string | null;
+};
+
+type SuggestPmKitResponse =
+  | {
+      ok: true;
+      ai_suggested_pm_kit: boolean;
+      ai_suggestion_reason: string;
+      line_items: Array<{
+        part_number: string;
+        quantity: number;
+        description?: string;
+        is_ai_suggested?: boolean;
+      }>;
+      matched_job_code: {
+        id: string;
+        job_name: string;
+        make: string;
+        model_family: string | null;
+      };
+    }
+  | {
+      ok: false;
+      error: string;
+      message: string;
+      matched_job_code?: {
+        id: string;
+        job_name: string;
+        make: string;
+        model_family: string | null;
+      };
+    };
 
 export function PortalPartsPage() {
   const qc = useQueryClient();
   const [lines, setLines] = useState<LineDraft[]>([{ part_number: "", quantity: 1 }]);
+  const [fleetId, setFleetId] = useState<string>("");
+  const [aiReason, setAiReason] = useState<string | null>(null);
+  const [matchedJobLabel, setMatchedJobLabel] = useState<string | null>(null);
+  /** When true, draft submit includes ai_suggested_pm_kit + ai_suggestion_reason. Cleared if user edits lines. */
+  const [aiKitSubmitEligible, setAiKitSubmitEligible] = useState(false);
+
+  const { data: fleetData } = useQuery({
+    queryKey: ["portal", "fleet"],
+    queryFn: portalApi.getFleet,
+    staleTime: 60_000,
+  });
+
+  const fleet: FleetRow[] = (fleetData?.fleet as FleetRow[] | undefined) ?? [];
+
+  useEffect(() => {
+    if (!fleetId && fleet.length > 0) {
+      setFleetId(fleet[0].id);
+    }
+  }, [fleet, fleetId]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["portal", "parts-orders"],
@@ -23,14 +79,44 @@ export function PortalPartsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portal", "parts-orders"] });
       setLines([{ part_number: "", quantity: 1 }]);
+      setAiReason(null);
+      setMatchedJobLabel(null);
+      setAiKitSubmitEligible(false);
+    },
+  });
+
+  const suggestMutation = useMutation({
+    mutationFn: async () => {
+      if (!fleetId) throw new Error("Select a machine from your fleet first.");
+      return portalApi.suggestPmKit(fleetId) as Promise<SuggestPmKitResponse>;
+    },
+    onSuccess: (res) => {
+      if (!res.ok) {
+        setAiReason(res.message);
+        setMatchedJobLabel(
+          res.matched_job_code ? `${res.matched_job_code.job_name} (${res.matched_job_code.make})` : null,
+        );
+        setAiKitSubmitEligible(false);
+        return;
+      }
+      const mapped: LineDraft[] = res.line_items.map((l) => ({
+        part_number: l.part_number,
+        quantity: Math.max(1, l.quantity),
+      }));
+      setLines(mapped.length > 0 ? mapped : [{ part_number: "", quantity: 1 }]);
+      setAiReason(res.ai_suggestion_reason);
+      setMatchedJobLabel(`${res.matched_job_code.job_name} · ${res.matched_job_code.make}`);
+      setAiKitSubmitEligible(true);
     },
   });
 
   const orders = data?.orders ?? [];
 
   const addLine = () => setLines((prev) => [...prev, { part_number: "", quantity: 1 }]);
-  const removeLine = (i: number) =>
+  const removeLine = (i: number) => {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+    clearAiSubmitMetadata();
+  };
 
   const submit = () => {
     const line_items = lines
@@ -40,15 +126,98 @@ export function PortalPartsPage() {
       }))
       .filter((l) => l.part_number.length > 0);
     if (line_items.length === 0) return;
-    createMutation.mutate({ line_items });
+
+    const body: Record<string, unknown> = {
+      line_items,
+      fleet_id: fleetId || null,
+    };
+    if (aiKitSubmitEligible && aiReason) {
+      body.ai_suggested_pm_kit = true;
+      body.ai_suggestion_reason = aiReason;
+    }
+    createMutation.mutate(body);
+  };
+
+  const clearAiSubmitMetadata = () => setAiKitSubmitEligible(false);
+
+  const resetSuggestionContext = () => {
+    setAiKitSubmitEligible(false);
+    setAiReason(null);
+    setMatchedJobLabel(null);
   };
 
   return (
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Parts orders</h1>
       <p className="text-sm text-muted-foreground mb-4">
-        Request parts for your fleet. Orders start as draft until the dealership confirms.
+        Request parts for your fleet. Use AI-suggested PM kits grounded in dealership service templates, then review
+        lines before submitting a draft.
       </p>
+
+      {fleet.length > 0 && (
+        <Card className="p-4 mb-6 space-y-3">
+          <p className="text-sm font-medium text-foreground">Equipment context</p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-xs text-muted-foreground">Fleet machine</label>
+              <select
+                value={fleetId}
+                onChange={(e) => {
+                  setFleetId(e.target.value);
+                  resetSuggestionContext();
+                }}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-sm mt-1"
+              >
+                {fleet.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.make} {f.model}
+                    {f.serial_number ? ` · ${f.serial_number}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-1"
+              disabled={!fleetId || suggestMutation.isPending}
+              onClick={() => suggestMutation.mutate()}
+            >
+              <Sparkles className="h-4 w-4" />
+              {suggestMutation.isPending ? "Suggesting…" : "Suggest PM kit"}
+            </Button>
+          </div>
+          {matchedJobLabel && (
+            <p className="text-xs text-muted-foreground">
+              Template: <span className="text-foreground font-medium">{matchedJobLabel}</span>
+            </p>
+          )}
+          {aiReason && (
+            <div
+              className={`text-sm rounded-md border p-3 ${
+                aiKitSubmitEligible
+                  ? "border-amber-500/40 bg-amber-500/10 text-foreground"
+                  : "border-border bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {aiKitSubmitEligible ? (
+                <>
+                  <span className="font-medium text-amber-200/90">AI + dealership template — </span>
+                  {aiReason}
+                </>
+              ) : (
+                aiReason
+              )}
+            </div>
+          )}
+          {suggestMutation.isError && (
+            <p className="text-sm text-destructive">
+              {suggestMutation.error instanceof Error ? suggestMutation.error.message : "Suggestion failed"}
+            </p>
+          )}
+        </Card>
+      )}
 
       <Card className="p-4 mb-6 space-y-3">
         <p className="text-sm font-medium text-foreground">New order</p>
@@ -58,11 +227,12 @@ export function PortalPartsPage() {
               <label className="text-xs text-muted-foreground">Part #</label>
               <input
                 value={line.part_number}
-                onChange={(e) =>
+                onChange={(e) => {
                   setLines((prev) =>
                     prev.map((row, j) => (j === i ? { ...row, part_number: e.target.value } : row)),
-                  )
-                }
+                  );
+                  clearAiSubmitMetadata();
+                }}
                 className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
                 placeholder="SKU / part number"
               />
@@ -89,7 +259,15 @@ export function PortalPartsPage() {
           </div>
         ))}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={addLine}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              addLine();
+              clearAiSubmitMetadata();
+            }}
+          >
             <Plus className="h-4 w-4 mr-1" /> Add line
           </Button>
           <Button size="sm" onClick={submit} disabled={createMutation.isPending}>
@@ -121,7 +299,10 @@ export function PortalPartsPage() {
                 {o.created_at ? new Date(String(o.created_at)).toLocaleString() : ""}
               </span>
             </div>
-            <pre className="mt-2 text-[10px] bg-muted/40 rounded p-2 overflow-x-auto max-h-24">
+            {o.ai_suggested_pm_kit === true && typeof o.ai_suggestion_reason === "string" && (
+              <p className="mt-2 text-xs text-amber-200/90 border-l-2 border-amber-500/60 pl-2">{o.ai_suggestion_reason}</p>
+            )}
+            <pre className="mt-2 text-[10px] bg-muted/40 rounded p-2 overflow-x-auto max-h-32">
               {JSON.stringify(o.line_items, null, 2)}
             </pre>
           </Card>

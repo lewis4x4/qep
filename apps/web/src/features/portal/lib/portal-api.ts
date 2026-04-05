@@ -30,6 +30,12 @@ export const portalApi = {
   getPartsOrders: () => portalFetch("parts"),
   createPartsOrder: (data: Record<string, unknown>) =>
     portalFetch("parts", { method: "POST", body: JSON.stringify(data) }),
+  /** Grounded PM kit from job_codes.parts_template + optional LLM narrative (portal-api). */
+  suggestPmKit: (fleetId: string) =>
+    portalFetch("parts/suggest-pm-kit", {
+      method: "POST",
+      body: JSON.stringify({ fleet_id: fleetId }),
+    }),
   getInvoices: () => portalFetch("invoices"),
   recordInvoicePayment: (data: Record<string, unknown>) =>
     portalFetch("invoices/pay", { method: "POST", body: JSON.stringify(data) }),
