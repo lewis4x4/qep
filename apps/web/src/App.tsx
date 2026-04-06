@@ -109,6 +109,9 @@ const VoiceQrmPage = lazy(() =>
 const NervousSystemDashboardPage = lazy(() =>
   import("./features/nervous-system/pages/NervousSystemDashboardPage").then((m) => ({ default: m.NervousSystemDashboardPage }))
 );
+const PriceIntelligencePage = lazy(() =>
+  import("./features/price-intelligence/pages/PriceIntelligencePage").then((m) => ({ default: m.PriceIntelligencePage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -844,6 +847,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <NervousSystemDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/price-intelligence"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <PriceIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
