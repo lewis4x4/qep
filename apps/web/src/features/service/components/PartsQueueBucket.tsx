@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { PartsQueueItem } from "../hooks/usePartsQueue";
 
 interface Props {
@@ -39,6 +40,16 @@ export function PartsQueueBucket({ title, items, accentColor = "bg-slate-100", o
                   {item.job?.customer?.name ?? "Unknown"} &middot;{" "}
                   {item.job?.machine ? `${item.job.machine.make} ${item.job.machine.model}` : "No machine"}
                 </p>
+                {item.job?.fulfillment_run_id ? (
+                  <p className="text-[10px] mt-1">
+                    <Link
+                      to={`/service/fulfillment/${item.job.fulfillment_run_id}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      Fulfillment run
+                    </Link>
+                  </p>
+                ) : null}
               </div>
               <div className="text-right shrink-0">
                 {item.need_by_date && (

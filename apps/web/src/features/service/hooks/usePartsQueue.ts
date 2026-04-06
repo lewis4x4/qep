@@ -15,6 +15,7 @@ export interface PartsQueueItem {
   intake_line_status?: string;
   job?: {
     id: string;
+    fulfillment_run_id: string | null;
     customer_problem_summary: string | null;
     priority: string;
     status_flags: string[];
@@ -40,7 +41,7 @@ export function usePartsQueue() {
         .select(`
           *,
           job:service_jobs(
-            id, customer_problem_summary, priority, status_flags,
+            id, fulfillment_run_id, customer_problem_summary, priority, status_flags,
             customer:crm_companies(id, name),
             machine:crm_equipment(id, make, model, serial_number)
           ),
