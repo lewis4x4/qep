@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
@@ -364,7 +365,13 @@ export function PortalPartsOrdersPage() {
                           )}
                           {row.fulfillment_run_id && (
                             <p className="text-[11px] text-muted-foreground mb-2 font-mono">
-                              Fulfillment run: {row.fulfillment_run_id}
+                              Fulfillment run:{" "}
+                              <Link
+                                to={`/service/fulfillment/${row.fulfillment_run_id}`}
+                                className="text-primary underline-offset-2 hover:underline"
+                              >
+                                {row.fulfillment_run_id}
+                              </Link>
                             </p>
                           )}
                           <pre className="text-[11px] overflow-x-auto p-2 rounded bg-muted/50 max-h-48">

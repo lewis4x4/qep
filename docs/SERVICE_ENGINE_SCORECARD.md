@@ -32,6 +32,7 @@ deno test supabase/functions/_shared/vendor-inbound-contract.test.ts
 5. Portal: submit request with photo → `service_requests.photos` contains URLs; internal job linked shows shop status label.
 6. Cron: after a **POST** to a scheduled worker (e.g. `service-vendor-escalator`), `service_cron_runs` contains a row with matching `job_name` and `ok: true` (unless `SERVICE_CRON_RUNS_DISABLED=true`).
 7. Vendor inbound: POST with optional `edi_control_number` / `line_items` → updated order action **`metadata.vendor_contract`** populated and fulfillment event payload includes **`vendor_contract`** when the job is linked to a run.
+8. **Portal → Parts orders:** expand an order with **`fulfillment_run_id`** → link opens **Service → Fulfillment run** (`/service/fulfillment/:runId`); events with vendor dedupe show **`idempotency_key`** when set.
 
 ## Gate
 

@@ -94,7 +94,7 @@ export function FulfillmentRunDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("parts_fulfillment_events")
-        .select("id, event_type, payload, created_at")
+        .select("id, event_type, payload, created_at, idempotency_key")
         .eq("fulfillment_run_id", trimmed)
         .order("created_at", { ascending: false })
         .limit(100);
@@ -220,7 +220,8 @@ export function FulfillmentRunDetailPage() {
             <h2 className="text-sm font-medium mb-2">Events (newest first)</h2>
             <p className="text-[11px] text-muted-foreground mb-2">
               Channel badges: Shop (counter/system), Portal (customer order), Vendor (inbound webhooks /
-              escalations). Older rows infer channel from event type when needed.
+              escalations). Older rows infer channel from event type when needed. Vendor retries show an
+              idempotency key when present (migration 131).
             </p>
             {eventsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading…</p>
@@ -256,6 +257,11 @@ export function FulfillmentRunDetailPage() {
                       <p className="mt-0.5 font-mono text-[10px] text-muted-foreground break-all">
                         {ev.event_type}
                       </p>
+                      {ev.idempotency_key ? (
+                        <p className="mt-0.5 font-mono text-[10px] text-amber-800/90 dark:text-amber-200/90 break-all">
+                          idempotency_key: {String(ev.idempotency_key)}
+                        </p>
+                      ) : null}
                       <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-background/50 p-2 font-mono text-[10px] text-muted-foreground">
                         {JSON.stringify(ev.payload, null, 2)}
                       </pre>
