@@ -57,7 +57,7 @@ async function requestRouter<T>(
   options: RouterRequestOptions = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/crm-router${path}`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/qrm-router${path}`, {
     method,
     headers: await getAuthHeaders(options.idempotencyKey),
     body: options.body === undefined ? undefined : JSON.stringify(options.body),

@@ -1307,7 +1307,7 @@ export function IntegrationPanel({
     setIsRunningHubSpotImport(true);
     setHubSpotImportDialogOpen(false);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-hubspot-import", {
+      const { data, error } = await supabase.functions.invoke("qrm-hubspot-import", {
         body: runId ? { runId } : {},
       });
       if (error) {
