@@ -95,6 +95,37 @@ export async function invokePartsManager(
   return data;
 }
 
+/** P1-C: suggested → accepted so parts planner can include the line. */
+export async function acceptPartsIntakeLine(requirementId: string): Promise<unknown> {
+  return invokePartsManager({
+    action: "accept_intake_line",
+    requirement_id: requirementId,
+  });
+}
+
+/** Post draft consumed-parts staging lines to a pending customer_invoices for the job (P1-A). */
+export async function postInternalBillingToInvoice(
+  serviceJobId: string,
+): Promise<{
+  ok?: boolean;
+  customer_invoice_id?: string;
+  lines_posted?: number;
+  invoice_total?: number;
+  error?: string;
+}> {
+  const { data, error } = await supabase.functions.invoke("service-billing-post", {
+    body: { service_job_id: serviceJobId },
+  });
+  if (error) throw new Error(error.message ?? "billing post failed");
+  return (data ?? {}) as {
+    ok?: boolean;
+    customer_invoice_id?: string;
+    lines_posted?: number;
+    invoice_total?: number;
+    error?: string;
+  };
+}
+
 export async function suggestTechnicians(jobId: string): Promise<unknown> {
   const { data, error } = await supabase.functions.invoke("service-scheduler", {
     body: { job_id: jobId },

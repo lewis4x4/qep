@@ -380,7 +380,8 @@ export async function listEquipmentForCompanySubtree(
 
   if (error) throw error;
 
-  const rows = data ?? [];
+  type EquipmentDbRow = { company_id: string | null } & Record<string, unknown>;
+  const rows = (data ?? []) as unknown as EquipmentDbRow[];
   const companyIds = [...new Set(rows.map((row) => String(row.company_id)))];
   let nameMap = new Map<string, string>();
   if (companyIds.length > 0) {

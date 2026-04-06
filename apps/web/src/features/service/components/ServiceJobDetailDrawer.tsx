@@ -7,6 +7,7 @@ import { PartsRequirementEditor } from "./PartsRequirementEditor";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
 import {
+  acceptPartsIntakeLine,
   assignTechnicianToJob,
   linkFulfillmentRunToJob,
   linkPortalRequestToJob,
@@ -130,6 +131,13 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
       if (!job?.id) throw new Error("No job");
       return assignTechnicianToJob(job.id, technicianUserId);
     },
+    onSuccess: () => {
+      if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
+    },
+  });
+
+  const acceptIntake = useMutation({
+    mutationFn: (requirementId: string) => acceptPartsIntakeLine(requirementId),
     onSuccess: () => {
       if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
     },
@@ -598,6 +606,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
             <PartsRequirementEditor
               jobId={job.id}
               selectedJobCodeId={job.selected_job_code_id}
+              parts={job.parts}
             />
 
             <section className="space-y-2">
@@ -656,9 +665,38 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">Parts ({job.parts.length})</h3>
                 <div className="space-y-1">
                   {job.parts.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-sm border rounded px-2 py-1.5">
-                      <span className="truncate">{p.part_number} — {p.description ?? "No desc"}</span>
-                      <span className="text-xs bg-muted px-1.5 py-0.5 rounded ml-2 shrink-0">{p.status}</span>
+                    <div
+                      key={p.id}
+                      className="flex items-start justify-between gap-2 text-sm border rounded px-2 py-1.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">
+                          {p.part_number} — {p.description ?? "No desc"}
+                        </div>
+                        {(p.intake_line_status || p.source) && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            {p.intake_line_status && (
+                              <span className="uppercase tracking-wide">{p.intake_line_status}</span>
+                            )}
+                            {p.source && (
+                              <span className={p.intake_line_status ? "ml-1" : ""}>· {p.source}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {(p.intake_line_status ?? "accepted") === "suggested" && (
+                          <button
+                            type="button"
+                            className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-900 dark:text-amber-100 hover:bg-amber-500/25"
+                            disabled={acceptIntake.isPending}
+                            onClick={() => acceptIntake.mutate(p.id)}
+                          >
+                            Accept
+                          </button>
+                        )}
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.status}</span>
+                      </div>
                     </div>
                   ))}
                 </div>

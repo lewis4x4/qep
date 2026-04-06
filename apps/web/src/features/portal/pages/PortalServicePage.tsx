@@ -30,6 +30,89 @@ const JOB_STAGE_LABEL: Record<string, string> = {
   paid_closed: "Completed",
 };
 
+/** Linked-job timeline (P1-D) — same underlying events as staff, customer-safe labels only. */
+function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["portal", "service-timeline", requestId],
+    queryFn: () => portalApi.getServiceRequestTimeline(requestId),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">Loading shop updates…</p>
+    );
+  }
+  if (error) {
+    return (
+      <p className="text-xs text-destructive mt-2 border-t pt-2">Could not load shop updates.</p>
+    );
+  }
+
+  const payload = data as {
+    ok?: boolean;
+    service_job_id?: string | null;
+    events?: Array<{
+      id: string;
+      event_type: string;
+      created_at: string;
+      old_stage?: string | null;
+      new_stage?: string | null;
+      customer_label: string;
+    }>;
+  };
+
+  if (!payload?.ok) return null;
+
+  if (!payload.service_job_id) {
+    return (
+      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+        Shop updates will appear here once your request is linked to the service team.
+      </p>
+    );
+  }
+
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  if (events.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+        No milestone updates yet. Current status is shown above when available.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 border-t pt-2 space-y-1.5">
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+        Shop updates
+      </p>
+      <ul className="space-y-2 max-h-52 overflow-y-auto pr-1">
+        {events.map((ev) => (
+          <li key={ev.id} className="text-xs flex flex-col gap-0.5">
+            <div className="flex justify-between gap-2">
+              <span className="text-foreground">{ev.customer_label}</span>
+              <time
+                className="text-muted-foreground shrink-0 text-[10px]"
+                dateTime={ev.created_at}
+              >
+                {new Date(ev.created_at).toLocaleString(undefined, {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              </time>
+            </div>
+            {ev.new_stage && ev.event_type === "stage_transition" && (
+              <span className="text-[11px] text-muted-foreground">
+                {JOB_STAGE_LABEL[ev.new_stage] ?? ev.new_stage}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function PortalServicePage() {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -186,6 +269,13 @@ export function PortalServicePage() {
               {shopStage && (
                 <p className="text-xs text-muted-foreground">
                   Shop status: <span className="text-foreground font-medium">{shopStage}</span>
+                </p>
+              )}
+              {ij?.id ? (
+                <PortalRequestShopTimeline requestId={req.id} />
+              ) : (
+                <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                  When the shop connects this request to a job, milestone updates will appear here.
                 </p>
               )}
             </Card>

@@ -18,11 +18,18 @@ type Action =
   | "update"
   | "remove"
   | "bulk_add"
+  | "accept_intake_line"
   | "pick"
   | "receive"
   | "stage"
   | "consume"
   | "return_part";
+
+function intakeLineStatusForSource(source: string | undefined): "suggested" | "accepted" {
+  const s = (source ?? "manual").toLowerCase();
+  if (s === "ai_suggested" || s === "job_code_template") return "suggested";
+  return "accepted";
+}
 
 interface Body {
   action: Action;
@@ -35,6 +42,8 @@ interface Body {
   vendor_id?: string | null;
   source?: string;
   bin_location?: string | null;
+  /** Admin/manager/owner only: force pick when ledger would block (audited). */
+  override_reason?: string | null;
   items?: Array<Record<string, unknown>>;
 }
 
@@ -61,16 +70,18 @@ Deno.serve(async (req) => {
         return await handleRemove(supabase, body, actorId, origin);
       case "bulk_add":
         return await handleBulkAdd(supabase, body, actorId, origin);
+      case "accept_intake_line":
+        return await handleAcceptIntakeLine(supabase, body, actorId, origin);
       case "pick":
-        return await handleFulfillment(supabase, body, actorId, "pick", "picking", origin);
+        return await handleFulfillment(supabase, body, actorId, "pick", "picking", origin, true);
       case "receive":
-        return await handleFulfillment(supabase, body, actorId, "receive", "received", origin);
+        return await handleFulfillment(supabase, body, actorId, "receive", "received", origin, false);
       case "stage":
         return await handleStage(supabase, body, actorId, origin);
       case "consume":
-        return await handleFulfillment(supabase, body, actorId, "consume", "consumed", origin);
+        return await handleFulfillment(supabase, body, actorId, "consume", "consumed", origin, false);
       case "return_part":
-        return await handleFulfillment(supabase, body, actorId, "return", "returned", origin);
+        return await handleFulfillment(supabase, body, actorId, "return", "returned", origin, false);
       default:
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
@@ -94,60 +105,6 @@ async function loadJob(
     .single();
   if (error || !data) return null;
   return data;
-}
-
-/** pick/receive/return adjust parts_inventory; consume does not (stock left shelf at pick). */
-async function adjustInventoryForAction(
-  supabase: SupabaseClient,
-  opts: {
-    workspaceId: string;
-    branchId: string | null;
-    partNumber: string;
-    quantity: number;
-    actionType: string;
-    jobId: string;
-    actorId: string;
-  },
-): Promise<void> {
-  const { workspaceId, branchId, partNumber, quantity, actionType, jobId, actorId } = opts;
-  if (!branchId || quantity <= 0) return;
-
-  let delta = 0;
-  if (actionType === "pick") delta = -quantity;
-  else if (actionType === "receive" || actionType === "return") delta = quantity;
-  else if (actionType === "consume") return;
-
-  if (delta === 0) return;
-
-  const { data, error } = await supabase.rpc("adjust_parts_inventory_delta", {
-    p_workspace_id: workspaceId,
-    p_branch_id: branchId,
-    p_part_number: partNumber,
-    p_delta: delta,
-  });
-
-  if (error) {
-    console.warn("adjust_parts_inventory_delta:", error.message);
-    await supabase.from("service_job_events").insert({
-      workspace_id: workspaceId,
-      job_id: jobId,
-      event_type: "parts_inventory_adjust_failed",
-      actor_id: actorId,
-      metadata: { part_number: partNumber, delta, error: error.message },
-    });
-    return;
-  }
-
-  const row = data as { insufficient?: boolean } | null;
-  if (row && typeof row === "object" && row.insufficient) {
-    await supabase.from("service_job_events").insert({
-      workspace_id: workspaceId,
-      job_id: jobId,
-      event_type: "parts_inventory_insufficient",
-      actor_id: actorId,
-      metadata: { part_number: partNumber, delta, note: "qty_on_hand may be understated" },
-    });
-  }
 }
 
 async function logEvent(
@@ -179,6 +136,7 @@ async function handleAdd(
   if (!job) return safeJsonError("Job not found", 404, origin);
 
   const qty = Math.max(1, Math.floor(Number(body.quantity ?? 1)) || 1);
+  const src = body.source ?? "manual";
   const { data: row, error } = await supabase
     .from("service_parts_requirements")
     .insert({
@@ -189,9 +147,10 @@ async function handleAdd(
       quantity: qty,
       unit_cost: body.unit_cost ?? null,
       vendor_id: body.vendor_id ?? null,
-      source: body.source ?? "manual",
+      source: src,
       confidence: "manual",
       status: "pending",
+      intake_line_status: intakeLineStatusForSource(src),
     })
     .select()
     .single();
@@ -267,6 +226,7 @@ async function handleBulkAdd(
     const pn = String(o.part_number ?? "").trim();
     if (!pn) continue;
     const qty = Math.max(1, Math.floor(Number(o.quantity ?? 1)) || 1);
+    const src = String(o.source ?? "manual");
     rows.push({
       workspace_id: job.workspace_id,
       job_id: body.job_id,
@@ -274,9 +234,10 @@ async function handleBulkAdd(
       description: o.description ? String(o.description) : null,
       quantity: qty,
       unit_cost: o.unit_cost != null ? Number(o.unit_cost) : null,
-      source: String(o.source ?? "manual"),
+      source: src,
       confidence: String(o.confidence ?? "medium"),
       status: "pending",
+      intake_line_status: intakeLineStatusForSource(src),
     });
   }
   if (rows.length === 0) return safeJsonError("No valid items", 400, origin);
@@ -290,28 +251,28 @@ async function handleBulkAdd(
   return safeJsonOk({ requirements: data ?? [] }, origin, 201);
 }
 
-/** Returns error message or null if allowed. */
-function validatePartTransition(
-  status: string,
-  actionType: string,
-): string | null {
-  if (actionType === "receive") {
-    const ok = ["ordering", "transferring", "received"].includes(status);
-    if (!ok) {
-      return "INVALID_TRANSITION: receive requires ordering or transferring (planned order in flight)";
-    }
+async function handleAcceptIntakeLine(
+  supabase: SupabaseClient,
+  body: Body,
+  actorId: string,
+  origin: string | null,
+) {
+  if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
+
+  const { data, error } = await supabase.rpc("service_parts_accept_intake_line", {
+    p_requirement_id: body.requirement_id,
+    p_actor_id: actorId,
+  });
+
+  if (error) {
+    const msg = error.message ?? "accept_intake_failed";
+    const code = (error as { code?: string }).code;
+    const status = code === "42501" || /forbidden/i.test(msg) ? 403 : 400;
+    return safeJsonError(msg, status, origin);
   }
-  if (actionType === "pick") {
-    if (status === "pending") {
-      return "INVALID_TRANSITION: pick requires a plan — run parts planner first";
-    }
-  }
-  if (actionType === "consume" || actionType === "return") {
-    if (!["staged", "received", "consumed", "returned"].includes(status)) {
-      return "INVALID_TRANSITION: line must be staged or received before consume/return";
-    }
-  }
-  return null;
+
+  const payload = data as { requirement?: Record<string, unknown>; ok?: boolean } | null;
+  return safeJsonOk(payload ?? {}, origin);
 }
 
 async function completeOpenActions(
@@ -333,76 +294,81 @@ async function handleFulfillment(
   body: Body,
   actorId: string,
   actionType: string,
-  nextStatus: string,
+  _nextStatus: string,
   origin: string | null,
+  allowOverride = false,
 ) {
   if (!body.requirement_id) return safeJsonError("requirement_id required", 400, origin);
 
-  const { data: req, error: rErr } = await supabase
-    .from("service_parts_requirements")
-    .select("id, job_id, workspace_id, status, part_number, quantity")
-    .eq("id", body.requirement_id)
-    .single();
-  if (rErr || !req) return safeJsonError("Requirement not found", 404, origin);
-
-  const transitionErr = validatePartTransition(req.status, actionType);
-  if (transitionErr) {
-    return safeJsonError(transitionErr, 400, origin);
+  const rpcAction = actionType === "return_part" ? "return" : actionType;
+  const rpcArgs: {
+    p_requirement_id: string;
+    p_action: string;
+    p_actor_id: string;
+    p_override_reason?: string;
+  } = {
+    p_requirement_id: body.requirement_id,
+    p_action: rpcAction,
+    p_actor_id: actorId,
+  };
+  if (allowOverride) {
+    const raw = body.override_reason;
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      rpcArgs.p_override_reason = raw.trim();
+    }
   }
 
-  const jobRow = await loadJob(supabase, req.job_id as string);
-  const branchId = jobRow?.branch_id as string | null ?? null;
-  const qty = Math.max(1, Math.floor(Number(req.quantity ?? 1)) || 1);
-  const partNumber = String(req.part_number ?? "").trim();
+  const { data, error } = await supabase.rpc("service_parts_apply_fulfillment_action", rpcArgs);
 
-  await completeOpenActions(supabase, req.id, req.job_id);
+  if (error) {
+    const msg = error.message ?? "fulfillment_failed";
+    const code = (error as { code?: string }).code;
+    const status =
+      code === "42501" || /forbidden|override_requires_manager/i.test(msg) ? 403 : 400;
+    if (/INTAKE_SUGGESTED_NOT_ACCEPTED/i.test(msg)) {
+      return safeJsonError(
+        "Accept suggested line before pick, receive, consume, or return",
+        400,
+        origin,
+      );
+    }
+    return safeJsonError(msg, status, origin);
+  }
 
-  await supabase.from("service_parts_actions").insert({
-    workspace_id: req.workspace_id,
-    requirement_id: req.id,
-    job_id: req.job_id,
-    action_type: actionType,
-    actor_id: actorId,
-    completed_at: new Date().toISOString(),
-    metadata: { via: "service-parts-manager" },
-  });
+  const payload = data as {
+    requirement?: Record<string, unknown>;
+    inventory_override?: boolean;
+  } | null;
+  const updated = payload?.requirement;
+  if (!updated || typeof updated !== "object") {
+    return safeJsonError("RPC returned no requirement", 500, origin);
+  }
 
-  const { data: updated, error: uErr } = await supabase
-    .from("service_parts_requirements")
-    .update({ status: nextStatus })
-    .eq("id", req.id)
-    .select()
-    .single();
-  if (uErr) return safeJsonError(uErr.message, 400, origin);
-
-  await adjustInventoryForAction(supabase, {
-    workspaceId: req.workspace_id as string,
-    branchId,
-    partNumber,
-    quantity: qty,
-    actionType,
-    jobId: req.job_id as string,
-    actorId,
-  });
-
-  await logEvent(supabase, req.workspace_id, req.job_id, actorId, {
-    action: actionType,
-    requirement_id: req.id,
-    new_status: nextStatus,
-  });
+  const jobId = String(updated.job_id ?? "");
+  const workspaceId = String(updated.workspace_id ?? "");
+  const partNumber = String(updated.part_number ?? "").trim();
 
   await mirrorToFulfillmentRun(supabase, {
-    jobId: req.job_id as string,
-    workspaceId: req.workspace_id as string,
+    jobId,
+    workspaceId,
     eventType: "shop_parts_action",
     payload: {
-      action_type: actionType,
-      requirement_id: req.id,
+      action_type: rpcAction,
+      requirement_id: body.requirement_id,
       part_number: partNumber,
+      inventory_override: payload?.inventory_override === true,
     },
   });
 
-  return safeJsonOk({ requirement: updated }, origin);
+  return safeJsonOk(
+    {
+      requirement: updated,
+      ...(payload?.inventory_override != null
+        ? { inventory_override: payload.inventory_override }
+        : {}),
+    },
+    origin,
+  );
 }
 
 async function handleStage(
@@ -415,10 +381,13 @@ async function handleStage(
 
   const { data: req, error: rErr } = await supabase
     .from("service_parts_requirements")
-    .select("id, job_id, workspace_id, part_number")
+    .select("id, job_id, workspace_id, part_number, intake_line_status")
     .eq("id", body.requirement_id)
     .single();
   if (rErr || !req) return safeJsonError("Requirement not found", 404, origin);
+  if ((req as { intake_line_status?: string }).intake_line_status === "suggested") {
+    return safeJsonError("Accept suggested line before staging", 400, origin);
+  }
 
   await completeOpenActions(supabase, req.id, req.job_id);
 

@@ -41,6 +41,9 @@ async function portalFetch(route: string, options?: RequestInit): Promise<any> {
 export const portalApi = {
   getFleet: () => portalFetch("fleet"),
   getServiceRequests: () => portalFetch("service-requests"),
+  /** P1-D: customer-safe timeline for the internal job linked to this portal request. */
+  getServiceRequestTimeline: (serviceRequestId: string) =>
+    portalFetch(`service-requests/${serviceRequestId}/timeline`),
   createServiceRequest: (data: Record<string, unknown>) =>
     portalFetch("service-requests", { method: "POST", body: JSON.stringify(data) }),
   getPartsOrders: () => portalFetch("parts"),

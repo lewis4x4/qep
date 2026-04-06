@@ -3,7 +3,7 @@
  *
  * Auth: user JWT only
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleGenerate(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: QuoteRequest,
   actorId: string,
   origin: string | null,
@@ -224,7 +224,7 @@ async function handleGenerate(
 }
 
 async function handleUpdate(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: QuoteRequest,
   origin: string | null,
 ) {
@@ -278,7 +278,7 @@ async function handleUpdate(
 }
 
 async function handleSend(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: QuoteRequest,
   origin: string | null,
 ) {
@@ -317,7 +317,7 @@ async function handleSend(
 }
 
 async function handleApprove(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: QuoteRequest,
   origin: string | null,
 ) {
@@ -369,7 +369,7 @@ async function handleApprove(
 }
 
 async function handleReject(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: QuoteRequest,
   origin: string | null,
 ) {

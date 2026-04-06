@@ -10,7 +10,7 @@
  *
  * Auth: service_role (device webhooks) or admin/owner (manual)
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 Deno.serve(async (req) => {
@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
     // Only create admin client when actually needed
-    let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+    let supabaseAdmin: SupabaseClient | null = null;
     if (isServiceRole) {
       supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL")!,
@@ -59,6 +59,10 @@ Deno.serve(async (req) => {
       if (!profile || !["admin", "owner"].includes(profile.role)) {
         return safeJsonError("Telematics requires admin/owner role", 403, origin);
       }
+    }
+
+    if (!supabaseAdmin) {
+      return safeJsonError("Server misconfiguration", 500, origin);
     }
 
     const url = new URL(req.url);

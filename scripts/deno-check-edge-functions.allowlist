@@ -1,0 +1,10 @@
+# Paths relative to repo root; one per line. Extend as more functions pass `deno check`.
+supabase/functions/service-billing-post/index.ts
+supabase/functions/service-parts-manager/index.ts
+supabase/functions/service-parts-planner/index.ts
+supabase/functions/service-public-job-status/index.ts
+supabase/functions/service-scheduler/index.ts
+supabase/functions/service-haul-router/index.ts
+supabase/functions/service-job-router/index.ts
+supabase/functions/service-quote-engine/index.ts
+supabase/functions/portal-api/index.ts

@@ -3,7 +3,7 @@
  *
  * Auth: user JWT only
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   optionsResponse,
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleCreateHaul(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: HaulRequest,
   actorId: string,
   origin: string | null,
@@ -68,7 +68,9 @@ async function handleCreateHaul(
   if (!job) return safeJsonError("Job not found", 404, origin);
   if (!job.haul_required) return safeJsonError("Job does not require haul", 400, origin);
 
-  const machine = job.machine as Record<string, unknown> | null;
+  const embedded = job.machine;
+  const machineRow = Array.isArray(embedded) ? embedded[0] : embedded;
+  const machine = (machineRow ?? null) as Record<string, unknown> | null;
 
   const { data: ticket, error } = await supabase
     .from("traffic_tickets")
@@ -112,7 +114,7 @@ async function handleCreateHaul(
 }
 
 async function handleSyncStatus(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: HaulRequest,
   origin: string | null,
 ) {

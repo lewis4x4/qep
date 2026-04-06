@@ -67,6 +67,16 @@ const PortalPartsOrdersPage = lazy(() =>
 const JobCodeSuggestionsPage = lazy(() =>
   import("./features/service/pages/JobCodeSuggestionsPage").then((m) => ({ default: m.JobCodeSuggestionsPage }))
 );
+const ServiceSchedulerHealthPage = lazy(() =>
+  import("./features/service/pages/ServiceSchedulerHealthPage").then((m) => ({
+    default: m.ServiceSchedulerHealthPage,
+  }))
+);
+const ServiceShopInvoicePage = lazy(() =>
+  import("./features/service/pages/ServiceShopInvoicePage").then((m) => ({
+    default: m.ServiceShopInvoicePage,
+  }))
+);
 const ServicePublicTrackPage = lazy(() =>
   import("./features/service/pages/ServicePublicTrackPage").then((m) => ({ default: m.ServicePublicTrackPage }))
 );
@@ -667,6 +677,26 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <JobCodeSuggestionsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/scheduler-health"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceSchedulerHealthPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/invoice/:invoiceId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceShopInvoicePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

@@ -312,7 +312,7 @@ export function ServiceIntakePage() {
           ? `${intakeResult.suggested_next_step} (confidence: ${(intakeResult.confidence * 100).toFixed(0)}%)`
           : null,
       },
-      { onSuccess: (job) => navigate(`/service?highlight=${job.id}`) },
+      { onSuccess: (job) => navigate(`/service?job=${job.id}`) },
     );
   }, [
     selectedCustomer,

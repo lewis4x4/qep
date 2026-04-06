@@ -134,6 +134,9 @@ verify_jwt = false
 [functions.service-parts-manager]
 verify_jwt = false
 
+[functions.service-billing-post]
+verify_jwt = false
+
 [functions.service-vendor-escalator]
 verify_jwt = false
 

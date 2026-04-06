@@ -3,7 +3,7 @@
  *
  * Auth: user JWT only (service_role rejected — use RLS via user session).
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   safeJsonError,
@@ -88,7 +88,7 @@ const SERVICE_JOB_ENRICHED_SELECT = `
       job_code:job_codes(id, job_name, make, model_family, manufacturer_estimated_hours),
       events:service_job_events(id, event_type, actor_id, old_stage, new_stage, metadata, created_at),
       blockers:service_job_blockers(id, blocker_type, description, resolved_at, created_at),
-      parts:service_parts_requirements(id, part_number, description, quantity, status, need_by_date),
+      parts:service_parts_requirements(id, part_number, description, quantity, status, need_by_date, source, intake_line_status),
       quotes:service_quotes(id, version, total, status, sent_at),
       fulfillment_run:parts_fulfillment_runs(id, status, created_at),
       portal_request:service_requests!service_jobs_portal_request_id_fkey(
@@ -103,7 +103,7 @@ const SERVICE_JOB_ENRICHED_SELECT = `
     `;
 
 async function fetchJobEnriched(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   jobId: string,
 ) {
   return await supabase
@@ -131,6 +131,7 @@ function buildPartsRowsFromTemplate(
         quantity: 1,
         source: "job_code_template",
         confidence: "medium",
+        intake_line_status: "suggested",
       });
     } else if (item && typeof item === "object") {
       const o = item as Record<string, unknown>;
@@ -146,6 +147,7 @@ function buildPartsRowsFromTemplate(
         unit_cost: o.unit_cost != null ? Number(o.unit_cost) : null,
         source: "job_code_template",
         confidence: "medium",
+        intake_line_status: "suggested",
       });
     }
   }
@@ -154,7 +156,7 @@ function buildPartsRowsFromTemplate(
 
 /** Insert parts lines from job_codes.parts_template when job has none yet. */
 async function populatePartsFromJobCode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   jobId: string,
   jobCodeId: string,
   workspaceId: string,
@@ -182,7 +184,7 @@ async function populatePartsFromJobCode(
 }
 
 async function resyncPartsFromJobCode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   jobId: string,
   jobCodeId: string,
   workspaceId: string,
@@ -287,7 +289,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleCreate(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -375,7 +377,7 @@ async function handleCreate(
 }
 
 async function handlePopulateParts(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   origin: string | null,
 ) {
@@ -410,7 +412,7 @@ async function handlePopulateParts(
 }
 
 async function handleUpdate(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -482,7 +484,7 @@ async function handleUpdate(
 }
 
 async function handleTransition(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -606,7 +608,7 @@ async function handleTransition(
 }
 
 async function handleGet(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   origin: string | null,
 ) {
@@ -628,7 +630,7 @@ function sanitizeIlikeTerm(raw: string): string {
 }
 
 async function handleList(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   origin: string | null,
 ) {
@@ -722,7 +724,7 @@ async function handleList(
 
 /** Reassign open jobs from a departing advisor/tech using branch pool UUIDs in service_branch_config. */
 async function handleReassignPool(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -780,7 +782,7 @@ async function handleReassignPool(
 }
 
 async function handleResyncPartsFromJobCode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -821,7 +823,7 @@ async function handleResyncPartsFromJobCode(
 }
 
 async function handleAssignTechnician(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -886,7 +888,7 @@ async function handleAssignTechnician(
 }
 
 async function handleLinkPortalRequest(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -971,7 +973,7 @@ async function handleLinkPortalRequest(
 }
 
 async function handleUnlinkPortalRequest(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,
@@ -1021,7 +1023,7 @@ async function handleUnlinkPortalRequest(
 }
 
 async function handleSearchPortalOrders(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   origin: string | null,
 ) {
@@ -1068,7 +1070,7 @@ async function handleSearchPortalOrders(
 }
 
 async function handleLinkFulfillmentRun(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   body: RouterPayload,
   actorId: string,
   origin: string | null,

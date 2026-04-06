@@ -47,7 +47,9 @@ Deno.serve(async (req) => {
 
     const { data: profiles } = await supabase
       .from("technician_profiles")
-      .select("id, user_id, brands_supported, branch_id, shop_eligible, field_eligible, active_workload")
+      .select(
+        "id, user_id, brands_supported, certifications, branch_id, shop_eligible, field_eligible, active_workload",
+      )
       .order("active_workload", { ascending: true });
 
     const ranked = (profiles ?? []).map((p) => {

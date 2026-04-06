@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ChevronLeft,
   Settings2,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const ADMIN_LINKS = [
   { to: "/service/branches", label: "Branches", icon: GitBranch },
   { to: "/service/inventory", label: "Inventory", icon: Boxes },
   { to: "/service/job-code-suggestions", label: "Job Codes", icon: Lightbulb },
+  { to: "/service/scheduler-health", label: "Cron health", icon: Activity },
 ] as const;
 
 /** Inactive pill: frosted glass chip */

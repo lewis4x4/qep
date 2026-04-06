@@ -8,16 +8,14 @@ import { CrmContactEditorSheet } from "../components/CrmContactEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
 import { listCrmContacts } from "../lib/crm-api";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/lib/uuid";
 
 export function CrmContactsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const treeRootParam = searchParams.get("treeRoot");
   const treeRootCompanyId = useMemo(() => {
-    if (!treeRootParam || !UUID_RE.test(treeRootParam)) return undefined;
+    if (!treeRootParam || !isUuid(treeRootParam)) return undefined;
     return treeRootParam;
   }, [treeRootParam]);
 

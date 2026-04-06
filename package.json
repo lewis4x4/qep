@@ -5,7 +5,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "bun run --filter @qep/web dev",
-    "build": "bun run migrations:check && bun run --filter @qep/web build",
+    "build": "bun run migrations:check && bun run service:cron:path-check && bun run edge:deno-check && bun run --filter @qep/web build",
+    "lint": "bun run --filter @qep/web lint",
     "build:web": "bun run --filter @qep/web build",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
     "demo:plan": "bun ./scripts/demo/crm-demo-data.mjs plan",
@@ -24,6 +25,8 @@
     "supabase:types:remote": "sh -c 'supabase gen types typescript --project-id xbfzymdhlfhfhaqhawzs --schema public 2>/dev/null > apps/web/src/lib/database.types.ts && printf \"\\nexport type UserRole = Database[\\\"public\\\"][\\\"Enums\\\"][\\\"user_role\\\"]\\n\" >> apps/web/src/lib/database.types.ts'",
     "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
+    "service:cron:path-check": "bun ./scripts/service-cron-path-guard.mjs",
+    "edge:deno-check": "bun ./scripts/deno-check-edge-functions.mjs",
     "demo:service-fulfillment": "bun ./scripts/demo/service-fulfillment-link-seed.mjs"
   }
 }

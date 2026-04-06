@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useState, useMemo, useLayoutEffect, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useServiceJobList } from "../hooks/useServiceJobs";
 import { ServiceJobCard } from "../components/ServiceJobCard";
@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
+import { isUuid } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "kanban" | "table" | "machine_down" | "today" | "delayed" | "parts_pending" | "invoice_ready";
@@ -39,9 +40,60 @@ const VIEWS: { key: ViewMode; label: string; icon: React.ElementType }[] = [
 export function ServiceCommandCenterPage() {
   const { profile } = useAuth();
   const showCronHealth = ["admin", "manager", "owner"].includes(profile?.role ?? "");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<ViewMode>("kanban");
   const [filters, setFilters] = useState<ServiceListFilters>({ per_page: 100 });
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  const selectJob = useCallback(
+    (id: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("highlight");
+          next.set("job", id);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const clearJobSelection = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("job");
+        next.delete("highlight");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  useLayoutEffect(() => {
+    const raw =
+      searchParams.get("job")?.trim() ?? searchParams.get("highlight")?.trim() ?? "";
+    if (isUuid(raw)) {
+      setSelectedJobId(raw);
+      return;
+    }
+    if (raw) {
+      setSelectedJobId(null);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("job");
+          next.delete("highlight");
+          return next;
+        },
+        { replace: true },
+      );
+      return;
+    }
+    setSelectedJobId(null);
+  }, [searchParams, setSearchParams]);
 
   const queryFilters = useMemo<ServiceListFilters>(() => {
     const f = { ...filters };
@@ -190,7 +242,7 @@ export function ServiceCommandCenterPage() {
           <p className="text-sm text-muted-foreground">Loading jobs...</p>
         </div>
       ) : view === "kanban" ? (
-        <ServiceKanbanBoard jobs={filteredJobs} onJobClick={setSelectedJobId} />
+        <ServiceKanbanBoard jobs={filteredJobs} onJobClick={selectJob} />
       ) : (
         <div className="space-y-2">
           {filteredJobs.length === 0 ? (
@@ -206,7 +258,7 @@ export function ServiceCommandCenterPage() {
                 <ServiceJobCard
                   key={job.id}
                   job={job}
-                  onClick={() => setSelectedJobId(job.id)}
+                  onClick={() => selectJob(job.id)}
                 />
               ))}
             </div>
@@ -214,10 +266,7 @@ export function ServiceCommandCenterPage() {
         </div>
       )}
 
-      <ServiceJobDetailDrawer
-        jobId={selectedJobId}
-        onClose={() => setSelectedJobId(null)}
-      />
+      <ServiceJobDetailDrawer jobId={selectedJobId} onClose={clearJobSelection} />
     </div>
   );
 }

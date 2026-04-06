@@ -132,6 +132,33 @@ Deno.serve(async (req) => {
 
     // ── /service-requests — Service request CRUD ───────────────────────
     if (route === "service-requests") {
+      // GET /service-requests/:id/timeline — customer-safe shop timeline (P1-D)
+      if (
+        req.method === "GET" &&
+        pathParts.length >= 3 &&
+        pathParts[2] === "timeline"
+      ) {
+        const requestId = pathParts[1]?.trim() ?? "";
+        if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)) {
+          return safeJsonError("Invalid service request id", 400, origin);
+        }
+        const { data, error } = await supabase.rpc("portal_get_service_job_timeline", {
+          p_service_request_id: requestId,
+        });
+        if (error) {
+          console.error("portal_get_service_job_timeline:", error);
+          return safeJsonError("Failed to load timeline", 500, origin);
+        }
+        const payload = data as { ok?: boolean; error?: string } | null;
+        if (payload && payload.ok === false && payload.error === "not_found") {
+          return safeJsonError("Request not found", 404, origin);
+        }
+        if (payload && payload.ok === false && payload.error === "not_portal_user") {
+          return safeJsonError("Not allowed", 403, origin);
+        }
+        return safeJsonOk(data ?? {}, origin);
+      }
+
       if (req.method === "GET") {
         const { data, error } = await supabase
           .from("service_requests")

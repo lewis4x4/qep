@@ -122,6 +122,9 @@ export interface ServicePartsRequirement {
   quantity: number;
   status: string;
   need_by_date: string | null;
+  /** job_code_template / ai_suggested lines start suggested until operator accepts. */
+  source?: string | null;
+  intake_line_status?: "suggested" | "accepted" | "planned" | null;
 }
 
 export interface ServiceQuoteSummary {
