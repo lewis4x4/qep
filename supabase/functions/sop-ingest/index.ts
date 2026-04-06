@@ -158,13 +158,15 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role")
+      .select("role, workspace_id")
       .eq("id", user.id)
       .single();
 
     if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
       return safeJsonError("SOP ingestion requires admin, manager, or owner role", 403, origin);
     }
+
+    const workspace = profile.workspace_id || "default";
 
     const body = await req.json();
     let documentText = body.text || "";
@@ -190,7 +192,7 @@ Deno.serve(async (req) => {
     const { data: runRow } = await supabaseAdmin
       .from("sop_ingestion_runs")
       .insert({
-        workspace_id: "default",
+        workspace_id: workspace,
         document_id: documentId,
         source_filename: body.source_filename || null,
         status: "pending",
@@ -217,7 +219,7 @@ Deno.serve(async (req) => {
     const { data: template, error: templateErr } = await supabaseAdmin
       .from("sop_templates")
       .insert({
-        workspace_id: "default",
+        workspace_id: workspace,
         title: body.title || parsed.title,
         description: parsed.description || null,
         department: parsed.department || body.department || "all",
@@ -245,7 +247,7 @@ Deno.serve(async (req) => {
       const { error: stepErr } = await supabaseAdmin
         .from("sop_steps")
         .insert({
-          workspace_id: "default",
+          workspace_id: workspace,
           sop_template_id: template.id,
           sort_order: step.sort_order,
           title: step.title,
