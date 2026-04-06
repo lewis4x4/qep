@@ -1,0 +1,205 @@
+/**
+ * Price File Import Edge Function
+ *
+ * Moonshot 2: Price File Intelligence.
+ * Rylee: "if we could get price files for program changes... it could
+ *         basically always be aware that we're quoting the most up to date pricing."
+ *
+ * POST: Upload CSV price file → parse → upsert catalog_entries →
+ *       trigger auto-populates price_history → flag affected quotes
+ *
+ * Auth: admin/owner
+ */
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+
+function parseCsvRows(csvText: string): Record<string, string>[] {
+  const lines = csvText.trim().split("\n");
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_"));
+  const rows: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+    const row: Record<string, string> = {};
+    headers.forEach((h, j) => { row[h] = values[j] || ""; });
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+Deno.serve(async (req) => {
+  const origin = req.headers.get("origin");
+
+  if (req.method === "OPTIONS") {
+    return optionsResponse(origin);
+  }
+
+  if (req.method !== "POST") {
+    return safeJsonError("Method not allowed", 405, origin);
+  }
+
+  try {
+    const authHeader = req.headers.get("Authorization")?.trim();
+    if (!authHeader) {
+      return safeJsonError("Unauthorized", 401, origin);
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return safeJsonError("Unauthorized", 401, origin);
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || !["admin", "owner"].includes(profile.role)) {
+      return safeJsonError("Price file import requires admin or owner role", 403, origin);
+    }
+
+    // Parse multipart form data with CSV file
+    const contentType = req.headers.get("content-type") || "";
+    let csvText = "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) return safeJsonError("CSV file required", 400, origin);
+      csvText = await file.text();
+    } else {
+      // Accept raw CSV text body
+      csvText = await req.text();
+    }
+
+    if (!csvText.trim()) {
+      return safeJsonError("Empty CSV file", 400, origin);
+    }
+
+    const rows = parseCsvRows(csvText);
+    if (rows.length === 0) {
+      return safeJsonError("No data rows found in CSV", 400, origin);
+    }
+
+    const results = {
+      rows_parsed: rows.length,
+      rows_imported: 0,
+      prices_changed: 0,
+      quotes_flagged: 0,
+      errors: [] as string[],
+    };
+
+    // Upsert each row into catalog_entries
+    for (const row of rows) {
+      const make = row.make || row.manufacturer;
+      const model = row.model;
+
+      if (!make || !model) {
+        results.errors.push(`Row missing make/model: ${JSON.stringify(row).substring(0, 100)}`);
+        continue;
+      }
+
+      const entry = {
+        workspace_id: "default",
+        source: "csv_import" as const,
+        make,
+        model,
+        year: row.year ? parseInt(row.year) : null,
+        stock_number: row.stock_number || row.stock || null,
+        serial_number: row.serial_number || row.serial || null,
+        list_price: row.list_price ? parseFloat(row.list_price) : null,
+        dealer_cost: row.dealer_cost ? parseFloat(row.dealer_cost) : null,
+        msrp: row.msrp ? parseFloat(row.msrp) : null,
+        category: row.category || null,
+        condition: (row.condition === "new" || row.condition === "used") ? row.condition : null,
+        is_available: true,
+        imported_at: new Date().toISOString(),
+      };
+
+      // Try to match existing entry by stock_number or make+model+year
+      let existing: { id: string } | null = null;
+      if (entry.stock_number) {
+        const { data } = await supabaseAdmin
+          .from("catalog_entries")
+          .select("id")
+          .eq("stock_number", entry.stock_number)
+          .maybeSingle();
+        existing = data;
+      }
+
+      if (existing) {
+        // Update existing — trigger will auto-capture price history
+        const { error: updateErr } = await supabaseAdmin
+          .from("catalog_entries")
+          .update({
+            list_price: entry.list_price,
+            dealer_cost: entry.dealer_cost,
+            msrp: entry.msrp,
+            last_synced_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+
+        if (updateErr) {
+          results.errors.push(`Update failed for ${make} ${model}: ${updateErr.message}`);
+        } else {
+          results.rows_imported++;
+          results.prices_changed++;
+        }
+      } else {
+        // Insert new entry
+        const { error: insertErr } = await supabaseAdmin
+          .from("catalog_entries")
+          .insert(entry);
+
+        if (insertErr) {
+          results.errors.push(`Insert failed for ${make} ${model}: ${insertErr.message}`);
+        } else {
+          results.rows_imported++;
+        }
+      }
+    }
+
+    // Flag open quotes that reference changed catalog entries
+    // Check quote_packages where equipment JSONB references updated makes/models
+    const { data: openQuotes } = await supabaseAdmin
+      .from("quote_packages")
+      .select("id")
+      .in("status", ["draft", "ready", "sent"])
+      .eq("requires_requote", false);
+
+    if (openQuotes && openQuotes.length > 0) {
+      // Flag all open quotes created before this import as potentially needing requote
+      const { data: flagged } = await supabaseAdmin
+        .from("quote_packages")
+        .update({
+          requires_requote: true,
+          requote_reason: `Price file imported on ${new Date().toISOString().split("T")[0]} — verify pricing is current.`,
+        })
+        .in("status", ["draft", "ready", "sent"])
+        .eq("requires_requote", false)
+        .select("id");
+
+      results.quotes_flagged = flagged?.length ?? 0;
+    }
+
+    return safeJsonOk({ ok: true, results }, origin);
+  } catch (err) {
+    console.error("price-file-import error:", err);
+    return safeJsonError("Internal server error", 500, req.headers.get("origin"));
+  }
+});
