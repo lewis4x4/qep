@@ -100,6 +100,9 @@ const PaymentValidationPage = lazy(() =>
 const SopComplianceDashboardPage = lazy(() =>
   import("./features/ops/pages/SopComplianceDashboardPage").then((m) => ({ default: m.SopComplianceDashboardPage }))
 );
+const DealTimingDashboardPage = lazy(() =>
+  import("./features/deal-timing/pages/DealTimingDashboardPage").then((m) => ({ default: m.DealTimingDashboardPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -805,6 +808,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <SopComplianceDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/deal-timing"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DealTimingDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
