@@ -25,6 +25,7 @@ export function EmailDraftInboxPage() {
   const [filterScenario, setFilterScenario] = useState<DraftScenario | "all">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editState, setEditState] = useState<{ id: string; subject: string; body: string } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: drafts = [], isLoading, isError } = useQuery({
     queryKey: ["email-drafts", "inbox"],
@@ -36,23 +37,36 @@ export function EmailDraftInboxPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["email-drafts", "inbox"] });
 
+  const handleActionError = (err: unknown) =>
+    setActionError(err instanceof Error ? err.message : "Action failed");
+
   const saveMutation = useMutation({
     mutationFn: (input: { id: string; subject: string; body: string }) =>
       updateEmailDraft(input.id, { subject: input.subject, body: input.body }),
     onSuccess: () => {
       setEditState(null);
+      setActionError(null);
       invalidate();
     },
+    onError: handleActionError,
   });
 
   const dismissMutation = useMutation({
     mutationFn: (id: string) => dismissEmailDraft(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setActionError(null);
+      invalidate();
+    },
+    onError: handleActionError,
   });
 
   const sendMutation = useMutation({
     mutationFn: (id: string) => markEmailDraftSent(id, "manual"),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setActionError(null);
+      invalidate();
+    },
+    onError: handleActionError,
   });
 
   const filtered = useMemo(
@@ -85,6 +99,21 @@ export function EmailDraftInboxPage() {
           </p>
         </div>
       </div>
+
+      {actionError && (
+        <Card className="border-red-500/30 bg-red-500/5 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs text-red-400">{actionError}</p>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Dismiss
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

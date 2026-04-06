@@ -879,23 +879,53 @@ function App() {
               />
               <Route
                 path="/sop/templates"
-                element={<SopTemplatesListPage />}
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <SopTemplatesListPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
               />
               <Route
                 path="/sop/templates/:templateId"
-                element={<SopTemplateEditorPage />}
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <SopTemplateEditorPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
               />
               <Route
                 path="/sop/executions/:executionId"
-                element={<SopExecutionPage />}
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <SopExecutionPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
               />
               <Route
                 path="/email-drafts"
-                element={<EmailDraftInboxPage />}
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <EmailDraftInboxPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
               />
               <Route
                 path="/dge/cockpit"
-                element={<DgeCockpitPage userId={profile.id} />}
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DgeCockpitPage userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
               />
               <Route
                 path="/rentals"

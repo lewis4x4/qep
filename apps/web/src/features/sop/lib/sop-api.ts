@@ -276,15 +276,7 @@ export async function fetchExecutionContext(executionId: string): Promise<{
   }).order("completed_at", { ascending: true });
   if (completionsErr) throw new Error(String((completionsErr as { message?: string }).message ?? "Failed to load completions"));
 
-  const { data: skips, error: skipsErr } = await sb
-    .from("sop_step_skips")
-    .select("sop_step_id")
-    .eq("sop_execution_id", executionId)
-    .maybeSingle();
-  // skips may return multiple rows — but we used maybeSingle only to satisfy sb typing
-  // Fall back to empty array for skip list
-  const skippedStepIds: string[] = skipsErr || !skips ? [] : [];
-  // Re-query via direct client for the actual array
+  const skippedStepIds: string[] = [];
   try {
     const { data: skipRows } = await (supabase as unknown as {
       from: (t: string) => {
@@ -300,7 +292,7 @@ export async function fetchExecutionContext(executionId: string): Promise<{
       for (const row of skipRows) skippedStepIds.push(row.sop_step_id);
     }
   } catch {
-    // ignore
+    // Skips are additive signal; ignore load failure and treat as none.
   }
 
   return {
