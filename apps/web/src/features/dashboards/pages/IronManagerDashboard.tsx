@@ -1,8 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { ApprovalQueue } from "../components/ApprovalQueue";
+import { InventoryAgingCard } from "../components/InventoryAgingCard";
 import { useIronManagerData } from "../hooks/useDashboardData";
-import { Users, TrendingUp, AlertTriangle, DollarSign } from "lucide-react";
+import { Users, TrendingUp, AlertTriangle, DollarSign, Package } from "lucide-react";
 
 /** PostgREST may return numeric columns as strings; calling .toFixed on a string throws. */
 function formatPercentLabel(value: unknown): string {
@@ -38,6 +39,7 @@ export function IronManagerDashboard() {
   const totalPipeline = (data?.pipelineDeals ?? []).reduce((sum: number, d: any) => sum + (d.amount ?? 0), 0);
   const targetsMet = (data?.kpis ?? []).filter((k: any) => k.target_met).length;
   const totalAdvisors = (data?.kpis ?? []).length;
+  const agingCount = data?.agingEquipment?.length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -46,14 +48,23 @@ export function IronManagerDashboard() {
         <p className="text-sm text-muted-foreground">Pipeline oversight, approvals, team KPIs</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <DashboardKpiCard label="Pipeline Value" value={`$${(totalPipeline / 1000).toFixed(0)}K`} icon={<DollarSign className="h-4 w-4 text-qep-orange" />} accent="text-qep-orange" />
         <DashboardKpiCard label="Open Deals" value={data?.pipelineDeals?.length ?? 0} icon={<TrendingUp className="h-4 w-4 text-blue-400" />} />
         <DashboardKpiCard label="Pending Approvals" value={data?.approvalCount ?? 0} icon={<AlertTriangle className="h-4 w-4 text-amber-400" />} accent={data?.approvalCount ? "text-amber-400" : "text-foreground"} />
         <DashboardKpiCard label="KPI Target Met" value={`${targetsMet}/${totalAdvisors}`} sublabel="advisors today" icon={<Users className="h-4 w-4 text-emerald-400" />} />
+        <DashboardKpiCard
+          label="Aging fleet"
+          value={agingCount}
+          sublabel="90d+ in registry"
+          icon={<Package className="h-4 w-4 text-amber-400" />}
+          accent={agingCount > 0 ? "text-amber-400" : "text-foreground"}
+        />
       </div>
 
       <ApprovalQueue items={approvalItems} />
+
+      <InventoryAgingCard items={data?.agingEquipment ?? []} />
     </div>
   );
 }

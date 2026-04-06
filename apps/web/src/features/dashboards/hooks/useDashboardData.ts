@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
+/** Fleet / registry rows older than this many days surface as aging inventory (punch list: Iron Manager). */
+const INVENTORY_AGING_DAYS = 90;
+
 export function useIronManagerData() {
   return useQuery({
     queryKey: ["dashboard", "iron-manager"],
     queryFn: async () => {
       const sb = supabase;
+
+      const agingCutoff = new Date();
+      agingCutoff.setDate(agingCutoff.getDate() - INVENTORY_AGING_DAYS);
 
       const [
         { data: pendingDemos },
@@ -13,12 +19,20 @@ export function useIronManagerData() {
         { data: marginFlags },
         { data: kpis },
         { data: pipelineDeals },
+        { data: agingEquipment },
       ] = await Promise.all([
         sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested"),
         sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review"),
         sb.from("crm_deals").select("id, name, margin_pct, margin_check_status").eq("margin_check_status", "flagged"),
         sb.from("prospecting_kpis").select("rep_id, positive_visits, target, target_met, kpi_date").eq("kpi_date", new Date().toISOString().split("T")[0]),
         sb.from("crm_deals").select("id, name, stage_id, amount, assigned_rep_id, last_activity_at").is("deleted_at", null).order("last_activity_at", { ascending: false }).limit(50),
+        sb
+          .from("crm_equipment")
+          .select("id, name, created_at, company_id, crm_companies(name)")
+          .is("deleted_at", null)
+          .lte("created_at", agingCutoff.toISOString())
+          .order("created_at", { ascending: true })
+          .limit(40),
       ]);
 
       return {
@@ -27,6 +41,7 @@ export function useIronManagerData() {
         marginFlags: marginFlags ?? [],
         kpis: kpis ?? [],
         pipelineDeals: pipelineDeals ?? [],
+        agingEquipment: agingEquipment ?? [],
         approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
       };
     },
