@@ -463,7 +463,12 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                         <span className="text-muted-foreground">
                           Run:{" "}
                           {o.fulfillment_run_id ? (
-                            <span className="font-mono break-all">{o.fulfillment_run_id}</span>
+                            <Link
+                              to={`/service/fulfillment/${o.fulfillment_run_id}`}
+                              className="font-mono break-all text-primary underline-offset-2 hover:underline"
+                            >
+                              {o.fulfillment_run_id}
+                            </Link>
                           ) : (
                             <span className="text-amber-700 dark:text-amber-400">
                               none — order needs a run (portal submit)
