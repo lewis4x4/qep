@@ -112,6 +112,15 @@ const NervousSystemDashboardPage = lazy(() =>
 const PriceIntelligencePage = lazy(() =>
   import("./features/price-intelligence/pages/PriceIntelligencePage").then((m) => ({ default: m.PriceIntelligencePage }))
 );
+const SopTemplatesListPage = lazy(() =>
+  import("./features/sop/pages/SopTemplatesListPage").then((m) => ({ default: m.SopTemplatesListPage }))
+);
+const SopTemplateEditorPage = lazy(() =>
+  import("./features/sop/pages/SopTemplateEditorPage").then((m) => ({ default: m.SopTemplateEditorPage }))
+);
+const SopExecutionPage = lazy(() =>
+  import("./features/sop/pages/SopExecutionPage").then((m) => ({ default: m.SopExecutionPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -861,6 +870,18 @@ function App() {
                     <Navigate to="/dashboard" replace />
                   )
                 }
+              />
+              <Route
+                path="/sop/templates"
+                element={<SopTemplatesListPage />}
+              />
+              <Route
+                path="/sop/templates/:templateId"
+                element={<SopTemplateEditorPage />}
+              />
+              <Route
+                path="/sop/executions/:executionId"
+                element={<SopExecutionPage />}
               />
               <Route
                 path="/rentals"

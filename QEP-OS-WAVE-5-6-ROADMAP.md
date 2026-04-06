@@ -1,8 +1,45 @@
-# QEP OS — Wave 5 + 6 Build Roadmap
+# QEP OS — Wave 5 + 6 Build Roadmap (v2)
 
-**Status:** Build-ready handoff document
+**Status:** Build-ready handoff document — revised with stabilization gate, scope splits, and cross-cutting layers
 **Owner (CEO):** Brian Lewis (Speedy)
 **Pipeline target:** Paperclip 15-agent build pipeline
+
+---
+
+## v2 Revision Notes (read first)
+
+This roadmap now contains the following structural changes vs v1:
+
+1. **Wave 5.0 Stabilization Gate** inserted before 5A.3 (section 2.5). 2–3 days. Locks down everything migrations 153–158 just added before stacking more on top.
+2. **Wave 5A.3 tax mode contract** — explicit decision required: estimate vs compliance-grade, source precedence (branch / delivery / customer), manual override audit, stale-cache behavior, disclaimer language. Tax cannot ship without these locked.
+3. **Wave 5B split** into 5B.1 (CSV/XLSX + impact + requote + yard-first) and 5B.2 (PDF + OCR + unmatched-row repair). 5B.2 is a separate release; do NOT bundle.
+4. **Wave 5C health score contract** — weighted inputs frozen, score range defined, explainability drawer is non-negotiable v1 (current score, 7/30/90d deltas, top + factors, top − factors, blockers). Advisory-only at first; no auto-actions.
+5. **Wave 5C AR blocking sharpened** — block financed / credit-extended / rental-risk paths only; cash deals pass; "quote allowed, order progression blocked" lifecycle gate; override requires reason + approver + time window + accounting notification.
+6. **Wave 5D portal event consistency rule** — every portal-facing status reads from a single canonical state machine. ETA carries source + last-updated. Stage labels are curated translations, not raw internal jargon. Document visibility writes audit rows.
+7. **Wave 5E SOP false-positive protection** — confidence score on step mapping, per-step evidence matcher, "not applicable" path, suppression/review queue, distinction between skipped / deferred / satisfied-elsewhere.
+8. **Wave 6 split into two parallel tracks:**
+   - **Track A — Intelligence UI:** 6.1 primitives, 6.2 Asset 360, 6.6 Ask Iron Advisor everywhere
+   - **Track B — Spatial / Operational Command:** 6.3 fleet map, 6.4 service dashboard, 6.5 geofences, 6.7 portal fleet mirror
+   Track A ships first. Track B must not block Track A.
+9. **Asset 360 Commercial Action tab** added (6.2): recommended next outreach, open quotes, trade-up score reason, budget cycle, last rep touch, service/downtime risk, one-click drafts (trade-up / service follow-up / parts reorder / warranty).
+10. **Geofence v1 restraint:** only customer jobsite, branch territory, competitor yard. Defer state-boundary compliance, custom polygons, multi-action automation to v2.
+11. **New Wave 6.8 — Data Quality Layer:** nightly admin audit for equipment without owner linkage, missing make/model normalization, missing geocoords, stale telematics, dup equipment, missing service intervals, undisclassified docs, quotes lacking tax jurisdiction.
+12. **New Wave 6.9 — Exception Inbox:** cross-functional human work queue for tax lookup failures, price-file unmatched rows, health-score refresh failures, AR override pending, Stripe webhook mismatch, portal reorder approvals, SOP evidence mismatch, geofence event conflicts, stale telematics, document visibility issues.
+13. **New Wave 6.10 — Executive Command Center:** owner/COO layer above all waves (quote risk, AR blocks, service backlog, health score movers, trade-up windows, revenue by make/model, SOP hotspots, portal adoption, payment success rate, branch comparison).
+14. **Cross-cutting additions:**
+    - **Playbooks pattern:** every page that reveals risk must offer one-click action (draft email, create task, open quote, escalate, reorder, SOP remediation, manager override).
+    - **Institutional memory:** machine-family lessons + customer history + "what solved this last time" surfaced on Asset 360 and Customer 360.
+    - **AI confidence indicators** required everywhere AI does work: tax/incentive resolution, SOP parsing, health score, attribution, trade-up suggestions, geofence triggers.
+15. **Deprioritized:** Storybook polish (functional stories only, no perfection pass), 271K-asset stress test (reframed as "real working set first, synthetic scale test only after Track B ships"), portal expansion beyond v1 surfaces until trust is proven.
+
+**Revised effort estimate:** ~63 engineer-days (was ~51). Delta is the stabilization gate, the 5B split overhead, the explainability drawer, the Exception Inbox, the Data Quality layer, and the Executive Command Center.
+
+**Revised migration sequence:** 155 (tax/incentives) → 156 (price intel CSV/XLSX) → 156b (price intel PDF/OCR, separate release) → 157 (nervous system + explainability views) → 158 (portal/payments + canonical state machine views) → 159 (SOP + confidence + suppression) → 160 (asset RPCs + commercial action joins) → 161 (service dashboard) → 162 (geofences/PostGIS, restrained v1) → 163 (service KB) → 164 (data quality audit views) → 165 (exception inbox) → 166 (executive command center materialized views).
+
+---
+
+## v1 Sections (now treated as the body of the contract)
+
 **Last updated:** 2026-04-06
 **Repo:** `/Users/brianlewis/client-projects/qep`
 **Supabase project:** `iciddijgonywtxoelous`
