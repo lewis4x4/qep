@@ -7,4 +7,5 @@ supabase/functions/service-scheduler/index.ts
 supabase/functions/service-haul-router/index.ts
 supabase/functions/service-job-router/index.ts
 supabase/functions/service-quote-engine/index.ts
+supabase/functions/service-intake/index.ts
 supabase/functions/portal-api/index.ts
