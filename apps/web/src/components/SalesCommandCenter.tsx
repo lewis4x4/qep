@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, escapeHtml } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { crmSupabase } from "@/features/crm/lib/crm-supabase";
+import { crmSupabase } from "@/features/qrm/lib/qrm-supabase";
 import type { UserRole } from "@/lib/database.types";
 import {
   getExtractedContactLabel,

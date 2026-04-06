@@ -1,5 +1,5 @@
 import type { UserRole } from "@/lib/database.types";
-import { getIronRole } from "../../crm/lib/iron-roles";
+import { getIronRole } from "../../qrm/lib/iron-roles";
 import { IronManagerDashboard } from "./IronManagerDashboard";
 import { IronAdvisorDashboard } from "./IronAdvisorDashboard";
 import { IronWomanDashboard } from "./IronWomanDashboard";

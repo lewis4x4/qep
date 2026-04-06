@@ -225,51 +225,51 @@ const IntegrationCallbackPage = lazy(() =>
 const HubSpotConnectPage = lazy(() =>
   import("./components/HubSpotConnectPage").then((m) => ({ default: m.HubSpotConnectPage }))
 );
-const CrmContactsPage = lazy(() =>
-  import("./features/crm/pages/CrmContactsPage").then((m) => ({ default: m.CrmContactsPage }))
+const QrmContactsPage = lazy(() =>
+  import("./features/qrm/pages/QrmContactsPage").then((m) => ({ default: m.QrmContactsPage }))
 );
-const CrmContactDetailPage = lazy(() =>
-  import("./features/crm/pages/CrmContactDetailPage").then((m) => ({
-    default: m.CrmContactDetailPage,
+const QrmContactDetailPage = lazy(() =>
+  import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
+    default: m.QrmContactDetailPage,
   }))
 );
-const CrmCompaniesPage = lazy(() =>
-  import("./features/crm/pages/CrmCompaniesPage").then((m) => ({ default: m.CrmCompaniesPage }))
+const QrmCompaniesPage = lazy(() =>
+  import("./features/qrm/pages/QrmCompaniesPage").then((m) => ({ default: m.QrmCompaniesPage }))
 );
-const CrmCompanyDetailPage = lazy(() =>
-  import("./features/crm/pages/CrmCompanyDetailPage").then((m) => ({
-    default: m.CrmCompanyDetailPage,
+const QrmCompanyDetailPage = lazy(() =>
+  import("./features/qrm/pages/QrmCompanyDetailPage").then((m) => ({
+    default: m.QrmCompanyDetailPage,
   }))
 );
-const CrmDealDetailPage = lazy(() =>
-  import("./features/crm/pages/CrmDealDetailPage").then((m) => ({ default: m.CrmDealDetailPage }))
+const QrmDealDetailPage = lazy(() =>
+  import("./features/qrm/pages/QrmDealDetailPage").then((m) => ({ default: m.QrmDealDetailPage }))
 );
-const CrmPipelinePage = lazy(() =>
-  import("./features/crm/pages/CrmPipelinePage").then((m) => ({ default: m.CrmPipelinePage }))
+const QrmPipelinePage = lazy(() =>
+  import("./features/qrm/pages/QrmPipelinePage").then((m) => ({ default: m.QrmPipelinePage }))
 );
-const CrmDuplicatesPage = lazy(() =>
-  import("./features/crm/pages/CrmDuplicatesPage").then((m) => ({ default: m.CrmDuplicatesPage }))
+const QrmDuplicatesPage = lazy(() =>
+  import("./features/qrm/pages/QrmDuplicatesPage").then((m) => ({ default: m.QrmDuplicatesPage }))
 );
-const CrmEquipmentDetailPage = lazy(() =>
-  import("./features/crm/pages/CrmEquipmentDetailPage").then((m) => ({
-    default: m.CrmEquipmentDetailPage,
+const QrmEquipmentDetailPage = lazy(() =>
+  import("./features/qrm/pages/QrmEquipmentDetailPage").then((m) => ({
+    default: m.QrmEquipmentDetailPage,
   }))
 );
-const CrmActivitiesPage = lazy(() =>
-  import("./features/crm/pages/CrmActivitiesPage").then((m) => ({ default: m.CrmActivitiesPage }))
+const QrmActivitiesPage = lazy(() =>
+  import("./features/qrm/pages/QrmActivitiesPage").then((m) => ({ default: m.QrmActivitiesPage }))
 );
-const CrmActivityTemplatesPage = lazy(() =>
-  import("./features/crm/pages/CrmActivityTemplatesPage").then((m) => ({
-    default: m.CrmActivityTemplatesPage,
+const QrmActivityTemplatesPage = lazy(() =>
+  import("./features/qrm/pages/QrmActivityTemplatesPage").then((m) => ({
+    default: m.QrmActivityTemplatesPage,
   }))
 );
-const CrmFollowUpSequencesPage = lazy(() =>
-  import("./features/crm/pages/CrmFollowUpSequencesPage").then((m) => ({
-    default: m.CrmFollowUpSequencesPage,
+const QrmFollowUpSequencesPage = lazy(() =>
+  import("./features/qrm/pages/QrmFollowUpSequencesPage").then((m) => ({
+    default: m.QrmFollowUpSequencesPage,
   }))
 );
-const CrmHubPage = lazy(() =>
-  import("./features/crm/pages/CrmHubPage").then((m) => ({ default: m.CrmHubPage }))
+const QrmHubPage = lazy(() =>
+  import("./features/qrm/pages/QrmHubPage").then((m) => ({ default: m.QrmHubPage }))
 );
 
 function RouteFallback() {
@@ -1226,7 +1226,7 @@ function App() {
                 path="/qrm"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} />
+                    <QrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1239,7 +1239,7 @@ function App() {
                 path="/qrm/activities"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmActivitiesPage />
+                    <QrmActivitiesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1257,7 +1257,7 @@ function App() {
                 path="/qrm/deals"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmPipelinePage userRole={profile.role} />
+                    <QrmPipelinePage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1268,7 +1268,7 @@ function App() {
                 path="/qrm/contacts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmContactsPage />
+                    <QrmContactsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1278,7 +1278,7 @@ function App() {
                 path="/qrm/contacts/:contactId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmContactDetailPage userId={profile.id} userRole={profile.role} />
+                    <QrmContactDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1288,7 +1288,7 @@ function App() {
                 path="/qrm/deals/:dealId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmDealDetailPage userId={profile.id} userRole={profile.role} />
+                    <QrmDealDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1298,7 +1298,7 @@ function App() {
                 path="/qrm/companies"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmCompaniesPage />
+                    <QrmCompaniesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1308,7 +1308,7 @@ function App() {
                 path="/qrm/companies/:companyId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
+                    <QrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1318,7 +1318,7 @@ function App() {
                 path="/qrm/equipment/:equipmentId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmEquipmentDetailPage userId={profile.id} userRole={profile.role} />
+                    <QrmEquipmentDetailPage userId={profile.id} userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1332,7 +1332,7 @@ function App() {
                 path="/admin/templates"
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmActivityTemplatesPage userId={profile.id} />
+                    <QrmActivityTemplatesPage userId={profile.id} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1342,7 +1342,7 @@ function App() {
                 path="/admin/sequences"
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmFollowUpSequencesPage userId={profile.id} />
+                    <QrmFollowUpSequencesPage userId={profile.id} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1352,7 +1352,7 @@ function App() {
                 path="/admin/duplicates"
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <CrmDuplicatesPage userRole={profile.role} />
+                    <QrmDuplicatesPage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

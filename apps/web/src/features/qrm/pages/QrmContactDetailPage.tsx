@@ -1,0 +1,379 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarDays, FileText, Link2, Plus } from "lucide-react";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { AskIronAdvisorButton } from "@/components/primitives";
+import { Card } from "@/components/ui/card";
+import type { UserRole } from "@/lib/database.types";
+import { QrmActivityComposer } from "../components/QrmActivityComposer";
+import { QrmDealSignalBadges } from "../components/QrmDealSignalBadges";
+import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
+import { QrmContactEditorSheet } from "../components/QrmContactEditorSheet";
+import { QrmCustomFieldsCard } from "../components/QrmCustomFieldsCard";
+import { QrmPageHeader } from "../components/QrmPageHeader";
+import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
+import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
+import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
+import { QrmTerritoryConflictBadge } from "../components/QrmTerritoryConflictBadge";
+import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
+import {
+  createCrmActivity,
+  getCrmCompany,
+  getCrmContact,
+  getProfileDisplayName,
+  listContactActivities,
+  listContactTerritories,
+  listRepSafeDealsForContact,
+} from "../lib/qrm-api";
+import type { QrmActivityItem } from "../lib/types";
+
+interface QrmContactDetailPageProps {
+  userId: string;
+  userRole: UserRole;
+}
+
+export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageProps) {
+  const { contactId } = useParams<{ contactId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+
+  const contactQuery = useQuery({
+    queryKey: ["crm", "contact", contactId],
+    queryFn: () => getCrmContact(contactId!),
+    enabled: Boolean(contactId),
+  });
+
+  const activitiesQuery = useQuery({
+    queryKey: ["crm", "contact", contactId, "activities"],
+    queryFn: () => listContactActivities(contactId!),
+    enabled: Boolean(contactId) && contactQuery.data !== null,
+  });
+
+  const companyQuery = useQuery({
+    queryKey: ["crm", "company", contactQuery.data?.primaryCompanyId],
+    queryFn: () => getCrmCompany(contactQuery.data?.primaryCompanyId ?? ""),
+    enabled: Boolean(contactQuery.data?.primaryCompanyId),
+  });
+
+  const territoriesQuery = useQuery({
+    queryKey: ["crm", "contact", contactId, "territories"],
+    queryFn: () => listContactTerritories(contactId!),
+    enabled: Boolean(contactId) && Boolean(contactQuery.data),
+    staleTime: 30_000,
+  });
+
+  const dealsQuery = useQuery({
+    queryKey: ["crm", "contact", contactId, "rep-safe-deals"],
+    queryFn: () => listRepSafeDealsForContact(contactId!),
+    enabled: Boolean(contactId) && contactQuery.data !== null,
+  });
+
+  const createActivityMutation = useMutation({
+    mutationFn: async (input: {
+      activityType: "note" | "call" | "email" | "meeting" | "task" | "sms";
+      body: string;
+      occurredAt: string;
+      sendNow?: boolean;
+      task?: {
+        dueAt?: string | null;
+        status?: "open" | "completed";
+      };
+    }) => createCrmActivity({ ...input, contactId: contactId! }, userId),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
+      const previous = queryClient.getQueryData<QrmActivityItem[]>(["crm", "contact", contactId, "activities"]) ?? [];
+      const optimistic: QrmActivityItem = {
+        id: `optimistic-${Date.now()}`,
+        workspaceId: "default",
+        activityType: input.activityType,
+        body: input.body,
+        occurredAt: input.occurredAt,
+        contactId: contactId!,
+        companyId: null,
+        dealId: null,
+        createdBy: userId,
+        metadata: input.task ? { task: input.task } : {},
+        createdAt: input.occurredAt,
+        updatedAt: input.occurredAt,
+        isOptimistic: true,
+      };
+
+      queryClient.setQueryData<QrmActivityItem[]>(["crm", "contact", contactId, "activities"], [optimistic, ...previous]);
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["crm", "contact", contactId, "activities"], context.previous);
+      }
+    },
+    onSuccess: () => {
+      setComposerOpen(false);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["crm", "contact", contactId, "activities"] });
+    },
+  });
+
+  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "contact", contactId, "activities"]);
+  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(["crm", "contact", contactId, "activities"]);
+  const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "contact", contactId, "activities"]);
+  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
+    "crm",
+    "contact",
+    contactId,
+    "activities",
+  ]);
+
+  const conflict = useMemo(() => {
+    if (!contactQuery.data?.assignedRepId || !territoriesQuery.data) {
+      return null;
+    }
+
+    return territoriesQuery.data.find((territory) =>
+      territory.assignedRepId && territory.assignedRepId !== contactQuery.data?.assignedRepId
+    ) ?? null;
+  }, [contactQuery.data?.assignedRepId, territoriesQuery.data]);
+
+  const contactRepNameQuery = useQuery({
+    queryKey: ["crm", "profile", "contact-rep", contactQuery.data?.assignedRepId],
+    queryFn: () => getProfileDisplayName(contactQuery.data?.assignedRepId ?? ""),
+    enabled: Boolean(contactQuery.data?.assignedRepId),
+  });
+
+  const territoryRepNameQuery = useQuery({
+    queryKey: ["crm", "profile", "territory-rep", conflict?.assignedRepId],
+    queryFn: () => getProfileDisplayName(conflict?.assignedRepId ?? ""),
+    enabled: Boolean(conflict?.assignedRepId),
+  });
+
+  const contactName = useMemo(() => {
+    if (!contactQuery.data) {
+      return "contact";
+    }
+    return `${contactQuery.data.firstName} ${contactQuery.data.lastName}`;
+  }, [contactQuery.data]);
+
+  if (!contactId) {
+    return <Navigate to="/qrm/contacts" replace />;
+  }
+
+  const canResolveConflict = userRole === "admin" || userRole === "manager" || userRole === "owner";
+  const canManageDefinitions = userRole === "admin" || userRole === "owner";
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          to="/qrm/contacts"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to contacts
+        </Link>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setEditorOpen(true)}>
+            Edit Contact
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={`/quote?crm_contact_id=${contactId}`}>
+              <FileText className="mr-2 h-4 w-4" />
+              New Quote
+            </Link>
+          </Button>
+          <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Log Activity
+          </Button>
+        </div>
+      </div>
+
+      {contactQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
+
+      {contactQuery.isError && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-muted-foreground">Unable to load this contact. Refresh the page or go back to your contacts list.</p>
+        </Card>
+      )}
+
+      {!contactQuery.isLoading && !contactQuery.isError && !contactQuery.data && (
+        <Card className="p-6 text-center">
+          <p className="text-sm text-muted-foreground">This contact isn&apos;t available. It may have been removed or you might not have access.</p>
+        </Card>
+      )}
+
+      {contactQuery.data && (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            <QrmPageHeader
+              title={`${contactQuery.data.firstName} ${contactQuery.data.lastName}`}
+              subtitle={contactQuery.data.title || "QRM Contact"}
+            />
+            <AskIronAdvisorButton contextType="contact" contextId={contactId} variant="inline" />
+          </div>
+
+          {contactQuery.data.dgeCustomerProfileId && (
+            <Card className="p-3">
+              <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Link2 className="h-4 w-4 text-primary" />
+                <Link
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                  to={`/chat?customer_profile_id=${contactQuery.data.dgeCustomerProfileId}&contact_id=${contactId}${
+                    contactQuery.data.primaryCompanyId ? `&company_id=${contactQuery.data.primaryCompanyId}` : ""
+                  }`}
+                >
+                  DGE profile linked
+                </Link>
+              </p>
+            </Card>
+          )}
+
+          {conflict && (
+            <QrmTerritoryConflictBadge
+              territoryName={conflict.name}
+              territoryRepName={territoryRepNameQuery.data ?? null}
+              contactRepName={contactRepNameQuery.data ?? null}
+              canResolve={canResolveConflict}
+              onResolve={() => {
+                if (contactQuery.data?.primaryCompanyId) {
+                  navigate(`/qrm/companies/${contactQuery.data.primaryCompanyId}`);
+                }
+              }}
+            />
+          )}
+
+          <Card className="p-4 sm:p-5">
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="font-medium text-foreground">{contactQuery.data.email || "Not provided"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Phone</dt>
+                <dd className="font-medium text-foreground">{contactQuery.data.phone || "Not provided"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Primary company</dt>
+                <dd className="font-medium text-foreground">{companyQuery.data?.name || "Not linked"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Last updated</dt>
+                <dd className="font-medium text-foreground">
+                  {new Date(contactQuery.data.updatedAt).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          <QrmCustomFieldsCard
+            recordType="contact"
+            recordId={contactId}
+            canManageDefinitions={canManageDefinitions}
+          />
+
+          <Card className="p-4 sm:p-5">
+            <h2 className="text-base font-semibold text-foreground">Open Deals</h2>
+            {dealsQuery.isLoading && <div className="mt-3 h-10 animate-pulse rounded bg-muted/30" />}
+            {!dealsQuery.isLoading && (dealsQuery.data?.length ?? 0) === 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">No linked deals yet.</p>
+            )}
+            {!dealsQuery.isLoading && (dealsQuery.data?.length ?? 0) > 0 && (
+              <ul className="mt-3 space-y-2">
+                {dealsQuery.data?.map((deal) => (
+                  <li key={deal.id} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link to={`/qrm/deals/${deal.id}`} className="font-medium text-foreground hover:text-primary">
+                        {deal.name}
+                      </Link>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{deal.amount ? `$${deal.amount.toLocaleString()}` : "Amount TBD"}</span>
+                        <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
+                          <Link to={`/quote?crm_contact_id=${contactId}&crm_deal_id=${deal.id}`}>
+                            Quote
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                    <QrmDealSignalBadges deal={deal} />
+                    {deal.expectedCloseOn && <p className="mt-1 text-xs text-muted-foreground">Target close: {deal.expectedCloseOn}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
+            </div>
+
+            {activitiesQuery.isLoading ? (
+              <div className="space-y-3" role="status" aria-label="Loading activities">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
+                ))}
+              </div>
+            ) : activitiesQuery.isError ? (
+              <Card className="p-4 text-sm text-muted-foreground">Couldn&apos;t load activities. Try refreshing the page.</Card>
+            ) : (
+              <QrmActivityTimeline
+                activities={activitiesQuery.data ?? []}
+                onLogActivity={() => setComposerOpen(true)}
+                entityLabel={contactName}
+                showEntityLabel={false}
+                pendingBodyId={pendingBodyId}
+                pendingOccurredAtId={pendingOccurredAtId}
+                pendingTaskId={pendingTaskId}
+                pendingDeliveryId={pendingDeliveryId}
+                onPatchBody={async (activity, body, updatedAt) => {
+                  await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
+                }}
+                onPatchTask={async (activity, task, updatedAt) => {
+                  await patchTask({ activityId: activity.id, task, updatedAt });
+                }}
+                onDeliverCommunication={async (activity) => {
+                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
+                }}
+              />
+            )}
+          </section>
+        </>
+      )}
+
+      <Button
+        className="fixed bottom-20 right-4 z-30 min-h-[44px] rounded-full px-5 shadow-lg sm:hidden"
+        onClick={() => setComposerOpen(true)}
+      >
+        <Plus className="mr-1 h-4 w-4" />
+        Log Activity
+      </Button>
+
+      <QrmActivityComposer
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        isPending={createActivityMutation.isPending}
+        subjectLabel={contactName}
+        onSubmit={async (input) => {
+          await createActivityMutation.mutateAsync(input);
+        }}
+      />
+      <QrmContactEditorSheet
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        contact={contactQuery.data}
+        onArchived={() => navigate("/qrm/contacts")}
+      />
+    </div>
+  );
+}

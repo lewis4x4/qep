@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
 import { getInitials } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
-import { CrmGlobalSearchCommand } from "@/features/crm/components/CrmGlobalSearchCommand";
+import { QrmGlobalSearchCommand } from "@/features/qrm/components/QrmGlobalSearchCommand";
 
 interface Profile {
   id: string;
@@ -85,7 +85,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/admin/integrations": null,
 };
 
-type CrmBellRow = {
+type QrmBellRow = {
   id: string;
   title: string;
   body: string | null;
@@ -96,7 +96,7 @@ type CrmBellRow = {
 
 function useTopBarBell(profileId: string) {
   const [docVoiceBadge, setDocVoiceBadge] = useState(false);
-  const [crmRows, setCrmRows] = useState<CrmBellRow[]>([]);
+  const [crmRows, setCrmRows] = useState<QrmBellRow[]>([]);
   const [crmUnread, setCrmUnread] = useState(0);
 
   useEffect(() => {
@@ -149,7 +149,7 @@ function useTopBarBell(profileId: string) {
         return;
       }
       setCrmUnread(count ?? 0);
-      setCrmRows((data ?? []) as CrmBellRow[]);
+      setCrmRows((data ?? []) as QrmBellRow[]);
     } catch {
       setCrmUnread(0);
       setCrmRows([]);
@@ -318,7 +318,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
         {/* Center: Global search */}
         <div className="hidden lg:flex flex-1 justify-center" role="search">
           {showCrmSearch ? (
-            <CrmGlobalSearchCommand />
+            <QrmGlobalSearchCommand />
           ) : (
             <form onSubmit={handleSearchSubmit} className="w-full max-w-[400px]">
               <div className="relative">

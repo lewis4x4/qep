@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { crmSupabase } from "@/features/crm/lib/crm-supabase";
+import { crmSupabase } from "@/features/qrm/lib/qrm-supabase";
 import {
   getEvidenceSnippet,
   getExtractedMachineLabel,

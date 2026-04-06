@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { AdvisorMorningBriefingCard } from "../components/AdvisorMorningBriefingCard";
-import { ProspectingKpiCounter } from "../../crm/components/ProspectingKpiCounter";
+import { ProspectingKpiCounter } from "../../qrm/components/ProspectingKpiCounter";
 import { useIronAdvisorData } from "../hooks/useDashboardData";
 import { calendarDaysFromToday, followUpDueBadge } from "../lib/advisor-dates";
 import { Clock, Target, CalendarDays } from "lucide-react";

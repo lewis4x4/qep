@@ -40,8 +40,8 @@ import {
   getCrmContact,
   getCrmDeal,
   updateCrmQuote,
-} from "@/features/crm/lib/crm-api";
-import type { CrmQuoteUpsertInput } from "@/features/crm/lib/types";
+} from "@/features/qrm/lib/qrm-api";
+import type { QrmQuoteUpsertInput } from "@/features/qrm/lib/types";
 
 interface QuoteBuilderPageProps {
   userRole: UserRole;
@@ -453,7 +453,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     }
 
     const hasCrmLink = Boolean(crmContactId || crmDealId);
-    const status: CrmQuoteUpsertInput["status"] = hasCrmLink ? "linked" : "draft";
+    const status: QrmQuoteUpsertInput["status"] = hasCrmLink ? "linked" : "draft";
     const lineItems = buildQuoteLineItems(selectedMachine, selectedAttachmentObjects);
     const customerSnapshot = {
       name: customer.name.trim(),
@@ -463,7 +463,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
       address: customer.address.trim() || null,
     };
 
-    const payload: CrmQuoteUpsertInput = {
+    const payload: QrmQuoteUpsertInput = {
       crmContactId,
       crmDealId,
       status,
