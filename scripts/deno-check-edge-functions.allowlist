@@ -8,4 +8,8 @@ supabase/functions/service-haul-router/index.ts
 supabase/functions/service-job-router/index.ts
 supabase/functions/service-quote-engine/index.ts
 supabase/functions/service-intake/index.ts
+supabase/functions/service-calendar-slots/index.ts
+supabase/functions/service-customer-notify-dispatch/index.ts
+supabase/functions/service-stage-enforcer/index.ts
+supabase/functions/service-tat-monitor/index.ts
 supabase/functions/portal-api/index.ts
