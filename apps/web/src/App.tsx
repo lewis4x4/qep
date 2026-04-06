@@ -121,6 +121,9 @@ const SopTemplateEditorPage = lazy(() =>
 const SopExecutionPage = lazy(() =>
   import("./features/sop/pages/SopExecutionPage").then((m) => ({ default: m.SopExecutionPage }))
 );
+const EmailDraftInboxPage = lazy(() =>
+  import("./features/email-drafts/pages/EmailDraftInboxPage").then((m) => ({ default: m.EmailDraftInboxPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -882,6 +885,10 @@ function App() {
               <Route
                 path="/sop/executions/:executionId"
                 element={<SopExecutionPage />}
+              />
+              <Route
+                path="/email-drafts"
+                element={<EmailDraftInboxPage />}
               />
               <Route
                 path="/rentals"
