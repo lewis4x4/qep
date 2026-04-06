@@ -147,16 +147,28 @@ export function PartsWorkQueuePage() {
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
       <ServiceSubNav />
+      <main aria-labelledby="parts-work-queue-title" className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Parts Work Queue</h1>
+        <h1 id="parts-work-queue-title" className="text-2xl font-semibold tracking-tight">
+          Parts Work Queue
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Queue-driven parts workflow — {items.length} active items
         </p>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div
+          className="flex items-center justify-center py-20"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading parts queue</span>
+          <div
+            className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
+            aria-hidden
+          />
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-12 italic">No active parts requirements</p>
@@ -196,6 +208,7 @@ export function PartsWorkQueuePage() {
           <PartsQueueBucket title="Other" items={buckets.other} onAction={handleAction} />
         </div>
       )}
+      </main>
     </div>
   );
 }

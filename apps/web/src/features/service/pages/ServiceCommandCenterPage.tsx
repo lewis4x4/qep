@@ -260,8 +260,17 @@ export function ServiceCommandCenterPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-24">
-          <div className="h-10 w-10 rounded-full border-[3px] border-primary/30 border-t-primary animate-spin" />
+        <div
+          className="flex flex-col items-center justify-center gap-3 py-24"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading jobs</span>
+          <div
+            className="h-10 w-10 rounded-full border-[3px] border-primary/30 border-t-primary animate-spin"
+            aria-hidden
+          />
           <p className="text-sm text-muted-foreground">Loading jobs...</p>
         </div>
       ) : view === "kanban" ? (

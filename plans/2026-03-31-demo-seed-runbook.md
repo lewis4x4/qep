@@ -70,7 +70,7 @@ bun run demo:reseed
 
 ```bash
 QEP_DEMO_WORKSPACE_ID="default"
-QEP_DEMO_PASSWORD="QepDemo!2026"
+QEP_DEMO_PASSWORD="<set-in-env-or-.env.demo.local>"
 ```
 
 Credential resolution order:
