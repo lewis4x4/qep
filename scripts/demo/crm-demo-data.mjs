@@ -2,24 +2,20 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-
-function parseDotEnvFile(filePath) {
-  const raw = readFileSync(filePath, "utf8");
-  const parsed = {};
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex === -1) continue;
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim();
-    if (!key) continue;
-    parsed[key] = value;
-  }
-
-  return parsed;
-}
+import {
+  DEMO_BATCH_ID,
+  DEMO_IDS,
+  DEMO_PASSWORD,
+  DEMO_USERS,
+  DEMO_WORKSPACE_ID,
+  PREFER_LOCAL_RUNTIME,
+  STAGE_DEFS,
+  buildDate,
+  buildTimestamp,
+  deliveryMetadata,
+  sqlJson,
+  sqlLiteral,
+} from "./seed-ids.mjs";
 
 function normalizeEnvValue(value) {
   if (typeof value !== "string") return "";
@@ -33,213 +29,6 @@ function normalizeEnvValue(value) {
   return trimmed;
 }
 
-function loadLocalDemoEnv() {
-  const cwd = process.cwd();
-  const envFiles = [
-    `${cwd}/.env.demo.local`,
-    `${cwd}/.env.local`,
-    `${cwd}/.env`,
-  ];
-
-  for (const filePath of envFiles) {
-    if (!existsSync(filePath)) continue;
-    const entries = parseDotEnvFile(filePath);
-    for (const [key, rawValue] of Object.entries(entries)) {
-      if (process.env[key]) continue;
-      process.env[key] = normalizeEnvValue(rawValue);
-    }
-  }
-}
-
-loadLocalDemoEnv();
-
-const DEMO_BATCH_ID = "crm-demo-thursday-2026-04-02";
-const DEMO_WORKSPACE_ID = process.env.QEP_DEMO_WORKSPACE_ID ?? "default";
-const DEMO_PASSWORD = process.env.QEP_DEMO_PASSWORD ?? "QepDemo!2026";
-const PREFER_LOCAL_RUNTIME = process.env.QEP_DEMO_PREFER_LOCAL === "1";
-
-const DEMO_USERS = [
-  {
-    key: "owner",
-    id: "10000000-0000-4000-8000-000000000001",
-    email: "demo.owner@qep-demo.local",
-    fullName: "Alex Mercer",
-    role: "owner",
-  },
-  {
-    key: "admin",
-    id: "10000000-0000-4000-8000-000000000005",
-    email: "demo.admin@qep-demo.local",
-    fullName: "Jordan Pike",
-    role: "admin",
-  },
-  {
-    key: "manager",
-    id: "10000000-0000-4000-8000-000000000002",
-    email: "demo.manager@qep-demo.local",
-    fullName: "Riley Shaw",
-    role: "manager",
-  },
-  {
-    key: "rep_primary",
-    id: "10000000-0000-4000-8000-000000000003",
-    email: "demo.rep@qep-demo.local",
-    fullName: "Cole Bryant",
-    role: "rep",
-  },
-  {
-    key: "rep_secondary",
-    id: "10000000-0000-4000-8000-000000000004",
-    email: "demo.rep2@qep-demo.local",
-    fullName: "Maya Torres",
-    role: "rep",
-  },
-];
-
-const STAGE_DEFS = [
-  {
-    id: "91000000-0000-4000-8000-000000000001",
-    name: "Discovery",
-    sortOrder: 10,
-    probability: 15,
-    isClosedWon: false,
-    isClosedLost: false,
-  },
-  {
-    id: "91000000-0000-4000-8000-000000000002",
-    name: "Demo Scheduled",
-    sortOrder: 20,
-    probability: 35,
-    isClosedWon: false,
-    isClosedLost: false,
-  },
-  {
-    id: "91000000-0000-4000-8000-000000000003",
-    name: "Quote Working",
-    sortOrder: 30,
-    probability: 60,
-    isClosedWon: false,
-    isClosedLost: false,
-  },
-  {
-    id: "91000000-0000-4000-8000-000000000004",
-    name: "Negotiation",
-    sortOrder: 40,
-    probability: 80,
-    isClosedWon: false,
-    isClosedLost: false,
-  },
-  {
-    id: "91000000-0000-4000-8000-000000000005",
-    name: "Closed Won",
-    sortOrder: 50,
-    probability: 100,
-    isClosedWon: true,
-    isClosedLost: false,
-  },
-  {
-    id: "91000000-0000-4000-8000-000000000006",
-    name: "Closed Lost",
-    sortOrder: 60,
-    probability: 0,
-    isClosedWon: false,
-    isClosedLost: true,
-  },
-];
-
-const DEMO_IDS = {
-  customerProfiles: {
-    apex: "61000000-0000-4000-8000-000000000001",
-  },
-  companies: {
-    apexHoldings: "11000000-0000-4000-8000-000000000001",
-    apexLakeCity: "11000000-0000-4000-8000-000000000002",
-    gulfCoast: "11000000-0000-4000-8000-000000000003",
-    pineRiver: "11000000-0000-4000-8000-000000000004",
-  },
-  contacts: {
-    mason: "21000000-0000-4000-8000-000000000001",
-    hannah: "21000000-0000-4000-8000-000000000002",
-    jordan: "21000000-0000-4000-8000-000000000003",
-    jordon: "21000000-0000-4000-8000-000000000004",
-    elena: "21000000-0000-4000-8000-000000000005",
-    wes: "21000000-0000-4000-8000-000000000006",
-  },
-  contactCompanies: {
-    masonApex: "22000000-0000-4000-8000-000000000001",
-    hannahApex: "22000000-0000-4000-8000-000000000002",
-    jordanGulf: "22000000-0000-4000-8000-000000000003",
-    jordonGulf: "22000000-0000-4000-8000-000000000004",
-    elenaPine: "22000000-0000-4000-8000-000000000005",
-    wesApex: "22000000-0000-4000-8000-000000000006",
-  },
-  territories: {
-    northFlorida: "31000000-0000-4000-8000-000000000001",
-    gulfCoast: "31000000-0000-4000-8000-000000000002",
-  },
-  contactTerritories: {
-    masonNorth: "32000000-0000-4000-8000-000000000001",
-    hannahNorth: "32000000-0000-4000-8000-000000000002",
-    jordanGulf: "32000000-0000-4000-8000-000000000003",
-  },
-  equipment: {
-    apexDozer: "33000000-0000-4000-8000-000000000001",
-    apexMulcher: "33000000-0000-4000-8000-000000000002",
-    pineSkidSteer: "33000000-0000-4000-8000-000000000003",
-  },
-  customFieldDefinitions: {
-    contactDecisionWindow: "41000000-0000-4000-8000-000000000001",
-    contactPreferredChannel: "41000000-0000-4000-8000-000000000002",
-    companyFleetPriority: "41000000-0000-4000-8000-000000000003",
-    companyServiceRisk: "41000000-0000-4000-8000-000000000004",
-  },
-  customFieldValues: {
-    masonDecisionWindow: "42000000-0000-4000-8000-000000000001",
-    masonChannel: "42000000-0000-4000-8000-000000000002",
-    apexFleetPriority: "42000000-0000-4000-8000-000000000003",
-    pineServiceRisk: "42000000-0000-4000-8000-000000000004",
-  },
-  deals: {
-    barkoPackage: "51000000-0000-4000-8000-000000000001",
-    banditDemo: "51000000-0000-4000-8000-000000000002",
-    prinothRevision: "51000000-0000-4000-8000-000000000003",
-    yanmarRental: "51000000-0000-4000-8000-000000000004",
-    asvWon: "51000000-0000-4000-8000-000000000005",
-    municipalLost: "51000000-0000-4000-8000-000000000006",
-  },
-  activities: {
-    barkoCall: "71000000-0000-4000-8000-000000000001",
-    barkoTaskOverdue: "71000000-0000-4000-8000-000000000002",
-    barkoEmailSent: "71000000-0000-4000-8000-000000000003",
-    apexNote: "71000000-0000-4000-8000-000000000004",
-    banditSmsFailed: "71000000-0000-4000-8000-000000000005",
-    banditMeeting: "71000000-0000-4000-8000-000000000006",
-    masonManualEmail: "71000000-0000-4000-8000-000000000007",
-    prinothTaskOpen: "71000000-0000-4000-8000-000000000008",
-    pineCall: "71000000-0000-4000-8000-000000000009",
-    gulfTaskDone: "71000000-0000-4000-8000-000000000010",
-    apexSmsManual: "71000000-0000-4000-8000-000000000011",
-  },
-  quotes: {
-    barkoQuote: "81000000-0000-4000-8000-000000000001",
-  },
-  duplicateCandidates: {
-    jordanLead: "91000000-0000-4000-8000-000000000010",
-  },
-  activityTemplates: {
-    demoRecap: "88000000-0000-4000-8000-000000000001",
-    branchCheckin: "88000000-0000-4000-8000-000000000002",
-    rentalTask: "88000000-0000-4000-8000-000000000003",
-  },
-  hubspotImportRuns: {
-    completed: "98000000-0000-4000-8000-000000000001",
-    completedWithErrors: "98000000-0000-4000-8000-000000000002",
-  },
-  hubspotImportErrors: {
-    companyStageFallback: "99000000-0000-4000-8000-000000000001",
-    activityMissingOwner: "99000000-0000-4000-8000-000000000002",
-  },
-};
 
 function usage() {
   console.log(`QEP CRM demo data
@@ -500,15 +289,6 @@ function createAdminClient() {
   return createClient(credentials.url, credentials.adminKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-}
-
-function sqlLiteral(value) {
-  if (value === null || value === undefined) return "null";
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
-
-function sqlJson(value) {
-  return `${sqlLiteral(JSON.stringify(value))}::jsonb`;
 }
 
 function execLocalSql(sql) {
@@ -927,49 +707,6 @@ async function resetLocalDatabaseToRepoMigrations() {
       await sleep(LOCAL_RESET_RETRY_DELAY_MS);
     }
   }
-}
-
-function buildTimestamp(offset) {
-  const value = new Date();
-  value.setSeconds(0, 0);
-  value.setDate(value.getDate() + (offset.days ?? 0));
-  value.setHours(
-    value.getHours() + (offset.hours ?? 0),
-    value.getMinutes() + (offset.minutes ?? 0),
-    0,
-    0,
-  );
-  return value.toISOString();
-}
-
-function buildDate(daysFromNow) {
-  const value = new Date();
-  value.setHours(0, 0, 0, 0);
-  value.setDate(value.getDate() + daysFromNow);
-  return value.toISOString().slice(0, 10);
-}
-
-function deliveryMetadata({
-  mode,
-  provider,
-  status,
-  destination,
-  attemptedAt,
-  externalMessageId = null,
-  reasonCode = null,
-  message = null,
-}) {
-  return {
-    attempted: true,
-    mode,
-    provider,
-    status,
-    attemptedAt,
-    destination,
-    externalMessageId,
-    reasonCode,
-    message,
-  };
 }
 
 const DEMO_INTEGRATION_ROWS = [

@@ -1,4 +1,5 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { resetServicePartsDemoData, seedServicePartsDemoData } from "./service-parts-demo.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -322,6 +323,7 @@ async function ensureDealStages() {
 }
 
 async function resetDemoData() {
+  await resetServicePartsDemoData(admin, deleteByIds);
   await deleteByIds("crm_activities", Object.values(IDS.activities));
   await deleteByIds("crm_deals", Object.values(IDS.deals));
   await deleteByIds("crm_equipment", Object.values(IDS.equipment));
@@ -1169,6 +1171,11 @@ Deno.serve(async (req) => {
             deals: 0,
             activities: 0,
           },
+          servicePartsSummary: {
+            partsInventory: 0,
+            serviceJobs: 0,
+            requirements: 0,
+          },
         },
         200,
         ch,
@@ -1176,7 +1183,34 @@ Deno.serve(async (req) => {
     }
 
     const demoSummary = await seedDemoData();
-    return jsonResponse({ ok: true, action, batchId: DEMO_BATCH_ID, voiceSummary, demoSummary }, 200, ch);
+    const assignees = await resolveAssignees();
+    const servicePartsSummary = await seedServicePartsDemoData(admin, {
+      companies: {
+        apexHoldings: IDS.companies.apexHoldings,
+        apexLakeCity: IDS.companies.apexLakeCity,
+        gulfCoast: IDS.companies.gulfCoast,
+        pineRiver: IDS.companies.pineRiver,
+      },
+      contacts: {
+        mason: IDS.contacts.mason,
+        hannah: IDS.contacts.hannah,
+        jordan: IDS.contacts.jordan,
+        elena: IDS.contacts.elena,
+      },
+      equipment: {
+        apexDozer: IDS.equipment.apexDozer,
+        apexMulcher: IDS.equipment.apexMulcher,
+        pineSkidSteer: IDS.equipment.pineSkidSteer,
+      },
+    }, assignees);
+    return jsonResponse({
+      ok: true,
+      action,
+      batchId: DEMO_BATCH_ID,
+      voiceSummary,
+      demoSummary,
+      servicePartsSummary,
+    }, 200, ch);
   } catch (error) {
     console.error("[demo-admin] failed:", error);
     return jsonResponse(

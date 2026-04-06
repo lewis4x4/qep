@@ -27,6 +27,10 @@
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "service:cron:path-check": "bun ./scripts/service-cron-path-guard.mjs",
     "edge:deno-check": "bun ./scripts/deno-check-edge-functions.mjs",
-    "demo:service-fulfillment": "bun ./scripts/demo/service-fulfillment-link-seed.mjs"
+    "demo:service-fulfillment": "bun ./scripts/demo/service-fulfillment-link-seed.mjs",
+    "demo:service-parts": "bun ./scripts/demo/service-parts-seed.mjs",
+    "demo:full": "bun ./scripts/demo/full-seed.mjs",
+    "demo:full:local": "QEP_DEMO_PREFER_LOCAL=1 bun ./scripts/demo/full-seed.mjs baseline-local",
+    "demo:verify": "bun ./scripts/demo/verify-seed.mjs"
   }
 }
