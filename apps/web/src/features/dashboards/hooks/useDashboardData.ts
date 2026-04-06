@@ -80,22 +80,55 @@ export function useIronAdvisorData(userId: string) {
     queryKey: ["dashboard", "iron-advisor", userId],
     queryFn: async () => {
       const sb = supabase;
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      const end = new Date(today);
+      end.setDate(end.getDate() + 3);
+      const followUpWindowEndStr = end.toISOString().split("T")[0];
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
 
       const [
         { data: myDeals },
         { data: dueTouchpoints },
         { data: kpi },
+        { data: newLeads },
       ] = await Promise.all([
-        sb.from("crm_deals").select("id, name, stage_id, amount, sla_deadline_at, next_follow_up_at").eq("assigned_rep_id", userId).is("deleted_at", null).order("sla_deadline_at", { ascending: true, nullsFirst: false }).limit(20),
-        sb.from("follow_up_touchpoints").select("id, touchpoint_type, scheduled_date, purpose, suggested_message, status, follow_up_cadences!inner(deal_id, assigned_to)").eq("status", "pending").lte("scheduled_date", today).eq("follow_up_cadences.assigned_to", userId).limit(10),
-        sb.from("prospecting_kpis").select("*").eq("rep_id", userId).eq("kpi_date", today).maybeSingle(),
+        sb
+          .from("crm_deals")
+          .select("id, name, stage_id, amount, sla_deadline_at, next_follow_up_at")
+          .eq("assigned_rep_id", userId)
+          .is("deleted_at", null)
+          .order("sla_deadline_at", { ascending: true, nullsFirst: false })
+          .limit(20),
+        sb
+          .from("follow_up_touchpoints")
+          .select(
+            "id, touchpoint_type, scheduled_date, purpose, suggested_message, status, follow_up_cadences!inner(deal_id, assigned_to)",
+          )
+          .eq("status", "pending")
+          .lte("scheduled_date", followUpWindowEndStr)
+          .eq("follow_up_cadences.assigned_to", userId)
+          .order("scheduled_date", { ascending: true })
+          .limit(25),
+        sb.from("prospecting_kpis").select("*").eq("rep_id", userId).eq("kpi_date", todayStr).maybeSingle(),
+        sb
+          .from("crm_deals")
+          .select("id, name, created_at, crm_deal_stages!inner(sort_order)")
+          .eq("assigned_rep_id", userId)
+          .is("deleted_at", null)
+          .lte("crm_deal_stages.sort_order", 3)
+          .gte("created_at", weekAgo.toISOString())
+          .order("created_at", { ascending: false })
+          .limit(8),
       ]);
 
       return {
         myDeals: myDeals ?? [],
         dueTouchpoints: dueTouchpoints ?? [],
+        newLeads: newLeads ?? [],
         kpi: kpi ?? { positive_visits: 0, target: 10, target_met: false, consecutive_days_met: 0 },
+        todayStr,
       };
     },
     staleTime: 15_000,
