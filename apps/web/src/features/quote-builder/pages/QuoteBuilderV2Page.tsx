@@ -9,6 +9,7 @@ import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
+import { IncentiveStack } from "../components/IncentiveStack";
 import { saveQuotePackage } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
@@ -278,9 +279,16 @@ export function QuoteBuilderV2Page() {
           </div>
 
           {saveMutation.isSuccess && (
-            <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
-              <p className="text-sm text-emerald-400">Quote saved successfully.</p>
-            </Card>
+            <>
+              <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
+                <p className="text-sm text-emerald-400">Quote saved successfully.</p>
+              </Card>
+              {(() => {
+                const savedId = (saveMutation.data as { quote?: { id?: string }; id?: string } | undefined)?.quote?.id
+                  ?? (saveMutation.data as { id?: string } | undefined)?.id;
+                return savedId ? <IncentiveStack quotePackageId={savedId} /> : null;
+              })()}
+            </>
           )}
           {saveMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">

@@ -91,6 +91,13 @@ export function TaxBreakdown({
         </Card>
       ) : null}
 
+      {/* Estimate-only disclaimer footer (Phase 2A locked contract) */}
+      {data.tax_lines.length > 0 && (
+        <p className="text-[10px] italic text-muted-foreground">
+          Estimated only — consult tax and professional. (disclaimer v1)
+        </p>
+      )}
+
       {/* Section 179 */}
       {data.section_179 && data.section_179.total_deduction > 0 && (
         <Card className={`p-4 ${showUrgency ? "border-qep-orange/30 bg-qep-orange/5" : ""}`}>
@@ -133,6 +140,9 @@ export function TaxBreakdown({
               Place this machine in service by December 31 to claim {formatCurrency(data.section_179.tax_savings)} in tax savings for {taxYear}.
             </p>
           )}
+          <p className="mt-2 text-[10px] italic text-muted-foreground">
+            Estimated only — consult tax and professional. (disclaimer v1)
+          </p>
         </Card>
       )}
     </div>

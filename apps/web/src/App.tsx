@@ -145,6 +145,9 @@ const ExceptionInboxPage = lazy(() =>
 const ExecCommandCenterPage = lazy(() =>
   import("./features/admin/pages/ExecCommandCenterPage").then((m) => ({ default: m.ExecCommandCenterPage }))
 );
+const IncentiveCatalogPage = lazy(() =>
+  import("./features/admin/pages/IncentiveCatalogPage").then((m) => ({ default: m.IncentiveCatalogPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -1000,6 +1003,16 @@ function App() {
                 element={
                   ["owner", "manager"].includes(profile.role) ? (
                     <ExecCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/incentives"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <IncentiveCatalogPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
