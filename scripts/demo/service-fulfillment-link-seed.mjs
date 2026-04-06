@@ -9,6 +9,12 @@
  *   bun ./scripts/demo/service-fulfillment-link-seed.mjs print   # show IDs (no DB)
  *
  * Workspace defaults to QEP_DEMO_WORKSPACE_ID or "default" (must match staff JWT get_my_workspace()).
+ *
+ * This script also seeds a few `parts_inventory` rows and sets the demo job to `parts_pending`
+ * so Service Command Center "Parts" view and `/service/inventory` show data. For the full
+ * service/parts dataset (8 jobs, 24 inventory lines, vendors, requirements), run after CRM seed:
+ *   bun run demo:service-parts
+ * or POST `demo-admin` with `{ "action": "seed" }` and `x-demo-admin-secret`.
  */
 import { createClient } from "@supabase/supabase-js";
 import { existsSync, readFileSync } from "node:fs";
@@ -51,6 +57,12 @@ const DEMO_IDS = {
   crmEquipment: "e6000000-0000-4000-8000-000000000001",
   /** Portal service_requests row bridged to the shop job */
   portalServiceRequest: "e7000000-0000-4000-8000-000000000001",
+  /** Branch stock rows for /service/inventory + planner demos */
+  partsInventory: [
+    "d5000000-0000-4000-8000-000000000001",
+    "d5000000-0000-4000-8000-000000000002",
+    "d5000000-0000-4000-8000-000000000003",
+  ],
 };
 
 const SEED_EMAIL = `fulfillment-link-seed@${WORKSPACE}.qep.local`;
@@ -70,6 +82,7 @@ function client() {
 }
 
 async function reset(supabase) {
+  await supabase.from("parts_inventory").delete().in("id", DEMO_IDS.partsInventory);
   await supabase.from("service_jobs").delete().eq("id", DEMO_IDS.serviceJob);
   await supabase.from("service_requests").delete().eq("id", DEMO_IDS.portalServiceRequest);
   await supabase.from("parts_orders").delete().eq("id", DEMO_IDS.partsOrder);
@@ -161,14 +174,48 @@ async function seed(supabase) {
   );
   if (e3) throw new Error(`parts_orders: ${e3.message}`);
 
+  const stageNow = new Date().toISOString();
+  const invRows = [
+    {
+      id: DEMO_IDS.partsInventory[0],
+      workspace_id: WORKSPACE,
+      branch_id: "main-yard",
+      part_number: "DEMO-FILTER",
+      qty_on_hand: 14,
+      bin_location: "SEED-A1",
+    },
+    {
+      id: DEMO_IDS.partsInventory[1],
+      workspace_id: WORKSPACE,
+      branch_id: "main-yard",
+      part_number: "HYD-FILTER-01",
+      qty_on_hand: 8,
+      bin_location: "SEED-A2",
+    },
+    {
+      id: DEMO_IDS.partsInventory[2],
+      workspace_id: WORKSPACE,
+      branch_id: "main-yard",
+      part_number: "SEAL-KIT-12",
+      qty_on_hand: 3,
+      bin_location: "SEED-B1",
+    },
+  ];
+  const { error: eInv } = await supabase.from("parts_inventory").upsert(invRows, {
+    onConflict: "id",
+  });
+  if (eInv) throw new Error(`parts_inventory: ${eInv.message}`);
+
   const { error: e4 } = await supabase.from("service_jobs").upsert(
     {
       id: DEMO_IDS.serviceJob,
       workspace_id: WORKSPACE,
+      branch_id: "main-yard",
       source_type: "walk_in",
       request_type: "repair",
       priority: "normal",
-      current_stage: "quote_sent",
+      current_stage: "parts_pending",
+      current_stage_entered_at: stageNow,
       status_flags: ["shop_job"],
       shop_or_field: "shop",
       haul_required: false,
@@ -176,7 +223,8 @@ async function seed(supabase) {
       customer_id: DEMO_IDS.crmCompany,
       machine_id: DEMO_IDS.crmEquipment,
       portal_request_id: null,
-      customer_problem_summary: "Demo job — customer access, portal bridge, and fulfillment link UX",
+      customer_problem_summary:
+        "Demo job — customer access, portal bridge, fulfillment link UX; staged in parts_pending for Parts queue + inventory seed",
     },
     { onConflict: "id" },
   );
@@ -211,6 +259,7 @@ async function seed(supabase) {
   console.log(`  portal_service_request_id (portal bridge): ${DEMO_IDS.portalServiceRequest}`);
   console.log(`  crm_company_id / crm_equipment_id: ${DEMO_IDS.crmCompany} / ${DEMO_IDS.crmEquipment}`);
   console.log(`  portal customer email (search in drawer): ${SEED_EMAIL}`);
+  console.log(`  parts_inventory ids (main-yard): ${DEMO_IDS.partsInventory.join(", ")}`);
 }
 
 async function main() {

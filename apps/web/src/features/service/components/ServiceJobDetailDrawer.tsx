@@ -167,17 +167,22 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
     },
   });
 
-  if (!jobId) return null;
-
+  // Hooks must run unconditionally — never place useMemo/useCallback after `if (!jobId) return null`
+  // or opening a job throws "Rendered more hooks than during the previous render".
   const stage = (job?.current_stage ?? "request_received") as ServiceStage;
   const publicPreview = useMemo(
     () => (job ? getPublicServiceStatus(job.current_stage) : null),
     [job?.current_stage],
   );
-  const nextStages = [
-    ...(ALLOWED_TRANSITIONS[stage] ?? []),
-    ...(BLOCKED_ALLOWED_FROM.has(stage) ? ["blocked_waiting"] : []),
-  ];
+  const nextStages = useMemo(
+    () => [
+      ...(ALLOWED_TRANSITIONS[stage] ?? []),
+      ...(BLOCKED_ALLOWED_FROM.has(stage) ? ["blocked_waiting"] : []),
+    ],
+    [stage],
+  );
+
+  if (!jobId) return null;
 
   return (
     <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-background border-l shadow-xl z-50 flex flex-col overflow-hidden">
