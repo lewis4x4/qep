@@ -394,7 +394,7 @@ function formatEvidenceBlock(evidence: EvidenceItem[]): string {
   }
   if (grouped.crm.length > 0) {
     sections.push(
-      `CRM evidence:\n${grouped.crm.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
+      `QRM evidence:\n${grouped.crm.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
     );
   }
   return sections.join("\n\n====\n\n");
@@ -915,7 +915,7 @@ async function buildCustomerContextEvidence(
     evidence.push({
       sourceType: "crm",
       sourceId: `crm-contact:${contact.id}`,
-      sourceTitle: `CRM Contact: ${[contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact"}`,
+      sourceTitle: `QRM Contact: ${[contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Contact"}`,
       excerpt: truncateText(
         [
           `Contact: ${[contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown"}`,
@@ -934,7 +934,7 @@ async function buildCustomerContextEvidence(
     evidence.push({
       sourceType: "crm",
       sourceId: `crm-company:${company.id}`,
-      sourceTitle: `CRM Company: ${company.name}`,
+      sourceTitle: `QRM Company: ${company.name}`,
       excerpt: truncateText(
         [
           `Company: ${company.name}`,
@@ -951,7 +951,7 @@ async function buildCustomerContextEvidence(
     evidence.push({
       sourceType: "crm",
       sourceId: `crm-deal:${deal.id}`,
-      sourceTitle: `CRM Deal: ${deal.name}`,
+      sourceTitle: `QRM Deal: ${deal.name}`,
       excerpt: truncateText(
         [
           `Deal: ${deal.name}`,
@@ -1053,7 +1053,7 @@ async function buildCustomerContextEvidence(
       evidence.push({
         sourceType: "crm",
         sourceId: `quotes:${quotes.map((quote) => quote.id).join(",")}`,
-        sourceTitle: "CRM Quotes",
+        sourceTitle: "QRM Quotes",
         excerpt: truncateText(
           quotes.map((quote) => `${quote.title || quote.id}: ${quote.status} (updated ${quote.updated_at})`).join("\n"),
           420,
@@ -1115,7 +1115,7 @@ async function buildCustomerContextEvidence(
       evidence.push({
         sourceType: "crm",
         sourceId: `crm-activities:${activities.map((activity) => activity.id).join(",")}`,
-        sourceTitle: "Recent CRM Activity",
+        sourceTitle: "Recent QRM Activity",
         excerpt: truncateText(
           activities.map((row) => `${row.occurred_at}: ${row.activity_type}${row.body ? ` — ${truncateText(row.body, 120)}` : ""}`).join("\n"),
           500,
@@ -1262,7 +1262,7 @@ type OutreachQueueRow = {
 };
 
 /**
- * Broad CRM search: always runs alongside document retrieval so the assistant
+ * Broad QRM search: always runs alongside document retrieval so the assistant
  * can answer questions about ANY entity in the system — contacts, companies,
  * deals, equipment, activities, voice notes, and quotes — without needing
  * explicit context IDs from the frontend.
@@ -1477,7 +1477,7 @@ async function searchCrmBroadly(
     pushEvidence({
       sourceType: "crm",
       sourceId: `crm-contact:${contact.id}`,
-      sourceTitle: `CRM Contact: ${fullName}`,
+      sourceTitle: `QRM Contact: ${fullName}`,
       excerpt: truncateText(
         [
           `Contact: ${fullName}`,
@@ -1504,7 +1504,7 @@ async function searchCrmBroadly(
         pushEvidence({
           sourceType: "crm",
           sourceId: `crm-company:${co.id}`,
-          sourceTitle: `CRM Company: ${co.name}`,
+          sourceTitle: `QRM Company: ${co.name}`,
           excerpt: truncateText(
             [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
               .filter(Boolean).join("\n"),
@@ -1632,7 +1632,7 @@ async function searchCrmBroadly(
     pushEvidence({
       sourceType: "crm",
       sourceId: `crm-company:${co.id}`,
-      sourceTitle: `CRM Company: ${co.name}`,
+      sourceTitle: `QRM Company: ${co.name}`,
       excerpt: truncateText(
         [co.name, [co.city, co.state, co.country].filter(Boolean).join(", ") || null]
           .filter(Boolean).join("\n"),
@@ -1648,7 +1648,7 @@ async function searchCrmBroadly(
     pushEvidence({
       sourceType: "crm",
       sourceId: `crm-deal:${deal.id}`,
-      sourceTitle: `CRM Deal: ${deal.name}`,
+      sourceTitle: `QRM Deal: ${deal.name}`,
       excerpt: truncateText(
         [
           `Deal: ${deal.name}`,
@@ -2118,7 +2118,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ID-based CRM retrieval (when frontend provides explicit context IDs)
+    // ID-based QRM retrieval (when frontend provides explicit context IDs)
     let contextCrmEvidence: EvidenceItem[] = [];
     try {
       contextCrmEvidence = await buildCustomerContextEvidence(adminClient, callerClient, {
@@ -2130,7 +2130,7 @@ Deno.serve(async (req) => {
       console.error(`[chat:${traceId}] customer context retrieval failed`, error);
     }
 
-    // Broad CRM search: always runs, searches contacts/companies/deals/
+    // Broad QRM search: always runs, searches contacts/companies/deals/
     // equipment/activities/voice notes/quotes by message text
     let broadCrmEvidence: EvidenceItem[] = [];
     try {
@@ -2143,7 +2143,7 @@ Deno.serve(async (req) => {
       console.warn(`[chat:${traceId}] crm_broad_search failed (non-fatal)`, broadErr);
     }
 
-    // Merge and deduplicate CRM evidence (context IDs take priority)
+    // Merge and deduplicate QRM evidence (context IDs take priority)
     const seenCrmIds = new Set<string>();
     const crmEvidence: EvidenceItem[] = [];
     for (const item of contextCrmEvidence) {
@@ -2165,14 +2165,14 @@ Deno.serve(async (req) => {
     );
 
     const toolInstructions = `
-You have tools to query live CRM data AND to take actions on behalf of the user. Use query tools when:
+You have tools to query live QRM data AND to take actions on behalf of the user. Use query tools when:
 - The pre-loaded evidence above doesn't answer the question fully
 - The user asks for specific aggregations (pipeline totals, deals closing this week, etc.)
 - The user asks about a specific contact, deal, or equipment not in the evidence
 - The user needs current pricing, financing, or competitive intelligence
 Prefer the pre-loaded evidence when it already contains the answer.
 
-You can also take CRM ACTIONS when the user explicitly asks you to:
+You can also take QRM ACTIONS when the user explicitly asks you to:
 - createFollowUpTask — create tasks/reminders on deals
 - logActivity — log notes, calls, emails, or meetings on deals/contacts/companies
 - updateDealStage — move a deal to a new pipeline stage
@@ -2186,7 +2186,7 @@ You can also take CRM ACTIONS when the user explicitly asks you to:
 For write actions (createFollowUpTask, logActivity, updateDealStage): confirm what you did and show the result. For draftEmail: present the draft clearly and tell the user to review it before sending.`;
 
     const systemPrompt = contextBlock
-      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full CRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer from the provided evidence and your tools. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
+      ? `You are the QEP USA internal knowledge assistant. You have access to the company's full QRM, equipment fleet, market valuations, auction comps, competitor listings, customer DNA profiles, manufacturer incentives, financing rates, voice field notes, sales documents, and deal history. Answer from the provided evidence and your tools. The evidence has already been filtered to the caller's allowed access. Never speculate about hidden or restricted information.
 
 ${contextBlock}
 ${toolInstructions}
@@ -2194,7 +2194,7 @@ ${toolInstructions}
 Rules:
 - Be concise and direct.
 - Cite the source title naturally in the answer when it materially supports the claim.
-- Use CRM evidence (contacts, deals, equipment, voice notes, activities) for customer-specific and operational facts.
+- Use QRM evidence (contacts, deals, equipment, voice notes, activities) for customer-specific and operational facts.
 - Use document evidence for policy, process, and product reference facts.
 - Market valuations provide current fair market values — cite the source and date.
 - Auction results are historical comps — present as comparable sales data.
@@ -2204,9 +2204,9 @@ Rules:
 - Manufacturer incentives are active OEM programs — highlight when relevant to equipment being discussed.
 - Financing rates are current lending terms — present specific rates and terms when asked about financing.
 - Voice notes contain field observations recorded by sales reps — treat them as firsthand accounts.
-- If CRM and document evidence conflict, say which source you relied on.
+- If QRM and document evidence conflict, say which source you relied on.
 - If the answer is not in your evidence or tools, say "I don't have that information in the accessible QEP knowledge base."`
-      : `You are the QEP USA internal knowledge assistant. No pre-loaded evidence was retrieved for this request, but you have tools to query live CRM data. Use your tools to find the information the user is looking for. If you cannot find the answer with your tools either, say "I don't have that information in the accessible QEP knowledge base."
+      : `You are the QEP USA internal knowledge assistant. No pre-loaded evidence was retrieved for this request, but you have tools to query live QRM data. Use your tools to find the information the user is looking for. If you cannot find the answer with your tools either, say "I don't have that information in the accessible QEP knowledge base."
 ${toolInstructions}`;
 
     // ── Tool-calling loop: run non-streaming rounds until the model

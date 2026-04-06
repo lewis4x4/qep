@@ -26,7 +26,7 @@ bun run test:vendor-escalation-resend
 
 ## Staging checklist (manual)
 
-1. Create job with CRM contact email → stage transition → `service_customer_notifications.recipient` populated (or advisor in-app if missing).
+1. Create job with QRM contact email → stage transition → `service_customer_notifications.recipient` populated (or advisor in-app if missing).
 2. `POST service-vendor-inbound` without ids in strict env → 400.
 3. Insert `service_tat_targets` row → TAT warning uses those hours.
 4. Insert `parts_inventory` for branch + part → planner returns `stock_first` pick vs order.

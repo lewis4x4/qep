@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
     // 1. Generate email draft
     const emailContent = await generateEscalationEmail(body, contactName);
 
-    // 2. Create follow-up task (CRM activity)
+    // 2. Create follow-up task (QRM activity)
     const { data: task } = await supabase
       .from("crm_activities")
       .insert({

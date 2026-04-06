@@ -1438,7 +1438,7 @@ export function CrmActivitiesPage() {
 
       {activitiesQuery.isError && (
         <Card className="p-6 text-center">
-          <p className="text-sm text-muted-foreground">Failed to load the CRM activity feed. Refresh and try again.</p>
+          <p className="text-sm text-muted-foreground">Failed to load the QRM activity feed. Refresh and try again.</p>
         </Card>
       )}
 

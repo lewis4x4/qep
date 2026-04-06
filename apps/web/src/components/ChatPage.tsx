@@ -185,9 +185,9 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
   );
   const contextLabel = useMemo(() => {
-    if (chatContext.dealId) return "Customer context active: answers can use this deal's CRM and sales history.";
-    if (chatContext.contactId) return "Customer context active: answers can use this contact's CRM and sales history.";
-    if (chatContext.companyId) return "Customer context active: answers can use this company's CRM and sales history.";
+    if (chatContext.dealId) return "Customer context active: answers can use this deal's QRM and sales history.";
+    if (chatContext.contactId) return "Customer context active: answers can use this contact's QRM and sales history.";
+    if (chatContext.companyId) return "Customer context active: answers can use this company's QRM and sales history.";
     if (chatContext.customerProfileId) return "Customer context active: answers can use linked customer profile history.";
     return null;
   }, [chatContext]);

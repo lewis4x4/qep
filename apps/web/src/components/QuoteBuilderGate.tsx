@@ -399,7 +399,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                     <span className="text-sm font-bold text-white">Built and ready for activation.</span>
                   </div>
                   <p className="text-[13px] leading-relaxed text-white/50 pl-[18px]">
-                    The workflow, CRM persistence, and AI insight layers are already in place.
+                    The workflow, QRM persistence, and AI insight layers are already in place.
                     Live dealer inventory and pricing unlock when IntelliDealer or Telapath
                     credentials are connected.
                   </p>
@@ -451,7 +451,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                       {
                         icon: CheckCircle2,
                         title: "Already built",
-                        desc: "Three-step guided flow, CRM save, AI insight surfaces.",
+                        desc: "Three-step guided flow, QRM save, AI insight surfaces.",
                         color: "text-emerald-400",
                         bg: "bg-emerald-400/10 border-emerald-400/15",
                       },
@@ -535,7 +535,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                 <h3 className="text-lg font-bold text-white mb-3">Built for leadership visibility</h3>
                 <p className="text-sm leading-relaxed text-white/55">
                   Instead of quote activity living in disconnected notes, texts, and
-                  spreadsheets, it becomes part of the CRM system of record and future
+                  spreadsheets, it becomes part of the QRM system of record and future
                   commercial reporting layer.
                 </p>
               </GlassCard>
@@ -581,7 +581,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                 number={3}
                 title="Proposal / Review"
                 icon={ClipboardCheck}
-                description="Review line items, pricing, and proposal-ready structure before saving the quote into CRM for follow-through and future reporting."
+                description="Review line items, pricing, and proposal-ready structure before saving the quote into QRM for follow-through and future reporting."
                 delay={300}
               />
             </div>
@@ -634,11 +634,11 @@ export function QuoteBuilderGate(): React.ReactElement {
                 "Full QuoteBuilderPage already built",
                 "3-step wizard already implemented",
                 "Mock equipment catalog already functioning",
-                "CRM quote save / update already working",
+                "QRM quote save / update already working",
                 "AI customer insight already integrated",
                 "AI market valuation already integrated",
                 "Print-ready PDF proposal layout",
-                "CRM deal + contact linking",
+                "QRM deal + contact linking",
               ].map((text, i) => (
                 <ProofPill key={text} delay={i * 60}>
                   {text}
@@ -753,7 +753,7 @@ export function QuoteBuilderGate(): React.ReactElement {
             <ValueCard
               icon={BarChart3}
               title="Executive Visibility"
-              description="Capture quote activity inside CRM for downstream control, reporting, and commercial pattern analysis."
+              description="Capture quote activity inside QRM for downstream control, reporting, and commercial pattern analysis."
               delay={300}
             />
           </div>
@@ -796,7 +796,7 @@ export function QuoteBuilderGate(): React.ReactElement {
                 <p className="text-sm leading-relaxed text-white/55">
                   Once the dealer-system integration is turned on, QEP OS gains a quoting
                   experience positioned to become a core revenue workflow — with AI insights,
-                  CRM persistence, and proposal generation already wired in.
+                  QRM persistence, and proposal generation already wired in.
                 </p>
               </GlassCard>
             </Reveal>

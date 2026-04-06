@@ -281,7 +281,7 @@ async function resolveAssignees() {
     null;
 
   if (!anyUserId) {
-    throw new Error("No active operator profiles are available for CRM demo assignments.");
+    throw new Error("No active operator profiles are available for QRM demo assignments.");
   }
 
   return {

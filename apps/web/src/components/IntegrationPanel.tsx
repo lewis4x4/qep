@@ -40,7 +40,7 @@ import { BRAND_NAME } from "@/components/BrandLogo";
 // Per-integration sync scope definitions
 const SYNC_SCOPES: Record<string, { key: string; label: string; description: string }[]> = {
   hubspot: [
-    { key: "companies", label: "Companies", description: "Account records from HubSpot CRM" },
+    { key: "companies", label: "Companies", description: "Account records from HubSpot QRM" },
     { key: "contacts", label: "Contacts", description: "People and role details linked to accounts" },
     { key: "deals", label: "Deals", description: "Pipeline opportunities and stage transitions" },
     { key: "activities", label: "Activities", description: "Calls, notes, and timeline events" },
@@ -1324,8 +1324,8 @@ export function IntegrationPanel({
       if (result.status === "completed_with_errors" || result.status === "failed") {
         setHubSpotImportError(
           result.status === "failed"
-            ? "HubSpot import failed. Review CRM import logs and retry."
-            : "HubSpot import completed with errors. Review CRM import logs for failed rows."
+            ? "HubSpot import failed. Review QRM import logs and retry."
+            : "HubSpot import completed with errors. Review QRM import logs for failed rows."
         );
       }
       toast({
@@ -1479,7 +1479,7 @@ export function IntegrationPanel({
               <section>
                 <h4 className="text-sm font-semibold text-foreground mb-1">Bulk import</h4>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Import HubSpot companies, contacts, deals, and activities into CRM.
+                  Import HubSpot companies, contacts, deals, and activities into QRM.
                 </p>
                 <Button
                   variant="outline"
@@ -2623,7 +2623,7 @@ export function IntegrationPanel({
           <DialogHeader>
             <DialogTitle>Run a new HubSpot import?</DialogTitle>
             <DialogDescription>
-              This will import CRM records from HubSpot and may take a few minutes. We update existing records when they match and add new ones.
+              This will import QRM records from HubSpot and may take a few minutes. We update existing records when they match and add new ones.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

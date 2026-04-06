@@ -77,7 +77,7 @@ export function CrmCompanyEditorSheet({
       toast({
         title: variables.archive ? "Company archived" : company ? "Company updated" : "Company created",
         description: variables.archive
-          ? "The company is out of the active CRM and can be restored from backups if needed."
+          ? "The company is out of the active QRM and can be restored from backups if needed."
           : company
             ? "The account record is up to date."
             : "The company is ready for contact, equipment, and activity work.",
@@ -108,7 +108,7 @@ export function CrmCompanyEditorSheet({
 
   async function handleArchive(): Promise<void> {
     if (!company || mutation.isPending) return;
-    if (!window.confirm(`Archive ${company.name}? This removes the company from active CRM views.`)) {
+    if (!window.confirm(`Archive ${company.name}? This removes the company from active QRM views.`)) {
       return;
     }
     setFormError(null);

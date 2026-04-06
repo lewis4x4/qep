@@ -178,7 +178,7 @@ export function ServiceShopInvoicePage() {
                 to={`/crm/companies/${invoice.crm_company_id}`}
                 className="text-primary hover:underline"
               >
-                Open in CRM
+                Open in QRM
               </Link>
             </p>
           )}

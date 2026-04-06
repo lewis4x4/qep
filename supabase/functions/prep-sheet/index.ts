@@ -2,7 +2,7 @@
  * Customer Prep Sheet Edge Function
  *
  * Generates a comprehensive pre-meeting brief by:
- * 1. Looking up the company/contact and all related CRM data
+ * 1. Looking up the company/contact and all related QRM data
  * 2. Pulling voice notes, activities, equipment, deals, valuations
  * 3. Using GPT to synthesize a one-page actionable prep sheet
  *

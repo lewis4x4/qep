@@ -29,7 +29,7 @@ Expect `OK (200)` for **chat**, **ingest**, and **document-admin**. A **404** me
 
 ## What automation cannot replace
 
-- Grounded answers and **Document** vs **CRM** citations need live LLM + embeddings + your corpus.
+- Grounded answers and **Document** vs **QRM** citations need live LLM + embeddings + your corpus.
 - **Finance vs rep** leakage tests need documents and users with the right roles.
 - **Manager upload → pending_review → publish** needs manager + admin accounts.
 

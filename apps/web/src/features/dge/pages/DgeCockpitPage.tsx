@@ -204,7 +204,7 @@ export function DgeCockpitPage({ userId }: DgeCockpitPageProps) {
               type="text"
               value={scenarioDealId}
               onChange={(e) => setScenarioDealId(e.target.value)}
-              placeholder="Paste a CRM deal UUID"
+              placeholder="Paste a QRM deal UUID"
               className="flex-1 rounded-md border border-border bg-card px-2 py-1.5 font-mono text-xs"
             />
             <Button
@@ -216,7 +216,7 @@ export function DgeCockpitPage({ userId }: DgeCockpitPageProps) {
             </Button>
           </div>
           <p className="mt-1 text-[10px] text-muted-foreground">
-            Tip: open any deal from the CRM pipeline and copy its URL ID.
+            Tip: open any deal from the QRM pipeline and copy its URL ID.
           </p>
         </Card>
         {activeDealId && <DgeScenarioPanel dealId={activeDealId} />}

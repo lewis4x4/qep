@@ -176,7 +176,7 @@ export function CrmDealEditorSheet({
           ? "The deal is out of the active pipeline."
           : deal
             ? "The pipeline record has been updated."
-            : "The deal is live in the CRM pipeline.",
+            : "The deal is live in the QRM pipeline.",
       });
       if (variables.archive) {
         onArchived?.();

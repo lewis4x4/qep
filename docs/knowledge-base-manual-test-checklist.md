@@ -11,7 +11,7 @@ Record pass/fail, notes, and **trace IDs** from chat errors or the footer (`Trac
 | Step | Action | Expected |
 |------|--------|----------|
 | 1.1 | As **admin** or **owner**, upload an HR-style handbook (PDF/DOCX with real text). Set **audience** `company_wide`, **status** `published`. | Document appears as published; ingest completes without `ingest_failed`. |
-| 1.2 | Sign in as **rep**. Open **Knowledge Chat** (no CRM query params). Ask: *What are our core values?* | Grounded answer from the handbook; at least one **Document** source in the source list; no generic “connection” error. |
+| 1.2 | Sign in as **rep**. Open **Knowledge Chat** (no QRM query params). Ask: *What are our core values?* | Grounded answer from the handbook; at least one **Document** source in the source list; no generic “connection” error. |
 | 1.3 | Repeat with a paraphrased question (e.g. *core values policy*) | Still grounded if content supports it; sources remain **Document** where appropriate. |
 | 1.4 | **Embedding failure (strict)** — set Edge Function secret/env `CHAT_FAIL_CLOSED_ON_EMBEDDING` = `true` on **chat**, redeploy, send any message. | HTTP **503**, JSON `error.code` = `EMBEDDING_FAILED`, message mentions embedding; UI shows that message + **Reference: &lt;trace_id&gt;**. |
 | 1.5 | Remove `CHAT_FAIL_CLOSED_ON_EMBEDDING` (or set not `true`), redeploy. Break or revoke OpenAI key **or** simulate API failure. | Chat may still respond using keyword/FTS; **amber banner**: semantic search unavailable / text matching only; trace id in banner. |
@@ -41,14 +41,14 @@ Record pass/fail, notes, and **trace IDs** from chat errors or the footer (`Trac
 
 ---
 
-## 4. Contextual CRM knowledge
+## 4. Contextual QRM knowledge
 
 | Step | Action | Expected |
 |------|--------|----------|
-| 4.1 | Open a **contact**, **deal**, or **company** that has CRM history and use **Open chat** / link to `/chat?...` with the matching ids. | **Context banner** indicates customer context; chat subtitle mentions documents + this context. |
-| 4.2 | Ask something customer-specific (e.g. recent deals, follow-ups, profile summary). | Answer uses **CRM** sources where applicable and **Document** for policy; citations distinguish **CRM** vs **Document**. |
-| 4.3 | Ask a policy question in the same contextual session. | **Document** evidence can dominate where appropriate; if CRM and docs conflict, model instruction is to state which source it used. |
-| 4.4 | As **rep**, open contextual chat for a customer **outside** their linked CRM scope (if your data model allows). | No disclosure of restricted CRM facts; no fabricated customer data. |
+| 4.1 | Open a **contact**, **deal**, or **company** that has QRM history and use **Open chat** / link to `/chat?...` with the matching ids. | **Context banner** indicates customer context; chat subtitle mentions documents + this context. |
+| 4.2 | Ask something customer-specific (e.g. recent deals, follow-ups, profile summary). | Answer uses **QRM** sources where applicable and **Document** for policy; citations distinguish **QRM** vs **Document**. |
+| 4.3 | Ask a policy question in the same contextual session. | **Document** evidence can dominate where appropriate; if QRM and docs conflict, model instruction is to state which source it used. |
+| 4.4 | As **rep**, open contextual chat for a customer **outside** their linked QRM scope (if your data model allows). | No disclosure of restricted QRM facts; no fabricated customer data. |
 
 ---
 
@@ -58,7 +58,7 @@ Record pass/fail, notes, and **trace IDs** from chat errors or the footer (`Trac
 |------|--------|----------|
 | 5.1 | Rate limit: send many chat messages quickly (or lower limit in dev). | **429** / `RATE_LIMITED` or rate-limit check message; not a generic network error. |
 | 5.2 | Signed out or expired session → chat. | **401** / `AUTH_REQUIRED`; clear sign-in message. |
-| 5.3 | Main `/chat` with **no** query params → ask product question. | Document-only grounding; no CRM sources unless user pasted context. |
+| 5.3 | Main `/chat` with **no** query params → ask product question. | Document-only grounding; no QRM sources unless user pasted context. |
 
 ---
 

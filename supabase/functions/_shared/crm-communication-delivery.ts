@@ -208,7 +208,7 @@ async function sendViaSendGrid(params: {
     body: JSON.stringify({
       personalizations: [{
         to: [{ email: params.toEmail }],
-        subject: "QEP CRM update",
+        subject: "QEP QRM update",
       }],
       from: params.fromName
         ? { email: params.fromEmail, name: params.fromName }

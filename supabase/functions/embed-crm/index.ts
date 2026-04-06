@@ -1,7 +1,7 @@
 /**
- * CRM Record Embedding Edge Function
+ * QRM Record Embedding Edge Function
  *
- * Generates text summaries of CRM records (contacts, companies, deals,
+ * Generates text summaries of QRM records (contacts, companies, deals,
  * equipment, voice captures, activities), embeds them via OpenAI, and
  * upserts into the crm_embeddings table for semantic search.
  *
@@ -32,7 +32,7 @@ const EMBED_MODEL = "text-embedding-3-small";
 // ── Text summary builders ──────────────────────────────────────────────
 
 function contactSummary(r: Record<string, unknown>): string {
-  const parts = [`CRM Contact: ${r.first_name ?? ""} ${r.last_name ?? ""}`.trim()];
+  const parts = [`QRM Contact: ${r.first_name ?? ""} ${r.last_name ?? ""}`.trim()];
   if (r.email) parts.push(`Email: ${r.email}`);
   if (r.phone) parts.push(`Phone: ${r.phone}`);
   if (r.title) parts.push(`Title: ${r.title}`);
@@ -42,7 +42,7 @@ function contactSummary(r: Record<string, unknown>): string {
 }
 
 function companySummary(r: Record<string, unknown>): string {
-  const parts = [`CRM Company: ${r.name ?? "Unknown"}`];
+  const parts = [`QRM Company: ${r.name ?? "Unknown"}`];
   if (r.industry) parts.push(`Industry: ${r.industry}`);
   if (r.city || r.state || r.country) {
     parts.push(`Location: ${[r.city, r.state, r.country].filter(Boolean).join(", ")}`);
@@ -54,7 +54,7 @@ function companySummary(r: Record<string, unknown>): string {
 }
 
 function dealSummary(r: Record<string, unknown>): string {
-  const parts = [`CRM Deal: ${r.name ?? "Untitled"}`];
+  const parts = [`QRM Deal: ${r.name ?? "Untitled"}`];
   if (r.amount != null) parts.push(`Amount: $${Number(r.amount).toLocaleString()}`);
   if (r.stage_name) parts.push(`Stage: ${r.stage_name}`);
   if (r.expected_close_on) parts.push(`Expected Close: ${r.expected_close_on}`);
@@ -91,7 +91,7 @@ function voiceCaptureSummary(r: Record<string, unknown>): string {
 }
 
 function activitySummary(r: Record<string, unknown>): string {
-  const parts = [`CRM Activity (${r.activity_type ?? "note"}) on ${r.occurred_at ?? "unknown date"}`];
+  const parts = [`QRM Activity (${r.activity_type ?? "note"}) on ${r.occurred_at ?? "unknown date"}`];
   if (r.body) parts.push(String(r.body).slice(0, 1500));
   return parts.join("\n");
 }

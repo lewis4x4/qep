@@ -56,7 +56,7 @@ export function PipelineQueryStatus({
       {!isLoading && !hasError && showCacheBanner && (
         <Card className="border-amber-200 bg-amber-50 p-4">
           <p className="text-sm text-amber-900">
-            Showing a cached pipeline snapshot while live CRM data is unavailable.
+            Showing a cached pipeline snapshot while live QRM data is unavailable.
           </p>
         </Card>
       )}

@@ -112,9 +112,9 @@ export function CrmContactEditorSheet({
       toast({
         title: variables.archive ? "Contact archived" : contact ? "Contact updated" : "Contact created",
         description: variables.archive
-          ? "The contact is out of the active CRM without a database cleanup step."
+          ? "The contact is out of the active QRM without a database cleanup step."
           : contact
-            ? "The CRM contact record is up to date."
+            ? "The QRM contact record is up to date."
             : "The contact is ready for activity logging and deal work.",
       });
       if (variables.archive) {
@@ -143,7 +143,7 @@ export function CrmContactEditorSheet({
 
   async function handleArchive(): Promise<void> {
     if (!contact || mutation.isPending) return;
-    if (!window.confirm(`Archive ${contact.firstName} ${contact.lastName}? This removes the contact from active CRM views.`)) {
+    if (!window.confirm(`Archive ${contact.firstName} ${contact.lastName}? This removes the contact from active QRM views.`)) {
       return;
     }
     setFormError(null);
@@ -156,7 +156,7 @@ export function CrmContactEditorSheet({
         <SheetHeader className="mb-4">
           <SheetTitle>{contact ? "Edit contact" : "New contact"}</SheetTitle>
           <SheetDescription>
-            Capture the contact record without leaving the CRM workflow.
+            Capture the contact record without leaving the QRM workflow.
           </SheetDescription>
         </SheetHeader>
 

@@ -49,7 +49,7 @@ export function CounterSaleForm() {
   const createMut = useMutation({
     mutationFn: async () => {
       const line_items = buildLineItems();
-      if (!crmCompanyId) throw new Error("Select a CRM company");
+      if (!crmCompanyId) throw new Error("Select a QRM company");
       if (line_items.length === 0) throw new Error("Add at least one line");
       return invokeCreateInternalOrder({
         crm_company_id: crmCompanyId,
@@ -67,7 +67,7 @@ export function CounterSaleForm() {
   const createAndSubmitMut = useMutation({
     mutationFn: async () => {
       const line_items = buildLineItems();
-      if (!crmCompanyId) throw new Error("Select a CRM company");
+      if (!crmCompanyId) throw new Error("Select a QRM company");
       if (line_items.length === 0) throw new Error("Add at least one line");
       const { order } = await invokeCreateInternalOrder({
         crm_company_id: crmCompanyId,
@@ -85,7 +85,7 @@ export function CounterSaleForm() {
   return (
     <Card className="p-4 space-y-4">
       <div className="space-y-1">
-        <label className="text-xs font-medium">CRM company *</label>
+        <label className="text-xs font-medium">QRM company *</label>
         <Input
           placeholder="Type to search company name…"
           value={companyQuery}

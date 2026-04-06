@@ -100,7 +100,7 @@ function mapError(origin: string | null, error: unknown): Response {
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "Requested CRM resource was not found.",
+      message: "Requested QRM resource was not found.",
     });
   }
 
@@ -332,7 +332,7 @@ function mapError(origin: string | null, error: unknown): Response {
     origin,
     status: 500,
     code: "UNEXPECTED_ERROR",
-    message: "CRM router request failed.",
+    message: "QRM router request failed.",
   });
 }
 
@@ -351,7 +351,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "CRM route not found.",
+      message: "QRM route not found.",
     });
   }
 
@@ -693,7 +693,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "CRM route not found.",
+      message: "QRM route not found.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

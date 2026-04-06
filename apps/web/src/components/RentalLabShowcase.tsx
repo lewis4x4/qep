@@ -409,7 +409,7 @@ export function RentalLabShowcase(): React.ReactElement {
                   <h3 className="text-xl font-bold text-white mb-2">What owners should know</h3>
                   <p className="text-sm leading-relaxed text-white/50 mb-6">
                     Rental Equipment Lab is how QEP can professionalize and scale the entire
-                    rental business inside the same platform that manages sales, CRM, and
+                    rental business inside the same platform that manages sales, QRM, and
                     intelligence.
                   </p>
 

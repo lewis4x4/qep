@@ -250,7 +250,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 <Link to="/service/track" className="text-primary underline-offset-2 hover:underline">
                   track page
                 </Link>
-                . This does not replace CRM customer/machine on the job — those are set below.
+                . This does not replace QRM customer/machine on the job — those are set below.
               </p>
               <div className="rounded-md border bg-background/50 p-2 text-[11px] text-muted-foreground">
                 <p className="font-medium text-foreground mb-0.5">Customer preview</p>

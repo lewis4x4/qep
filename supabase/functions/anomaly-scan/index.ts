@@ -1,7 +1,7 @@
 /**
  * Anomaly Scan Edge Function
  *
- * Runs periodic analysis across CRM data to detect:
+ * Runs periodic analysis across QRM data to detect:
  * 1. Stalling deals — no activity in 7+ days, deal not closed
  * 2. Overdue follow-ups — past their next_follow_up_at date
  * 3. Activity gaps — reps with no logged activity in 3+ days
@@ -137,7 +137,7 @@ async function detectActivityGaps(db: AdminClient): Promise<Alert[]> {
 
   const repIds = (reps as Record<string, unknown>[]).map((r) => r.id as string);
 
-  // Batch: get reps with recent CRM activity
+  // Batch: get reps with recent QRM activity
   const [{ data: activityRows }, { data: voiceRows }] = await Promise.all([
     db.from("crm_activities")
       .select("created_by")
@@ -163,7 +163,7 @@ async function detectActivityGaps(db: AdminClient): Promise<Alert[]> {
       alert_type: "activity_gap",
       severity: "medium",
       title: `No activity from ${rep.full_name ?? "rep"} in 3+ days`,
-      description: `${rep.full_name ?? "A rep"} has not logged any CRM activities or voice notes in the last 3 days.`,
+      description: `${rep.full_name ?? "A rep"} has not logged any QRM activities or voice notes in the last 3 days.`,
       entity_type: null,
       entity_id: null,
       assigned_to: rep.id as string,

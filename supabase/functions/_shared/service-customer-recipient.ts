@@ -2,7 +2,7 @@
  * Resolve customer email / SMS recipient for service job outbound comms.
  *
  * Precedence (first non-empty wins):
- * 1. Job-linked CRM contact (contact_id → crm_contacts.email / .phone)
+ * 1. Job-linked QRM contact (contact_id → crm_contacts.email / .phone)
  * 2. Portal request → portal customer (portal_request_id → service_requests → portal_customers)
  * 3. Company metadata fallback (customer_id → crm_companies.metadata.email or metadata.contact_email)
  */

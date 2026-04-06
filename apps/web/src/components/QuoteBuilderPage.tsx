@@ -306,8 +306,8 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
       } catch {
         if (!cancelled) {
           toast({
-            title: "CRM context unavailable",
-            description: "Quote Builder loaded, but CRM prefill could not be applied.",
+            title: "QRM context unavailable",
+            description: "Quote Builder loaded, but QRM prefill could not be applied.",
             variant: "destructive",
           });
         }
@@ -489,8 +489,8 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
       toast({
         title: savedQuoteId ? "Quote updated" : "Quote saved",
         description: hasCrmLink
-          ? "Quote is durably linked to CRM."
-          : "Quote saved as draft. Link to a CRM contact or deal when available.",
+          ? "Quote is durably linked to QRM."
+          : "Quote saved as draft. Link to a QRM contact or deal when available.",
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save quote.";
@@ -652,7 +652,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>Double-check the email — the proposal will reference this address when printed.</p>
                   <p>Include the company address if delivery or job-site pricing applies.</p>
-                  <p>Phone number is required for follow-up task creation in CRM.</p>
+                  <p>Phone number is required for follow-up task creation in QRM.</p>
                 </CardContent>
               </Card>
               <Card>
@@ -974,10 +974,10 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
               <Card className="border-border bg-muted/30">
                 <CardContent className="pt-4 pb-3 space-y-2">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    CRM Linkage
+                    QRM Linkage
                   </p>
                   <p className="text-sm text-foreground">
-                    {crmContextSummary ?? "No CRM entity selected."}
+                    {crmContextSummary ?? "No QRM entity selected."}
                   </p>
                   {!crmContactId && !crmDealId && (
                     <p className="text-xs text-muted-foreground">
@@ -1180,7 +1180,7 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
               <Card>
                 <CardContent className="pt-4 text-sm text-muted-foreground space-y-2">
                   <p>Pricing valid for 30 days. Print or download PDF to send to the customer.</p>
-                  <p>After printing, create a CRM follow-up so the next step stays attached to the deal.</p>
+                  <p>After printing, create a QRM follow-up so the next step stays attached to the deal.</p>
                 </CardContent>
               </Card>
             </aside>

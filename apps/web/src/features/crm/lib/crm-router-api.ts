@@ -41,7 +41,7 @@ interface RouterRequestOptions {
 async function getAuthHeaders(idempotencyKey?: string): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
-    throw new Error("Sign in is required to access CRM.");
+    throw new Error("Sign in is required to access QRM.");
   }
 
   return {
@@ -65,7 +65,7 @@ async function requestRouter<T>(
 
   const payload = await response.json() as T & EdgeErrorPayload;
   if (!response.ok || payload.error) {
-    const message = payload.error?.message || "CRM request failed.";
+    const message = payload.error?.message || "QRM request failed.";
     throw new Error(message);
   }
 

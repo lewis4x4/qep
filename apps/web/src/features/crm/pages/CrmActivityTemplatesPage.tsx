@@ -192,7 +192,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
           </div>
 
           {templatesQuery.isLoading && (
-            <div className="space-y-3" role="status" aria-label="Loading CRM templates">
+            <div className="space-y-3" role="status" aria-label="Loading QRM templates">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
               ))}
@@ -201,7 +201,7 @@ export function CrmActivityTemplatesPage({ userId }: CrmActivityTemplatesPagePro
 
           {templatesQuery.isError && (
             <Card className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm text-[#991B1B]">
-              Could not load CRM templates.
+              Could not load QRM templates.
             </Card>
           )}
 

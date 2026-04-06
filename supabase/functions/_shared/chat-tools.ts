@@ -12,7 +12,7 @@ export const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "searchContacts",
-      description: "Search CRM contacts by name, email, company, or title. Returns matching contacts with their details.",
+      description: "Search QRM contacts by name, email, company, or title. Returns matching contacts with their details.",
       parameters: {
         type: "object",
         properties: {
@@ -27,7 +27,7 @@ export const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "searchDeals",
-      description: "Search CRM deals. Can filter by name, closing date range, or minimum amount.",
+      description: "Search QRM deals. Can filter by name, closing date range, or minimum amount.",
       parameters: {
         type: "object",
         properties: {
@@ -124,7 +124,7 @@ export const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "getRecentActivities",
-      description: "Get recent CRM activities (calls, meetings, notes, tasks) optionally filtered by contact or deal name.",
+      description: "Get recent QRM activities (calls, meetings, notes, tasks) optionally filtered by contact or deal name.",
       parameters: {
         type: "object",
         properties: {
@@ -237,7 +237,7 @@ export const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "logActivity",
-      description: "Log a CRM activity (note, call, email, meeting) on a deal, contact, or company. Use when user says 'log a note', 'record a call', 'note that I met with', or 'add an activity'.",
+      description: "Log a QRM activity (note, call, email, meeting) on a deal, contact, or company. Use when user says 'log a note', 'record a call', 'note that I met with', or 'add an activity'.",
       parameters: {
         type: "object",
         properties: {
@@ -298,7 +298,7 @@ export const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "generatePrepSheet",
-      description: "Generate a comprehensive pre-meeting customer prep sheet. Pulls all CRM data for a company or contact and synthesizes a one-page briefing with talking points, intelligence, and action items. Use when user says 'prep for meeting with X', 'prep sheet for X', or 'what do I need to know before meeting X'.",
+      description: "Generate a comprehensive pre-meeting customer prep sheet. Pulls all QRM data for a company or contact and synthesizes a one-page briefing with talking points, intelligence, and action items. Use when user says 'prep for meeting with X', 'prep sheet for X', or 'what do I need to know before meeting X'.",
       parameters: {
         type: "object",
         properties: {

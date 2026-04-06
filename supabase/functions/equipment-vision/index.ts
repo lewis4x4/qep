@@ -4,7 +4,7 @@
  * Accepts a photo of equipment and uses OpenAI's vision capabilities to:
  * 1. Identify make, model, year, and equipment category
  * 2. Assess visible condition (exterior, wear, damage)
- * 3. Cross-reference against CRM equipment inventory and market valuations
+ * 3. Cross-reference against QRM equipment inventory and market valuations
  * 4. Return a structured analysis with estimated value range
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -183,7 +183,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       return jsonError("Failed to parse equipment analysis", 500, ch);
     }
 
-    // Cross-reference with CRM equipment and market data
+    // Cross-reference with QRM equipment and market data
     const adminDb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,

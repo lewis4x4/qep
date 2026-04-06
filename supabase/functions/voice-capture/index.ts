@@ -1,5 +1,5 @@
 /**
- * Voice-to-CRM Field Capture (Module 4)
+ * Voice-to-QRM Field Capture (Module 4)
  *
  * Accepts a multipart POST with an audio blob from a sales rep in the field.
  * Pipeline:
@@ -215,8 +215,8 @@ Deno.serve(async (req) => {
     let extracted: ExtractedDealData;
 
     try {
-      const extractionPrompt = `You are a CRM data extraction assistant for a heavy equipment dealership.
-A sales rep just recorded a field note. Extract structured dealership CRM information from their transcript.
+      const extractionPrompt = `You are a QRM data extraction assistant for a heavy equipment dealership.
+A sales rep just recorded a field note. Extract structured dealership QRM information from their transcript.
 
 Transcript:
 """
@@ -319,7 +319,7 @@ Return ONLY valid JSON matching this exact structure:
             {
               role: "system",
               content:
-                "Extract CRM-ready dealership field-note data. Return valid JSON only. Do not wrap the JSON in markdown fences.",
+                "Extract QRM-ready dealership field-note data. Return valid JSON only. Do not wrap the JSON in markdown fences.",
             },
             { role: "user", content: extractionPrompt },
           ],
@@ -369,8 +369,8 @@ Return ONLY valid JSON matching this exact structure:
       });
     } catch (localCrmErr) {
       const errMsg =
-        localCrmErr instanceof Error ? localCrmErr.message : "Unknown error saving to CRM";
-      console.error("Local CRM sync failed:", errMsg, localCrmErr);
+        localCrmErr instanceof Error ? localCrmErr.message : "Unknown error saving to QRM";
+      console.error("Local QRM sync failed:", errMsg, localCrmErr);
       await supabaseAdmin
         .from("voice_captures")
         .update({
@@ -378,11 +378,11 @@ Return ONLY valid JSON matching this exact structure:
           duration_seconds: durationSeconds,
           extracted_data: extracted,
           sync_status: "failed",
-          sync_error: `Local CRM save failed: ${errMsg}`,
+          sync_error: `Local QRM save failed: ${errMsg}`,
         })
         .eq("id", captureId);
       return jsonError(
-        "Could not attach this note to the CRM deal. If this keeps happening, contact support.",
+        "Could not attach this note to the QRM deal. If this keeps happening, contact support.",
         500,
         ch,
       );

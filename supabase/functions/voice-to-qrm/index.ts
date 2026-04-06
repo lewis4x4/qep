@@ -939,7 +939,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 10. Create CRM activity note ──────────────────────────────────────
+    // ── 10. Create QRM activity note ──────────────────────────────────────
     // crm_activities_check: exactly one of contact_id / deal_id / company_id (migration 021).
     if (dealId) {
       await supabaseAdmin.from("crm_activities").insert({

@@ -547,7 +547,7 @@ export async function createCrmActivityTemplate(input: {
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Could not create CRM activity template.");
+    throw new Error(error?.message ?? "Could not create QRM activity template.");
   }
 
   return toActivityTemplate(data as CrmActivityTemplateRow);
@@ -585,7 +585,7 @@ export async function updateCrmActivityTemplate(
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Could not update CRM activity template.");
+    throw new Error(error?.message ?? "Could not update QRM activity template.");
   }
 
   return toActivityTemplate(data as CrmActivityTemplateRow);

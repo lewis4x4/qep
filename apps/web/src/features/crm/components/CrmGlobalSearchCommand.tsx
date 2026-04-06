@@ -74,7 +74,7 @@ export function CrmGlobalSearchCommand() {
         type="button"
         onClick={() => setOpen(true)}
         className="hidden md:flex h-9 w-full max-w-[400px] items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground hover:text-foreground"
-        aria-label="Open CRM search"
+        aria-label="Open QRM search"
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="truncate">Search contacts and companies</span>
@@ -128,7 +128,7 @@ export function CrmGlobalSearchCommand() {
               )}
 
               {!searchQuery.isLoading && !searchQuery.isError && query.trim().length > 1 && searchQuery.data?.length === 0 && (
-                <Command.Empty>No matching CRM records.</Command.Empty>
+                <Command.Empty>No matching QRM records.</Command.Empty>
               )}
 
               {companies.length > 0 && (

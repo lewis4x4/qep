@@ -137,7 +137,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                   </h1>
                   <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
                     Quotes, customer history, field notes, and follow-up all in one system. Built for sales reps,
-                    parts, service, rentals, and management without the usual CRM clutter.
+                    parts, service, rentals, and management without the usual QRM clutter.
                   </p>
                 </div>
               </div>
@@ -222,7 +222,7 @@ export function LoginPage({ authError }: LoginPageProps) {
                     Welcome back
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    Sign in with your {BRAND_NAME} work account to access knowledge, CRM follow-up, voice capture, and
+                    Sign in with your {BRAND_NAME} work account to access knowledge, QRM follow-up, voice capture, and
                     quotes.
                   </p>
                 </div>

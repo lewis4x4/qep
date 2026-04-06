@@ -197,7 +197,7 @@ export function ChatMessage({
                             {src.title}
                           </span>
                           <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)] backdrop-blur-sm dark:from-white/[0.07] dark:to-white/[0.02]">
-                            {src.kind === "crm" ? "CRM" : "Document"}
+                            {src.kind === "crm" ? "QRM" : "Document"}
                           </span>
                         </div>
                         <span className="text-xs text-qep-gray whitespace-nowrap shrink-0">

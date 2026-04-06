@@ -56,7 +56,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",
-  "/crm": "CRM",
+  "/crm": "QRM",
   "/crm/activities": "Activities",
   "/crm/deals": "Deals",
   "/crm/contacts": "Contacts",
@@ -291,7 +291,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
                 <>
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
                   <Link to="/crm" className="text-[#8A9BAE] hover:text-white transition-colors">
-                    CRM
+                    QRM
                   </Link>
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
                   <span className="text-white font-medium">{breadcrumbLabel}</span>

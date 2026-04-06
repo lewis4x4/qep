@@ -44,7 +44,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return errorResponse(
       405,
       "METHOD_NOT_ALLOWED",
-      "Use POST for CRM HubSpot import.",
+      "Use POST for QRM HubSpot import.",
       {
         headers: ch,
       },
@@ -148,7 +148,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return errorResponse(
       403,
       "FORBIDDEN",
-      "Only admin/owner can run CRM import.",
+      "Only admin/owner can run QRM import.",
       {
         headers: ch,
       },
@@ -292,7 +292,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       console.error("[crm-import] unable to mark run as failed", updateError);
     }
 
-    return errorResponse(500, "IMPORT_FAILED", "CRM HubSpot import failed.", {
+    return errorResponse(500, "IMPORT_FAILED", "QRM HubSpot import failed.", {
       headers: ch,
       details: { requestId, message },
     });

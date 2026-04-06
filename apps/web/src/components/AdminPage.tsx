@@ -254,7 +254,7 @@ function KnowledgeGapsPanel() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         These are questions users asked that the knowledge base couldn&apos;t find answers for.
-        Upload relevant documents or add CRM data to resolve them.
+        Upload relevant documents or add QRM data to resolve them.
       </p>
       <div className="space-y-2">
         {gaps.map((gap) => (
@@ -656,7 +656,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
             value="crm-tools"
             className="rounded-none px-4 pb-3 pt-1 text-sm data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary -mb-px"
           >
-            CRM Tools
+            QRM Tools
           </TabsTrigger>
         </TabsList>
 

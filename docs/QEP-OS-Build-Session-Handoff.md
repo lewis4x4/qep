@@ -114,7 +114,7 @@ Three critical bugs from the March 27 code audit were addressed before any new w
   - `DndContext` with `DraggableDealCard` and `DroppableStageColumn` wrappers
   - Optimistic drag-and-drop with error rollback (race condition fixed in audit via ref-captured original stage)
   - SLA countdown and deposit gate badges on every deal card
-- **QRM branding** applied across 13 user-facing strings (CRM → QRM in titles, nav, aria-labels)
+- **QRM branding** applied across 13 user-facing strings (QRM → QRM in titles, nav, aria-labels)
 - Iron role badge on QRM Hub page header
 
 ---

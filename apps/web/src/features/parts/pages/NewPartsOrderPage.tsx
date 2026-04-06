@@ -10,7 +10,7 @@ export function NewPartsOrderPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">New parts order</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Counter or phone sale — ties to a CRM company and optional catalog pricing.
+          Counter or phone sale — ties to a QRM company and optional catalog pricing.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

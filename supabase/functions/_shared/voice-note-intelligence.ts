@@ -2,7 +2,7 @@
  * Voice Note Intelligence — post-extraction analysis
  *
  * After a voice note is transcribed and structured data extracted, this module:
- * 1. Auto-links mentioned contacts, companies, and deals to CRM records
+ * 1. Auto-links mentioned contacts, companies, and deals to QRM records
  * 2. Stores queryable intelligence signals (sentiment, competitor mentions, attention flags)
  * 3. Creates competitive_mentions records for tracking
  */

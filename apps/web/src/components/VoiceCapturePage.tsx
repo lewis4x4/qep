@@ -196,10 +196,10 @@ function getVoiceCaptureStatusMeta(
   switch (status) {
     case "synced":
       return {
-        badgeLabel: "Saved to CRM",
+        badgeLabel: "Saved to QRM",
         badgeVariant: "default",
-        heading: "Saved to CRM",
-        summary: "This field note processed cleanly and the CRM sync completed.",
+        heading: "Saved to QRM",
+        summary: "This field note processed cleanly and the QRM sync completed.",
       };
     case "processing":
       return {
@@ -213,7 +213,7 @@ function getVoiceCaptureStatusMeta(
         badgeLabel: "Ready to push",
         badgeVariant: "secondary",
         heading: "Captured locally",
-        summary: "The note is captured, but it is not attached to the CRM timeline yet.",
+        summary: "The note is captured, but it is not attached to the QRM timeline yet.",
       };
     case "failed":
     default:
@@ -230,7 +230,7 @@ function getVoiceCaptureStatusMeta(
           badgeLabel: "Extraction failed",
           badgeVariant: "destructive",
           heading: "Extraction failed",
-          summary: "The transcript exists, but the structured CRM fields did not finish extracting.",
+          summary: "The transcript exists, but the structured QRM fields did not finish extracting.",
         };
       }
       return {
@@ -710,10 +710,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           : prev,
       );
       void loadRecentCaptures();
-      toast({ title: "Added to CRM", description: "Note and follow-up task are on the local deal timeline." });
+      toast({ title: "Added to QRM", description: "Note and follow-up task are on the local deal timeline." });
     } catch (err) {
       toast({
-        title: "CRM sync failed",
+        title: "QRM sync failed",
         description: err instanceof Error ? err.message : "Sync failed",
         variant: "destructive",
       });
@@ -780,13 +780,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
       if (data.local_crm_saved || data.hubspot_synced) {
         toast({
-          title: "Saved to CRM",
+          title: "Saved to QRM",
           description: "Note and follow-up task were attached to the deal.",
         });
       } else {
         toast({
           title: "Captured locally",
-          description: "The note is saved, but it still needs to be attached to a CRM deal.",
+          description: "The note is saved, but it still needs to be attached to a QRM deal.",
         });
       }
     } catch (err) {
@@ -875,7 +875,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const selectedSummary = selectedDealLabel
       ? { title: selectedDealLabel, detail: hubspotDealId }
       : hubspotDealId
-      ? { title: "Linked by pasted CRM deal ID", detail: hubspotDealId }
+      ? { title: "Linked by pasted QRM deal ID", detail: hubspotDealId }
       : null;
 
     return (
@@ -885,7 +885,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           type="text"
           value={dealLookupQuery}
           onChange={(e) => handleDealLookupChange(e.target.value)}
-          placeholder="Search by deal name or paste CRM deal ID"
+          placeholder="Search by deal name or paste QRM deal ID"
           autoComplete="off"
         />
 
@@ -916,7 +916,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
               </div>
             ) : dealLookupOptions.length === 0 ? (
               <div className="px-3 py-3 text-sm text-muted-foreground">
-                No matching deals found. Paste a CRM deal ID if you already have one.
+                No matching deals found. Paste a QRM deal ID if you already have one.
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -939,7 +939,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         )}
 
         <p className="text-xs text-muted-foreground">
-          Search by deal name or paste the CRM deal ID directly. If you leave it blank, we&apos;ll
+          Search by deal name or paste the QRM deal ID directly. If you leave it blank, we&apos;ll
           still try to match the note by customer details.
         </p>
       </div>
@@ -955,7 +955,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           <div className="mb-6">
             <h1 className="text-xl font-semibold text-foreground">Field Note</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Record a quick summary after your visit — we'll pull out the key details and push them into CRM.
+              Record a quick summary after your visit — we'll pull out the key details and push them into QRM.
             </p>
           </div>
 
@@ -967,23 +967,23 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
           {/* ── IDLE ──────────────────────────────────────────────────────────── */}
           {recordingState === "idle" && (
             <div className="space-y-6">
-              {/* CRM Deal input */}
+              {/* QRM Deal input */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="deal-id">CRM Deal ID</Label>
+                  <Label htmlFor="deal-id">QRM Deal ID</Label>
                   <span className="text-xs text-muted-foreground">(optional)</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="What is a CRM deal ID?"
+                        aria-label="What is a QRM deal ID?"
                         className="h-11 w-11 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2"
                       >
                         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side={isMobile ? "bottom" : "right"} align={isMobile ? "start" : "center"} className="max-w-[200px]">
-                      Search by deal name or paste the CRM deal ID to link this note directly.
+                      Search by deal name or paste the QRM deal ID to link this note directly.
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -1080,7 +1080,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
               {/* Deal link (editable) */}
               <div className="space-y-1.5">
-                <Label htmlFor="deal-id-review">CRM Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                <Label htmlFor="deal-id-review">QRM Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 {renderDealLookupField("deal-id-review")}
               </div>
 
@@ -1200,11 +1200,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 return (
                   <ResultCard
                     icon={<Building2 className="w-4 h-4" />}
-                    title="CRM Link"
+                    title="QRM Link"
                   >
                     <ExtractedField
                       label="Linked deal"
-                      value={linkedDealTitle ?? "CRM deal linked"}
+                      value={linkedDealTitle ?? "QRM deal linked"}
                       icon={<Building2 className="w-3.5 h-3.5" />}
                     />
                     <ExtractedField
@@ -1216,7 +1216,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 );
               })()}
 
-              {/* CRM sync status */}
+              {/* QRM sync status */}
               <div className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3",
                 crmSaved
@@ -1227,7 +1227,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                   <>
                     <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-800">Saved to CRM</p>
+                      <p className="text-sm font-medium text-green-800">Saved to QRM</p>
                       <p className="text-xs text-green-600 mt-0.5">Note and follow-up task are attached to the local deal timeline.</p>
                     </div>
                     <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
@@ -1239,10 +1239,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-amber-800">Captured locally</p>
-                      <p className="text-xs text-amber-600 mt-0.5">This note is safe, but it still needs to be attached to a CRM deal timeline.</p>
+                      <p className="text-xs text-amber-600 mt-0.5">This note is safe, but it still needs to be attached to a QRM deal timeline.</p>
                     </div>
                     <Badge variant="outline" className="text-amber-600 border-amber-300">
-                      Attach to CRM
+                      Attach to QRM
                     </Badge>
                   </>
                 )}
@@ -1296,7 +1296,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 {looksLikeCrmRecordId(result.hubspot_deal_id ?? hubspotDealId ?? "") && (
                   <Button asChild variant="outline" className="flex-1">
                     <Link to={`/crm/deals/${result.hubspot_deal_id ?? hubspotDealId}`}>
-                      Open CRM Deal
+                      Open QRM Deal
                     </Link>
                   </Button>
                 )}
@@ -1311,7 +1311,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     ) : (
                       <Send className="w-4 h-4 mr-2" />
                     )}
-                    Add to CRM
+                    Add to QRM
                   </Button>
                 )}
                 <Button
@@ -1479,7 +1479,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
                   <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
                   <p>Record immediately after the visit while details are fresh.</p>
-                  <p>If you know the CRM deal ID, paste it before recording to link the note automatically.</p>
+                  <p>If you know the QRM deal ID, paste it before recording to link the note automatically.</p>
                 </CardContent>
               </Card>
             </div>

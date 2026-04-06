@@ -623,7 +623,7 @@ function QuickActionsBar() {
   );
 }
 
-// ─── CRM Navigation ─────────────────────────────────────────────
+// ─── QRM Navigation ─────────────────────────────────────────────
 
 interface SectionCardDef {
   label: string;
@@ -741,7 +741,7 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center justify-center gap-4 py-20">
           <AlertTriangle className="h-8 w-8 text-qep-orange" />
-          <p className="text-sm text-foreground font-medium">Could not load CRM intelligence</p>
+          <p className="text-sm text-foreground font-medium">Could not load QRM intelligence</p>
           <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
         </div>
       </div>
@@ -797,7 +797,7 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
         </div>
       </div>
 
-      {/* ── CRM Navigation ─────────────────────────────────────── */}
+      {/* ── QRM Navigation ─────────────────────────────────────── */}
       <CrmNavGrid />
 
       {/* ── Deal Momentum ──────────────────────────────────────── */}

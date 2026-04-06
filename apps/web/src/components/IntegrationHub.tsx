@@ -117,17 +117,17 @@ const INTEGRATION_DISPLAY: Record<
   Pick<IntegrationCardConfig, "name" | "category" | "description" | "icon">
 > = {
   hubspot: {
-    name: "HubSpot CRM",
-    category: "CRM Data Sync",
+    name: "HubSpot QRM",
+    category: "QRM Data Sync",
     description:
-      "Manage HubSpot connection health and run bulk CRM imports with explicit confirmation.",
+      "Manage HubSpot connection health and run bulk QRM imports with explicit confirmation.",
     icon: "HS",
   },
   sendgrid: {
     name: "SendGrid Email",
     category: "Communication Hub",
     description:
-      "Outbound dealership email delivery for templates, follow-ups, and CRM timeline communication logs.",
+      "Outbound dealership email delivery for templates, follow-ups, and QRM timeline communication logs.",
     icon: "SG",
   },
   twilio: {
@@ -146,7 +146,7 @@ const INTEGRATION_DISPLAY: Record<
   },
   intellidealer: {
     name: "IntelliDealer (VitalEdge)",
-    category: "Inventory & CRM",
+    category: "Inventory & QRM",
     description:
       "Inventory, customer master data, and deal history from your dealer management system.",
     icon: "ID",

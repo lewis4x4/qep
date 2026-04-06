@@ -1,4 +1,4 @@
-/** Shared shapes for get_deal_composite + CRM cards (avoids circular imports). */
+/** Shared shapes for get_deal_composite + QRM cards (avoids circular imports). */
 
 export interface NeedsAssessment {
   id: string;

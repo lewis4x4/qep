@@ -34,7 +34,7 @@ interface IntegrationDefaultConfig {
 
 const INTEGRATION_DEFAULTS: Record<string, IntegrationDefaultConfig> = {
   hubspot: {
-    displayName: "HubSpot CRM",
+    displayName: "HubSpot QRM",
     authType: "oauth2",
     syncFrequency: "manual",
   },

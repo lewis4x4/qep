@@ -1,6 +1,6 @@
 # Service job ↔ portal tracking — demo seed
 
-Use this when pods / environments have **no CRM or service data** but you need to validate the full staff drawer flow:
+Use this when pods / environments have **no QRM or service data** but you need to validate the full staff drawer flow:
 
 **Service Command Center → job drawer → Customer access + Portal request link + Parts fulfillment link**
 
@@ -26,7 +26,7 @@ bun ./scripts/demo/service-fulfillment-link-seed.mjs seed
 
 The script prints **fixed UUIDs**, seeds:
 
-- Portal customer + **CRM company + equipment** (so **Customer & machine** on the job are not empty)
+- Portal customer + **QRM company + equipment** (so **Customer & machine** on the job are not empty)
 - **Portal service request** bridged to the job (`portal_request_id` + `service_requests.service_job_id`)
 - Portal parts order + fulfillment run (still **unlinked** from the job until you link in the UI)
 
@@ -48,6 +48,6 @@ bun ./scripts/demo/service-fulfillment-link-seed.mjs reset
 6. Click **Link shop job to this run** — should succeed; `service-job-router` checks the run exists and `workspace_id` matches.
 7. **Unlink** (fulfillment) should clear `fulfillment_run_id` and append run events per router logic.
 
-## 4. Full CRM demo (optional)
+## 4. Full QRM demo (optional)
 
 For richer data (deals, contacts, etc.), use `bun run demo:seed` — it does **not** currently include this fulfillment-link bundle; use the script above for the specific UX path.
