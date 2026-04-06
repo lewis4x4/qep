@@ -53,7 +53,7 @@ export function AssetDetailPage() {
         <Card className="border-red-500/20 p-6 text-center">
           <p className="text-sm text-red-400">Failed to load asset.</p>
           <Button asChild variant="outline" size="sm" className="mt-3">
-            <Link to="/crm/companies">
+            <Link to="/qrm/companies">
               <ArrowLeft className="mr-1 h-3 w-3" /> Back
             </Link>
           </Button>
@@ -75,7 +75,7 @@ export function AssetDetailPage() {
       {/* Header */}
       <div>
         <Button asChild variant="ghost" size="sm" className="h-7 text-[11px] mb-2">
-          <Link to={company ? `/crm/companies/${company.id}` : "/crm/companies"}>
+          <Link to={company ? `/qrm/companies/${company.id}` : "/qrm/companies"}>
             <ArrowLeft className="mr-1 h-3 w-3" aria-hidden />
             Back
           </Link>
@@ -190,7 +190,7 @@ function DealTab({ data }: { data: Asset360Response }) {
   const d = data.open_deal;
   return (
     <Card className="p-4">
-      <Link to={`/crm/deals/${d.id}`} className="text-sm font-semibold text-foreground hover:text-qep-orange">
+      <Link to={`/qrm/deals/${d.id}`} className="text-sm font-semibold text-foreground hover:text-qep-orange">
         {d.name}
       </Link>
       {d.amount && (

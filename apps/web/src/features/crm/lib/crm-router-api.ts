@@ -75,14 +75,14 @@ async function requestRouter<T>(
 export async function searchCrm(query: string): Promise<CrmSearchItem[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim(), types: "contact,company" });
-  const payload = await requestRouter<{ results: CrmSearchItem[] }>(`/crm/search?${params.toString()}`);
+  const payload = await requestRouter<{ results: CrmSearchItem[] }>(`/qrm/search?${params.toString()}`);
   return payload.results;
 }
 
 export async function createCrmActivityViaRouter(
   input: CrmActivityCreateInput,
 ): Promise<CrmActivityItem> {
-  const payload = await requestRouter<{ activity: CrmActivityItem }>("/crm/activities", {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>("/qrm/activities", {
     method: "POST",
     body: input,
   });
@@ -93,7 +93,7 @@ export async function patchCrmActivityTaskViaRouter(
   activityId: string,
   input: CrmActivityTaskPatchInput,
 ): Promise<CrmActivityItem> {
-  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}`, {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/qrm/activities/${activityId}`, {
     method: "PATCH",
     body: input,
   });
@@ -104,7 +104,7 @@ export async function patchCrmActivityViaRouter(
   activityId: string,
   input: CrmActivityPatchInput,
 ): Promise<CrmActivityItem> {
-  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}`, {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/qrm/activities/${activityId}`, {
     method: "PATCH",
     body: input,
   });
@@ -115,7 +115,7 @@ export async function deliverCrmActivityViaRouter(
   activityId: string,
   updatedAt?: string,
 ): Promise<CrmActivityItem> {
-  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/crm/activities/${activityId}/deliver`, {
+  const payload = await requestRouter<{ activity: CrmActivityItem }>(`/qrm/activities/${activityId}/deliver`, {
     method: "POST",
     body: { sendNow: true, updatedAt },
   });
@@ -126,7 +126,7 @@ export async function patchCrmDealViaRouter(
   dealId: string,
   input: CrmDealPatchInput,
 ): Promise<CrmRepSafeDeal> {
-  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>(`/crm/deals/${dealId}`, {
+  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>(`/qrm/deals/${dealId}`, {
     method: "PATCH",
     body: input,
   });
@@ -136,7 +136,7 @@ export async function patchCrmDealViaRouter(
 export async function createCrmContactViaRouter(
   input: CrmContactUpsertInput,
 ): Promise<CrmContactSummary> {
-  const payload = await requestRouter<{ contact: CrmContactSummary }>("/crm/contacts", {
+  const payload = await requestRouter<{ contact: CrmContactSummary }>("/qrm/contacts", {
     method: "POST",
     body: input,
   });
@@ -147,7 +147,7 @@ export async function patchCrmContactViaRouter(
   contactId: string,
   input: Partial<CrmContactUpsertInput>,
 ): Promise<CrmContactSummary> {
-  const payload = await requestRouter<{ contact: CrmContactSummary }>(`/crm/contacts/${contactId}`, {
+  const payload = await requestRouter<{ contact: CrmContactSummary }>(`/qrm/contacts/${contactId}`, {
     method: "PATCH",
     body: input,
   });
@@ -157,7 +157,7 @@ export async function patchCrmContactViaRouter(
 export async function createCrmCompanyViaRouter(
   input: CrmCompanyUpsertInput,
 ): Promise<CrmCompanySummary> {
-  const payload = await requestRouter<{ company: CrmCompanySummary }>("/crm/companies", {
+  const payload = await requestRouter<{ company: CrmCompanySummary }>("/qrm/companies", {
     method: "POST",
     body: input,
   });
@@ -168,7 +168,7 @@ export async function patchCrmCompanyViaRouter(
   companyId: string,
   input: Partial<CrmCompanyUpsertInput>,
 ): Promise<CrmCompanySummary> {
-  const payload = await requestRouter<{ company: CrmCompanySummary }>(`/crm/companies/${companyId}`, {
+  const payload = await requestRouter<{ company: CrmCompanySummary }>(`/qrm/companies/${companyId}`, {
     method: "PATCH",
     body: input,
   });
@@ -178,7 +178,7 @@ export async function patchCrmCompanyViaRouter(
 export async function createCrmDealViaRouter(
   input: CrmDealCreateInput,
 ): Promise<CrmRepSafeDeal> {
-  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>("/crm/deals", {
+  const payload = await requestRouter<{ deal: CrmRepSafeDeal }>("/qrm/deals", {
     method: "POST",
     body: input,
   });
@@ -187,7 +187,7 @@ export async function createCrmDealViaRouter(
 
 export async function fetchCompanyHierarchy(companyId: string): Promise<CrmCompanyHierarchy | null> {
   try {
-    return await requestRouter<CrmCompanyHierarchy>(`/crm/companies/${companyId}/hierarchy`);
+    return await requestRouter<CrmCompanyHierarchy>(`/qrm/companies/${companyId}/hierarchy`);
   } catch (error) {
     if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
       return null;
@@ -202,7 +202,7 @@ export async function updateCompanyParent(
 ): Promise<{ id: string; parentCompanyId: string | null; updatedAt: string }> {
   const payload = await requestRouter<{
     company: { id: string; parentCompanyId: string | null; updatedAt: string };
-  }>(`/crm/companies/${companyId}/parent`, {
+  }>(`/qrm/companies/${companyId}/parent`, {
     method: "PATCH",
     body: { parentCompanyId },
   });
@@ -211,19 +211,19 @@ export async function updateCompanyParent(
 
 export async function fetchCompanyEquipment(companyId: string): Promise<CrmEquipment[]> {
   const params = new URLSearchParams({ company_id: companyId });
-  const payload = await requestRouter<{ items: CrmEquipment[] }>(`/crm/equipment?${params.toString()}`);
+  const payload = await requestRouter<{ items: CrmEquipment[] }>(`/qrm/equipment?${params.toString()}`);
   return payload.items;
 }
 
 /** Equipment on this company and all descendant companies (matches hierarchy roll-up). */
 export async function fetchCompanySubtreeEquipment(companyId: string): Promise<CrmEquipment[]> {
   const params = new URLSearchParams({ subtree_root: companyId });
-  const payload = await requestRouter<{ items: CrmEquipment[] }>(`/crm/equipment?${params.toString()}`);
+  const payload = await requestRouter<{ items: CrmEquipment[] }>(`/qrm/equipment?${params.toString()}`);
   return payload.items;
 }
 
 export async function createCompanyEquipment(input: Omit<Partial<CrmEquipment>, "id" | "createdAt" | "updatedAt" | "companyName"> & { companyId: string; name: string }): Promise<CrmEquipment> {
-  const payload = await requestRouter<{ equipment: CrmEquipment }>("/crm/equipment", {
+  const payload = await requestRouter<{ equipment: CrmEquipment }>("/qrm/equipment", {
     method: "POST",
     body: input,
   });
@@ -231,7 +231,7 @@ export async function createCompanyEquipment(input: Omit<Partial<CrmEquipment>, 
 }
 
 export async function getEquipmentById(equipmentId: string): Promise<CrmEquipment> {
-  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/crm/equipment/${equipmentId}`);
+  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/qrm/equipment/${equipmentId}`);
   return payload.equipment;
 }
 
@@ -239,7 +239,7 @@ export async function patchEquipment(
   equipmentId: string,
   input: Partial<CrmEquipment>,
 ): Promise<CrmEquipment> {
-  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/crm/equipment/${equipmentId}`, {
+  const payload = await requestRouter<{ equipment: CrmEquipment }>(`/qrm/equipment/${equipmentId}`, {
     method: "PATCH",
     body: input,
   });
@@ -248,7 +248,7 @@ export async function patchEquipment(
 
 export async function fetchDealEquipment(dealId: string): Promise<CrmDealEquipmentLink[]> {
   const params = new URLSearchParams({ deal_id: dealId });
-  const payload = await requestRouter<{ items: CrmDealEquipmentLink[] }>(`/crm/deal-equipment?${params.toString()}`);
+  const payload = await requestRouter<{ items: CrmDealEquipmentLink[] }>(`/qrm/deal-equipment?${params.toString()}`);
   return payload.items;
 }
 
@@ -258,7 +258,7 @@ export async function linkEquipmentToDeal(input: {
   role?: CrmDealEquipmentRole;
   notes?: string | null;
 }): Promise<CrmDealEquipmentLink> {
-  const payload = await requestRouter<{ link: CrmDealEquipmentLink }>("/crm/deal-equipment", {
+  const payload = await requestRouter<{ link: CrmDealEquipmentLink }>("/qrm/deal-equipment", {
     method: "POST",
     body: input,
   });
@@ -266,7 +266,7 @@ export async function linkEquipmentToDeal(input: {
 }
 
 export async function unlinkEquipmentFromDeal(linkId: string): Promise<void> {
-  await requestRouter<{ deleted: boolean }>(`/crm/deal-equipment/${linkId}`, {
+  await requestRouter<{ deleted: boolean }>(`/qrm/deal-equipment/${linkId}`, {
     method: "DELETE",
   });
 }
@@ -295,7 +295,7 @@ export async function listCustomFieldDefinitions(
     visibilityRoles: string[];
     sortOrder: number;
     constraints: Record<string, unknown>;
-  }> }>(`/crm/custom-field-definitions?${params.toString()}`);
+  }> }>(`/qrm/custom-field-definitions?${params.toString()}`);
   return payload.items;
 }
 
@@ -307,7 +307,7 @@ export async function createCustomFieldDefinition(input: {
   required: boolean;
   visibilityRoles: string[];
 }): Promise<void> {
-  await requestRouter<{ definition: unknown }>("/crm/custom-field-definitions", {
+  await requestRouter<{ definition: unknown }>("/qrm/custom-field-definitions", {
     method: "POST",
     body: input,
   });
@@ -318,7 +318,7 @@ export async function fetchRecordCustomFields(
   recordId: string,
 ): Promise<CrmCustomField[]> {
   const params = new URLSearchParams({ record_type: recordType, record_id: recordId });
-  const payload = await requestRouter<{ fields: CrmCustomField[] }>(`/crm/custom-fields?${params.toString()}`);
+  const payload = await requestRouter<{ fields: CrmCustomField[] }>(`/qrm/custom-fields?${params.toString()}`);
   return payload.fields;
 }
 
@@ -327,7 +327,7 @@ export async function saveRecordCustomFields(
   recordId: string,
   values: Record<string, unknown>,
 ): Promise<CrmCustomField[]> {
-  const payload = await requestRouter<{ fields: CrmCustomField[] }>("/crm/custom-fields", {
+  const payload = await requestRouter<{ fields: CrmCustomField[] }>("/qrm/custom-fields", {
     method: "PATCH",
     body: {
       recordType,
@@ -339,12 +339,12 @@ export async function saveRecordCustomFields(
 }
 
 export async function listDuplicateCandidates(): Promise<CrmDuplicateCandidate[]> {
-  const payload = await requestRouter<{ candidates: CrmDuplicateCandidate[] }>("/crm/duplicates");
+  const payload = await requestRouter<{ candidates: CrmDuplicateCandidate[] }>("/qrm/duplicates");
   return payload.candidates;
 }
 
 export async function dismissDuplicateCandidate(candidateId: string): Promise<void> {
-  await requestRouter<{ ok: boolean }>(`/crm/duplicates/${candidateId}/dismiss`, {
+  await requestRouter<{ ok: boolean }>(`/qrm/duplicates/${candidateId}/dismiss`, {
     method: "POST",
   });
 }
@@ -353,7 +353,7 @@ export async function mergeDuplicateContacts(input: {
   survivorId: string;
   loserId: string;
 }): Promise<void> {
-  await requestRouter<{ merge: unknown }>("/crm/merges", {
+  await requestRouter<{ merge: unknown }>("/qrm/merges", {
     method: "POST",
     idempotencyKey: crypto.randomUUID(),
     body: input,

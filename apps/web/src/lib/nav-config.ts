@@ -57,7 +57,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
   {
     label: "QRM",
-    href: "/crm",
+    href: "/qrm",
     icon: LayoutGrid,
     roles: ["rep", "admin", "manager", "owner"],
   },

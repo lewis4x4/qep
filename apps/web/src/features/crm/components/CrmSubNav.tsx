@@ -14,10 +14,10 @@ interface SubNavItem {
 }
 
 const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
-  { label: "Activities", href: "/crm/activities", icon: MessageCircleMore },
-  { label: "Deals", href: "/crm/deals", icon: LayoutGrid },
-  { label: "Contacts", href: "/crm/contacts", icon: UsersRound },
-  { label: "Companies", href: "/crm/companies", icon: Building2 },
+  { label: "Activities", href: "/qrm/activities", icon: MessageCircleMore },
+  { label: "Deals", href: "/qrm/deals", icon: LayoutGrid },
+  { label: "Contacts", href: "/qrm/contacts", icon: UsersRound },
+  { label: "Companies", href: "/qrm/companies", icon: Building2 },
 ];
 
 export function CrmSubNav() {

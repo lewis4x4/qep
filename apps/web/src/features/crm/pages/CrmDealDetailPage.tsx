@@ -153,7 +153,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   );
 
   if (!dealId) {
-    return <Navigate to="/crm/contacts" replace />;
+    return <Navigate to="/qrm/contacts" replace />;
   }
 
   async function handleSave(): Promise<void> {
@@ -207,7 +207,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <div className="flex items-center justify-between gap-3">
         <Link
-          to="/crm/deals"
+          to="/qrm/deals"
           className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -286,7 +286,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 <dt className="text-muted-foreground">Primary contact</dt>
                 <dd className="font-medium text-foreground">
                   {contactQueryData ? (
-                    <Link to={`/crm/contacts/${contactQueryData.id}`}>
+                    <Link to={`/qrm/contacts/${contactQueryData.id}`}>
                       {contactQueryData.firstName} {contactQueryData.lastName}
                     </Link>
                   ) : (
@@ -298,7 +298,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
                 <dt className="text-muted-foreground">Company</dt>
                 <dd className="font-medium text-foreground">
                   {companyQueryData ? (
-                    <Link to={`/crm/companies/${companyQueryData.id}`}>{companyQueryData.name}</Link>
+                    <Link to={`/qrm/companies/${companyQueryData.id}`}>{companyQueryData.name}</Link>
                   ) : (
                     "Not linked"
                   )}
@@ -388,7 +388,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
         open={editorOpen}
         onOpenChange={setEditorOpen}
         deal={dealQueryData}
-        onArchived={() => navigate("/crm/deals")}
+        onArchived={() => navigate("/qrm/deals")}
       />
     </div>
   );

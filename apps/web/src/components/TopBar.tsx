@@ -56,11 +56,11 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",
-  "/crm": "QRM",
-  "/crm/activities": "Activities",
-  "/crm/deals": "Deals",
-  "/crm/contacts": "Contacts",
-  "/crm/companies": "Companies",
+  "/qrm": "QRM",
+  "/qrm/activities": "Activities",
+  "/qrm/deals": "Deals",
+  "/qrm/contacts": "Contacts",
+  "/qrm/companies": "Companies",
   "/admin": "Admin",
   "/admin/sequences": "Sequences",
   "/admin/templates": "Templates",
@@ -73,11 +73,11 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote" },
-  "/crm": { label: "QRM Hub", route: "/crm" },
-  "/crm/activities": { label: "Activities", route: "/crm/activities" },
-  "/crm/deals": { label: "Deals", route: "/crm/deals" },
-  "/crm/contacts": { label: "Contacts", route: "/crm/contacts" },
-  "/crm/companies": { label: "Companies", route: "/crm/companies" },
+  "/qrm": { label: "QRM Hub", route: "/qrm" },
+  "/qrm/activities": { label: "Activities", route: "/qrm/activities" },
+  "/qrm/deals": { label: "Deals", route: "/qrm/deals" },
+  "/qrm/contacts": { label: "Contacts", route: "/qrm/contacts" },
+  "/qrm/companies": { label: "Companies", route: "/qrm/companies" },
   "/admin": null,
   "/admin/sequences": null,
   "/admin/templates": null,
@@ -212,7 +212,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
     markCrmNotificationRead,
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
-  const showCrmSearch = location.pathname.startsWith("/crm");
+  const showCrmSearch = location.pathname.startsWith("/qrm");
 
   const themeAriaLabel =
     preference === "system"
@@ -220,19 +220,19 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
       : `Theme: ${preference}`;
 
   const isCrmSubPage =
-    location.pathname.startsWith("/crm/") && location.pathname !== "/crm";
+    location.pathname.startsWith("/qrm/") && location.pathname !== "/qrm";
   const isAdminSubPage =
     location.pathname.startsWith("/admin/") && location.pathname !== "/admin";
   const breadcrumbLabel =
     BREADCRUMB_LABELS[location.pathname] ??
-    (location.pathname.startsWith("/crm/deals/") ? "Deal Detail" : undefined) ??
-    (location.pathname.startsWith("/crm/contacts/") ? "Contact Detail" : undefined) ??
-    (location.pathname.startsWith("/crm/companies/") ? "Company Detail" : undefined);
+    (location.pathname.startsWith("/qrm/deals/") ? "Deal Detail" : undefined) ??
+    (location.pathname.startsWith("/qrm/contacts/") ? "Contact Detail" : undefined) ??
+    (location.pathname.startsWith("/qrm/companies/") ? "Company Detail" : undefined);
   const quickAction =
     QUICK_ACTION_MAP[location.pathname] ??
-    (location.pathname.startsWith("/crm/deals/") ? { label: "Deals", route: "/crm/deals" } : null) ??
-    (location.pathname.startsWith("/crm/contacts/") ? { label: "Contacts", route: "/crm/contacts" } : null) ??
-    (location.pathname.startsWith("/crm/companies/") ? { label: "Companies", route: "/crm/companies" } : null);
+    (location.pathname.startsWith("/qrm/deals/") ? { label: "Deals", route: "/qrm/deals" } : null) ??
+    (location.pathname.startsWith("/qrm/contacts/") ? { label: "Contacts", route: "/qrm/contacts" } : null) ??
+    (location.pathname.startsWith("/qrm/companies/") ? { label: "Companies", route: "/qrm/companies" } : null);
 
   // Clear search on route change
   useEffect(() => {
@@ -290,7 +290,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
               {isCrmSubPage ? (
                 <>
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <Link to="/crm" className="text-[#8A9BAE] hover:text-white transition-colors">
+                  <Link to="/qrm" className="text-[#8A9BAE] hover:text-white transition-colors">
                     QRM
                   </Link>
                   <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
@@ -423,7 +423,7 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
                     onClick={() => {
                       if (!row.deal_id) return;
                       void markCrmNotificationRead(row.id);
-                      navigate(`/crm/deals/${row.deal_id}`);
+                      navigate(`/qrm/deals/${row.deal_id}`);
                     }}
                   >
                     <span className="text-sm font-medium text-foreground">{row.title}</span>

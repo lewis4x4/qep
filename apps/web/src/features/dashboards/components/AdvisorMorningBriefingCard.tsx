@@ -45,7 +45,7 @@ export function AdvisorMorningBriefingCard({ slaDeals, newLeads }: AdvisorMornin
               <ul className="space-y-1">
                 {slaDeals.slice(0, 4).map((d) => (
                   <li key={d.id}>
-                    <Link to={`/crm/deals/${d.id}`} className="text-sm text-foreground hover:text-qep-orange underline-offset-2 hover:underline">
+                    <Link to={`/qrm/deals/${d.id}`} className="text-sm text-foreground hover:text-qep-orange underline-offset-2 hover:underline">
                       {d.name}
                     </Link>
                   </li>
@@ -60,7 +60,7 @@ export function AdvisorMorningBriefingCard({ slaDeals, newLeads }: AdvisorMornin
               <ul className="space-y-1">
                 {newLeads.slice(0, 4).map((d) => (
                   <li key={d.id} className="flex items-center justify-between gap-2">
-                    <Link to={`/crm/deals/${d.id}`} className="text-sm text-foreground truncate hover:text-qep-orange underline-offset-2 hover:underline min-w-0">
+                    <Link to={`/qrm/deals/${d.id}`} className="text-sm text-foreground truncate hover:text-qep-orange underline-offset-2 hover:underline min-w-0">
                       {d.name}
                     </Link>
                   </li>
@@ -71,7 +71,7 @@ export function AdvisorMorningBriefingCard({ slaDeals, newLeads }: AdvisorMornin
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Link
-              to="/crm/pipeline"
+              to="/qrm/pipeline"
               className="text-xs font-medium text-qep-orange hover:underline"
             >
               Open my pipeline

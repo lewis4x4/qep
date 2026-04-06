@@ -420,7 +420,7 @@ function DealScoreBoard({ deals }: { deals: ScoredDeal[] }) {
         <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Brain className="h-4 w-4" aria-hidden />AI Deal Scores
         </h2>
-        <Link to="/crm/deals" className="text-xs text-muted-foreground hover:text-qep-orange transition-colors">View all</Link>
+        <Link to="/qrm/deals" className="text-xs text-muted-foreground hover:text-qep-orange transition-colors">View all</Link>
       </div>
       <div className="space-y-2">
         {deals.map((deal) => {
@@ -431,7 +431,7 @@ function DealScoreBoard({ deals }: { deals: ScoredDeal[] }) {
           const factorEntries = Object.entries(factors).sort(([, a], [, b]) => b - a).slice(0, 3);
 
           return (
-            <Link key={deal.id} to={`/crm/deals/${deal.id}`} className="block group">
+            <Link key={deal.id} to={`/qrm/deals/${deal.id}`} className="block group">
               <Card className="border-border bg-card px-4 py-3 transition-all duration-150 hover:shadow-md hover:border-white/20">
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
@@ -488,14 +488,14 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
         <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <TrendingUp className="h-4 w-4" aria-hidden />Deal Momentum
         </h2>
-        <Link to="/crm/deals" className="text-xs text-muted-foreground hover:text-qep-orange transition-colors">All deals</Link>
+        <Link to="/qrm/deals" className="text-xs text-muted-foreground hover:text-qep-orange transition-colors">All deals</Link>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {visibleDeals.map((deal) => {
           const heatCfg = HEAT_CONFIG[deal.heat];
           const HeatIcon = heatCfg.icon;
           return (
-            <Link key={deal.id} to={`/crm/deals/${deal.id}`} className="group">
+            <Link key={deal.id} to={`/qrm/deals/${deal.id}`} className="group">
               <Card className="h-full border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
                 <div className="flex items-start justify-between mb-2">
                   <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${heatCfg.bg} ${heatCfg.color}`}>
@@ -602,8 +602,8 @@ function QuickActionsBar() {
   const actions = [
     { label: "Record Voice", icon: Mic, path: "/voice", accent: "bg-qep-orange/10 text-qep-orange" },
     { label: "Ask AI", icon: MessageSquare, path: "/chat", accent: "bg-violet-500/10 text-violet-400" },
-    { label: "Scan Equipment", icon: Camera, path: "/crm", accent: "bg-blue-400/10 text-blue-400" },
-    { label: "View Pipeline", icon: TrendingUp, path: "/crm/deals", accent: "bg-emerald-500/10 text-emerald-400" },
+    { label: "Scan Equipment", icon: Camera, path: "/qrm", accent: "bg-blue-400/10 text-blue-400" },
+    { label: "View Pipeline", icon: TrendingUp, path: "/qrm/deals", accent: "bg-emerald-500/10 text-emerald-400" },
   ];
 
   return (
@@ -633,10 +633,10 @@ interface SectionCardDef {
 }
 
 const PRIMARY_SECTIONS: SectionCardDef[] = [
-  { label: "Activities", description: "Track calls, emails, tasks, and follow-ups.", href: "/crm/activities", icon: MessageCircleMore },
-  { label: "Deals", description: "View pipeline, stages, and weighted revenue.", href: "/crm/deals", icon: LayoutGrid },
-  { label: "Contacts", description: "Manage customer contacts and relationships.", href: "/crm/contacts", icon: UsersRound },
-  { label: "Companies", description: "Organize accounts and company records.", href: "/crm/companies", icon: Building2 },
+  { label: "Activities", description: "Track calls, emails, tasks, and follow-ups.", href: "/qrm/activities", icon: MessageCircleMore },
+  { label: "Deals", description: "View pipeline, stages, and weighted revenue.", href: "/qrm/deals", icon: LayoutGrid },
+  { label: "Contacts", description: "Manage customer contacts and relationships.", href: "/qrm/contacts", icon: UsersRound },
+  { label: "Companies", description: "Organize accounts and company records.", href: "/qrm/companies", icon: Building2 },
 ];
 
 
@@ -763,10 +763,10 @@ export function CrmHubPage({ userRole, userId }: CrmHubPageProps) {
 
       {/* ── Pipeline Stats ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Pipeline" value={formatCurrency(data.totalPipelineValue)} href="/crm/deals" icon={DollarSign} accent="text-qep-orange" />
-        <StatCard label="Open Deals" value={String(data.stats.openDeals)} href="/crm/deals" icon={BarChart3} accent="text-blue-400" />
-        <StatCard label="Avg AI Score" value={data.avgDealScore != null ? String(data.avgDealScore) : "—"} href="/crm/deals" icon={Brain} accent="text-violet-400" />
-        <StatCard label="Activity (7d)" value={String(data.stats.recentActivities)} href="/crm/activities" icon={Activity} accent="text-emerald-400" />
+        <StatCard label="Pipeline" value={formatCurrency(data.totalPipelineValue)} href="/qrm/deals" icon={DollarSign} accent="text-qep-orange" />
+        <StatCard label="Open Deals" value={String(data.stats.openDeals)} href="/qrm/deals" icon={BarChart3} accent="text-blue-400" />
+        <StatCard label="Avg AI Score" value={data.avgDealScore != null ? String(data.avgDealScore) : "—"} href="/qrm/deals" icon={Brain} accent="text-violet-400" />
+        <StatCard label="Activity (7d)" value={String(data.stats.recentActivities)} href="/qrm/activities" icon={Activity} accent="text-emerald-400" />
       </div>
 
       {/* ── Pipeline Health Bar ─────────────────────────────────── */}

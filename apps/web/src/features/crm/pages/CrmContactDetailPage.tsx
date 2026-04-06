@@ -157,7 +157,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
   }, [contactQuery.data]);
 
   if (!contactId) {
-    return <Navigate to="/crm/contacts" replace />;
+    return <Navigate to="/qrm/contacts" replace />;
   }
 
   const canResolveConflict = userRole === "admin" || userRole === "manager" || userRole === "owner";
@@ -167,7 +167,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <div className="flex items-center justify-between gap-3">
         <Link
-          to="/crm/contacts"
+          to="/qrm/contacts"
           className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -238,7 +238,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
               canResolve={canResolveConflict}
               onResolve={() => {
                 if (contactQuery.data?.primaryCompanyId) {
-                  navigate(`/crm/companies/${contactQuery.data.primaryCompanyId}`);
+                  navigate(`/qrm/companies/${contactQuery.data.primaryCompanyId}`);
                 }
               }}
             />
@@ -289,7 +289,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
                 {dealsQuery.data?.map((deal) => (
                   <li key={deal.id} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <Link to={`/crm/deals/${deal.id}`} className="font-medium text-foreground hover:text-primary">
+                      <Link to={`/qrm/deals/${deal.id}`} className="font-medium text-foreground hover:text-primary">
                         {deal.name}
                       </Link>
                       <div className="flex items-center gap-2">
@@ -372,7 +372,7 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
         open={editorOpen}
         onOpenChange={setEditorOpen}
         contact={contactQuery.data}
-        onArchived={() => navigate("/crm/contacts")}
+        onArchived={() => navigate("/qrm/contacts")}
       />
     </div>
   );

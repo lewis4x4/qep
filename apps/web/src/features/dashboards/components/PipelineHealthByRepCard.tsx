@@ -57,7 +57,7 @@ export function PipelineHealthByRepCard({ rows }: PipelineHealthByRepCardProps) 
                 </p>
               </div>
               {row.repKey !== "__unassigned__" && (
-                <Link to="/crm/pipeline" className="text-[10px] font-medium text-qep-orange hover:underline shrink-0">
+                <Link to="/qrm/pipeline" className="text-[10px] font-medium text-qep-orange hover:underline shrink-0">
                   Open pipeline
                 </Link>
               )}

@@ -181,7 +181,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
   }, [hierarchyEditorOpen, companyQuery.data?.id, companyQuery.data?.parentCompanyId]);
 
   if (!companyId) {
-    return <Navigate to="/crm/companies" replace />;
+    return <Navigate to="/qrm/companies" replace />;
   }
 
   const currentParentNode = useMemo(() => {
@@ -241,7 +241,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="outline" className="min-h-[44px] gap-2">
-          <Link to="/crm/companies">
+          <Link to="/qrm/companies">
             <ArrowLeft className="h-4 w-4" />
             Back to companies
           </Link>
@@ -527,7 +527,7 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
         open={editorOpen}
         onOpenChange={setEditorOpen}
         company={companyQuery.data}
-        onArchived={() => navigate("/crm/companies")}
+        onArchived={() => navigate("/qrm/companies")}
       />
     </div>
   );

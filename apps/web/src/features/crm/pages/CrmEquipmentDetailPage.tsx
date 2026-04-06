@@ -108,7 +108,7 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
     },
   });
 
-  if (!equipmentId) return <Navigate to="/crm/companies" replace />;
+  if (!equipmentId) return <Navigate to="/qrm/companies" replace />;
 
   if (equipmentQuery.isLoading) {
     return (
@@ -199,7 +199,7 @@ export function CrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
             {eq.companyId && (
               <InfoRow
                 label="Company"
-                value={<Link to={`/crm/companies/${eq.companyId}`} className="text-primary hover:underline">View company</Link>}
+                value={<Link to={`/qrm/companies/${eq.companyId}`} className="text-primary hover:underline">View company</Link>}
               />
             )}
           </div>

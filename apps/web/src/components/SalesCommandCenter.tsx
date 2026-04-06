@@ -489,7 +489,7 @@ function FollowUpItem({ deal }: { deal: EnrichedDeal }) {
   };
 
   return (
-    <Link to={`/crm/deals/${deal.id}`} className="block group">
+    <Link to={`/qrm/deals/${deal.id}`} className="block group">
       <div
         className={`flex items-center gap-3 rounded-lg border border-border/60 border-l-[3px] px-4 py-3 transition-all duration-150 hover:shadow-md hover:border-white/20 ${urgencyStyles[urgency]}`}
       >
@@ -642,7 +642,7 @@ function ActionQueueSection({
           Action Queue
         </h2>
         <Link
-          to="/crm/deals"
+          to="/qrm/deals"
           className="text-xs text-muted-foreground hover:text-qep-orange transition-colors"
         >
           View pipeline
@@ -699,7 +699,7 @@ function ActionQueueSection({
           ))}
           {remaining > 0 && (
             <Link
-              to="/crm/deals"
+              to="/qrm/deals"
               className="flex items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-qep-orange hover:border-qep-orange/30"
             >
               View {remaining} more in pipeline
@@ -740,7 +740,7 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
           Deal Momentum
         </h2>
         <Link
-          to="/crm/deals"
+          to="/qrm/deals"
           className="text-xs text-muted-foreground hover:text-qep-orange transition-colors"
         >
           All deals
@@ -753,7 +753,7 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
           return (
             <Link
               key={deal.id}
-              to={`/crm/deals/${deal.id}`}
+              to={`/qrm/deals/${deal.id}`}
               className="group"
             >
               <Card className="h-full border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
@@ -1263,7 +1263,7 @@ export function SalesCommandCenter({
           value={formatCurrency(data.totalPipelineValue)}
           subValue={`${formatCurrency(data.weightedPipelineValue)} weighted`}
           icon={DollarSign}
-          href="/crm/deals"
+          href="/qrm/deals"
           accent="orange"
         />
         <MetricCard
@@ -1275,7 +1275,7 @@ export function SalesCommandCenter({
               : undefined
           }
           icon={BarChart3}
-          href="/crm/deals"
+          href="/qrm/deals"
           accent="blue"
         />
         <MetricCard
@@ -1297,7 +1297,7 @@ export function SalesCommandCenter({
           label="Activity (7d)"
           value={String(data.activitiesThisWeek)}
           icon={Activity}
-          href="/crm/activities"
+          href="/qrm/activities"
           accent="green"
         />
       </div>

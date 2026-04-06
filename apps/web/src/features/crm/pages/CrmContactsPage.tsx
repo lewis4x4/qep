@@ -74,7 +74,7 @@ export function CrmContactsPage() {
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
-            <Link to="/crm/contacts">Clear company filter</Link>
+            <Link to="/qrm/contacts">Clear company filter</Link>
           </Button>
         </Card>
       )}
@@ -138,7 +138,7 @@ export function CrmContactsPage() {
             {contacts.map((contact) => (
               <Link
                 key={contact.id}
-                to={`/crm/contacts/${contact.id}`}
+                to={`/qrm/contacts/${contact.id}`}
                 className="block min-h-[44px] rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">
@@ -184,7 +184,7 @@ export function CrmContactsPage() {
       <CrmContactEditorSheet
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        onSaved={(contact) => navigate(`/crm/contacts/${contact.id}`)}
+        onSaved={(contact) => navigate(`/qrm/contacts/${contact.id}`)}
       />
     </div>
   );

@@ -293,6 +293,16 @@ interface IntegrationAvailabilityResponse {
   connected?: boolean;
 }
 
+/**
+ * Legacy /crm/* redirect helper. The product is QRM now; old bookmarks
+ * still work via this catch-all that rewrites the prefix.
+ */
+function LegacyCrmRedirect() {
+  const location = useLocation();
+  const next = `/qrm${location.pathname.slice(4)}${location.search}`;
+  return <Navigate to={next} replace />;
+}
+
 function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   return (
@@ -1213,7 +1223,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm"
+                path="/qrm"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} />
@@ -1222,8 +1232,11 @@ function App() {
                   )
                 }
               />
+              {/* Legacy /crm/* bookmark catch-all → /qrm/* */}
+              <Route path="/crm" element={<Navigate to="/qrm" replace />} />
+              <Route path="/crm/*" element={<LegacyCrmRedirect />} />
               <Route
-                path="/crm/activities"
+                path="/qrm/activities"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmActivitiesPage />
@@ -1233,15 +1246,15 @@ function App() {
                 }
               />
               <Route
-                path="/crm/templates"
+                path="/qrm/templates"
                 element={<Navigate to="/admin/templates" replace />}
               />
               <Route
-                path="/crm/sequences"
+                path="/qrm/sequences"
                 element={<Navigate to="/admin/sequences" replace />}
               />
               <Route
-                path="/crm/deals"
+                path="/qrm/deals"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmPipelinePage userRole={profile.role} />
@@ -1250,9 +1263,9 @@ function App() {
                   )
                 }
               />
-              <Route path="/crm/pipeline" element={<Navigate to="/crm/deals" replace />} />
+              <Route path="/qrm/pipeline" element={<Navigate to="/qrm/deals" replace />} />
               <Route
-                path="/crm/contacts"
+                path="/qrm/contacts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmContactsPage />
@@ -1262,7 +1275,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/contacts/:contactId"
+                path="/qrm/contacts/:contactId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmContactDetailPage userId={profile.id} userRole={profile.role} />
@@ -1272,7 +1285,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/deals/:dealId"
+                path="/qrm/deals/:dealId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmDealDetailPage userId={profile.id} userRole={profile.role} />
@@ -1282,7 +1295,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/companies"
+                path="/qrm/companies"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmCompaniesPage />
@@ -1292,7 +1305,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/companies/:companyId"
+                path="/qrm/companies/:companyId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
@@ -1302,7 +1315,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/equipment/:equipmentId"
+                path="/qrm/equipment/:equipmentId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmEquipmentDetailPage userId={profile.id} userRole={profile.role} />
@@ -1312,7 +1325,7 @@ function App() {
                 }
               />
               <Route
-                path="/crm/duplicates"
+                path="/qrm/duplicates"
                 element={<Navigate to="/admin/duplicates" replace />}
               />
               <Route
