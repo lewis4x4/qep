@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ExternalLink, Package, ShoppingCart, Truck } from "lucide-react";
+import { Cog, ExternalLink, Package, ShoppingCart, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -42,6 +42,14 @@ export function ServicePartsHubStrip({ jobId, fulfillmentRunId }: Props) {
           Fulfillment run
         </Link>
       ) : null}
+      <Link
+        to="/parts"
+        className={linkClass}
+        title="Standalone parts module"
+      >
+        <Cog className="h-3.5 w-3.5 text-primary" />
+        Parts module
+      </Link>
       <Link
         to={`/service?job=${encodeURIComponent(jobId)}`}
         className={cn(linkClass, "border-dashed text-muted-foreground")}

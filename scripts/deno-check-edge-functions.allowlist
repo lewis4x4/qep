@@ -32,6 +32,7 @@ supabase/functions/needs-assessment/index.ts
 supabase/functions/nudge-scheduler/index.ts
 supabase/functions/onedrive-oauth/index.ts
 supabase/functions/parts-order-customer-notify/index.ts
+supabase/functions/parts-order-manager/index.ts
 supabase/functions/pipeline-enforcer/index.ts
 supabase/functions/portal-api/index.ts
 supabase/functions/prep-sheet/index.ts

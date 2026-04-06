@@ -5789,10 +5789,62 @@ export type Database = {
         }
         Relationships: []
       }
+      parts_catalog: {
+        Row: {
+          category: string | null
+          cost_price: number | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          list_price: number | null
+          manufacturer: string | null
+          part_number: string
+          uom: string | null
+          updated_at: string
+          weight_lb: number | null
+          workspace_id: string
+        }
+        Insert: {
+          category?: string | null
+          cost_price?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          list_price?: number | null
+          manufacturer?: string | null
+          part_number: string
+          uom?: string | null
+          updated_at?: string
+          weight_lb?: number | null
+          workspace_id?: string
+        }
+        Update: {
+          category?: string | null
+          cost_price?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          list_price?: number | null
+          manufacturer?: string | null
+          part_number?: string
+          uom?: string | null
+          updated_at?: string
+          weight_lb?: number | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       parts_inventory: {
         Row: {
           bin_location: string | null
           branch_id: string
+          catalog_id: string | null
           created_at: string
           deleted_at: string | null
           id: string
@@ -5804,6 +5856,7 @@ export type Database = {
         Insert: {
           bin_location?: string | null
           branch_id: string
+          catalog_id?: string | null
           created_at?: string
           deleted_at?: string | null
           id?: string
@@ -5815,6 +5868,7 @@ export type Database = {
         Update: {
           bin_location?: string | null
           branch_id?: string
+          catalog_id?: string | null
           created_at?: string
           deleted_at?: string | null
           id?: string
@@ -5823,7 +5877,15 @@ export type Database = {
           updated_at?: string
           workspace_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parts_order_notification_sends: {
         Row: {
@@ -5860,17 +5922,81 @@ export type Database = {
           },
         ]
       }
+      parts_order_lines: {
+        Row: {
+          catalog_item_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          line_total: number | null
+          part_number: string
+          parts_order_id: string
+          quantity: number
+          sort_order: number
+          unit_price: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          catalog_item_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          line_total?: number | null
+          part_number: string
+          parts_order_id: string
+          quantity?: number
+          sort_order?: number
+          unit_price?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          catalog_item_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          line_total?: number | null
+          part_number?: string
+          parts_order_id?: string
+          quantity?: number
+          sort_order?: number
+          unit_price?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_parts_order_id_fkey"
+            columns: ["parts_order_id"]
+            isOneToOne: false
+            referencedRelation: "parts_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parts_orders: {
         Row: {
           ai_suggested_pm_kit: boolean | null
           ai_suggestion_reason: string | null
           created_at: string
+          created_by: string | null
+          crm_company_id: string | null
           estimated_delivery: string | null
           fleet_id: string | null
           fulfillment_run_id: string | null
           id: string
           line_items: Json
-          portal_customer_id: string
+          notes: string | null
+          order_source: string
+          portal_customer_id: string | null
           shipping: number | null
           shipping_address: Json | null
           status: string
@@ -5885,12 +6011,16 @@ export type Database = {
           ai_suggested_pm_kit?: boolean | null
           ai_suggestion_reason?: string | null
           created_at?: string
+          created_by?: string | null
+          crm_company_id?: string | null
           estimated_delivery?: string | null
           fleet_id?: string | null
           fulfillment_run_id?: string | null
           id?: string
           line_items?: Json
-          portal_customer_id: string
+          notes?: string | null
+          order_source?: string
+          portal_customer_id?: string | null
           shipping?: number | null
           shipping_address?: Json | null
           status?: string
@@ -5905,12 +6035,16 @@ export type Database = {
           ai_suggested_pm_kit?: boolean | null
           ai_suggestion_reason?: string | null
           created_at?: string
+          created_by?: string | null
+          crm_company_id?: string | null
           estimated_delivery?: string | null
           fleet_id?: string | null
           fulfillment_run_id?: string | null
           id?: string
           line_items?: Json
-          portal_customer_id?: string
+          notes?: string | null
+          order_source?: string
+          portal_customer_id?: string | null
           shipping?: number | null
           shipping_address?: Json | null
           status?: string
@@ -5922,6 +6056,20 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "parts_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_orders_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "parts_orders_fleet_id_fkey"
             columns: ["fleet_id"]

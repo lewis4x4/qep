@@ -173,3 +173,7 @@ verify_jwt = false
 # Email to portal customer when parts order ships (JWT validated in function).
 [functions.parts-order-customer-notify]
 verify_jwt = false
+
+# Internal/counter parts orders (JWT validated in function).
+[functions.parts-order-manager]
+verify_jwt = false

@@ -416,15 +416,25 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   "—"
                 )}
               </p>
-              <p className="text-xs">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 <Link
                   to="/service/portal-parts"
                   className="text-primary underline-offset-2 hover:underline"
                 >
                   Open portal parts orders
                 </Link>
-                <span className="text-muted-foreground"> — search by order id, email, or name.</span>
-              </p>
+                <Link
+                  to={
+                    job.fulfillment_run_id ?? job.fulfillment_run?.id
+                      ? `/parts/fulfillment/${job.fulfillment_run_id ?? job.fulfillment_run?.id}`
+                      : "/parts/orders"
+                  }
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  Open in Parts module
+                </Link>
+                <span className="text-muted-foreground">— search by order id, email, or name.</span>
+              </div>
               <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2">
                 <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
                   Find portal order (this workspace)

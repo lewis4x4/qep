@@ -106,6 +106,30 @@ const RentalLabShowcase = lazy(() =>
 const PartsLabShowcase = lazy(() =>
   import("./components/PartsLabShowcase").then((m) => ({ default: m.PartsLabShowcase }))
 );
+const PartsCommandCenterPage = lazy(() =>
+  import("./features/parts/pages/PartsCommandCenterPage").then((m) => ({
+    default: m.PartsCommandCenterPage,
+  }))
+);
+const PartsCatalogPage = lazy(() =>
+  import("./features/parts/pages/PartsCatalogPage").then((m) => ({ default: m.PartsCatalogPage }))
+);
+const PartsOrdersPage = lazy(() =>
+  import("./features/parts/pages/PartsOrdersPage").then((m) => ({ default: m.PartsOrdersPage }))
+);
+const NewPartsOrderPage = lazy(() =>
+  import("./features/parts/pages/NewPartsOrderPage").then((m) => ({ default: m.NewPartsOrderPage }))
+);
+const PartsOrderDetailPage = lazy(() =>
+  import("./features/parts/pages/PartsOrderDetailPage").then((m) => ({
+    default: m.PartsOrderDetailPage,
+  }))
+);
+const PartsFulfillmentPage = lazy(() =>
+  import("./features/parts/pages/PartsFulfillmentPage").then((m) => ({
+    default: m.PartsFulfillmentPage,
+  }))
+);
 const LogisticsShowcase = lazy(() =>
   import("./components/LogisticsShowcase").then((m) => ({ default: m.LogisticsShowcase }))
 );
@@ -769,10 +793,120 @@ function App() {
                 }
               />
               <Route
+                path="/parts/lab"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsLabShowcase />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/catalog"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsCatalogPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/orders/new"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <NewPartsOrderPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/orders/:id"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsOrderDetailPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/orders"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsOrdersPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/fulfillment/:runId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <FulfillmentRunDetailPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/fulfillment"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsFulfillmentPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/inventory"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsInventoryPage subNav="parts" />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/vendors"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <VendorProfilesPage subNav="parts" />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/parts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <PartsLabShowcase />
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsCommandCenterPage />
+                    </Suspense>
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

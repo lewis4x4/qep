@@ -157,6 +157,46 @@ mustContain(
   "/service/fulfillment/",
   "parts queue UI links to fulfillment audit",
 );
+mustContain(
+  "apps/web/src/features/parts/components/PartsSubNav.tsx",
+  "/parts/catalog",
+  "parts module sub-nav includes catalog",
+);
+mustContain(
+  "supabase/functions/parts-order-manager/index.ts",
+  "create_internal_order",
+  "parts-order-manager supports internal/counter orders",
+);
+mustContain(
+  "supabase/functions/parts-order-manager/index.ts",
+  "advance_status",
+  "parts-order-manager supports status transitions",
+);
+mustContain(
+  "supabase/functions/parts-order-manager/index.ts",
+  "pick_order_line",
+  "parts-order-manager supports inventory pick",
+);
+mustContain(
+  "apps/web/src/features/parts/components/CatalogSearchBar.tsx",
+  "onQueryChange",
+  "CatalogSearchBar extracted component",
+);
+mustContain(
+  "apps/web/src/features/parts/components/CounterSaleForm.tsx",
+  "invokeCreateInternalOrder",
+  "CounterSaleForm extracted component",
+);
+mustContain(
+  "apps/web/src/features/parts/components/VendorMetricsCard.tsx",
+  "vendor-metrics-summary",
+  "VendorMetricsCard on command center",
+);
+mustContain(
+  "apps/web/src/features/service/components/ServicePartsHubStrip.tsx",
+  "/parts",
+  "ServicePartsHubStrip cross-links to parts module",
+);
 
 const base = (
   process.env.SUPABASE_URL ||

@@ -93,7 +93,6 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     href: "/parts",
     icon: Cog,
     roles: ["rep", "admin", "manager", "owner"],
-    showcase: true,
   },
   {
     label: "Logistics",

@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
       status,
       tracking_number,
       estimated_delivery,
+      crm_company_id,
       portal_customers ( email, notification_preferences )
     `)
     .eq("id", orderId)
@@ -65,11 +66,28 @@ Deno.serve(async (req) => {
 
   type PortalCustRow = { email?: string; notification_preferences?: unknown };
   const cust = one(row.portal_customers as PortalCustRow | PortalCustRow[] | null) as PortalCustRow | null;
-  const email = typeof cust?.email === "string" ? cust.email.trim() : "";
+  let email = typeof cust?.email === "string" ? cust.email.trim() : "";
   const prefs = cust?.notification_preferences as { email?: boolean } | undefined;
-  if (prefs?.email === false) {
+  if (cust && prefs?.email === false) {
     return safeJsonOk({ ok: true, email: "skipped_preferences" }, origin);
   }
+
+  const crmCompanyId =
+    typeof row.crm_company_id === "string" ? row.crm_company_id.trim() : "";
+  if (!email.includes("@") && crmCompanyId) {
+    const { data: contacts } = await supabase
+      .from("crm_contacts")
+      .select("email, updated_at")
+      .eq("primary_company_id", crmCompanyId)
+      .not("email", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    const c = one(contacts);
+    if (c && typeof (c as { email?: string }).email === "string") {
+      email = String((c as { email: string }).email).trim();
+    }
+  }
+
   if (!email.includes("@")) {
     return safeJsonOk({ ok: true, email: "skipped_no_address" }, origin);
   }
@@ -84,7 +102,8 @@ Deno.serve(async (req) => {
     return safeJsonOk({ ok: true, email: "deduped_already_sent" }, origin);
   }
   if (dedupeErr) {
-    return safeJsonError(dedupeErr.message, 400, origin);
+    console.error("parts-order-customer-notify dedupe:", dedupeErr);
+    return safeJsonError("Could not record shipment notification", 400, origin);
   }
 
   const text =

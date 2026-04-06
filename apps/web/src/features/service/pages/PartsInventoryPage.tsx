@@ -3,16 +3,25 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { PartsSubNav } from "@/features/parts/components/PartsSubNav";
 
-export function PartsInventoryPage() {
+export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" | "parts" }) {
   const qc = useQueryClient();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
   const [branchId, setBranchId] = useState("");
   const [partNumber, setPartNumber] = useState("");
   const [qty, setQty] = useState("1");
   const [bin, setBin] = useState("");
 
-  const { data: rows = [], isLoading } = useQuery({
+  const {
+    data: rows = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["parts-inventory"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -34,9 +43,10 @@ export function PartsInventoryPage() {
       qty_on_hand: number;
       bin_location?: string | null;
     }) => {
+      if (!workspaceId) throw new Error("Workspace unavailable for inventory write.");
       const { error } = await supabase.from("parts_inventory").upsert(
         {
-          workspace_id: "default",
+          workspace_id: workspaceId,
           branch_id: payload.branch_id,
           part_number: payload.part_number.trim(),
           qty_on_hand: payload.qty_on_hand,
@@ -45,6 +55,25 @@ export function PartsInventoryPage() {
         },
         { onConflict: "workspace_id,branch_id,part_number" },
       );
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["parts-inventory"] }),
+  });
+
+  const autoLinkMut = useMutation({
+    mutationFn: async (invRow: { id: string; part_number: string }) => {
+      const { data: cat, error: catErr } = await supabase
+        .from("parts_catalog")
+        .select("id")
+        .eq("part_number", invRow.part_number)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (catErr) throw catErr;
+      if (!cat) throw new Error(`No catalog entry for ${invRow.part_number}`);
+      const { error } = await supabase
+        .from("parts_inventory")
+        .update({ catalog_id: cat.id })
+        .eq("id", invRow.id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["parts-inventory"] }),
@@ -76,7 +105,7 @@ export function PartsInventoryPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
-      <ServiceSubNav />
+      {subNav === "parts" ? <PartsSubNav /> : <ServiceSubNav />}
       <div>
         <h1 className="text-2xl font-semibold">Parts inventory</h1>
         <p className="text-sm text-muted-foreground">
@@ -148,10 +177,32 @@ export function PartsInventoryPage() {
         </div>
       </Card>
 
+      {workspaceQ.isError && (
+        <Card className="p-3 text-sm text-destructive border-destructive/40">
+          {(workspaceQ.error as Error)?.message ?? "Could not resolve your workspace."}
+        </Card>
+      )}
+
+      {upsert.isError && (
+        <Card className="p-3 text-sm text-destructive border-destructive/40">
+          {(upsert.error as Error)?.message ?? "Inventory save failed."}
+        </Card>
+      )}
+
+      {autoLinkMut.isError && (
+        <Card className="p-3 text-sm text-destructive border-destructive/40">
+          {(autoLinkMut.error as Error)?.message ?? "Auto-link failed."}
+        </Card>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : isError ? (
+        <Card className="p-3 text-sm text-destructive border-destructive/40">
+          {(error as Error)?.message ?? "Could not load inventory rows."}
+        </Card>
       ) : (
         <div className="overflow-x-auto rounded border text-xs">
           <table className="w-full border-collapse">
@@ -161,6 +212,7 @@ export function PartsInventoryPage() {
                 <th className="p-2">Part</th>
                 <th className="p-2">Qty</th>
                 <th className="p-2">Bin</th>
+                <th className="p-2">Catalog</th>
                 <th className="p-2">Updated</th>
               </tr>
             </thead>
@@ -171,6 +223,7 @@ export function PartsInventoryPage() {
                   <td className="p-2">{r.part_number}</td>
                   <td className="p-2">
                     <input
+                      key={`${r.id}-${r.qty_on_hand}`}
                       type="number"
                       min={0}
                       className="w-16 rounded border px-1 py-0.5 bg-background"
@@ -187,6 +240,24 @@ export function PartsInventoryPage() {
                     />
                   </td>
                   <td className="p-2">{r.bin_location ?? "—"}</td>
+                  <td className="p-2">
+                    {r.catalog_id ? (
+                      <span className="text-muted-foreground font-mono" title={r.catalog_id}>
+                        {r.catalog_id.slice(0, 8)}…
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-[10px] h-6 px-1.5"
+                        disabled={autoLinkMut.isPending}
+                        onClick={() => autoLinkMut.mutate({ id: r.id, part_number: r.part_number })}
+                      >
+                        Auto-link
+                      </Button>
+                    )}
+                  </td>
                   <td className="p-2 text-muted-foreground">
                     {r.updated_at?.slice(0, 16) ?? "—"}
                   </td>

@@ -16,15 +16,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const SUB_NAV_LINKS = [
-  { to: "/service/parts", label: "Parts Queue", icon: Package },
-  { to: "/service/portal-parts", label: "Portal Orders", icon: ShoppingCart },
-  { to: "/service/vendors", label: "Vendors", icon: Truck },
+  { to: "/service/parts", label: "Shop Parts", icon: Package },
+  { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
+  { to: "/parts/vendors", label: "Vendors", icon: Truck },
   { to: "/service/efficiency", label: "Efficiency", icon: BarChart3 },
 ] as const;
 
 const ADMIN_LINKS = [
   { to: "/service/branches", label: "Branches", icon: GitBranch },
-  { to: "/service/inventory", label: "Inventory", icon: Boxes },
+  { to: "/parts/inventory", label: "Inventory", icon: Boxes },
   { to: "/service/job-code-suggestions", label: "Job Codes", icon: Lightbulb },
   { to: "/service/scheduler-health", label: "Cron health", icon: Activity },
 ] as const;
@@ -85,7 +85,15 @@ export function ServiceSubNav() {
   const isAdmin = ["admin", "manager", "owner"].includes(profile?.role ?? "");
   const isCommandCenter = location.pathname === "/service";
 
-  const isActive = (to: string) => location.pathname === to;
+  const isActive = (to: string) => {
+    if (to === "/parts/orders") {
+      return (
+        location.pathname === "/parts/orders" ||
+        /^\/parts\/orders\//.test(location.pathname)
+      );
+    }
+    return location.pathname === to;
+  };
 
   return (
     <nav

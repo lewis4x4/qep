@@ -1,7 +1,8 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { PartsSubNav } from "@/features/parts/components/PartsSubNav";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,12 +24,14 @@ function inferAuditChannel(eventType: string, payload: unknown): AuditChannel {
     return "vendor";
   }
   if (eventType.includes("portal") || eventType === "portal_submitted") return "portal";
+  if (eventType === "internal_order_submitted") return "shop";
   return "shop";
 }
 
 function labelEventType(eventType: string): string {
   const map: Record<string, string> = {
     portal_submitted: "Portal order submitted",
+    internal_order_submitted: "Internal / counter order submitted",
     shop_vendor_inbound: "Vendor inbound (PO / dates)",
     shop_vendor_escalation_seeded: "Vendor escalation opened",
     shop_vendor_escalation_step: "Vendor escalation step",
@@ -73,6 +76,8 @@ function channelLabel(ch: AuditChannel): string {
 
 export function FulfillmentRunDetailPage() {
   const { runId = "" } = useParams<{ runId: string }>();
+  const location = useLocation();
+  const partsModule = location.pathname.startsWith("/parts/");
   const trimmed = runId.trim();
 
   const runQuery = useQuery({
@@ -121,15 +126,15 @@ export function FulfillmentRunDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
-      <ServiceSubNav />
+      {partsModule ? <PartsSubNav /> : <ServiceSubNav />}
       <main aria-labelledby="fulfillment-run-title" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          to="/service/parts"
+          to={partsModule ? "/parts/fulfillment" : "/service/parts"}
           className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Parts queue
+          {partsModule ? "Fulfillment list" : "Shop parts queue"}
         </Link>
       </div>
 
@@ -193,6 +198,10 @@ export function FulfillmentRunDetailPage() {
             <h2 className="text-sm font-medium mb-2">Linked service jobs</h2>
             {jobsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : jobsQuery.isError ? (
+              <p className="text-xs text-destructive" role="alert">
+                {(jobsQuery.error as Error)?.message ?? "Could not load linked jobs."}
+              </p>
             ) : (jobsQuery.data?.length ?? 0) === 0 ? (
               <p className="text-xs text-muted-foreground">No jobs linked to this run.</p>
             ) : (
@@ -237,6 +246,10 @@ export function FulfillmentRunDetailPage() {
             </p>
             {eventsQuery.isLoading ? (
               <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : eventsQuery.isError ? (
+              <p className="text-xs text-destructive" role="alert">
+                {(eventsQuery.error as Error)?.message ?? "Could not load fulfillment events."}
+              </p>
             ) : (eventsQuery.data?.length ?? 0) === 0 ? (
               <p className="text-xs text-muted-foreground">No events recorded yet.</p>
             ) : (

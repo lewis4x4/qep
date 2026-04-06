@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { PartsSubNav } from "@/features/parts/components/PartsSubNav";
 
 const SUPPLIER_TYPES = ["oem", "aftermarket", "general", "specialty", "internal"] as const;
 
@@ -31,7 +32,7 @@ type PolicyRow = {
   is_machine_down: boolean;
 };
 
-export function VendorProfilesPage() {
+export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" | "parts" }) {
   const { profile } = useAuth();
   const qc = useQueryClient();
   const canManage = ["admin", "manager", "owner"].includes(profile?.role ?? "");
@@ -146,7 +147,7 @@ export function VendorProfilesPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
-      <ServiceSubNav />
+      {subNav === "parts" ? <PartsSubNav /> : <ServiceSubNav />}
       <div>
         <h1 className="text-2xl font-semibold">Vendor profiles</h1>
         <p className="text-sm text-muted-foreground">
