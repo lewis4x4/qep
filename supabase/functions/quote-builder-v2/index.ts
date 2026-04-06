@@ -173,11 +173,12 @@ Deno.serve(async (req) => {
         return safeJsonError("job_description required", 400, origin);
       }
 
-      // Fetch available catalog
+      // Fetch available catalog — yard stock first (inventory-first logic)
       const { data: catalog } = await supabase
         .from("catalog_entries")
-        .select("make, model, year, category, list_price, attachments")
+        .select("id, make, model, year, category, list_price, dealer_cost, cost_to_qep, source_location, is_yard_stock, attachments")
         .eq("is_available", true)
+        .order("is_yard_stock", { ascending: false, nullsFirst: false })
         .limit(50);
 
       const recommendation = await aiEquipmentRecommendation(
@@ -186,6 +187,66 @@ Deno.serve(async (req) => {
       );
 
       return safeJsonOk({ recommendation }, origin);
+    }
+
+    // ── POST /inventory-first: Rank catalog entries yard-stock first ──────
+    // Rylee: "We would always prioritize quoting the inventory on hand
+    //        before we quote from the manufacturer."
+    if (action === "inventory-first") {
+      if (!body.make && !body.model && !body.category) {
+        return safeJsonError("Provide make, model, or category", 400, origin);
+      }
+
+      let query = supabase
+        .from("catalog_entries")
+        .select("id, make, model, year, category, list_price, dealer_cost, cost_to_qep, source_location, is_yard_stock, stock_number, acquired_at")
+        .eq("is_available", true);
+
+      if (body.make) query = query.ilike("make", body.make);
+      if (body.model) query = query.ilike("model", `%${body.model}%`);
+      if (body.category) query = query.eq("category", body.category);
+
+      // Yard stock first, then by age (oldest yard stock moves first)
+      const { data: results, error: searchErr } = await query
+        .order("is_yard_stock", { ascending: false, nullsFirst: false })
+        .order("acquired_at", { ascending: true, nullsFirst: false })
+        .limit(20);
+
+      if (searchErr) {
+        console.error("inventory-first search error:", searchErr);
+        return safeJsonError("Catalog search failed", 500, origin);
+      }
+
+      const rows = (results ?? []) as Array<Record<string, unknown>>;
+
+      // Compute margin for each entry (list_price - cost_to_qep)
+      const ranked: Array<Record<string, unknown>> = rows.map((row) => {
+        const listPrice = Number(row.list_price) || 0;
+        const costToQep = Number(row.cost_to_qep) || Number(row.dealer_cost) || 0;
+        const marginDollars = listPrice - costToQep;
+        const marginPct = listPrice > 0 ? (marginDollars / listPrice) * 100 : 0;
+        return {
+          ...row,
+          margin_dollars: Math.round(marginDollars * 100) / 100,
+          margin_pct: Math.round(marginPct * 100) / 100,
+          quote_priority: row.is_yard_stock ? "yard_stock_first" : "factory_order",
+        };
+      });
+
+      const yardCount = ranked.filter((r) => Boolean(r.is_yard_stock)).length;
+      const factoryCount = ranked.length - yardCount;
+
+      return safeJsonOk({
+        results: ranked,
+        summary: {
+          total: ranked.length,
+          yard_stock: yardCount,
+          factory_order: factoryCount,
+          recommendation: yardCount > 0
+            ? `Quote yard stock first (${yardCount} units available at better margin)`
+            : "No yard stock matching — quote from factory order",
+        },
+      }, origin);
     }
 
     // ── POST /calculate: Financing scenarios ─────────────────────────────

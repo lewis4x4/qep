@@ -197,7 +197,36 @@ Deno.serve(async (req) => {
       results.quotes_flagged = flagged?.length ?? 0;
     }
 
-    return safeJsonOk({ ok: true, results }, origin);
+    // ── Stratified impact report (sorted by dollar exposure) ──────────
+    // Uses the price_change_impact view from migration 155
+    const { data: impactRows } = await supabaseAdmin
+      .from("price_change_impact")
+      .select("*")
+      .order("price_delta_total", { ascending: false, nullsFirst: false });
+
+    const impactArr = (impactRows ?? []) as Array<Record<string, unknown>>;
+    const impactReport = {
+      total_line_items_affected: impactArr.length,
+      total_quotes_affected: new Set(impactArr.map((r) => r.quote_package_id)).size,
+      total_deals_affected: new Set(impactArr.map((r) => r.deal_id).filter(Boolean)).size,
+      total_dollar_exposure: Math.round(
+        impactArr.reduce((sum, r) => sum + (Number(r.price_delta_total) || 0), 0) * 100,
+      ) / 100,
+      top_10_by_dollar_impact: impactArr.slice(0, 10).map((r) => ({
+        quote_package_id: r.quote_package_id,
+        deal_id: r.deal_id,
+        make: r.make,
+        model: r.model,
+        price_delta_total: r.price_delta_total,
+        price_change_pct: r.price_change_pct,
+      })),
+    };
+
+    return safeJsonOk({
+      ok: true,
+      results,
+      impact_report: impactReport,
+    }, origin);
   } catch (err) {
     console.error("price-file-import error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
