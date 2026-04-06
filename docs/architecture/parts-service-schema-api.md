@@ -44,6 +44,7 @@ Job-scoped timeline (`event_type` e.g. `parts_action`); separate from fulfillmen
 | Parts CRUD / fulfillment | Edge | `service-parts-manager`: `add`, `pick`, `receive`, `stage`, `consume`, … |
 | Planning | Edge | `service-parts-planner`: `job_id` |
 | Vendor inbound / escalation | Edge | `service-vendor-inbound` (optional structured `vendor_contract`, idempotency headers/body, migration **131** keys on mirror rows), `service-vendor-escalator` (cron); mirror to run when `service_jobs.fulfillment_run_id` set |
+| Staff fulfillment audit UI | Web (staff JWT) | Route **`/service/fulfillment/:runId`** — links from portal parts orders detail, job drawer fulfillment bridge, parts work queue (`usePartsQueue` embeds `fulfillment_run_id`), command-center Parts hub strip |
 
 ## Permissions (summary)
 
