@@ -205,6 +205,26 @@ Deno.serve(async (req) => {
         return safeJsonOk({ completion }, origin, 201);
       }
 
+      // POST /executions/:id/skip-step — record an explicit skip (for compliance tracking)
+      if (req.method === "POST" && action === "skip-step") {
+        const body = await req.json();
+        if (!body.sop_step_id) return safeJsonError("sop_step_id required", 400, origin);
+
+        const { data: skip, error } = await supabase
+          .from("sop_step_skips")
+          .insert({
+            sop_execution_id: resourceId,
+            sop_step_id: body.sop_step_id,
+            skipped_by: user.id,
+            skip_reason: body.skip_reason || null,
+          })
+          .select()
+          .single();
+
+        if (error) return safeJsonError("Failed to record skip", 500, origin);
+        return safeJsonOk({ skip }, origin, 201);
+      }
+
       // POST /executions/:id/close
       if (req.method === "POST" && action === "close") {
         const body = await req.json();

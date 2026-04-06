@@ -97,6 +97,9 @@ const RentalReturnsPage = lazy(() =>
 const PaymentValidationPage = lazy(() =>
   import("./features/ops/pages/PaymentValidationPage").then((m) => ({ default: m.PaymentValidationPage }))
 );
+const SopComplianceDashboardPage = lazy(() =>
+  import("./features/ops/pages/SopComplianceDashboardPage").then((m) => ({ default: m.SopComplianceDashboardPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -792,6 +795,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <PaymentValidationPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/sop-compliance"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <SopComplianceDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

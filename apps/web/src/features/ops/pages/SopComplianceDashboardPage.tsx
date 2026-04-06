@@ -1,0 +1,176 @@
+import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase";
+import { AlertTriangle, CheckCircle, Clock, TrendingDown } from "lucide-react";
+
+interface StepAnalysis {
+  step_id: string;
+  sort_order: number;
+  step_title: string;
+  completions: number;
+  skips: number;
+  skip_rate_pct: number;
+}
+
+interface ComplianceRow {
+  template_id: string;
+  template_title: string;
+  department: string;
+  version: number;
+  total_executions: number;
+  completed_executions: number;
+  abandoned_executions: number;
+  blocked_executions: number;
+  completion_rate_pct: number | null;
+  avg_duration_minutes: number | null;
+  step_analysis: StepAnalysis[] | null;
+}
+
+export function SopComplianceDashboardPage() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["ops", "sop-compliance"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => { order: (c: string, o: Record<string, boolean>) => Promise<{ data: ComplianceRow[] | null; error: unknown }> };
+        };
+      })
+        .from("sop_compliance_summary")
+        .select("*")
+        .order("total_executions", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ComplianceRow[];
+    },
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 pb-24 pt-2 sm:px-6 lg:px-8 space-y-4">
+      <div>
+        <h1 className="text-xl font-bold text-foreground">SOP Compliance Dashboard</h1>
+        <p className="text-sm text-muted-foreground">Completion rates, skip analysis, bottleneck identification per SOP template.</p>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="h-32 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <Card className="border-red-500/20 p-4">
+          <p className="text-sm text-red-400">Failed to load compliance data.</p>
+        </Card>
+      )}
+
+      {data && data.length === 0 && (
+        <Card className="border-dashed p-6 text-center">
+          <p className="text-sm text-muted-foreground">No active SOP templates with execution history yet.</p>
+        </Card>
+      )}
+
+      {data && data.length > 0 && data.map((row) => {
+        const bottleneckStep = (row.step_analysis ?? [])
+          .slice()
+          .sort((a, b) => b.skip_rate_pct - a.skip_rate_pct)[0];
+
+        const completionRate = row.completion_rate_pct ?? 0;
+        const healthColor = completionRate >= 80 ? "text-emerald-400" : completionRate >= 50 ? "text-amber-400" : "text-red-400";
+
+        return (
+          <Card key={row.template_id} className="p-4 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground">{row.template_title}</h3>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {row.department} · v{row.version}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
+                  <div className="flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3 text-emerald-400" />
+                    <span className="text-muted-foreground">{row.completed_executions} completed</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <TrendingDown className="h-3 w-3 text-red-400" />
+                    <span className="text-muted-foreground">{row.abandoned_executions} abandoned</span>
+                  </div>
+                  {row.blocked_executions > 0 && (
+                    <div className="flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3 text-amber-400" />
+                      <span className="text-muted-foreground">{row.blocked_executions} blocked</span>
+                    </div>
+                  )}
+                  {row.avg_duration_minutes !== null && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        avg {Math.round(row.avg_duration_minutes)}m
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`text-2xl font-bold ${healthColor}`}>{completionRate.toFixed(0)}%</p>
+                <p className="text-[10px] text-muted-foreground">{row.total_executions} total runs</p>
+              </div>
+            </div>
+
+            {/* Bottleneck callout */}
+            {bottleneckStep && bottleneckStep.skip_rate_pct > 20 && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  Bottleneck: Step {bottleneckStep.sort_order}
+                </div>
+                <p className="mt-1 text-sm text-foreground">{bottleneckStep.step_title}</p>
+                <p className="mt-0.5 text-[11px] text-amber-300">
+                  Skipped {bottleneckStep.skip_rate_pct.toFixed(0)}% of the time ({bottleneckStep.skips} skips / {bottleneckStep.completions} completions)
+                </p>
+              </div>
+            )}
+
+            {/* Step analysis table */}
+            {row.step_analysis && row.step_analysis.length > 0 && (
+              <div className="overflow-hidden rounded-md border border-border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">#</th>
+                      <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Step</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Completed</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Skipped</th>
+                      <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Skip Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {row.step_analysis.map((step) => {
+                      const skipColor = step.skip_rate_pct >= 50 ? "text-red-400" :
+                                       step.skip_rate_pct >= 20 ? "text-amber-400" :
+                                       "text-muted-foreground";
+                      return (
+                        <tr key={step.step_id} className="border-t border-border/50">
+                          <td className="px-2 py-1.5 text-muted-foreground">{step.sort_order}</td>
+                          <td className="px-2 py-1.5 text-foreground">{step.step_title}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground">{step.completions}</td>
+                          <td className="px-2 py-1.5 text-right text-foreground">{step.skips}</td>
+                          <td className={`px-2 py-1.5 text-right font-semibold ${skipColor}`}>
+                            {step.skip_rate_pct.toFixed(0)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
