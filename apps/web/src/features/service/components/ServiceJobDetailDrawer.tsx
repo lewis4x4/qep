@@ -397,24 +397,21 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                 {job.fulfillment_run?.id ? (
                   <>
                     <span className="font-medium text-foreground">{job.fulfillment_run.status}</span>
-                    <span className="font-mono break-all"> · {job.fulfillment_run.id}</span>
+                    {" · "}
                     <Link
                       to={`/service/fulfillment/${job.fulfillment_run.id}`}
-                      className="ml-1 text-primary underline-offset-2 hover:underline text-[11px]"
+                      className="font-mono break-all text-primary underline-offset-2 hover:underline"
                     >
-                      Open run
+                      {job.fulfillment_run.id}
                     </Link>
                   </>
                 ) : job.fulfillment_run_id ? (
-                  <>
-                    <span className="font-mono break-all">{job.fulfillment_run_id}</span>
-                    <Link
-                      to={`/service/fulfillment/${job.fulfillment_run_id}`}
-                      className="ml-1 text-primary underline-offset-2 hover:underline text-[11px]"
-                    >
-                      Open run
-                    </Link>
-                  </>
+                  <Link
+                    to={`/service/fulfillment/${job.fulfillment_run_id}`}
+                    className="font-mono break-all text-primary underline-offset-2 hover:underline"
+                  >
+                    {job.fulfillment_run_id}
+                  </Link>
                 ) : (
                   "—"
                 )}
