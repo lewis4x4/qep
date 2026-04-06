@@ -130,6 +130,12 @@ const DgeCockpitPage = lazy(() =>
 const AssetDetailPage = lazy(() =>
   import("./features/equipment/pages/AssetDetailPage").then((m) => ({ default: m.AssetDetailPage }))
 );
+const ServiceDashboardPage = lazy(() =>
+  import("./features/service/pages/ServiceDashboardPage").then((m) => ({ default: m.ServiceDashboardPage }))
+);
+const FleetMapPage = lazy(() =>
+  import("./features/fleet/pages/FleetMapPage").then((m) => ({ default: m.FleetMapPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -935,6 +941,26 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <AssetDetailPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/dashboard"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/fleet"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <FleetMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
