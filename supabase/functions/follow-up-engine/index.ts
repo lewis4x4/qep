@@ -6,11 +6,13 @@
  * Zero tolerance for "just checking in."
  *
  * Pipeline:
- *   1. Query touchpoints where scheduled_date <= today AND status = 'pending'
- *   2. For each: load deal context (needs assessment, competitor mentions, equipment)
- *   3. Generate AI value-add content via OpenAI
- *   4. Create crm_in_app_notifications
- *   5. Mark overdue if past deadline
+ *   1. Query due touchpoints (join active cadences)
+ *   2. Batch-load deals, needs assessments, contacts (no N+1 on reads)
+ *   3. Per touchpoint: generate AI content (OpenAI)
+ *   4. Batch UPDATE touchpoints via batch_apply_follow_up_touchpoint_ai RPC
+ *   5. Bulk INSERT crm_in_app_notifications (one request)
+ *
+ * DB round-trips per run: 4 reads + 1 RPC + at most 1 insert (≤ 6, excluding auth).
  *
  * Auth: service_role (cron invocation)
  */
@@ -189,7 +191,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 3. Process touchpoints using pre-fetched data ────────────────────
+    // ── 3. Process touchpoints (AI per row) then batch DB writes (2 queries) ─
+    type TouchpointAiRow = {
+      id: string;
+      suggested_message: string;
+      content_generated_at: string;
+      content_context: Record<string, unknown>;
+      set_overdue: boolean;
+    };
+
+    const touchpointAiRows: TouchpointAiRow[] = [];
+    const notificationRows: Array<{
+      workspace_id: string;
+      user_id: string;
+      kind: string;
+      title: string;
+      body: string | null;
+      deal_id: string;
+      metadata: Record<string, unknown>;
+    }> = [];
+
     for (const tp of touchpoints) {
       try {
         results.touchpoints_processed++;
@@ -208,30 +229,25 @@ Deno.serve(async (req) => {
           current_issues: assessment?.current_equipment_issues,
         };
 
-        // Generate AI value-add content
         const suggestedMessage = await generateValueContent(tp, dealContext);
         results.content_generated++;
 
-        // Update touchpoint + mark overdue if past scheduled date
         const scheduledDate = new Date(tp.scheduled_date);
         const todayDate = new Date(today);
         const isOverdue = scheduledDate < todayDate;
 
-        await supabaseAdmin
-          .from("follow_up_touchpoints")
-          .update({
-            suggested_message: suggestedMessage,
-            content_generated_at: new Date().toISOString(),
-            content_context: dealContext,
-            ...(isOverdue ? { status: "overdue" as const } : {}),
-          })
-          .eq("id", tp.id);
+        touchpointAiRows.push({
+          id: tp.id,
+          suggested_message: suggestedMessage,
+          content_generated_at: new Date().toISOString(),
+          content_context: dealContext,
+          set_overdue: isOverdue,
+        });
 
         if (isOverdue) results.overdue_marked++;
 
-        // Create notification for assigned rep
         if (cadence.assigned_to) {
-          await supabaseAdmin.from("crm_in_app_notifications").insert({
+          notificationRows.push({
             workspace_id: cadence.workspace_id,
             user_id: cadence.assigned_to,
             kind: "follow_up_due",
@@ -245,12 +261,30 @@ Deno.serve(async (req) => {
               cadence_type: cadence.cadence_type,
             },
           });
-          results.notifications_created++;
         }
       } catch (tpError) {
         console.error(`Error processing touchpoint ${tp.id}:`, tpError);
         results.errors++;
       }
+    }
+
+    if (touchpointAiRows.length > 0) {
+      const { error: batchUpdateError } = await supabaseAdmin.rpc("batch_apply_follow_up_touchpoint_ai", {
+        p_rows: touchpointAiRows,
+      });
+      if (batchUpdateError) {
+        console.error("batch_apply_follow_up_touchpoint_ai error:", batchUpdateError);
+        return safeJsonError("Failed to persist touchpoint updates", 500, null);
+      }
+    }
+
+    if (notificationRows.length > 0) {
+      const { error: notifError } = await supabaseAdmin.from("crm_in_app_notifications").insert(notificationRows);
+      if (notifError) {
+        console.error("crm_in_app_notifications bulk insert error:", notifError);
+        return safeJsonError("Failed to create notifications", 500, null);
+      }
+      results.notifications_created = notificationRows.length;
     }
 
     return safeJsonOk({ ok: true, results }, null);
