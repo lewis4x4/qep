@@ -9,6 +9,17 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+/** Workspace for notifications — from profile_workspaces (migration 115), not profiles.workspace_id. */
+function primaryWorkspaceId(advisor: {
+  profile_workspaces?: { workspace_id: string }[] | null;
+}): string {
+  const rows = advisor.profile_workspaces;
+  if (Array.isArray(rows) && rows.length > 0 && rows[0]?.workspace_id) {
+    return rows[0].workspace_id;
+  }
+  return "default";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200 });
@@ -29,11 +40,15 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().split("T")[0];
     const results = { advisors_checked: 0, nudges_sent: 0 };
 
-    // Get all Iron Advisors with their workspace
-    const { data: advisors } = await supabaseAdmin
+    const { data: advisors, error: advisorsErr } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, workspace_id")
+      .select("id, full_name, profile_workspaces(workspace_id)")
       .eq("iron_role", "iron_advisor");
+
+    if (advisorsErr) {
+      console.error("nudge-scheduler advisors query:", advisorsErr.message);
+      return safeJsonError("Failed to load advisors", 500, null);
+    }
 
     if (!advisors || advisors.length === 0) {
       return safeJsonOk({ ok: true, message: "No Iron Advisors found", results }, null);
@@ -66,8 +81,8 @@ Deno.serve(async (req) => {
 
         if (!existingNudge) {
           const remaining = target - positiveVisits;
-          await supabaseAdmin.from("crm_in_app_notifications").insert({
-            workspace_id: advisor.workspace_id,
+          const { error: insertErr } = await supabaseAdmin.from("crm_in_app_notifications").insert({
+            workspace_id: primaryWorkspaceId(advisor),
             user_id: advisor.id,
             kind: "prospecting_nudge",
             title: "Prospecting Target Update",
@@ -79,7 +94,11 @@ Deno.serve(async (req) => {
               nudge_type: "2pm_check",
             },
           });
-          results.nudges_sent++;
+          if (insertErr) {
+            console.error("nudge-scheduler insert failed:", insertErr.message, "user", advisor.id);
+          } else {
+            results.nudges_sent++;
+          }
         }
       }
     }

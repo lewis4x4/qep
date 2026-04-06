@@ -242,13 +242,14 @@ export function PortalServicePage() {
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
 
       <div className="space-y-2">
-        {(data?.requests ?? []).map((req: {
-          id: string;
-          request_type: string;
-          description: string;
-          status: string;
-          internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
-        }) => {
+        {(data?.requests ?? []).map((raw) => {
+          const req = raw as {
+            id: string;
+            request_type: string;
+            description: string;
+            status: string;
+            internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
+          };
           const ij = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
           const shopStage = ij?.current_stage
             ? (JOB_STAGE_LABEL[ij.current_stage] ?? "In progress")
