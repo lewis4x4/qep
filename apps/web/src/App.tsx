@@ -136,6 +136,15 @@ const ServiceDashboardPage = lazy(() =>
 const FleetMapPage = lazy(() =>
   import("./features/fleet/pages/FleetMapPage").then((m) => ({ default: m.FleetMapPage }))
 );
+const DataQualityPage = lazy(() =>
+  import("./features/admin/pages/DataQualityPage").then((m) => ({ default: m.DataQualityPage }))
+);
+const ExceptionInboxPage = lazy(() =>
+  import("./features/admin/pages/ExceptionInboxPage").then((m) => ({ default: m.ExceptionInboxPage }))
+);
+const ExecCommandCenterPage = lazy(() =>
+  import("./features/admin/pages/ExecCommandCenterPage").then((m) => ({ default: m.ExecCommandCenterPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -961,6 +970,36 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <FleetMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/data-quality"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <DataQualityPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/exceptions"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ExceptionInboxPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/exec"
+                element={
+                  ["owner", "manager"].includes(profile.role) ? (
+                    <ExecCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
