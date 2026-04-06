@@ -22,6 +22,62 @@ import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
+/** Parsed GPT JSON; fields are optional at runtime. */
+interface VoiceQrmContact {
+  first_name?: string | null;
+  last_name?: string | null;
+  role?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}
+
+interface VoiceQrmCompany {
+  name?: string | null;
+  location?: string | null;
+}
+
+interface VoiceQrmNeedsAssessment {
+  application?: string | null;
+  terrain_material?: string | null;
+  machine_interest?: string | null;
+  attachments_needed?: string[] | null;
+  brand_preference?: string | null;
+  current_equipment?: string | null;
+  current_equipment_issues?: string | null;
+  timeline?: string | null;
+  timeline_urgency?: string | null;
+  budget_amount?: number | null;
+  budget_type?: string | null;
+  monthly_payment_target?: number | null;
+  financing_preference?: string | null;
+  trade_in?: boolean | null;
+  trade_in_details?: string | null;
+  decision_maker?: boolean | null;
+  decision_maker_name?: string | null;
+  next_step?: string | null;
+}
+
+interface VoiceQrmDeal {
+  next_step?: string | null;
+  stage_suggestion?: number | null;
+  estimated_value?: number | null;
+}
+
+interface VoiceQrmIntelligence {
+  competitor_mentions?: Array<{ brand?: string; context?: string }>;
+  sentiment?: string | null;
+  buying_intent?: string | null;
+}
+
+interface VoiceQrmExtraction {
+  contact?: VoiceQrmContact;
+  company?: VoiceQrmCompany;
+  needs_assessment?: VoiceQrmNeedsAssessment;
+  deal?: VoiceQrmDeal;
+  intelligence?: VoiceQrmIntelligence;
+  qrm_narrative?: string;
+}
+
 // Enhanced extraction schema per QEP-OS-Build-Roadmap-LLM.md lines 177-219
 const EXTRACTION_PROMPT_TEMPLATE = (transcript: string) => `You are a QRM (Quality Relationship Manager) data extraction assistant for QEP, a heavy equipment dealership.
 A sales rep (Iron Advisor) just recorded a field note about a customer interaction. Extract ALL available information.
@@ -230,9 +286,9 @@ Deno.serve(async (req) => {
       return safeJsonError("Extraction returned no content", 500, origin);
     }
 
-    let extracted: Record<string, unknown>;
+    let extracted: VoiceQrmExtraction;
     try {
-      extracted = JSON.parse(rawJson);
+      extracted = JSON.parse(rawJson) as VoiceQrmExtraction;
     } catch (parseErr) {
       console.error("voice-to-qrm JSON parse failed:", parseErr, "raw:", rawJson?.substring(0, 500));
       return safeJsonError("Data extraction returned malformed JSON", 422, origin);
