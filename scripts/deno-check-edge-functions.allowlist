@@ -12,4 +12,14 @@ supabase/functions/service-calendar-slots/index.ts
 supabase/functions/service-customer-notify-dispatch/index.ts
 supabase/functions/service-stage-enforcer/index.ts
 supabase/functions/service-tat-monitor/index.ts
+supabase/functions/parts-order-customer-notify/index.ts
+supabase/functions/service-completion-feedback/index.ts
+supabase/functions/service-invoice-generator/index.ts
+supabase/functions/service-jobcode-learner/index.ts
+supabase/functions/service-jobcode-suggestion-merge/index.ts
+supabase/functions/service-knowledge-capture/index.ts
+supabase/functions/service-notifications/index.ts
+supabase/functions/service-upsell-scanner/index.ts
+supabase/functions/service-vendor-escalator/index.ts
+supabase/functions/service-vendor-inbound/index.ts
 supabase/functions/portal-api/index.ts
