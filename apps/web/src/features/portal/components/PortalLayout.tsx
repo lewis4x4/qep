@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Boxes, FileText, Package, Receipt, Settings, Wrench } from "lucide-react";
+import { Boxes, BookOpen, FileText, Package, Receipt, Settings, Wrench } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/portal", icon: Boxes, label: "Fleet" },
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { to: "/portal/parts", icon: Package, label: "Parts" },
   { to: "/portal/invoices", icon: Receipt, label: "Invoices" },
   { to: "/portal/quotes", icon: FileText, label: "Quotes" },
+  { to: "/portal/documents", icon: BookOpen, label: "Documents" },
 ];
 
 export function PortalLayout({ children }: { children: React.ReactNode }) {
