@@ -14,6 +14,7 @@ import { NeedsAssessmentCard } from "../components/NeedsAssessmentCard";
 import { CadenceTimeline } from "../components/CadenceTimeline";
 import { DemoRequestCard } from "../components/DemoRequestCard";
 import { DgeScenarioPanel } from "../../dge/components/DgeScenarioPanel";
+import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -256,6 +257,14 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
       {dealQueryData && (
         <>
           <CrmPageHeader title={dealQueryData.name} subtitle="Deal detail, follow-up cadence, and close controls." />
+
+          <SopSuggestionWidget
+            entityType="deal"
+            entityId={dealQueryData.id}
+            stage={selectedStage?.name}
+            department="sales"
+            compact
+          />
 
           <Card className="p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
