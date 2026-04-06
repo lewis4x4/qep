@@ -7,6 +7,7 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
+import { sendVendorEscalationEmail } from "../_shared/vendor-escalation-resend.ts";
 
 type EscalationRow = {
   id: string;
@@ -25,31 +26,6 @@ function hoursFromStep(s: Record<string, unknown>): number {
 function stepAction(step: Record<string, unknown> | undefined): string {
   const a = step?.action ?? step?.type ?? step?.step_action;
   return typeof a === "string" && a.length > 0 ? a : "notify_advisor";
-}
-
-async function sendVendorEscalationEmail(opts: {
-  to: string;
-  subject: string;
-  text: string;
-}): Promise<boolean> {
-  const key = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("RESEND_FROM") ??
-    "QEP Service <onboarding@resend.dev>";
-  if (!key) return false;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [opts.to],
-      subject: opts.subject,
-      text: opts.text,
-    }),
-  });
-  return res.ok;
 }
 
 /** Create vendor_escalations for open order actions that are late or missing PO past grace. */

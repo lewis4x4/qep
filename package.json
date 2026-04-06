@@ -37,6 +37,7 @@
     "verify:service-cron-logging": "bun ./scripts/verify/service-cron-logging.mjs",
     "test:planner-rules": "bun test apps/web/src/features/service/lib/planner-rules.test.ts",
     "test:vendor-inbound-contract": "deno test supabase/functions/_shared/vendor-inbound-contract.test.ts",
-    "verify:service-slice": "bun run verify:parts-contracts && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:vendor-inbound-contract"
+    "test:vendor-escalation-resend": "deno test supabase/functions/_shared/vendor-escalation-resend.test.ts",
+    "verify:service-slice": "bun run verify:parts-contracts && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:vendor-inbound-contract && bun run test:vendor-escalation-resend"
   }
 }

@@ -6,7 +6,7 @@ This document tracks the Parts/Service engine against **observable behavior** (s
 |------|--------|----------|
 | Customer notifications | Proven (code + tests) | Recipient resolution: `supabase/functions/_shared/service-customer-recipient.ts`, `service-lifecycle-notify.ts`; dispatch skips null recipients: `service-customer-notify-dispatch/index.ts`. Tests: `supabase/functions/_shared/service-engine-smoke.test.ts` (partial — vendor policy). |
 | Vendor inbound | Proven (code + tests) | Strict mode when `ENV=production` or `VENDOR_INBOUND_WEBHOOK_SECRET` set; open-order match only when `ALLOW_VENDOR_INBOUND_OPEN_MATCH=true` and not strict: `service-vendor-inbound/index.ts`. Optional **`vendor_contract`** validation: `_shared/vendor-inbound-contract.ts`. Fulfillment dedupe: **`idempotency_key`** on `parts_fulfillment_events` (migration **131**). Tests: identifier gate in `service-engine-smoke.test.ts`; parser cases in `vendor-inbound-contract.test.ts` (via `bun run test:vendor-inbound-contract`). |
-| Vendor escalation email | Proven (code + static) | Resend when `RESEND_API_KEY` + contact email; else `vendor_escalation_logged`: `service-vendor-escalator/index.ts`. Static guard: `bun run pressure:parts` (Resend env + `api.resend.com`). |
+| Vendor escalation email | Proven (code + static + tests) | Resend when `RESEND_API_KEY` + contact email; else `vendor_escalation_logged`: `service-vendor-escalator/index.ts` → `_shared/vendor-escalation-resend.ts`. Static guard: `bun run pressure:parts`. Tests: `bun run test:vendor-escalation-resend`. |
 | TAT / SLA | Proven (migration + code) | Table `service_tat_targets` (migration **108**); `service-tat-monitor` loads DB then falls back to constants. Read-only UI: `ServiceBranchConfigPage`. |
 | Parts planner + inventory | Proven (migration + code) | `parts_inventory`, `planner_rules` on branch (migration **108**); stock-first unless `PLANNER_HEURISTIC_MODE=legacy`: `service-parts-planner/index.ts`. |
 | Job code learner governance | Proven (migration + code) | Suggestions table + merge function (migration **109**, `service-jobcode-learner`, `service-jobcode-suggestion-merge`). |
@@ -19,6 +19,7 @@ This document tracks the Parts/Service engine against **observable behavior** (s
 ```bash
 deno test supabase/functions/_shared/service-engine-smoke.test.ts
 deno test supabase/functions/_shared/vendor-inbound-contract.test.ts
+bun run test:vendor-escalation-resend
 ```
 
 (or `bun run test:vendor-inbound-contract` for the contract parser only)
@@ -36,7 +37,7 @@ deno test supabase/functions/_shared/vendor-inbound-contract.test.ts
 
 ## Gate
 
-Run `bun run segment:gates --segment "<id>"` per `AGENTS.md` after deployments; attach artifacts to the segment ticket. The orchestrator includes **`pressure:parts`**, **`bun run build`** (root + `apps/web`), and combined Deno tests (`service-engine-smoke` + `vendor-inbound-contract`), matching the **CI** workflow’s static checks plus full build.
+Run `bun run segment:gates --segment "<id>"` per `AGENTS.md` after deployments; attach artifacts to the segment ticket. The orchestrator includes **`pressure:parts`**, **`bun run build`** (root + `apps/web`), and combined Deno tests (`service-engine-smoke` + `vendor-inbound-contract` + `vendor-escalation-resend`), matching the **CI** workflow’s static checks plus full build.
 
 ## Stakeholder sign-off
 

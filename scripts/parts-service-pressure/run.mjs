@@ -133,14 +133,19 @@ mustContain(
   "escalator cron observability",
 );
 mustContain(
-  "supabase/functions/service-vendor-escalator/index.ts",
+  "supabase/functions/_shared/vendor-escalation-resend.ts",
   "RESEND_API_KEY",
   "vendor escalation email uses Resend when configured",
 );
 mustContain(
-  "supabase/functions/service-vendor-escalator/index.ts",
+  "supabase/functions/_shared/vendor-escalation-resend.ts",
   "api.resend.com",
   "vendor escalation email targets Resend API",
+);
+mustContain(
+  "supabase/functions/service-vendor-escalator/index.ts",
+  "vendor-escalation-resend",
+  "escalator delegates Resend to shared helper",
 );
 mustContain(
   "apps/web/src/features/service/hooks/usePartsQueue.ts",
