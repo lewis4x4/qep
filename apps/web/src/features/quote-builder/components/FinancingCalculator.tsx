@@ -40,6 +40,10 @@ export function FinancingCalculator({ totalAmount, marginPct }: FinancingCalcula
 
   const scenarios: Scenario[] = data?.scenarios ?? [];
   const marginCheck = data?.margin_check;
+  const incentives = data?.incentives as {
+    applicable?: Array<{ id: string; name: string; oem_name?: string; discount_type: string; discount_value: number; estimated_savings: number; end_date?: string }>;
+    total_savings?: number;
+  } | undefined;
 
   return (
     <div className="space-y-3">
@@ -47,6 +51,27 @@ export function FinancingCalculator({ totalAmount, marginPct }: FinancingCalcula
         <Card className="border-red-500/30 bg-red-500/5 p-4">
           <p className="text-sm font-semibold text-red-400">Margin Below 10%</p>
           <p className="mt-1 text-xs text-red-300">{marginCheck.message}</p>
+        </Card>
+      )}
+
+      {/* Auto-applied manufacturer incentives */}
+      {incentives && (incentives.applicable?.length ?? 0) > 0 && (
+        <Card className="border-qep-orange/30 bg-qep-orange/5 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold text-qep-orange">Active Incentives Applied</p>
+            <p className="text-sm font-bold text-qep-orange">-{formatCurrency(incentives.total_savings ?? 0)}</p>
+          </div>
+          <ul className="mt-2 space-y-1">
+            {(incentives.applicable ?? []).map((inc) => (
+              <li key={inc.id} className="flex justify-between text-xs">
+                <span className="text-foreground">
+                  {inc.name || inc.oem_name || "Incentive"}
+                  {inc.end_date && <span className="text-muted-foreground"> (exp {inc.end_date})</span>}
+                </span>
+                <span className="font-semibold text-emerald-400">-{formatCurrency(inc.estimated_savings)}</span>
+              </li>
+            ))}
+          </ul>
         </Card>
       )}
 

@@ -8,6 +8,7 @@ import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
+import { TaxBreakdown } from "../components/TaxBreakdown";
 import { saveQuotePackage } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
@@ -254,6 +255,16 @@ export function QuoteBuilderV2Page() {
             </div>
             {quoteBranch && <BranchDocumentFooter branchSlug={quoteBranch} />}
           </Card>
+
+          {/* Tax breakdown + Section 179 */}
+          {dealId && netTotal > 0 && (
+            <TaxBreakdown
+              dealId={dealId}
+              branchSlug={quoteBranch || undefined}
+              equipmentCost={netTotal}
+              enabled={true}
+            />
+          )}
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>

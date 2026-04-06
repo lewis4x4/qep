@@ -204,13 +204,64 @@ Deno.serve(async (req) => {
         (rates ?? []) as Array<{ term_months: number; apr: number; lender_name: string; loan_type: string }>,
       );
 
+      // ── Auto-apply manufacturer incentives ─────────────────────────────
+      // Filter by active date range + matching manufacturer/equipment
+      const today = new Date().toISOString().split("T")[0];
+      let incentivesQuery = supabase
+        .from("manufacturer_incentives")
+        .select("*")
+        .eq("is_active", true)
+        .or(`start_date.is.null,start_date.lte.${today}`)
+        .or(`end_date.is.null,end_date.gte.${today}`);
+
+      if (body.manufacturer) {
+        incentivesQuery = incentivesQuery.eq("oem_name", body.manufacturer);
+      }
+
+      const { data: incentives } = await incentivesQuery;
+      const applicableIncentives = (incentives ?? []).map((inc: Record<string, unknown>) => {
+        // Compute estimated savings per incentive
+        const discountValue = Number(inc.discount_value ?? 0);
+        const discountType = String(inc.discount_type ?? "");
+        let estimatedSavings = 0;
+
+        if (discountType === "percentage" || discountType === "percent") {
+          estimatedSavings = body.total_amount * (discountValue / 100);
+        } else if (discountType === "flat" || discountType === "cash") {
+          estimatedSavings = discountValue;
+        }
+
+        return {
+          id: inc.id,
+          oem_name: inc.oem_name,
+          name: inc.name || inc.incentive_name,
+          discount_type: discountType,
+          discount_value: discountValue,
+          estimated_savings: estimatedSavings,
+          end_date: inc.end_date,
+          stacking_rules: inc.stacking_rules,
+        };
+      });
+
+      const totalIncentiveSavings = applicableIncentives.reduce(
+        (sum: number, inc: { estimated_savings: number }) => sum + inc.estimated_savings,
+        0,
+      );
+
       // Margin check
       const marginPct = body.margin_pct ?? null;
       const marginStatus = marginPct !== null && marginPct < 10
         ? { flagged: true, message: "Margin below 10% — requires Iron Manager approval" }
         : { flagged: false, message: null };
 
-      return safeJsonOk({ scenarios, margin_check: marginStatus }, origin);
+      return safeJsonOk({
+        scenarios,
+        margin_check: marginStatus,
+        incentives: {
+          applicable: applicableIncentives,
+          total_savings: totalIncentiveSavings,
+        },
+      }, origin);
     }
 
     // ── POST /save: Save quote package ───────────────────────────────────

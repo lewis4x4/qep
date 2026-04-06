@@ -58,9 +58,33 @@ interface VoiceQrmNeedsAssessment {
 }
 
 interface VoiceQrmDeal {
+  description?: string | null;
   next_step?: string | null;
   stage_suggestion?: number | null;
   estimated_value?: number | null;
+  machine_interest?: string | null;
+  quantity?: number | null;
+}
+
+interface VoiceQrmEquipmentMention {
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  hours?: number | null;
+  mentioned_as?: "current_fleet" | "trade_in" | "competitor" | "interest" | null;
+  raw_mention?: string | null;
+}
+
+interface VoiceQrmBudgetTimeline {
+  cycle_month?: number | null; // 1-12 (e.g. "October" → 10)
+  fiscal_year_end_month?: number | null;
+  notes?: string | null;
+}
+
+interface VoiceQrmFutureTask {
+  title?: string | null;
+  description?: string | null;
+  scheduled_for?: string | null; // YYYY-MM-DD
 }
 
 interface VoiceQrmIntelligence {
@@ -74,6 +98,14 @@ interface VoiceQrmExtraction {
   company?: VoiceQrmCompany;
   needs_assessment?: VoiceQrmNeedsAssessment;
   deal?: VoiceQrmDeal;
+  /** Additional deals beyond the primary (multi-deal extraction) */
+  additional_deals?: VoiceQrmDeal[];
+  /** Equipment mentioned in voice (current fleet, trade-in, interest) */
+  equipment_mentions?: VoiceQrmEquipmentMention[];
+  /** Budget/fiscal timeline captured from conversation */
+  budget_timeline?: VoiceQrmBudgetTimeline;
+  /** Future-dated tasks extracted from voice (e.g., "call in August") */
+  future_tasks?: VoiceQrmFutureTask[];
   intelligence?: VoiceQrmIntelligence;
   qrm_narrative?: string;
   content_type?: string;
@@ -141,8 +173,46 @@ Return ONLY valid JSON:
   },
   "qrm_narrative": "string — professional first-person summary in the owner's format",
   "content_type": "sales | parts | service | process_improvement | general — classify the PRIMARY purpose of this voice note",
-  "follow_up_suggestions": ["string — 1-3 specific actionable follow-up steps based on the conversation"]
-}`;
+  "follow_up_suggestions": ["string — 1-3 specific actionable follow-up steps based on the conversation"],
+  "additional_deals": [
+    {
+      "description": "string — e.g. 'Second unit for crew 2'",
+      "machine_interest": "string — machine model",
+      "quantity": "number",
+      "estimated_value": "number or null",
+      "next_step": "quote | demo | credit_application | site_visit | follow_up | null",
+      "stage_suggestion": "number 1-21 or null"
+    }
+  ],
+  "equipment_mentions": [
+    {
+      "make": "string — manufacturer (e.g. 'Tigercat')",
+      "model": "string — model number (e.g. '620E')",
+      "year": "number or null",
+      "hours": "number or null",
+      "mentioned_as": "current_fleet | trade_in | competitor | interest",
+      "raw_mention": "string — short quote from transcript"
+    }
+  ],
+  "budget_timeline": {
+    "cycle_month": "number 1-12 — month when budget opens (e.g. 'budget opens October' → 10), null if not mentioned",
+    "fiscal_year_end_month": "number 1-12 — fiscal year end month, null if not mentioned",
+    "notes": "string — original language about budget timing"
+  },
+  "future_tasks": [
+    {
+      "title": "string — e.g. 'Call about Q4 budget'",
+      "description": "string",
+      "scheduled_for": "YYYY-MM-DD — specific date extracted from phrases like 'call in August' → pick a reasonable date"
+    }
+  ]
+}
+
+IMPORTANT:
+- If the rep mentions MULTIPLE equipment needs ("they need two units", "also want a second machine"), create ONE primary deal AND populate additional_deals.
+- Extract ALL equipment the rep mentions (current fleet, trade-ins, what they're interested in) into equipment_mentions.
+- If the rep says "budget opens October" or similar, extract cycle_month as 10.
+- If the rep says "call me in August" or "follow up in 3 months", compute an actual date for scheduled_for.`;
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -519,6 +589,134 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── 7b. Multi-deal extraction ──────────────────────────────────────────
+    const additionalDealIds: string[] = [];
+    if (Array.isArray(extracted.additional_deals) && extracted.additional_deals.length > 0) {
+      // Find a stage id for default sort_order = 3 (needs assessment)
+      const { data: fallbackStage } = await supabaseAdmin
+        .from("crm_deal_stages")
+        .select("id")
+        .eq("workspace_id", workspace)
+        .eq("sort_order", 3)
+        .maybeSingle();
+
+      for (const extraDeal of extracted.additional_deals) {
+        let extraStageId: string | null = fallbackStage?.id ?? null;
+        if (extraDeal.stage_suggestion) {
+          const { data: specificStage } = await supabaseAdmin
+            .from("crm_deal_stages")
+            .select("id")
+            .eq("workspace_id", workspace)
+            .eq("sort_order", extraDeal.stage_suggestion)
+            .maybeSingle();
+          if (specificStage) extraStageId = specificStage.id;
+        }
+
+        if (!extraStageId) continue;
+
+        const extraName = extraDeal.description
+          || (extracted.company?.name ? `${extracted.company.name} — ${extraDeal.machine_interest || "Additional Unit"}` : "Additional Opportunity");
+
+        const { data: extraDealRow, error: extraDealErr } = await supabaseAdmin
+          .from("crm_deals")
+          .insert({
+            workspace_id: workspace,
+            name: extraName,
+            stage_id: extraStageId,
+            primary_contact_id: contactId,
+            company_id: companyId,
+            assigned_rep_id: user.id,
+            amount: extraDeal.estimated_value || null,
+          })
+          .select("id")
+          .single();
+
+        if (extraDealErr) {
+          errors.push(`Additional deal creation failed: ${extraDealErr.message}`);
+        } else if (extraDealRow) {
+          additionalDealIds.push(extraDealRow.id);
+        }
+      }
+    }
+
+    // ── 7c. Equipment mentions: deferred until after voice_capture insert ──
+    // (See section 8b — needs voice_capture_id)
+    const extractedEquipmentIds: string[] = [];
+    const createdCrmEquipmentIds: string[] = [];
+
+    // ── 7d. Budget timeline capture ────────────────────────────────────────
+    let budgetCaptured = false;
+    if (extracted.budget_timeline && (extracted.budget_timeline.cycle_month || extracted.budget_timeline.fiscal_year_end_month)) {
+      if (companyId) {
+        // Upsert customer_profiles_extended with budget fields (matched by company_name)
+        const { data: existingProfile } = await supabaseAdmin
+          .from("customer_profiles_extended")
+          .select("id")
+          .eq("company_name", extracted.company?.name ?? "")
+          .maybeSingle();
+
+        if (existingProfile) {
+          await supabaseAdmin
+            .from("customer_profiles_extended")
+            .update({
+              budget_cycle_month: extracted.budget_timeline.cycle_month ?? undefined,
+              fiscal_year_end_month: extracted.budget_timeline.fiscal_year_end_month ?? undefined,
+              budget_cycle_notes: extracted.budget_timeline.notes ?? undefined,
+            })
+            .eq("id", existingProfile.id);
+          budgetCaptured = true;
+        } else if (extracted.company?.name) {
+          // Create new profile with budget timeline
+          await supabaseAdmin
+            .from("customer_profiles_extended")
+            .insert({
+              customer_name: extracted.company.name,
+              company_name: extracted.company.name,
+              budget_cycle_month: extracted.budget_timeline.cycle_month ?? null,
+              fiscal_year_end_month: extracted.budget_timeline.fiscal_year_end_month ?? null,
+              budget_cycle_notes: extracted.budget_timeline.notes ?? null,
+            });
+          budgetCaptured = true;
+        }
+      }
+    }
+
+    // ── 7e. Future-dated follow-up tasks ────────────────────────────────────
+    const scheduledFollowUpIds: string[] = [];
+    if (Array.isArray(extracted.future_tasks) && extracted.future_tasks.length > 0) {
+      for (const task of extracted.future_tasks) {
+        if (!task.title || !task.scheduled_for) continue;
+
+        // Validate date format
+        const taskDate = new Date(task.scheduled_for);
+        if (isNaN(taskDate.getTime())) continue;
+
+        const { data: futureTask, error: taskErr } = await supabaseAdmin
+          .from("scheduled_follow_ups")
+          .insert({
+            workspace_id: workspace,
+            assigned_to: user.id,
+            created_by: user.id,
+            deal_id: dealId,
+            contact_id: contactId,
+            company_id: companyId,
+            title: task.title,
+            description: task.description || null,
+            scheduled_for: task.scheduled_for,
+            source: "voice_extraction",
+            extraction_confidence: 0.8,
+          })
+          .select("id")
+          .single();
+
+        if (taskErr) {
+          errors.push(`Future task creation failed: ${taskErr.message}`);
+        } else if (futureTask) {
+          scheduledFollowUpIds.push(futureTask.id);
+        }
+      }
+    }
+
     // ── 8. Save voice capture record ───────────��──────────────────────────
     const { data: capture } = await supabaseAdmin
       .from("voice_captures")
@@ -533,6 +731,91 @@ Deno.serve(async (req) => {
       })
       .select("id")
       .single();
+
+    // ── 8b. Equipment mentions → crm_equipment + voice_extracted_equipment ──
+    // For current_fleet / trade_in mentions tied to a known company we create
+    // a first-class crm_equipment row so the machine becomes addressable
+    // throughout the dealership (parts, service, fleet view, deal linking).
+    // Every mention is also recorded in voice_extracted_equipment for audit.
+    if (capture && Array.isArray(extracted.equipment_mentions) && extracted.equipment_mentions.length > 0) {
+      for (const eq of extracted.equipment_mentions) {
+        if (!eq.make && !eq.model) continue;
+
+        let crmEquipmentId: string | null = null;
+        const shouldCreateCrmEquipment =
+          companyId &&
+          (eq.mentioned_as === "current_fleet" || eq.mentioned_as === "trade_in");
+
+        if (shouldCreateCrmEquipment) {
+          const equipmentName = [eq.year, eq.make, eq.model]
+            .filter((v) => v != null && v !== "")
+            .join(" ") || (eq.model || eq.make || "Equipment");
+
+          const { data: crmEqRow, error: crmEqErr } = await supabaseAdmin
+            .from("crm_equipment")
+            .insert({
+              workspace_id: workspace,
+              company_id: companyId,
+              primary_contact_id: contactId,
+              name: equipmentName,
+              make: eq.make || null,
+              model: eq.model || null,
+              year: eq.year || null,
+              engine_hours: eq.hours || null,
+              ownership: eq.mentioned_as === "trade_in" ? "customer_owned" : "customer_owned",
+              availability: "available",
+              metadata: {
+                source: "voice_extraction",
+                voice_capture_id: capture.id,
+                raw_mention: eq.raw_mention || null,
+              },
+            })
+            .select("id")
+            .single();
+
+          if (crmEqErr) {
+            errors.push(`crm_equipment insert failed: ${crmEqErr.message}`);
+          } else if (crmEqRow) {
+            crmEquipmentId = crmEqRow.id;
+            createdCrmEquipmentIds.push(crmEqRow.id);
+
+            // Link trade-in to the deal via crm_deal_equipment if applicable
+            if (eq.mentioned_as === "trade_in" && dealId) {
+              await supabaseAdmin.from("crm_deal_equipment").insert({
+                workspace_id: workspace,
+                deal_id: dealId,
+                equipment_id: crmEqRow.id,
+                role: "trade_in",
+              });
+            }
+          }
+        }
+
+        const { data: eqRow, error: eqErr } = await supabaseAdmin
+          .from("voice_extracted_equipment")
+          .insert({
+            workspace_id: workspace,
+            voice_capture_id: capture.id,
+            company_id: companyId,
+            crm_equipment_id: crmEquipmentId,
+            make: eq.make || null,
+            model: eq.model || null,
+            year: eq.year || null,
+            hours: eq.hours || null,
+            mentioned_as: eq.mentioned_as || "interest",
+            raw_mention: eq.raw_mention || null,
+            linked_deal_id: dealId,
+          })
+          .select("id")
+          .single();
+
+        if (eqErr) {
+          errors.push(`Equipment extraction failed: ${eqErr.message}`);
+        } else if (eqRow) {
+          extractedEquipmentIds.push(eqRow.id);
+        }
+      }
+    }
 
     // ── 9. Save QRM result audit trail ─────────────���──────────────────────
     const entityDuration = Date.now() - entityStart;
@@ -558,6 +841,10 @@ Deno.serve(async (req) => {
         needs_assessment_id: needsAssessmentId,
         cadence_id: cadenceId,
         qrm_narrative: extracted.qrm_narrative,
+        additional_deal_ids: additionalDealIds,
+        extracted_equipment_ids: extractedEquipmentIds,
+        scheduled_follow_up_ids: scheduledFollowUpIds,
+        budget_cycle_captured: budgetCaptured,
         sentiment_score: sentimentScore,
         content_type: extracted.content_type ?? "general",
         follow_up_suggestions: extracted.follow_up_suggestions ?? [],
@@ -592,13 +879,16 @@ Deno.serve(async (req) => {
             if (roleUsers) targetUsers.push(...roleUsers.map((u: { id: string }) => u.id));
           }
 
+          const snippet = extracted.qrm_narrative?.substring(0, 200) || "New voice capture routed to your department.";
+
+          // Notifications still fire for in-app visibility
           for (const uid of targetUsers) {
             await supabaseAdmin.from("crm_in_app_notifications").insert({
               workspace_id: workspace,
               user_id: uid,
               kind: "voice_routing",
               title: `Voice Note: ${contentType.replace(/_/g, " ")}`,
-              body: extracted.qrm_narrative?.substring(0, 200) || "New voice capture routed to your department.",
+              body: snippet,
               deal_id: dealId,
               metadata: {
                 voice_capture_id: capture.id,
@@ -606,6 +896,44 @@ Deno.serve(async (req) => {
                 sentiment_score: sentimentScore,
               },
             });
+          }
+
+          // ── Create actual downstream work (not just notifications) ────
+          // For non-sales content types, create a scheduled follow-up task
+          // assigned to the target user so it shows up in their task list.
+          const shouldCreateTask = ["parts", "service", "process_improvement"].includes(contentType);
+          if (shouldCreateTask && targetUsers.length > 0) {
+            const primaryAssignee = targetUsers[0];
+            const taskTitle = contentType === "parts"
+              ? `Parts request from voice capture`
+              : contentType === "service"
+                ? `Service issue from voice capture`
+                : `Process improvement idea from voice capture`;
+
+            const { data: routedTask, error: routedTaskErr } = await supabaseAdmin
+              .from("scheduled_follow_ups")
+              .insert({
+                workspace_id: workspace,
+                assigned_to: primaryAssignee,
+                created_by: user.id,
+                deal_id: dealId,
+                contact_id: contactId,
+                company_id: companyId,
+                voice_capture_id: capture.id,
+                title: taskTitle,
+                description: snippet,
+                scheduled_for: new Date().toISOString().split("T")[0],
+                source: "voice_extraction",
+                extraction_confidence: 0.9,
+              })
+              .select("id")
+              .single();
+
+            if (routedTaskErr) {
+              errors.push(`Routed task creation failed: ${routedTaskErr.message}`);
+            } else if (routedTask) {
+              scheduledFollowUpIds.push(routedTask.id);
+            }
           }
         }
       }
@@ -661,6 +989,14 @@ Deno.serve(async (req) => {
           completeness: na ? Object.values(na).filter(v => v != null && v !== false && !(Array.isArray(v) && v.length === 0)).length : 0,
         },
         cadence: { id: cadenceId },
+        additional_deals: { count: additionalDealIds.length, ids: additionalDealIds },
+        equipment: {
+          count: extractedEquipmentIds.length,
+          ids: extractedEquipmentIds,
+          crm_equipment_ids: createdCrmEquipmentIds,
+        },
+        scheduled_follow_ups: { count: scheduledFollowUpIds.length, ids: scheduledFollowUpIds },
+        budget_timeline_captured: budgetCaptured,
       },
       intelligence: extracted.intelligence,
       content_type: extracted.content_type ?? "general",

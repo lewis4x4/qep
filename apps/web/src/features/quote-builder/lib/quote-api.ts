@@ -28,11 +28,11 @@ export async function getAiEquipmentRecommendation(jobDescription: string) {
   return res.json();
 }
 
-export async function calculateFinancing(totalAmount: number, marginPct?: number) {
+export async function calculateFinancing(totalAmount: number, marginPct?: number, manufacturer?: string) {
   const res = await fetch(`${QUOTE_API_URL}/calculate`, {
     method: "POST",
     headers: await getAuthHeaders(),
-    body: JSON.stringify({ total_amount: totalAmount, margin_pct: marginPct }),
+    body: JSON.stringify({ total_amount: totalAmount, margin_pct: marginPct, manufacturer }),
   });
   if (!res.ok) throw new Error("Financing calculation failed");
   return res.json();
