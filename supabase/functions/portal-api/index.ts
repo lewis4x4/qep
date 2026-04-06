@@ -714,6 +714,43 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── /fleet-with-status — Live service job state per equipment ────
+    if (route === "fleet-with-status" && req.method === "GET") {
+      const { data, error } = await supabase.rpc("get_portal_fleet_with_status", {
+        p_portal_customer_id: portalCustomer.id,
+      });
+      if (error) return safeJsonError("Failed to load fleet with status", 500, origin);
+      return safeJsonOk({ fleet: data }, origin);
+    }
+
+    // ── /parts/reorder-history — Parts history by machine + one-click ─
+    if (route === "parts-history" && req.method === "GET") {
+      const { data, error } = await supabase.rpc("get_parts_reorder_history", {
+        p_portal_customer_id: portalCustomer.id,
+      });
+      if (error) return safeJsonError("Failed to load parts history", 500, origin);
+      return safeJsonOk({ history: data }, origin);
+    }
+
+    // ── /documents — Document library by fleet/serial ────────────────
+    if (route === "documents") {
+      if (req.method === "GET") {
+        const url2 = new URL(req.url);
+        const fleetId = url2.searchParams.get("fleet_id");
+        let query = supabase
+          .from("equipment_documents")
+          .select("*")
+          .eq("customer_visible", true)
+          .order("created_at", { ascending: false });
+
+        if (fleetId) query = query.eq("fleet_id", fleetId);
+
+        const { data, error } = await query;
+        if (error) return safeJsonError("Failed to load documents", 500, origin);
+        return safeJsonOk({ documents: data }, origin);
+      }
+    }
+
     // ── /fleet/:id/trade-interest — Toggle trade-in interest ────────
     if (route === "fleet" && req.method === "PUT") {
       const body = await req.json();
