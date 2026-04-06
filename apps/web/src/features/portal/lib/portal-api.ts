@@ -49,6 +49,17 @@ async function portalFetch<T extends Record<string, unknown> = Record<string, un
 
 export const portalApi = {
   getFleet: (): Promise<PortalFleetResponse> => portalFetch<PortalFleetResponse>("fleet"),
+  /** Wave 5D: fleet with LIVE service job state joined per equipment. */
+  getFleetWithStatus: (): Promise<{ fleet?: Record<string, unknown>[] }> =>
+    portalFetch<{ fleet?: Record<string, unknown>[] }>("fleet-with-status"),
+  /** Wave 5D: parts purchase history grouped by machine (one-click reorder source). */
+  getPartsHistory: (): Promise<{ history?: Record<string, unknown>[] }> =>
+    portalFetch<{ history?: Record<string, unknown>[] }>("parts-history"),
+  /** Wave 5D: document library filtered by fleet. */
+  getDocuments: (fleetId?: string): Promise<{ documents?: Record<string, unknown>[] }> => {
+    const qs = fleetId ? `?fleet_id=${encodeURIComponent(fleetId)}` : "";
+    return portalFetch<{ documents?: Record<string, unknown>[] }>(`documents${qs}`);
+  },
   getServiceRequests: (): Promise<PortalServiceRequestsResponse> =>
     portalFetch<PortalServiceRequestsResponse>("service-requests"),
   /** P1-D: customer-safe timeline for the internal job linked to this portal request. */
