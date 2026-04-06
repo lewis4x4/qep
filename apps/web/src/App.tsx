@@ -106,6 +106,9 @@ const DealTimingDashboardPage = lazy(() =>
 const VoiceQrmPage = lazy(() =>
   import("./features/voice-qrm/pages/VoiceQrmPage").then((m) => ({ default: m.VoiceQrmPage }))
 );
+const NervousSystemDashboardPage = lazy(() =>
+  import("./features/nervous-system/pages/NervousSystemDashboardPage").then((m) => ({ default: m.NervousSystemDashboardPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -831,6 +834,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <VoiceQrmPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/nervous-system"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <NervousSystemDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
