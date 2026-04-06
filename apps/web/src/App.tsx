@@ -103,6 +103,9 @@ const SopComplianceDashboardPage = lazy(() =>
 const DealTimingDashboardPage = lazy(() =>
   import("./features/deal-timing/pages/DealTimingDashboardPage").then((m) => ({ default: m.DealTimingDashboardPage }))
 );
+const VoiceQrmPage = lazy(() =>
+  import("./features/voice-qrm/pages/VoiceQrmPage").then((m) => ({ default: m.VoiceQrmPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -818,6 +821,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <DealTimingDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/voice-qrm"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VoiceQrmPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
