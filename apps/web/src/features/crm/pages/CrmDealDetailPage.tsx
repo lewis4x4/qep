@@ -15,6 +15,7 @@ import { CadenceTimeline } from "../components/CadenceTimeline";
 import { DemoRequestCard } from "../components/DemoRequestCard";
 import { DgeScenarioPanel } from "../../dge/components/DgeScenarioPanel";
 import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -256,7 +257,10 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
 
       {dealQueryData && (
         <>
-          <CrmPageHeader title={dealQueryData.name} subtitle="Deal detail, follow-up cadence, and close controls." />
+          <div className="flex items-start justify-between gap-3">
+            <CrmPageHeader title={dealQueryData.name} subtitle="Deal detail, follow-up cadence, and close controls." />
+            <AskIronAdvisorButton contextType="deal" contextId={dealId} variant="inline" />
+          </div>
 
           <SopSuggestionWidget
             entityType="deal"

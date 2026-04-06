@@ -13,6 +13,7 @@ import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
 import { CrmCompanySubtreeEquipmentSection } from "../components/CrmCompanySubtreeEquipmentSection";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -289,7 +290,10 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
 
       {companyQuery.data && (
         <>
-          <CrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
+          <div className="flex items-start justify-between gap-3">
+            <CrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
+            <AskIronAdvisorButton contextType="company" contextId={companyId} variant="inline" />
+          </div>
 
           <Card className="border-border bg-card p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">

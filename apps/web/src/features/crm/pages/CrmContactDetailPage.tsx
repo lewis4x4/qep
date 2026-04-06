@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, FileText, Link2, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmActivityComposer } from "../components/CrmActivityComposer";
@@ -205,10 +206,13 @@ export function CrmContactDetailPage({ userId, userRole }: CrmContactDetailPageP
 
       {contactQuery.data && (
         <>
-          <CrmPageHeader
-            title={`${contactQuery.data.firstName} ${contactQuery.data.lastName}`}
-            subtitle={contactQuery.data.title || "QRM Contact"}
-          />
+          <div className="flex items-start justify-between gap-3">
+            <CrmPageHeader
+              title={`${contactQuery.data.firstName} ${contactQuery.data.lastName}`}
+              subtitle={contactQuery.data.title || "QRM Contact"}
+            />
+            <AskIronAdvisorButton contextType="contact" contextId={contactId} variant="inline" />
+          </div>
 
           {contactQuery.data.dgeCustomerProfileId && (
             <Card className="p-3">
