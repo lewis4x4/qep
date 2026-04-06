@@ -3,41 +3,30 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
-import { PipelineDealTableRow } from "../components/PipelineDealTableRow";
+import { PipelineDealsTableView } from "../components/PipelineDealsTableView";
+import { PipelineFiltersBar } from "../components/PipelineFiltersBar";
+import { PipelineManagerSummary } from "../components/PipelineManagerSummary";
+import { PipelineQueryStatus } from "../components/PipelineQueryStatus";
 import { PipelineSwimLanesBoard } from "../components/PipelineSwimLanesBoard";
 import { listCrmDealStages, listCrmWeightedOpenDeals } from "../lib/crm-api";
 import {
-  formatMoney,
   updateDealNextFollowUp,
   fetchOpenDealsFirstPage,
   type OpenDealsFirstPageResult,
 } from "../lib/pipeline-utils";
 import { useOpenDealsHydration } from "../hooks/useOpenDealsHydration";
-import {
-  useCrmPipelineComputed,
-  type UrgencyFilter,
-} from "../hooks/useCrmPipelineComputed";
+import { useCrmPipelineComputed, type UrgencyFilter } from "../hooks/useCrmPipelineComputed";
 import { useCrmPipelineDragDrop } from "../hooks/useCrmPipelineDragDrop";
 
 interface CrmPipelinePageProps {
   userRole: UserRole;
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
-    </div>
-  );
-}
-
-export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
+export function CrmPipelinePage({ userRole }: CrmPipelinePageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
@@ -123,6 +112,9 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     });
   }
 
+  const showWeightedMetrics = isElevated && !weightedDealsQuery.isLoading;
+  const showStageDistribution = isElevated && stageSummary.length > 0;
+
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <CrmPageHeader
@@ -138,181 +130,41 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         </Button>
       </div>
 
-      {isElevated && !weightedDealsQuery.isLoading && (
-        <section
-          className="grid grid-cols-3 gap-3 rounded-xl border border-border bg-card p-4"
-          aria-label="Manager deal summary"
-        >
-          <Metric label="Open deals" value={String(weightedTotals.openDeals)} />
-          <Metric label="Pipeline amount" value={formatMoney(weightedTotals.pipelineAmount)} />
-          <Metric label="Weighted" value={formatMoney(weightedTotals.weightedPipeline)} />
-        </section>
-      )}
+      <PipelineManagerSummary
+        showWeightedMetrics={showWeightedMetrics}
+        showStageDistribution={showStageDistribution}
+        weightedTotals={weightedTotals}
+        stageSummary={stageSummary}
+      />
 
-      {isElevated && stageSummary.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">Stage distribution</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 text-left">Stage</th>
-                  <th className="px-4 py-2 text-right">Deals</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stageSummary.map((item) => (
-                  <tr key={item.stageId} className="border-t border-border">
-                    <td className="px-4 py-2 text-foreground">{item.stageName}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{item.count}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">{formatMoney(item.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      <PipelineFiltersBar
+        selectedStageId={selectedStageId}
+        onStageChange={setSelectedStageId}
+        stageOptions={stageOptions}
+        urgencyFilter={urgencyFilter}
+        onUrgencyChange={setUrgencyFilter}
+        urgencyCounts={urgencyEvaluation.counts}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
 
-      <Card className="p-3 sm:p-4">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div>
-            <label htmlFor="crm-stage-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Filter stage
-            </label>
-            <select
-              id="crm-stage-filter"
-              value={selectedStageId}
-              onChange={(event) => setSelectedStageId(event.target.value)}
-              className="h-11 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
-            >
-              <option value="all">All open stages</option>
-              {stageOptions.map((stage) => (
-                <option key={stage.id} value={stage.id}>
-                  {stage.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="crm-urgency-filter" className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Follow-up queue
-            </label>
-            <select
-              id="crm-urgency-filter"
-              value={urgencyFilter}
-              onChange={(event) => setUrgencyFilter(event.target.value as UrgencyFilter)}
-              className="h-11 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
-            >
-              <option value="all">All deals in stage ({urgencyEvaluation.counts.all})</option>
-              <option value="attention">Needs attention ({urgencyEvaluation.counts.attention})</option>
-              <option value="overdue_follow_up">Overdue follow-up ({urgencyEvaluation.counts.overdue_follow_up})</option>
-              <option value="no_follow_up">No follow-up scheduled ({urgencyEvaluation.counts.no_follow_up})</option>
-              <option value="stalled">Stalled activity ({urgencyEvaluation.counts.stalled})</option>
-              <option value="data_issues">Data issues ({urgencyEvaluation.counts.data_issues})</option>
-            </select>
-            <p className="mt-1 text-xs text-muted-foreground">Counts reflect the currently selected stage.</p>
-          </div>
-          <div>
-            <p className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">View</p>
-            <div className="flex rounded-md border border-input bg-card p-1">
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "board" ? "default" : "ghost"}
-                className="h-8 flex-1"
-                onClick={() => setViewMode("board")}
-              >
-                Board
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "table" ? "default" : "ghost"}
-                className="h-8 flex-1"
-                onClick={() => setViewMode("table")}
-              >
-                Table
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {isLoading && (
-        <div className="space-y-3" role="status" aria-label="Loading deals table">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-16 animate-pulse rounded-xl border border-border bg-card" />
-          ))}
-        </div>
-      )}
-
-      {hasError && !isLoading && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-muted-foreground">Unable to load deals right now. Refresh and try again.</p>
-        </Card>
-      )}
-
-      {!isLoading && !hasError && isHydratingRemainingDeals && (
-        <Card className="border-blue-200 bg-blue-50 p-4">
-          <p className="text-sm text-blue-900">Loading additional open deals in the background.</p>
-        </Card>
-      )}
-
-      {!isLoading && !hasError && dealHydrationWarning && (
-        <Card className="border-amber-200 bg-amber-50 p-4">
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-amber-900">{dealHydrationWarning}</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setHydrationAttempt((value) => value + 1)}>
-              Retry full load
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {!isLoading && !hasError && dealsQuery.data?.fromCache && (
-        <Card className="border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-amber-900">Showing a cached pipeline snapshot while live CRM data is unavailable.</p>
-        </Card>
-      )}
-
-      {!isLoading && !hasError && filteredDeals.length === 0 && (
-        <Card className="p-6 text-center">
-          <p className="text-sm text-muted-foreground">No open deals matched this filter.</p>
-        </Card>
-      )}
+      <PipelineQueryStatus
+        isLoading={isLoading}
+        hasError={hasError}
+        isHydratingRemainingDeals={isHydratingRemainingDeals}
+        dealHydrationWarning={dealHydrationWarning}
+        onRetryHydration={() => setHydrationAttempt((v) => v + 1)}
+        showCacheBanner={Boolean(dealsQuery.data?.fromCache)}
+        showEmptyFilter={!isLoading && !hasError && filteredDeals.length === 0}
+      />
 
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "table" && (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm" aria-label="QRM deals table">
-              <thead className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 text-left">Deal</th>
-                  <th className="px-4 py-2 text-left">Stage</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                  <th className="px-4 py-2 text-left">Target Close</th>
-                  <th className="px-4 py-2 text-left">Follow-up</th>
-                  <th className="px-4 py-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDeals.map((deal) => (
-                  <PipelineDealTableRow
-                    key={deal.id}
-                    deal={deal}
-                    stageName={stageNameById.get(deal.stageId) ?? "Unknown stage"}
-                    onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
-                    onSchedulePipelineRefresh={schedulePipelineRefresh}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <PipelineDealsTableView
+          deals={filteredDeals}
+          stageNameById={stageNameById}
+          onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+          onSchedulePipelineRefresh={schedulePipelineRefresh}
+        />
       )}
 
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "board" && (
@@ -334,5 +186,3 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     </div>
   );
 }
-
-export const CrmPipelinePage = CrmDealsPage;
