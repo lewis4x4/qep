@@ -124,6 +124,9 @@ const SopExecutionPage = lazy(() =>
 const EmailDraftInboxPage = lazy(() =>
   import("./features/email-drafts/pages/EmailDraftInboxPage").then((m) => ({ default: m.EmailDraftInboxPage }))
 );
+const DgeCockpitPage = lazy(() =>
+  import("./features/dge/pages/DgeCockpitPage").then((m) => ({ default: m.DgeCockpitPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -889,6 +892,10 @@ function App() {
               <Route
                 path="/email-drafts"
                 element={<EmailDraftInboxPage />}
+              />
+              <Route
+                path="/dge/cockpit"
+                element={<DgeCockpitPage userId={profile.id} />}
               />
               <Route
                 path="/rentals"
