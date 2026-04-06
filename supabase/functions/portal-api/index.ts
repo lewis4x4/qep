@@ -647,6 +647,92 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── /warranty-claims — Warranty claim submission ──────────────────
+    if (route === "warranty-claims") {
+      if (req.method === "GET") {
+        const { data, error } = await supabase
+          .from("portal_warranty_claims")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) return safeJsonError("Failed to load warranty claims", 500, origin);
+        return safeJsonOk({ claims: data }, origin);
+      }
+
+      if (req.method === "POST") {
+        const body = await req.json();
+        if (!body.claim_type || !body.description) {
+          return safeJsonError("claim_type and description required", 400, origin);
+        }
+
+        const validTypes = ["manufacturer_defect", "premature_failure", "warranty_repair", "recall", "other"];
+        if (!validTypes.includes(body.claim_type)) {
+          return safeJsonError(`claim_type must be one of: ${validTypes.join(", ")}`, 400, origin);
+        }
+
+        const safeBody = {
+          portal_customer_id: portalCustomer.id,
+          fleet_id: body.fleet_id || null,
+          claim_type: body.claim_type,
+          description: body.description,
+          photos: Array.isArray(body.photos) ? body.photos : [],
+        };
+
+        const { data, error } = await supabase
+          .from("portal_warranty_claims")
+          .insert(safeBody)
+          .select()
+          .single();
+
+        if (error) return safeJsonError("Failed to submit warranty claim", 500, origin);
+
+        // Notify internal staff
+        const supabaseAdmin = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const { data: serviceStaff } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .in("iron_role", ["iron_woman", "iron_man"])
+          .limit(5);
+
+        if (serviceStaff) {
+          for (const staff of serviceStaff) {
+            await supabaseAdmin.from("crm_in_app_notifications").insert({
+              workspace_id: "default",
+              user_id: staff.id,
+              kind: "warranty_claim",
+              title: "New Warranty Claim",
+              body: `${body.claim_type.replace(/_/g, " ")} claim submitted: ${body.description.substring(0, 100)}`,
+              metadata: { claim_id: data.id, portal_customer_id: portalCustomer.id },
+            });
+          }
+        }
+
+        return safeJsonOk({ claim: data }, origin, 201);
+      }
+    }
+
+    // ── /fleet/:id/trade-interest — Toggle trade-in interest ────────
+    if (route === "fleet" && req.method === "PUT") {
+      const body = await req.json();
+      if (!body.fleet_id) return safeJsonError("fleet_id required", 400, origin);
+
+      const { data, error } = await supabase
+        .from("customer_fleet")
+        .update({
+          trade_in_interest: body.trade_in_interest ?? false,
+          trade_in_notes: body.trade_in_notes ?? null,
+        })
+        .eq("id", body.fleet_id)
+        .select()
+        .single();
+
+      if (error) return safeJsonError("Failed to update trade-in interest", 500, origin);
+      return safeJsonOk({ fleet_item: data }, origin);
+    }
+
     return safeJsonError("Not found", 404, origin);
   } catch (err) {
     console.error("portal-api error:", err);

@@ -76,6 +76,8 @@ interface VoiceQrmExtraction {
   deal?: VoiceQrmDeal;
   intelligence?: VoiceQrmIntelligence;
   qrm_narrative?: string;
+  content_type?: string;
+  follow_up_suggestions?: string[];
 }
 
 // Enhanced extraction schema per QEP-OS-Build-Roadmap-LLM.md lines 177-219
@@ -137,7 +139,9 @@ Return ONLY valid JSON:
     "sentiment": "positive | neutral | negative",
     "buying_intent": "high | medium | low"
   },
-  "qrm_narrative": "string — professional first-person summary in the owner's format"
+  "qrm_narrative": "string — professional first-person summary in the owner's format",
+  "content_type": "sales | parts | service | process_improvement | general — classify the PRIMARY purpose of this voice note",
+  "follow_up_suggestions": ["string — 1-3 specific actionable follow-up steps based on the conversation"]
 }`;
 
 Deno.serve(async (req) => {
@@ -534,7 +538,12 @@ Deno.serve(async (req) => {
     const entityDuration = Date.now() - entityStart;
     const totalDuration = Date.now() - pipelineStart;
 
+    // Map sentiment to numeric score (used in result + response)
+    const sentimentMap: Record<string, number> = { positive: 0.8, neutral: 0.5, negative: 0.2 };
+
     if (capture) {
+      const sentimentScore = sentimentMap[extracted.intelligence?.sentiment ?? ""] ?? null;
+
       await supabaseAdmin.from("voice_qrm_results").insert({
         workspace_id: workspace,
         voice_capture_id: capture.id,
@@ -549,11 +558,57 @@ Deno.serve(async (req) => {
         needs_assessment_id: needsAssessmentId,
         cadence_id: cadenceId,
         qrm_narrative: extracted.qrm_narrative,
+        sentiment_score: sentimentScore,
+        content_type: extracted.content_type ?? "general",
+        follow_up_suggestions: extracted.follow_up_suggestions ?? [],
         extraction_duration_ms: extractionDuration,
         entity_creation_duration_ms: entityDuration,
         total_duration_ms: totalDuration,
         errors: errors.length > 0 ? errors : [],
       });
+
+      // Smart routing: notify appropriate department based on content type
+      const contentType = extracted.content_type ?? "general";
+      if (contentType !== "general") {
+        const { data: routingRule } = await supabaseAdmin
+          .from("voice_routing_rules")
+          .select("route_to_role, route_to_user_id")
+          .eq("workspace_id", workspace)
+          .eq("content_type", contentType)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (routingRule) {
+          // Find users matching the target role
+          const targetUsers: string[] = [];
+          if (routingRule.route_to_user_id) {
+            targetUsers.push(routingRule.route_to_user_id);
+          } else if (routingRule.route_to_role) {
+            const { data: roleUsers } = await supabaseAdmin
+              .from("profiles")
+              .select("id")
+              .eq("iron_role", routingRule.route_to_role)
+              .limit(5);
+            if (roleUsers) targetUsers.push(...roleUsers.map((u: { id: string }) => u.id));
+          }
+
+          for (const uid of targetUsers) {
+            await supabaseAdmin.from("crm_in_app_notifications").insert({
+              workspace_id: workspace,
+              user_id: uid,
+              kind: "voice_routing",
+              title: `Voice Note: ${contentType.replace(/_/g, " ")}`,
+              body: extracted.qrm_narrative?.substring(0, 200) || "New voice capture routed to your department.",
+              deal_id: dealId,
+              metadata: {
+                voice_capture_id: capture.id,
+                content_type: contentType,
+                sentiment_score: sentimentScore,
+              },
+            });
+          }
+        }
+      }
     }
 
     // ── 10. Create CRM activity note ──────────────────────────────────────
@@ -608,6 +663,9 @@ Deno.serve(async (req) => {
         cadence: { id: cadenceId },
       },
       intelligence: extracted.intelligence,
+      content_type: extracted.content_type ?? "general",
+      follow_up_suggestions: extracted.follow_up_suggestions ?? [],
+      sentiment_score: sentimentMap[extracted.intelligence?.sentiment ?? ""] ?? null,
       voice_capture_id: capture?.id,
       errors: errors.length > 0 ? errors : undefined,
     }, origin);
