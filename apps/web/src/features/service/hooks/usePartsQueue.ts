@@ -11,6 +11,8 @@ export interface PartsQueueItem {
   need_by_date: string | null;
   confidence: string;
   vendor_id: string | null;
+  /** Lines still in job-code / AI suggestion state are excluded so the queue matches the parts planner. */
+  intake_line_status?: string;
   job?: {
     id: string;
     customer_problem_summary: string | null;
@@ -33,7 +35,6 @@ export function usePartsQueue() {
   return useQuery({
     queryKey: ["parts-queue"],
     queryFn: async () => {
-      // Table not in generated types until next type generation
       const result = await supabase
         .from("service_parts_requirements")
         .select(`
@@ -51,7 +52,11 @@ export function usePartsQueue() {
       const { data, error } = result;
 
       if (error) throw error;
-      return (data ?? []) as PartsQueueItem[];
+      const rows = (data ?? []) as PartsQueueItem[];
+      // Align with service-parts-planner: suggested lines must be accepted before planning/ops work.
+      return rows.filter(
+        (r) => (r.intake_line_status ?? "accepted") !== "suggested",
+      );
     },
     staleTime: 30_000,
   });

@@ -61,6 +61,20 @@ export function safeJsonError(
   });
 }
 
+/** JSON error with extra fields (e.g. structured client handling for 409). */
+export function safeJsonErrorWithFields(
+  message: string,
+  status: number,
+  origin: string | null,
+  extra: Record<string, unknown> = {},
+): Response {
+  const headers = safeCorsHeaders(origin);
+  return new Response(JSON.stringify({ error: message, ...extra }), {
+    status,
+    headers: { ...headers, "Content-Type": "application/json" },
+  });
+}
+
 /** JSON success response with CORS headers guaranteed. */
 export function safeJsonOk(
   payload: unknown,

@@ -49,6 +49,11 @@ const ServiceIntakePage = lazy(() =>
 const PartsWorkQueuePage = lazy(() =>
   import("./features/service/pages/PartsWorkQueuePage").then((m) => ({ default: m.PartsWorkQueuePage }))
 );
+const FulfillmentRunDetailPage = lazy(() =>
+  import("./features/service/pages/FulfillmentRunDetailPage").then((m) => ({
+    default: m.FulfillmentRunDetailPage,
+  }))
+);
 const VendorProfilesPage = lazy(() =>
   import("./features/service/pages/VendorProfilesPage").then((m) => ({ default: m.VendorProfilesPage }))
 );
@@ -617,6 +622,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <PartsWorkQueuePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/fulfillment/:runId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <FulfillmentRunDetailPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

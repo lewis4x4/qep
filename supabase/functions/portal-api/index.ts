@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
           workspace_id: portalWorkspaceId,
           fulfillment_run_id: run.id,
           event_type: "portal_submitted",
-          payload: { parts_order_id: orderId },
+          payload: { parts_order_id: orderId, audit_channel: "portal" },
         });
         if (evErr) {
           console.warn("portal-api fulfillment event:", evErr);

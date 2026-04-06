@@ -6,6 +6,7 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
 type EscalationRow = {
   id: string;
@@ -150,6 +151,9 @@ async function seedEscalationsFromLateOrders(supabase: SupabaseClient): Promise<
         jobId: jobId,
         workspaceId: job.workspace_id as string,
         eventType: "shop_vendor_escalation_seeded",
+        auditChannel: "vendor",
+        idempotencyKey:
+          `escalation_seed:${job.workspace_id as string}:${insertedEsc.id}`,
         payload: {
           vendor_escalation_id: insertedEsc.id,
           vendor_id: vendorId,
@@ -268,6 +272,9 @@ async function runStepActions(
       jobId: row.job_id,
       workspaceId: row.workspace_id,
       eventType: "shop_vendor_escalation_step",
+      auditChannel: "vendor",
+      idempotencyKey:
+        `escalation_step:${row.workspace_id}:${row.id}:${stepIndex1}`,
       payload: {
         vendor_escalation_id: row.id,
         step_index: stepIndex1,
@@ -371,9 +378,27 @@ Deno.serve(async (req) => {
       results.processed++;
     }
 
+    await logServiceCronRun(supabase, {
+      jobName: "service-vendor-escalator",
+      ok: true,
+      metadata: { results },
+    });
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
     console.error("service-vendor-escalator:", err);
+    try {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (serviceKey) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+        await logServiceCronRun(supabase, {
+          jobName: "service-vendor-escalator",
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } catch {
+      /* ignore secondary logging failures */
+    }
     return safeJsonError("Internal server error", 500, null);
   }
 });

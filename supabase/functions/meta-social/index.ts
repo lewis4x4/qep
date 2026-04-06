@@ -116,9 +116,7 @@ Deno.serve(async (req) => {
         return safeJsonError("Failed to create post record", 500, origin);
       }
 
-      // TODO: Actual Meta Graph API call would go here
-      // For now, mark as posted with a note that API integration is pending
-
+      // Meta Graph API publish is not wired; DB row records intent; clients use meta_api.
       return safeJsonOk({ post, meta_api: "pending_integration" }, origin, 201);
     }
 

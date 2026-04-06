@@ -5,6 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
 function partKeysFromJson(arr: unknown): string[] {
   if (!Array.isArray(arr)) return [];
@@ -206,9 +207,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logServiceCronRun(supabase, {
+      jobName: "service-jobcode-learner",
+      ok: true,
+      metadata: { results },
+    });
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
     console.error("service-jobcode-learner:", err);
+    try {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (serviceKey) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+        await logServiceCronRun(supabase, {
+          jobName: "service-jobcode-learner",
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } catch {
+      /* ignore secondary logging failures */
+    }
     return safeJsonError("Internal server error", 500, null);
   }
 });

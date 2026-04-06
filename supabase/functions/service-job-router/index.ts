@@ -7,11 +7,16 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   safeJsonError,
+  safeJsonErrorWithFields,
   safeJsonOk,
   optionsResponse,
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
+import {
+  populatePartsFromJobCode,
+  resyncPartsFromJobCode,
+} from "../_shared/service-parts-from-job-code.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,128 +116,6 @@ async function fetchJobEnriched(
     .select(SERVICE_JOB_ENRICHED_SELECT)
     .eq("id", jobId)
     .single();
-}
-
-function buildPartsRowsFromTemplate(
-  tpl: unknown,
-  workspaceId: string,
-  jobId: string,
-): Record<string, unknown>[] {
-  const rows: Record<string, unknown>[] = [];
-  if (!tpl || !Array.isArray(tpl)) return rows;
-  for (const item of tpl) {
-    if (typeof item === "string") {
-      const pn = item.trim();
-      if (!pn) continue;
-      rows.push({
-        workspace_id: workspaceId,
-        job_id: jobId,
-        part_number: pn,
-        quantity: 1,
-        source: "job_code_template",
-        confidence: "medium",
-        intake_line_status: "suggested",
-      });
-    } else if (item && typeof item === "object") {
-      const o = item as Record<string, unknown>;
-      const pn = String(o.part_number ?? o.partNumber ?? o.sku ?? "").trim();
-      if (!pn) continue;
-      const qty = Math.max(1, Math.floor(Number(o.quantity ?? o.qty ?? 1)) || 1);
-      rows.push({
-        workspace_id: workspaceId,
-        job_id: jobId,
-        part_number: pn,
-        description: o.description ? String(o.description) : null,
-        quantity: qty,
-        unit_cost: o.unit_cost != null ? Number(o.unit_cost) : null,
-        source: "job_code_template",
-        confidence: "medium",
-        intake_line_status: "suggested",
-      });
-    }
-  }
-  return rows;
-}
-
-/** Insert parts lines from job_codes.parts_template when job has none yet. */
-async function populatePartsFromJobCode(
-  supabase: SupabaseClient,
-  jobId: string,
-  jobCodeId: string,
-  workspaceId: string,
-): Promise<{ inserted: number }> {
-  const { data: jc } = await supabase
-    .from("job_codes")
-    .select("parts_template")
-    .eq("id", jobCodeId)
-    .single();
-  const tpl = jc?.parts_template;
-  const rows = buildPartsRowsFromTemplate(tpl, workspaceId, jobId);
-  if (rows.length === 0) return { inserted: 0 };
-
-  const { data: existing } = await supabase
-    .from("service_parts_requirements")
-    .select("id")
-    .eq("job_id", jobId)
-    .neq("status", "cancelled")
-    .limit(1);
-  if (existing && existing.length > 0) return { inserted: 0 };
-
-  const { error } = await supabase.from("service_parts_requirements").insert(rows);
-  if (error) console.error("populatePartsFromJobCode:", error);
-  return { inserted: error ? 0 : rows.length };
-}
-
-async function resyncPartsFromJobCode(
-  supabase: SupabaseClient,
-  jobId: string,
-  jobCodeId: string,
-  workspaceId: string,
-  mode: "replace_cancelled_only" | "full",
-): Promise<{ inserted: number; cancelled: number }> {
-  const { data: jc } = await supabase
-    .from("job_codes")
-    .select("parts_template")
-    .eq("id", jobCodeId)
-    .single();
-  const rows = buildPartsRowsFromTemplate(jc?.parts_template, workspaceId, jobId);
-  if (rows.length === 0) return { inserted: 0, cancelled: 0 };
-
-  let cancelled = 0;
-  if (mode === "full") {
-    const { data: open } = await supabase
-      .from("service_parts_requirements")
-      .select("id, status")
-      .eq("job_id", jobId);
-    for (const r of open ?? []) {
-      if (!["consumed", "returned", "cancelled"].includes(r.status)) {
-        await supabase
-          .from("service_parts_requirements")
-          .update({ status: "cancelled" })
-          .eq("id", r.id);
-        cancelled++;
-      }
-    }
-    const { error } = await supabase.from("service_parts_requirements").insert(rows);
-    if (error) console.error("resyncPartsFromJobCode full:", error);
-    return { inserted: error ? 0 : rows.length, cancelled };
-  }
-
-  const { data: existing } = await supabase
-    .from("service_parts_requirements")
-    .select("part_number")
-    .eq("job_id", jobId)
-    .neq("status", "cancelled");
-  const have = new Set(
-    (existing ?? []).map((e) => String(e.part_number).toLowerCase()),
-  );
-  const toAdd = rows.filter(
-    (r) => !have.has(String(r.part_number).toLowerCase()),
-  );
-  if (toAdd.length === 0) return { inserted: 0, cancelled: 0 };
-  const { error } = await supabase.from("service_parts_requirements").insert(toAdd);
-  if (error) console.error("resyncPartsFromJobCode partial:", error);
-  return { inserted: error ? 0 : toAdd.length, cancelled: 0 };
 }
 
 Deno.serve(async (req) => {
@@ -1132,7 +1015,11 @@ async function handleLinkFulfillmentRun(
         workspace_id: ws,
         fulfillment_run_id: previousRun,
         event_type: "service_job_unlinked",
-        payload: { service_job_id: job_id, actor_id: actorId },
+        payload: {
+          service_job_id: job_id,
+          actor_id: actorId,
+          audit_channel: "shop",
+        },
       });
     }
     await supabase.from("service_job_events").insert({
@@ -1159,6 +1046,27 @@ async function handleLinkFulfillmentRun(
     return safeJsonError("Fulfillment run is not in the same workspace as this job", 400, origin);
   }
 
+  const acknowledge_shared =
+    body.acknowledge_shared_fulfillment_run === true ||
+    body.acknowledge_shared_fulfillment_run === "true";
+
+  const { data: otherJobs, error: ojErr } = await supabase
+    .from("service_jobs")
+    .select("id")
+    .eq("fulfillment_run_id", fulfillment_run_id)
+    .neq("id", job_id)
+    .limit(25);
+  if (ojErr) return safeJsonError(ojErr.message, 400, origin);
+  const otherIds = (otherJobs ?? []).map((r) => r.id as string);
+  if (otherIds.length > 0 && !acknowledge_shared) {
+    return safeJsonErrorWithFields(
+      "Another service job is already linked to this fulfillment run. Confirm to link this job to the same shared run.",
+      409,
+      origin,
+      { code: "shared_fulfillment_run", other_job_ids: otherIds },
+    );
+  }
+
   const { error: uErr } = await supabase
     .from("service_jobs")
     .update({ fulfillment_run_id })
@@ -1173,6 +1081,7 @@ async function handleLinkFulfillmentRun(
       service_job_id: job_id,
       actor_id: actorId,
       previous_fulfillment_run_id: previousRun,
+      audit_channel: "shop",
     },
   });
 

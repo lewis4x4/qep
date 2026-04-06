@@ -5,6 +5,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
@@ -119,17 +120,35 @@ Deno.serve(async (req) => {
       }
     }
 
-    return safeJsonOk({
-      ok: true,
+    const summary = {
       pending: pending?.length ?? 0,
       sms_sent,
       email_sent,
       skipped_no_credentials_or_recipient: skipped,
       twilio_configured: Boolean(twilioSid && twilioToken && twilioFrom),
       resend_configured: Boolean(resendKey),
-    }, null);
+    };
+    await logServiceCronRun(supabase, {
+      jobName: "service-customer-notify-dispatch",
+      ok: true,
+      metadata: summary,
+    });
+    return safeJsonOk({ ok: true, ...summary }, null);
   } catch (e) {
     console.error("service-customer-notify-dispatch:", e);
+    try {
+      const sk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (sk) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, sk);
+        await logServiceCronRun(supabase, {
+          jobName: "service-customer-notify-dispatch",
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    } catch {
+      /* ignore secondary logging failures */
+    }
     return safeJsonError("Internal error", 500, null);
   }
 });

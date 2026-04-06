@@ -12,6 +12,10 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { populatePartsFromJobCode } from "../_shared/service-parts-from-job-code.ts";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface IntakeRequest {
   customer_id?: string;
@@ -20,6 +24,8 @@ interface IntakeRequest {
   machine_search?: string;
   symptom?: string;
   request_type?: string;
+  /** Optional: after creating a job elsewhere, seed parts from a job code (same behavior as service-job-router populate). */
+  seed_parts_for_job?: { job_id: string; job_code_id: string };
 }
 
 interface JobCodeSuggestion {
@@ -173,6 +179,39 @@ Deno.serve(async (req) => {
 
     const knowledgeNoteIds = knowledge_notes.map((k) => k.id).filter(Boolean);
 
+    let parts_seeded: { inserted: number } | null = null;
+    if (body.seed_parts_for_job) {
+      const sj = body.seed_parts_for_job;
+      const jid = typeof sj.job_id === "string" ? sj.job_id.trim() : "";
+      const jcid = typeof sj.job_code_id === "string" ? sj.job_code_id.trim() : "";
+      if (!UUID_RE.test(jid) || !UUID_RE.test(jcid)) {
+        return safeJsonError(
+          "seed_parts_for_job: job_id and job_code_id must be UUIDs",
+          400,
+          origin,
+        );
+      }
+      const { data: jobRow, error: jobLookupErr } = await supabase
+        .from("service_jobs")
+        .select("id, workspace_id")
+        .eq("id", jid)
+        .maybeSingle();
+      if (jobLookupErr || !jobRow) {
+        return safeJsonError(
+          "seed_parts_for_job: job not found or access denied",
+          404,
+          origin,
+        );
+      }
+      const { inserted } = await populatePartsFromJobCode(
+        supabase,
+        jid,
+        jcid,
+        jobRow.workspace_id as string,
+      );
+      parts_seeded = { inserted };
+    }
+
     return safeJsonOk({
       machine,
       service_history: serviceHistory,
@@ -184,6 +223,7 @@ Deno.serve(async (req) => {
       knowledge_notes,
       knowledge_note_ids: knowledgeNoteIds,
       llm_diagnosis,
+      parts_seeded,
       suggested_next_step: suggestedJobCodes.length > 0
         ? "Select job code and create service request"
         : "Manual diagnosis required — no matching job codes found",

@@ -165,9 +165,21 @@ export function PartsRequirementEditor({ jobId, selectedJobCodeId, parts }: Prop
     },
   });
 
+  const hasSuggested = suggestedIds.length > 0;
+
   return (
     <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
       <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Parts Lines</h3>
+      {hasSuggested && (
+        <div
+          role="status"
+          className="rounded-md border border-amber-600/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15"
+        >
+          <span className="font-semibold">{suggestedIds.length} suggested line(s)</span> from the job
+          code template — accept them (or edit) before planning fulfillment. Suggested lines stay off the
+          shop parts queue until accepted.
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {selectedJobCodeId && (
           <button
@@ -193,8 +205,13 @@ export function PartsRequirementEditor({ jobId, selectedJobCodeId, parts }: Prop
         <button
           type="button"
           onClick={() => plan.mutate()}
-          disabled={plan.isPending}
-          className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+          disabled={plan.isPending || hasSuggested}
+          title={
+            hasSuggested
+              ? "Accept suggested lines first — planner ignores them until accepted"
+              : "Run parts planner for this job"
+          }
+          className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-45 disabled:pointer-events-none"
         >
           {plan.isPending ? "Planning…" : "Plan fulfillment"}
         </button>

@@ -1,0 +1,37 @@
+# PR / main: parts pressure matrix (static), then full gate — migrations, cron guard,
+# Deno edge check, service contracts + planner + vendor contract tests, web build.
+# Requires Deno on PATH for scripts/deno-check-edge-functions.mjs
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Parts service pressure matrix (static)
+        run: bun run pressure:parts
+
+      - name: Build (full gate)
+        run: bun run build

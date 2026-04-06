@@ -57,6 +57,8 @@ Run the gate orchestrator:
 bun run segment:gates --segment "<segment-id>" [--ui] [--no-chaos] [--strict-design]
 ```
 
+The orchestrator runs **`migrations:check`**, **`pressure:parts`** (static parts/service guards), **`bun run build`** from repo root and from **`apps/web`**, Deno tests for **`service-engine-smoke`** and **`vendor-inbound-contract`**, then optional chaos/design steps. This aligns post-segment verification with **`.github/workflows/ci.yml`** (which runs **`pressure:parts`** before **`bun run build`**).
+
 Examples:
 
 ```bash

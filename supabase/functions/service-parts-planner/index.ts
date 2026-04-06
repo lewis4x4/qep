@@ -30,6 +30,12 @@ interface PlannedRow {
   meta: Record<string, unknown>;
 }
 
+function finiteRuleHours(v: unknown, fallback: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 8760) return fallback;
+  return n;
+}
+
 function getEdgeLead(
   edgeMap: Map<string, number>,
   from: string,
@@ -149,16 +155,19 @@ Deno.serve(async (req) => {
         .eq("workspace_id", job.workspace_id)
         .eq("branch_id", jobBranchId)
         .maybeSingle();
-      if (cfg?.planner_rules && typeof cfg.planner_rules === "object") {
-        plannerRules = cfg.planner_rules as Record<string, unknown>;
+      const raw = cfg?.planner_rules;
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        plannerRules = raw as Record<string, unknown>;
       }
     }
 
-    const defaultTransferLead = Number(
-      plannerRules.transfer_default_lead_hours ?? 8,
+    const defaultTransferLead = finiteRuleHours(
+      plannerRules.transfer_default_lead_hours,
+      8,
     );
-    const transferVsOrderSlack = Number(
-      plannerRules.transfer_vs_order_slack_hours ?? 0,
+    const transferVsOrderSlack = finiteRuleHours(
+      plannerRules.transfer_vs_order_slack_hours,
+      0,
     );
 
     const partNumbers = [
@@ -504,6 +513,7 @@ Deno.serve(async (req) => {
           jobId: body.job_id,
           workspaceId: job.workspace_id as string,
           eventType: "shop_parts_plan_batch",
+          auditChannel: "shop",
           payload: {
             plan_batch_id: planBatchId,
             actions_created: actionsToInsert.length,
@@ -533,6 +543,13 @@ Deno.serve(async (req) => {
       is_machine_down: isMachineDown,
       plan_batch_id: planBatchId,
       traffic_ticket_id: trafficTicketId,
+      observability: {
+        workspace_id: job.workspace_id,
+        branch_id: jobBranchId,
+        job_id: body.job_id,
+        requirements_in_db: requirementsRaw?.length ?? 0,
+        requirements_eligible: requirements.length,
+      },
       metadata: {
         planner_mode: plannerHeuristicLegacy ? "legacy_line_index" : "stock_first",
         planner_rules: plannerRules,

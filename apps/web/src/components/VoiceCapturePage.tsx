@@ -517,9 +517,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
 
     const { data: captureRow, error: captureError } = await supabase
       .from("voice_captures")
-      .select(
-        "id, user_id, audio_storage_path, duration_seconds, transcript, extracted_data, hubspot_deal_id, hubspot_contact_id, hubspot_note_id, hubspot_task_id, hubspot_synced_at, sync_status, sync_error, created_at, updated_at",
-      )
+      .select("*")
       .eq("id", capture.id)
       .single();
 

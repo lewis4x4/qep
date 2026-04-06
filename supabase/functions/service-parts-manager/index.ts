@@ -352,6 +352,7 @@ async function handleFulfillment(
     jobId,
     workspaceId,
     eventType: "shop_parts_action",
+    auditChannel: "shop",
     payload: {
       action_type: rpcAction,
       requirement_id: body.requirement_id,
@@ -430,6 +431,7 @@ async function handleStage(
     jobId: req.job_id as string,
     workspaceId: req.workspace_id as string,
     eventType: "shop_parts_action",
+    auditChannel: "shop",
     payload: {
       action_type: "stage",
       requirement_id: req.id,

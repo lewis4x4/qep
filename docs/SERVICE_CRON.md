@@ -40,4 +40,8 @@ No trailing slash on `SUPABASE_URL`.
 
 ## Optional execution log (`service_cron_runs`)
 
-Migration **109** adds `service_cron_runs` (workspace, job name, timestamps, ok/error). Workers record rows by default. Set **`SERVICE_CRON_RUNS_DISABLED=true`** in the Edge Function environment to skip writes (see `_shared/service-cron-run.ts`). Admins and managers can `select` via RLS; inserts use `service_role`.
+Migration **109** adds `service_cron_runs` (workspace, job name, timestamps, ok/error). These workers append a row on each **POST** (cron) invocation — success with summary `metadata`, or failure with `ok: false` and `error`:
+
+`service-tat-monitor`, `service-stage-enforcer`, `service-vendor-escalator`, `service-jobcode-learner`, `service-customer-notify-dispatch` (via `_shared/service-cron-run.ts`).
+
+Set **`SERVICE_CRON_RUNS_DISABLED=true`** in Edge Function env to skip writes globally. Admins and managers can `select` via RLS; inserts use `service_role`. **GET** health checks do not log.

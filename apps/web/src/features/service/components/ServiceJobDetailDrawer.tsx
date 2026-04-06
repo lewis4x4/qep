@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   acceptPartsIntakeLine,
   assignTechnicianToJob,
+  SharedFulfillmentRunError,
   linkFulfillmentRunToJob,
   linkPortalRequestToJob,
   scanUpsell,
@@ -118,7 +119,28 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   const linkFulfillment = useMutation({
     mutationFn: async (runId: string | null) => {
       if (!job?.id) throw new Error("No job");
-      return linkFulfillmentRunToJob(job.id, runId);
+      try {
+        return await linkFulfillmentRunToJob(job.id, runId);
+      } catch (e) {
+        if (e instanceof SharedFulfillmentRunError) {
+          const preview = e.otherJobIds
+            .slice(0, 3)
+            .map((id) => id.slice(0, 8) + "…")
+            .join(", ");
+          const more =
+            e.otherJobIds.length > 3 ? ` (+${e.otherJobIds.length - 3} more)` : "";
+          const ok = window.confirm(
+            `${e.message}\n\nOther job(s): ${preview}${more}\n\nLink this job to the same shared fulfillment run?`,
+          );
+          if (ok) {
+            return await linkFulfillmentRunToJob(job.id, runId, {
+              acknowledgeSharedFulfillmentRun: true,
+            });
+          }
+          throw new Error("Link cancelled");
+        }
+        throw e;
+      }
     },
     onSuccess: () => {
       if (jobId) qc.invalidateQueries({ queryKey: ["service-job", jobId] });
@@ -276,7 +298,7 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                     to={`/service/track?job_id=${encodeURIComponent(job.id)}&token=${encodeURIComponent(job.tracking_token)}`}
                     className="text-xs rounded bg-secondary px-2 py-1 w-fit"
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                   >
                     Open track page (customer view)
                   </Link>
@@ -376,9 +398,23 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
                   <>
                     <span className="font-medium text-foreground">{job.fulfillment_run.status}</span>
                     <span className="font-mono break-all"> · {job.fulfillment_run.id}</span>
+                    <Link
+                      to={`/service/fulfillment/${job.fulfillment_run.id}`}
+                      className="ml-1 text-primary underline-offset-2 hover:underline text-[11px]"
+                    >
+                      Open run
+                    </Link>
                   </>
                 ) : job.fulfillment_run_id ? (
-                  <span className="font-mono break-all">{job.fulfillment_run_id}</span>
+                  <>
+                    <span className="font-mono break-all">{job.fulfillment_run_id}</span>
+                    <Link
+                      to={`/service/fulfillment/${job.fulfillment_run_id}`}
+                      className="ml-1 text-primary underline-offset-2 hover:underline text-[11px]"
+                    >
+                      Open run
+                    </Link>
+                  </>
                 ) : (
                   "—"
                 )}

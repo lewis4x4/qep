@@ -229,17 +229,61 @@ export async function searchPortalOrdersForJob(
   return result.orders ?? [];
 }
 
+/** Thrown when linking would attach a second job to a run unless explicitly acknowledged. */
+export class SharedFulfillmentRunError extends Error {
+  readonly code = "shared_fulfillment_run" as const;
+  constructor(
+    message: string,
+    public readonly otherJobIds: string[],
+  ) {
+    super(message);
+    this.name = "SharedFulfillmentRunError";
+  }
+}
+
 /** Link shop job to an existing parts_fulfillment_run (e.g. portal order run). Pass null to unlink. */
 export async function linkFulfillmentRunToJob(
   jobId: string,
   fulfillmentRunId: string | null,
+  options?: { acknowledgeSharedFulfillmentRun?: boolean },
 ): Promise<ServiceJobWithRelations> {
-  const result = await invoke<{ job: ServiceJobWithRelations }>({
-    action: "link_fulfillment_run",
-    job_id: jobId,
-    fulfillment_run_id: fulfillmentRunId,
+  const { data, error } = await supabase.functions.invoke("service-job-router", {
+    body: {
+      action: "link_fulfillment_run",
+      job_id: jobId,
+      fulfillment_run_id: fulfillmentRunId,
+      ...(options?.acknowledgeSharedFulfillmentRun
+        ? { acknowledge_shared_fulfillment_run: true }
+        : {}),
+    },
   });
-  return result.job;
+
+  const payload = data as
+    | {
+        job?: ServiceJobWithRelations;
+        error?: string;
+        code?: string;
+        other_job_ids?: string[];
+      }
+    | null;
+
+  if (payload?.code === "shared_fulfillment_run") {
+    throw new SharedFulfillmentRunError(
+      payload.error ??
+        "Another service job is already linked to this fulfillment run.",
+      Array.isArray(payload.other_job_ids) ? payload.other_job_ids : [],
+    );
+  }
+
+  if (error) {
+    throw new Error(error.message ?? "Service router error");
+  }
+
+  if (payload?.job) {
+    return payload.job;
+  }
+
+  throw new Error(payload?.error ?? "Link fulfillment run failed");
 }
 
 /** Admin/manager: reassign open jobs from a user to the next UUID in branch pool (service_branch_config). */

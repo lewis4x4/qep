@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useCreateServiceJob } from "../hooks/useServiceJobMutation";
+import { populatePartsFromJobCode } from "../lib/api";
 import {
   useCustomerSearch,
   useCustomerEquipment,
@@ -312,7 +313,18 @@ export function ServiceIntakePage() {
           ? `${intakeResult.suggested_next_step} (confidence: ${(intakeResult.confidence * 100).toFixed(0)}%)`
           : null,
       },
-      { onSuccess: (job) => navigate(`/service?job=${job.id}`) },
+      {
+        onSuccess: async (job) => {
+          if (selectedJobCodeId) {
+            try {
+              await populatePartsFromJobCode(job.id);
+            } catch {
+              // Operator can use “Load from job code” on the command center if populate fails.
+            }
+          }
+          navigate(`/service?job=${job.id}`);
+        },
+      },
     );
   }, [
     selectedCustomer,

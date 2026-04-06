@@ -5,7 +5,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "bun run --filter @qep/web dev",
-    "build": "bun run migrations:check && bun run service:cron:path-check && bun run edge:deno-check && bun run --filter @qep/web build",
+    "audit": "bun audit",
+    "build": "bun run migrations:check && bun run service:cron:path-check && bun run edge:deno-check && bun run verify:service-slice && bun run --filter @qep/web build",
     "lint": "bun run --filter @qep/web lint",
     "build:web": "bun run --filter @qep/web build",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
@@ -31,6 +32,11 @@
     "demo:service-parts": "bun ./scripts/demo/service-parts-seed.mjs",
     "demo:full": "bun ./scripts/demo/full-seed.mjs",
     "demo:full:local": "QEP_DEMO_PREFER_LOCAL=1 bun ./scripts/demo/full-seed.mjs baseline-local",
-    "demo:verify": "bun ./scripts/demo/verify-seed.mjs"
+    "demo:verify": "bun ./scripts/demo/verify-seed.mjs",
+    "verify:parts-contracts": "bun ./scripts/verify/parts-engine-contracts.mjs",
+    "verify:service-cron-logging": "bun ./scripts/verify/service-cron-logging.mjs",
+    "test:planner-rules": "bun test apps/web/src/features/service/lib/planner-rules.test.ts",
+    "test:vendor-inbound-contract": "deno test supabase/functions/_shared/vendor-inbound-contract.test.ts",
+    "verify:service-slice": "bun run verify:parts-contracts && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:vendor-inbound-contract"
   }
 }

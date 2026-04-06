@@ -117,6 +117,21 @@ mustContain(
   "shop_vendor_inbound",
   "vendor inbound fulfillment mirror event",
 );
+mustContain(
+  "supabase/functions/service-vendor-inbound/index.ts",
+  "parseVendorInboundContract",
+  "vendor inbound structured contract",
+);
+mustContain(
+  "supabase/functions/_shared/parts-fulfillment-mirror.ts",
+  "idempotencyKey",
+  "fulfillment mirror idempotency",
+);
+mustContain(
+  "supabase/functions/service-vendor-escalator/index.ts",
+  "logServiceCronRun",
+  "escalator cron observability",
+);
 
 const base = (
   process.env.SUPABASE_URL ||

@@ -36,7 +36,7 @@ export function ServiceEfficiencyPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("technician_profiles")
-        .select("user_id, active_workload, branch_id")
+        .select("user_id, active_workload, branch_id, profiles(full_name, email)")
         .order("active_workload", { ascending: false })
         .limit(25);
       if (error) throw error;
@@ -90,13 +90,25 @@ export function ServiceEfficiencyPage() {
               </tr>
             </thead>
             <tbody>
-              {techRows.map((t: Record<string, unknown>) => (
-                <tr key={String(t.user_id)} className="border-t">
-                  <td className="p-2 font-mono text-xs">{String(t.user_id).slice(0, 8)}…</td>
-                  <td className="p-2">{String(t.branch_id ?? "—")}</td>
-                  <td className="p-2 text-right">{Number(t.active_workload ?? 0)}</td>
-                </tr>
-              ))}
+              {techRows.map((t: Record<string, unknown>) => {
+                const prof = t.profiles as { full_name?: string | null; email?: string | null } | null;
+                const label =
+                  prof?.full_name?.trim() ||
+                  prof?.email?.trim() ||
+                  `${String(t.user_id).slice(0, 8)}…`;
+                return (
+                  <tr key={String(t.user_id)} className="border-t">
+                    <td className="p-2 text-xs">
+                      <span className="font-medium text-foreground">{label}</span>
+                      <div className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                        {String(t.user_id)}
+                      </div>
+                    </td>
+                    <td className="p-2">{String(t.branch_id ?? "—")}</td>
+                    <td className="p-2 text-right">{Number(t.active_workload ?? 0)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

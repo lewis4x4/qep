@@ -1,6 +1,7 @@
 import { useState, useMemo, useLayoutEffect, useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ServicePartsHubStrip } from "../components/ServicePartsHubStrip";
 import { useServiceJobList } from "../hooks/useServiceJobs";
 import { ServiceJobCard } from "../components/ServiceJobCard";
 import { ServiceJobDetailDrawer } from "../components/ServiceJobDetailDrawer";
@@ -106,6 +107,21 @@ export function ServiceCommandCenterPage() {
   const { data, isLoading } = useServiceJobList(queryFilters);
   const jobs = data?.jobs ?? [];
 
+  const { data: partsJobPeek } = useQuery({
+    queryKey: ["service-job-parts-peek", selectedJobId],
+    queryFn: async () => {
+      const { data: row, error } = await supabase
+        .from("service_jobs")
+        .select("id, fulfillment_run_id")
+        .eq("id", selectedJobId!)
+        .single();
+      if (error) throw error;
+      return row as { id: string; fulfillment_run_id: string | null };
+    },
+    enabled: !!selectedJobId,
+    staleTime: 15_000,
+  });
+
   const {
     data: cronRuns = [],
     isFetched: cronFetched,
@@ -170,6 +186,13 @@ export function ServiceCommandCenterPage() {
           <ServiceSubNav />
         </div>
       </div>
+
+      {selectedJobId && partsJobPeek && (
+        <ServicePartsHubStrip
+          jobId={partsJobPeek.id}
+          fulfillmentRunId={partsJobPeek.fulfillment_run_id}
+        />
+      )}
 
       {showCronHealth && cronFetched && (cronError || cronRuns.length > 0) && (
         <Card className="overflow-hidden border-border/40 bg-muted/10 p-0 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.02]">

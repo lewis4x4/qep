@@ -1,11 +1,19 @@
 /**
  * Inbound vendor email / webhook — extract PO reference and update parts actions.
  * verify_jwt false; protect with shared secret header in production.
+ *
+ * Optional EDI/API-shaped JSON (validated when present): `edi_control_number`,
+ * `vendor_transaction_id`, `asn_reference`, `shipment_reference`,
+ * `vendor_message_type`, `line_items[]` — see `_shared/vendor-inbound-contract.ts`.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
+import {
+  mirrorToFulfillmentRun,
+  normalizeFulfillmentEventIdempotencyKey,
+} from "../_shared/parts-fulfillment-mirror.ts";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { parseVendorInboundContract } from "../_shared/vendor-inbound-contract.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
@@ -31,7 +39,21 @@ Deno.serve(async (req) => {
       requirement_id?: string;
       job_id?: string;
       part_number?: string;
+      idempotency_key?: string;
     };
+
+    const {
+      contract: vendorContract,
+      error: contractError,
+    } = parseVendorInboundContract(body as Record<string, unknown>);
+    if (contractError) {
+      return safeJsonError(contractError, 400, null);
+    }
+
+    const clientIdempotencyKey =
+      normalizeFulfillmentEventIdempotencyKey(
+        req.headers.get("Idempotency-Key") ?? req.headers.get("x-idempotency-key"),
+      ) ?? normalizeFulfillmentEventIdempotencyKey(body.idempotency_key);
     const strictInbound =
       Deno.env.get("ENV") === "production" ||
       Boolean(Deno.env.get("VENDOR_INBOUND_WEBHOOK_SECRET"));
@@ -59,9 +81,17 @@ Deno.serve(async (req) => {
 
     const patch: Record<string, unknown> = {
       expected_date: body.expected_date ?? null,
-      metadata: { inbound_parse: true, at: new Date().toISOString() },
+      metadata: {
+        inbound_parse: true,
+        at: new Date().toISOString(),
+        ...(vendorContract ? { vendor_contract: vendorContract } : {}),
+      },
     };
     if (po) patch.po_reference = po;
+
+    const vendorMirrorPayload = vendorContract
+      ? { vendor_contract: vendorContract }
+      : {};
 
     if (body.requirement_id) {
       const { data: row, error } = await supabase
@@ -100,17 +130,35 @@ Deno.serve(async (req) => {
         }
       }
       if (reqMeta?.job_id && reqMeta.workspace_id) {
-        await mirrorToFulfillmentRun(supabase, {
+        const ws = reqMeta.workspace_id as string;
+        const idempotencyKey =
+          clientIdempotencyKey ??
+          `inbound:${ws}:${row.id}:${po ?? ""}`;
+        const mirror = await mirrorToFulfillmentRun(supabase, {
           jobId: reqMeta.job_id as string,
-          workspaceId: reqMeta.workspace_id as string,
+          workspaceId: ws,
           eventType: "shop_vendor_inbound",
+          auditChannel: "vendor",
+          idempotencyKey,
           payload: {
             requirement_id: body.requirement_id,
             po_reference: po,
             service_parts_action_id: row.id,
             source: "service-vendor-inbound",
+            ...vendorMirrorPayload,
           },
         });
+        if (!mirror.skipped && mirror.duplicate) {
+          return safeJsonOk(
+            {
+              ok: true,
+              po_reference: po,
+              updated: row?.id ?? null,
+              fulfillment_event_deduplicated: true,
+            },
+            null,
+          );
+        }
       }
       return safeJsonOk({ ok: true, po_reference: po, updated: row?.id ?? null }, null);
     }
@@ -140,17 +188,35 @@ Deno.serve(async (req) => {
           .eq("id", body.job_id)
           .maybeSingle();
         if (sj?.workspace_id) {
-          await mirrorToFulfillmentRun(supabase, {
+          const ws = sj.workspace_id as string;
+          const idempotencyKey =
+            clientIdempotencyKey ??
+            (row?.id ? `inbound:${ws}:${row.id}:${po ?? ""}` : undefined);
+          const mirror = await mirrorToFulfillmentRun(supabase, {
             jobId: body.job_id,
-            workspaceId: sj.workspace_id as string,
+            workspaceId: ws,
             eventType: "shop_vendor_inbound",
+            auditChannel: "vendor",
+            idempotencyKey,
             payload: {
               part_number: body.part_number,
               po_reference: po,
               service_parts_action_id: row?.id,
               source: "service-vendor-inbound",
+              ...vendorMirrorPayload,
             },
           });
+          if (!mirror.skipped && mirror.duplicate) {
+            return safeJsonOk(
+              {
+                ok: true,
+                po_reference: po,
+                updated: row?.id ?? null,
+                fulfillment_event_deduplicated: true,
+              },
+              null,
+            );
+          }
         }
         return safeJsonOk({ ok: true, po_reference: po, updated: row?.id ?? null }, null);
       }
@@ -176,17 +242,34 @@ Deno.serve(async (req) => {
           .eq("id", open.id);
         if (error) return safeJsonError(error.message, 400, null);
         if (open.job_id && open.workspace_id) {
-          await mirrorToFulfillmentRun(supabase, {
+          const ws = open.workspace_id as string;
+          const idempotencyKey =
+            clientIdempotencyKey ?? `inbound:${ws}:${open.id}:${po ?? ""}`;
+          const mirror = await mirrorToFulfillmentRun(supabase, {
             jobId: open.job_id as string,
-            workspaceId: open.workspace_id as string,
+            workspaceId: ws,
             eventType: "shop_vendor_inbound",
+            auditChannel: "vendor",
+            idempotencyKey,
             payload: {
               service_parts_action_id: open.id,
               po_reference: po,
               match: "open_order",
               source: "service-vendor-inbound",
+              ...vendorMirrorPayload,
             },
           });
+          if (!mirror.skipped && mirror.duplicate) {
+            return safeJsonOk(
+              {
+                ok: true,
+                po_reference: po,
+                updated: open.id,
+                fulfillment_event_deduplicated: true,
+              },
+              null,
+            );
+          }
         }
         return safeJsonOk({ ok: true, po_reference: po, updated: open.id }, null);
       }

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { reassignFromBranchPool } from "../lib/api";
+import { normalizePlannerRules } from "../lib/planner-rules";
 import { SERVICE_STAGES } from "../lib/constants";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 
@@ -76,6 +77,8 @@ export function ServiceBranchConfigPage() {
       } catch {
         throw new Error("Invalid JSON in pool, planner_rules, or business_hours fields");
       }
+      const pr = normalizePlannerRules(plannerRules);
+      if (!pr.ok) throw new Error(pr.message);
       const slotM = Math.max(15, Math.min(480, Math.floor(Number(appointmentSlotMinutes) || 60)));
       const { error } = await supabase.from("service_branch_config").upsert(
         {
@@ -84,7 +87,7 @@ export function ServiceBranchConfigPage() {
           default_advisor_pool: advisor,
           default_technician_pool: tech,
           parts_team_notify_user_ids: notify,
-          planner_rules: plannerRules as Record<string, unknown>,
+          planner_rules: pr.value,
           business_hours: businessHours as Record<string, unknown>,
           appointment_slot_minutes: slotM,
           notes: notes || null,

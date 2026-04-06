@@ -122,6 +122,12 @@ pushCheck({
 });
 
 pushCheck({
+  id: "qa.parts-pressure-matrix",
+  command: "bun run pressure:parts",
+  required: true,
+});
+
+pushCheck({
   id: "qa.root-build",
   command: "bun run build",
   required: true,
@@ -136,7 +142,8 @@ pushCheck({
 
 pushCheck({
   id: "qa.service-engine-deno-tests",
-  command: "deno test supabase/functions/_shared/service-engine-smoke.test.ts --allow-read --allow-env",
+  command:
+    "deno test supabase/functions/_shared/service-engine-smoke.test.ts supabase/functions/_shared/vendor-inbound-contract.test.ts --allow-read --allow-env",
   required: true,
 });
 
