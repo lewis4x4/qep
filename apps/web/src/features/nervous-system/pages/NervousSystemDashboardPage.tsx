@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, Zap, Users, TrendingUp, Package } from "lucide-react";
+import { HealthScoreDrawer } from "../components/HealthScoreDrawer";
 import {
   fetchHealthDistribution,
   runHealthRefresh,
@@ -19,6 +21,7 @@ function formatCurrency(value: number): string {
 
 export function NervousSystemDashboardPage() {
   const queryClient = useQueryClient();
+  const [drawerProfileId, setDrawerProfileId] = useState<string | null>(null);
 
   const { data: distribution, isLoading: distLoading } = useQuery({
     queryKey: ["nervous-system", "distribution"],
@@ -199,11 +202,24 @@ export function NervousSystemDashboardPage() {
         {!profilesLoading && (topProfiles ?? []).length > 0 && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(topProfiles ?? []).map((profile) => (
-              <CustomerHealthScore key={profile.id} profile={profile} />
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() => setDrawerProfileId(profile.id)}
+                className="text-left transition hover:scale-[1.01]"
+              >
+                <CustomerHealthScore profile={profile} />
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      <HealthScoreDrawer
+        customerProfileId={drawerProfileId}
+        open={drawerProfileId !== null}
+        onOpenChange={(open) => !open && setDrawerProfileId(null)}
+      />
     </div>
   );
 }
