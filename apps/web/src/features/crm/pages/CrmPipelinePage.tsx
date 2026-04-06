@@ -1,6 +1,5 @@
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { DndContext, closestCenter, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,33 +9,24 @@ import { CrmDealEditorSheet } from "../components/CrmDealEditorSheet";
 import { CrmPageHeader } from "../components/CrmPageHeader";
 import { CrmSubNav } from "../components/CrmSubNav";
 import { PipelineDealTableRow } from "../components/PipelineDealTableRow";
-import { DraggableDealCard } from "../components/DraggableDealCard";
-import { DroppableStageColumn } from "../components/DroppableStageColumn";
+import { PipelineSwimLanesBoard } from "../components/PipelineSwimLanesBoard";
+import { listCrmDealStages, listCrmWeightedOpenDeals } from "../lib/crm-api";
 import {
-  listCrmDealStages,
-  listCrmOpenDealsForBoard,
-  listCrmWeightedOpenDeals,
-  patchCrmDeal,
-} from "../lib/crm-api";
-import type { CrmRepSafeDeal } from "../lib/types";
-import { getDealSignalState } from "../lib/deal-signals";
-import {
-  OPEN_DEALS_PAGE_SIZE,
-  HYDRATION_UPDATE_BATCH_PAGES,
   formatMoney,
-  getFollowUpSortTime,
   updateDealNextFollowUp,
-  writeCachedOpenDeals,
   fetchOpenDealsFirstPage,
-  type DealUrgencyState,
   type OpenDealsFirstPageResult,
 } from "../lib/pipeline-utils";
+import { useOpenDealsHydration } from "../hooks/useOpenDealsHydration";
+import {
+  useCrmPipelineComputed,
+  type UrgencyFilter,
+} from "../hooks/useCrmPipelineComputed";
+import { useCrmPipelineDragDrop } from "../hooks/useCrmPipelineDragDrop";
 
 interface CrmPipelinePageProps {
   userRole: UserRole;
 }
-
-type UrgencyFilter = "all" | "overdue_follow_up" | "no_follow_up" | "stalled" | "data_issues" | "attention";
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -54,12 +44,6 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
   const [editorOpen, setEditorOpen] = useState(false);
-  const [hydratedDeals, setHydratedDeals] = useState<CrmRepSafeDeal[] | null>(null);
-  const [isHydratingRemainingDeals, setIsHydratingRemainingDeals] = useState(false);
-  const [dealHydrationWarning, setDealHydrationWarning] = useState<string | null>(null);
-  const [hydrationAttempt, setHydrationAttempt] = useState(0);
-  const pipelineRefreshTimeoutRef = useRef<number | null>(null);
-  const refreshedDealIdsRef = useRef<Set<string>>(new Set());
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
 
   const stagesQuery = useQuery({
@@ -74,80 +58,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     staleTime: 30_000,
   });
 
-  useEffect(() => {
-    const firstPage = dealsQuery.data;
-    if (!firstPage) {
-      setHydratedDeals(null);
-      setIsHydratingRemainingDeals(false);
-      setDealHydrationWarning(null);
-      return;
-    }
-
-    let cancelled = false;
-    const seenCursors = new Set<string>();
-    let mergedItems = [...firstPage.items];
-    setHydratedDeals(mergedItems);
-    setDealHydrationWarning(null);
-
-    if (firstPage.fromCache) {
-      setIsHydratingRemainingDeals(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!firstPage.nextCursor) {
-      setIsHydratingRemainingDeals(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setIsHydratingRemainingDeals(true);
-    void (async () => {
-      let cursor = firstPage.nextCursor;
-      let pagesSinceLastUpdate = 0;
-
-      while (cursor && !cancelled) {
-        if (seenCursors.has(cursor)) {
-          setDealHydrationWarning("Stopped loading additional deals due to a pagination loop. Showing partial results.");
-          break;
-        }
-        seenCursors.add(cursor);
-
-        try {
-          const pageResult = await listCrmOpenDealsForBoard({
-            limit: OPEN_DEALS_PAGE_SIZE,
-            cursor,
-          });
-          mergedItems = [...mergedItems, ...pageResult.items];
-          pagesSinceLastUpdate += 1;
-          if (!cancelled && (pagesSinceLastUpdate >= HYDRATION_UPDATE_BATCH_PAGES || !pageResult.nextCursor)) {
-            const snapshot = mergedItems;
-            startTransition(() => {
-              setHydratedDeals(snapshot);
-            });
-            pagesSinceLastUpdate = 0;
-          }
-          cursor = pageResult.nextCursor;
-        } catch {
-          if (!cancelled) {
-            setDealHydrationWarning("Could not load all deal pages. Showing partial results.");
-          }
-          break;
-        }
-      }
-
-      if (!cancelled) {
-        writeCachedOpenDeals({ items: mergedItems, nextCursor: null });
-        setIsHydratingRemainingDeals(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dealsQuery.dataUpdatedAt, hydrationAttempt]);
+  const {
+    hydratedDeals,
+    setHydratedDeals,
+    isHydratingRemainingDeals,
+    dealHydrationWarning,
+    hydrationAttempt,
+    setHydrationAttempt,
+  } = useOpenDealsHydration(dealsQuery.data, dealsQuery.dataUpdatedAt);
 
   const openDeals = hydratedDeals ?? dealsQuery.data?.items ?? [];
   const deferredOpenDeals = useDeferredValue(openDeals);
@@ -159,112 +77,19 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
     staleTime: 30_000,
   });
 
-  const stageNameById = useMemo(() => {
-    return new Map((stagesQuery.data ?? []).map((stage) => [stage.id, stage.name]));
-  }, [stagesQuery.data]);
-
-  const stageOptions = useMemo(() => {
-    return (stagesQuery.data ?? [])
-      .filter((stage) => !stage.isClosedWon && !stage.isClosedLost)
-      .map((stage) => ({ id: stage.id, name: stage.name }));
-  }, [stagesQuery.data]);
-
-  const stageFilteredDeals = useMemo(() => {
-    if (selectedStageId === "all") {
-      return deferredOpenDeals;
-    }
-    return deferredOpenDeals.filter((deal) => deal.stageId === selectedStageId);
-  }, [deferredOpenDeals, selectedStageId]);
-
-  const urgencyEvaluation = useMemo(() => {
-    const now = Date.now();
-    const byDealId = new Map<string, DealUrgencyState>();
-    const counts: Record<UrgencyFilter, number> = {
-      all: stageFilteredDeals.length,
-      overdue_follow_up: 0,
-      no_follow_up: 0,
-      stalled: 0,
-      data_issues: 0,
-      attention: 0,
-    };
-
-    for (const deal of stageFilteredDeals) {
-      const { isOverdueFollowUp, isStalled } = getDealSignalState(deal, now);
-      const hasNoFollowUp = !deal.nextFollowUpAt;
-      const hasDataIssue = (deal.nextFollowUpAt !== null && !Number.isFinite(Date.parse(deal.nextFollowUpAt))) ||
-        (deal.lastActivityAt !== null && !Number.isFinite(Date.parse(deal.lastActivityAt)));
-      const needsAttention = isOverdueFollowUp || hasNoFollowUp || isStalled || hasDataIssue;
-      const state: DealUrgencyState = {
-        isOverdueFollowUp,
-        hasNoFollowUp,
-        isStalled,
-        hasDataIssue,
-        needsAttention,
-      };
-
-      byDealId.set(deal.id, state);
-
-      if (state.isOverdueFollowUp) counts.overdue_follow_up += 1;
-      if (state.hasNoFollowUp) counts.no_follow_up += 1;
-      if (state.isStalled) counts.stalled += 1;
-      if (state.hasDataIssue) counts.data_issues += 1;
-      if (state.needsAttention) counts.attention += 1;
-    }
-
-    return { counts, byDealId };
-  }, [stageFilteredDeals]);
-
-  const filteredDeals = useMemo(() => {
-    if (urgencyFilter === "all") return stageFilteredDeals;
-
-    return stageFilteredDeals.filter((deal) => {
-      const state = urgencyEvaluation.byDealId.get(deal.id);
-      if (!state) return false;
-      if (urgencyFilter === "overdue_follow_up") return state.isOverdueFollowUp;
-      if (urgencyFilter === "no_follow_up") return state.hasNoFollowUp;
-      if (urgencyFilter === "stalled") return state.isStalled;
-      if (urgencyFilter === "data_issues") return state.hasDataIssue;
-      return state.needsAttention;
-    });
-  }, [stageFilteredDeals, urgencyFilter, urgencyEvaluation.byDealId]);
-
-  const stageSummary = useMemo(() => {
-    const byStage = new Map<string, { count: number; amount: number }>();
-    for (const deal of deferredOpenDeals) {
-      const current = byStage.get(deal.stageId) ?? { count: 0, amount: 0 };
-      current.count += 1;
-      current.amount += deal.amount ?? 0;
-      byStage.set(deal.stageId, current);
-    }
-    return Array.from(byStage.entries()).map(([stageId, value]) => ({
-      stageId,
-      stageName: stageNameById.get(stageId) ?? "Unknown stage",
-      count: value.count,
-      amount: value.amount,
-    }));
-  }, [deferredOpenDeals, stageNameById]);
-
-  const stageColumns = useMemo(() => {
-    const openStages = stageOptions.length > 0
-      ? stageOptions
-      : Array.from(stageNameById.entries()).map(([id, name]) => ({ id, name }));
-    const visibleStages = selectedStageId === "all"
-      ? openStages
-      : openStages.filter((stage) => stage.id === selectedStageId);
-
-    return visibleStages.map((stage) => {
-      const deals = filteredDeals
-        .filter((deal) => deal.stageId === stage.id)
-        .sort((a, b) => {
-          const nextA = getFollowUpSortTime(a.nextFollowUpAt);
-          const nextB = getFollowUpSortTime(b.nextFollowUpAt);
-          if (nextA !== nextB) return nextA - nextB;
-          return (b.amount ?? 0) - (a.amount ?? 0);
-        });
-      const amount = deals.reduce((total, deal) => total + (deal.amount ?? 0), 0);
-      return { stageId: stage.id, stageName: stage.name, deals, amount };
-    });
-  }, [filteredDeals, selectedStageId, stageOptions, stageNameById]);
+  const {
+    stageNameById,
+    stageOptions,
+    urgencyEvaluation,
+    filteredDeals,
+    stageSummary,
+    stageColumns,
+  } = useCrmPipelineComputed(
+    stagesQuery.data,
+    selectedStageId,
+    urgencyFilter,
+    deferredOpenDeals,
+  );
 
   const isLoading = dealsQuery.isLoading || stagesQuery.isLoading;
   const hasError = dealsQuery.isError || stagesQuery.isError;
@@ -277,83 +102,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
         acc.weightedPipeline += deal.weightedAmount ?? 0;
         return acc;
       },
-      { openDeals: 0, pipelineAmount: 0, weightedPipeline: 0 }
+      { openDeals: 0, pipelineAmount: 0, weightedPipeline: 0 },
     );
   }, [weightedDealsQuery.data]);
 
-  useEffect(() => {
-    return () => {
-      if (pipelineRefreshTimeoutRef.current !== null) {
-        window.clearTimeout(pipelineRefreshTimeoutRef.current);
-      }
-      refreshedDealIdsRef.current.clear();
-    };
-  }, []);
-
-  function schedulePipelineRefresh(dealId: string): void {
-    refreshedDealIdsRef.current.add(dealId);
-
-    if (typeof window === "undefined") {
-      void queryClient.invalidateQueries({ queryKey: ["crm", "deals", "open-table"] }).finally(() => {
-        refreshedDealIdsRef.current.clear();
-      });
-      return;
-    }
-
-    if (pipelineRefreshTimeoutRef.current !== null) {
-      window.clearTimeout(pipelineRefreshTimeoutRef.current);
-    }
-
-    pipelineRefreshTimeoutRef.current = window.setTimeout(() => {
-      void queryClient.invalidateQueries({ queryKey: ["crm", "deals", "open-table"] }).finally(() => {
-        refreshedDealIdsRef.current.clear();
-      });
-      pipelineRefreshTimeoutRef.current = null;
-    }, 2000);
-  }
-
-  const [activeDragDealId, setActiveDragDealId] = useState<string | null>(null);
-  const dragOriginalStageRef = useRef<Map<string, string>>(new Map());
-  const hydratedDealsRef = useRef(hydratedDeals);
-  hydratedDealsRef.current = hydratedDeals;
-
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const dealId = event.active.id as string;
-    setActiveDragDealId(dealId);
-    const deal = hydratedDealsRef.current?.find((d) => d.id === dealId);
-    if (deal) {
-      dragOriginalStageRef.current.set(dealId, deal.stageId);
-    }
-  }, []);
-
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      setActiveDragDealId(null);
-      const { active, over } = event;
-      if (!over || !active) return;
-
-      const dealId = active.id as string;
-      const newStageId = over.id as string;
-      const originalStageId = dragOriginalStageRef.current.get(dealId);
-      dragOriginalStageRef.current.delete(dealId);
-
-      if (!originalStageId || originalStageId === newStageId) return;
-
-      setHydratedDeals((current) =>
-        current?.map((d) => (d.id === dealId ? { ...d, stageId: newStageId } : d)) ?? current,
-      );
-
-      try {
-        await patchCrmDeal(dealId, { stageId: newStageId });
-        schedulePipelineRefresh(dealId);
-      } catch (err) {
-        setHydratedDeals((current) =>
-          current?.map((d) => (d.id === dealId ? { ...d, stageId: originalStageId } : d)) ?? current,
-        );
-        console.error("Stage transition failed:", err);
-      }
-    },
-    [schedulePipelineRefresh],
+  const { handleDragStart, handleDragEnd, schedulePipelineRefresh } = useCrmPipelineDragDrop(
+    queryClient,
+    hydratedDeals,
+    setHydratedDeals,
   );
 
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
@@ -560,72 +316,14 @@ export function CrmDealsPage({ userRole }: CrmPipelinePageProps) {
       )}
 
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "board" && (
-        <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="space-y-4">
-          {[
-            { label: "Pre-Sale Pipeline", range: [1, 12], color: "border-blue-500/30" },
-            { label: "Close Process", range: [13, 16], color: "border-orange-500/30" },
-            { label: "Post-Sale", range: [17, 21], color: "border-emerald-500/30" },
-          ].map((lane) => {
-            const laneColumns = stageColumns.filter((col) => {
-              const stage = (stagesQuery.data ?? []).find((s) => s.id === col.stageId);
-              const order = stage?.sortOrder ?? 0;
-              return order >= lane.range[0] && order <= lane.range[1];
-            });
-            if (laneColumns.length === 0) return null;
-            const laneDeals = laneColumns.reduce((sum, c) => sum + c.deals.length, 0);
-            const laneAmount = laneColumns.reduce((sum, c) => sum + c.amount, 0);
-            return (
-              <Card key={lane.label} className={`overflow-hidden border-l-2 ${lane.color}`}>
-                <header className="flex items-center justify-between border-b border-border px-4 py-2">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{lane.label}</h2>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{laneDeals} deals</span>
-                    <span>{formatMoney(laneAmount)}</span>
-                  </div>
-                </header>
-                <div className="overflow-x-auto" aria-label={`${lane.label} deals board`}>
-                  <div className="flex min-w-max gap-3 p-3">
-                    {laneColumns.map((column) => (
-                      <section
-                        key={column.stageId}
-                        className="w-[280px] shrink-0 rounded-xl border border-border bg-muted/30"
-                      >
-                        <header className="border-b border-border px-3 py-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <h3 className="text-sm font-semibold text-foreground">{column.stageName}</h3>
-                            <span className="rounded-full border border-white/12 bg-gradient-to-b from-white/[0.1] to-white/[0.02] px-2 py-0.5 text-xs text-muted-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)] backdrop-blur-md dark:border-white/10 dark:from-white/[0.07] dark:to-white/[0.02]">
-                              {column.deals.length}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">{formatMoney(column.amount)}</p>
-                        </header>
-
-                        <DroppableStageColumn stageId={column.stageId}>
-                          {column.deals.length === 0 && (
-                            <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
-                              No deals
-                            </div>
-                          )}
-
-                          {column.deals.map((deal) => (
-                            <DraggableDealCard
-                              key={deal.id}
-                              deal={deal}
-                              onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
-                              onSchedulePipelineRefresh={schedulePipelineRefresh}
-                            />
-                          ))}
-                        </DroppableStageColumn>
-                      </section>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-        </DndContext>
+        <PipelineSwimLanesBoard
+          stages={stagesQuery.data}
+          stageColumns={stageColumns}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+          onSchedulePipelineRefresh={schedulePipelineRefresh}
+        />
       )}
 
       <CrmDealEditorSheet
