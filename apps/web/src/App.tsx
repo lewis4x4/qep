@@ -127,6 +127,9 @@ const EmailDraftInboxPage = lazy(() =>
 const DgeCockpitPage = lazy(() =>
   import("./features/dge/pages/DgeCockpitPage").then((m) => ({ default: m.DgeCockpitPage }))
 );
+const AssetDetailPage = lazy(() =>
+  import("./features/equipment/pages/AssetDetailPage").then((m) => ({ default: m.AssetDetailPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -922,6 +925,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <DgeCockpitPage userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/equipment/:equipmentId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <AssetDetailPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
