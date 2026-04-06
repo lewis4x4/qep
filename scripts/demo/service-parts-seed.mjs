@@ -18,6 +18,7 @@ import {
   SEED_BRANCHES,
   SEED_PART_NUMBERS,
   SERVICE_PARTS_SEED_BATCH_ID,
+  BRANCH_MASTER_IDS,
   buildTimestamp,
 } from "./seed-ids.mjs";
 
@@ -1446,6 +1447,137 @@ function requirementRows(jobs) {
   return rows;
 }
 
+function branchMasterRows() {
+  const mgr = DEMO_USERS.find((u) => u.key === "manager").id;
+  const owner = DEMO_USERS.find((u) => u.key === "owner").id;
+  const admin = DEMO_USERS.find((u) => u.key === "admin").id;
+  const weekdayHours = [
+    { dow: 1, open: "07:30", close: "17:00" },
+    { dow: 2, open: "07:30", close: "17:00" },
+    { dow: 3, open: "07:30", close: "17:00" },
+    { dow: 4, open: "07:30", close: "17:00" },
+    { dow: 5, open: "07:30", close: "17:00" },
+  ];
+  const satHours = [...weekdayHours, { dow: 6, open: "08:00", close: "12:00" }];
+
+  return [
+    {
+      id: BRANCH_MASTER_IDS.mainYard,
+      workspace_id: DEMO_WORKSPACE_ID,
+      slug: SEED_BRANCHES.mainYard,
+      display_name: "Main Yard HQ",
+      short_code: "MY",
+      is_active: true,
+      address_line1: "4200 US-90 West",
+      city: "Lake City",
+      state_province: "FL",
+      postal_code: "32055",
+      country: "US",
+      latitude: 30.1897,
+      longitude: -82.6393,
+      phone_main: "3865551000",
+      phone_parts: "3865551001",
+      phone_service: "3865551002",
+      phone_sales: "3865551003",
+      email_main: "info@qep-demo.local",
+      email_parts: "parts@qep-demo.local",
+      email_service: "service@qep-demo.local",
+      email_sales: "sales@qep-demo.local",
+      general_manager_id: owner,
+      sales_manager_id: mgr,
+      service_manager_id: admin,
+      parts_manager_id: mgr,
+      business_hours: satHours,
+      header_tagline: "North Florida's Heavy Equipment Partner",
+      doc_footer_text: "Thank you for your business. Terms: Net 30. All quoted prices valid 30 days.",
+      tax_id: "59-1234567",
+      default_tax_rate: 0.07,
+      capabilities: ["parts_counter", "service_bay", "rental_yard", "sales_showroom", "warehouse"],
+      max_service_bays: 12,
+      rental_yard_capacity: 40,
+      parts_counter: true,
+      delivery_radius_miles: 75,
+      timezone: "America/New_York",
+      notes: "Primary location — corporate HQ + full-service dealership.",
+    },
+    {
+      id: BRANCH_MASTER_IDS.lakecity,
+      workspace_id: DEMO_WORKSPACE_ID,
+      slug: SEED_BRANCHES.lakecity,
+      display_name: "Lake City Branch",
+      short_code: "LC",
+      is_active: true,
+      address_line1: "1800 SW Commerce Dr",
+      city: "Lake City",
+      state_province: "FL",
+      postal_code: "32025",
+      country: "US",
+      latitude: 30.1735,
+      longitude: -82.6478,
+      phone_main: "3865552000",
+      phone_parts: "3865552001",
+      phone_service: "3865552002",
+      email_main: "lakecity@qep-demo.local",
+      email_parts: "lakecity.parts@qep-demo.local",
+      email_service: "lakecity.service@qep-demo.local",
+      general_manager_id: mgr,
+      sales_manager_id: null,
+      service_manager_id: admin,
+      parts_manager_id: null,
+      business_hours: weekdayHours,
+      header_tagline: "Parts & Service — Lake City",
+      doc_footer_text: "Thank you for your business. Terms: Net 30.",
+      tax_id: "59-1234567",
+      default_tax_rate: 0.07,
+      capabilities: ["parts_counter", "service_bay"],
+      max_service_bays: 6,
+      parts_counter: true,
+      delivery_radius_miles: 30,
+      timezone: "America/New_York",
+      notes: "Secondary branch — parts counter and 6-bay service shop.",
+    },
+    {
+      id: BRANCH_MASTER_IDS.gulfDepot,
+      workspace_id: DEMO_WORKSPACE_ID,
+      slug: SEED_BRANCHES.gulfDepot,
+      display_name: "Gulf Coast Depot",
+      short_code: "GD",
+      is_active: true,
+      address_line1: "7700 Industrial Park Blvd",
+      city: "Panama City",
+      state_province: "FL",
+      postal_code: "32401",
+      country: "US",
+      latitude: 30.1588,
+      longitude: -85.6602,
+      phone_main: "8505553000",
+      phone_parts: "8505553001",
+      phone_service: "8505553002",
+      phone_sales: "8505553003",
+      email_main: "gulf@qep-demo.local",
+      email_parts: "gulf.parts@qep-demo.local",
+      email_service: "gulf.service@qep-demo.local",
+      email_sales: "gulf.sales@qep-demo.local",
+      general_manager_id: admin,
+      sales_manager_id: mgr,
+      service_manager_id: null,
+      parts_manager_id: null,
+      business_hours: satHours,
+      header_tagline: "Gulf Coast's Equipment Headquarters",
+      doc_footer_text: "Thank you for your business. Terms: Net 30. Rental terms may differ.",
+      tax_id: "59-7654321",
+      default_tax_rate: 0.075,
+      capabilities: ["parts_counter", "service_bay", "rental_yard", "sales_showroom", "mobile_service"],
+      max_service_bays: 8,
+      rental_yard_capacity: 25,
+      parts_counter: true,
+      delivery_radius_miles: 60,
+      timezone: "America/Chicago",
+      notes: "Gulf Coast market — full dealership with mobile service fleet.",
+    },
+  ];
+}
+
 async function seedProfileWorkspaces(admin) {
   const rows = DEMO_USERS.map((u) => ({
     profile_id: u.id,
@@ -1613,6 +1745,16 @@ async function seedScenarioExtras(admin, scenario, jobs) {
 export async function seedServicePartsData(admin, options = {}) {
   const scenario = options.scenario ?? null;
   await seedProfileWorkspaces(admin);
+
+  // Seed branches master directory (migration 142+)
+  try {
+    const { error: bmErr } = await admin
+      .from("branches")
+      .upsert(branchMasterRows(), { onConflict: "workspace_id,slug" });
+    if (bmErr) throw bmErr;
+  } catch (e) {
+    console.warn("  [branches] table not yet available — skipping master seed:", e.message);
+  }
 
   const { error: bcErr } = await admin
     .from("service_branch_config")
@@ -2035,6 +2177,7 @@ export async function resetServicePartsData(admin) {
   await admin.from("parts_fulfillment_runs").delete().in("id", ids.runs);
   await admin.from("portal_customers").delete().in("id", ids.portal);
   await admin.from("service_branch_config").delete().in("id", ids.branches);
+  await admin.from("branches").delete().in("id", Object.values(BRANCH_MASTER_IDS)).catch(() => {});
   await admin
     .from("service_parts_requirements")
     .delete()

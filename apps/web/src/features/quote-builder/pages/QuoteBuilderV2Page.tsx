@@ -3,12 +3,14 @@ import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mic, MessageSquare, FileText, ArrowRight, ArrowLeft, Save } from "lucide-react";
+import { Mic, MessageSquare, FileText, ArrowRight, ArrowLeft, Save, MapPin } from "lucide-react";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { saveQuotePackage } from "../lib/quote-api";
+import { useActiveBranches } from "@/hooks/useBranches";
+import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 
 type EntryMode = "voice" | "ai_chat" | "manual";
 type Step = "entry" | "equipment" | "financing" | "review";
@@ -29,6 +31,9 @@ export function QuoteBuilderV2Page() {
 
   const [step, setStep] = useState<Step>("entry");
   const [entryMode, setEntryMode] = useState<EntryMode>("manual");
+  const [quoteBranch, setQuoteBranch] = useState("");
+  const branchesQ = useActiveBranches();
+  const branches = branchesQ.data ?? [];
   const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipment[]>([]);
   const [selectedAttachments, setSelectedAttachments] = useState<Array<{ name: string; price: number }>>([]);
   const [tradeAllowance, setTradeAllowance] = useState<number>(0);
@@ -93,6 +98,26 @@ export function QuoteBuilderV2Page() {
       {/* Step 1: Entry Mode */}
       {step === "entry" && (
         <div className="space-y-4">
+          {/* Branch selector */}
+          {branches.length > 0 && (
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+              <select
+                value={quoteBranch}
+                onChange={(e) => setQuoteBranch(e.target.value)}
+                className="rounded border px-2 py-1.5 text-sm bg-background"
+              >
+                <option value="">Select quoting branch…</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.slug}>{b.display_name}</option>
+                ))}
+              </select>
+              {!quoteBranch && (
+                <span className="text-[11px] text-muted-foreground">Branch appears on the printed quote</span>
+              )}
+            </div>
+          )}
+
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {([
@@ -201,6 +226,10 @@ export function QuoteBuilderV2Page() {
           <MarginCheckBanner marginPct={marginPct} />
 
           <Card className="p-4 space-y-3">
+            {/* Branch letterhead on printed quote */}
+            {quoteBranch && (
+              <BranchDocumentHeader branchSlug={quoteBranch} className="pb-3 border-b mb-2" />
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Equipment</span>
               <span className="font-medium">${equipmentTotal.toLocaleString()}</span>
@@ -223,6 +252,7 @@ export function QuoteBuilderV2Page() {
               <span className="font-bold text-foreground">Net Total</span>
               <span className="text-lg font-bold text-qep-orange">${netTotal.toLocaleString()}</span>
             </div>
+            {quoteBranch && <BranchDocumentFooter branchSlug={quoteBranch} />}
           </Card>
 
           <div className="flex justify-between">

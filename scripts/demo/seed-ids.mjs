@@ -240,11 +240,18 @@ export const DEMO_IDS = {
   },
 };
 
-/** Canonical branch slugs — keep in sync across inventory, jobs, branch_config. */
+/** Canonical branch slugs — keep in sync across inventory, jobs, branch_config, branches master. */
 export const SEED_BRANCHES = {
   mainYard: "main-yard",
   lakecity: "lakecity-branch",
   gulfDepot: "gulf-depot",
+};
+
+/** Fixed UUIDs for branches master directory. */
+export const BRANCH_MASTER_IDS = {
+  mainYard: "f0000030-0000-4000-8000-000000000001",
+  lakecity: "f0000030-0000-4000-8000-000000000002",
+  gulfDepot: "f0000030-0000-4000-8000-000000000003",
 };
 
 export const SEED_PART_NUMBERS = [

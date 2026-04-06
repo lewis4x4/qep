@@ -158,6 +158,11 @@ const PeopleOpsShowcase = lazy(() =>
     default: m.PeopleOpsShowcase,
   }))
 );
+const BranchManagementPage = lazy(() =>
+  import("./features/admin/pages/BranchManagementPage").then((m) => ({
+    default: m.BranchManagementPage,
+  }))
+);
 const IntegrationHub = lazy(() =>
   import("./components/IntegrationHub").then((m) => ({ default: m.IntegrationHub }))
 );
@@ -1114,6 +1119,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CrmDuplicatesPage userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/branches"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <BranchManagementPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

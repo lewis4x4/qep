@@ -4,10 +4,18 @@ import { supabase } from "@/lib/supabase";
 import { reassignFromBranchPool } from "../lib/api";
 import { normalizePlannerRules } from "../lib/planner-rules";
 import { SERVICE_STAGES } from "../lib/constants";
+import { Link } from "react-router-dom";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { useActiveBranches } from "@/hooks/useBranches";
 
 export function ServiceBranchConfigPage() {
   const qc = useQueryClient();
+  const branchMasterQ = useActiveBranches();
+  const branchNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const b of branchMasterQ.data ?? []) m.set(b.slug, b.display_name);
+    return m;
+  }, [branchMasterQ.data]);
   const [branchId, setBranchId] = useState("");
   const [advisorJson, setAdvisorJson] = useState("[]");
   const [techJson, setTechJson] = useState("[]");
@@ -150,7 +158,10 @@ export function ServiceBranchConfigPage() {
       <div>
         <h1 className="text-2xl font-semibold">Branch service routing</h1>
         <p className="text-sm text-muted-foreground">
-          Edit advisor/tech UUID pools and parts notification list per branch. JSON arrays of profile UUIDs.
+          Edit advisor/tech UUID pools and parts notification list per branch.{" "}
+          <Link to="/admin/branches" className="text-primary hover:underline">
+            Manage branch locations &amp; contacts
+          </Link>
         </p>
       </div>
 
@@ -170,7 +181,9 @@ export function ServiceBranchConfigPage() {
               >
                 <option value="">Select…</option>
                 {rows.map((r) => (
-                  <option key={r.id} value={r.branch_id}>{r.branch_id}</option>
+                  <option key={r.id} value={r.branch_id}>
+                    {branchNameMap.get(r.branch_id) ?? r.branch_id} ({r.branch_id})
+                  </option>
                 ))}
               </select>
             </div>

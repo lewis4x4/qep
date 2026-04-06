@@ -26,6 +26,7 @@
     "npm:@tailwindcss/typography@~0.5.19": "0.5.19_tailwindcss@3.4.19__postcss@8.5.8__jiti@1.21.7",
     "npm:@tanstack/react-query@^5.90.2": "5.95.2_react@18.3.1",
     "npm:@types/node@^25.5.0": "25.5.0",
+    "npm:@types/papaparse@^5.5.2": "5.5.2",
     "npm:@types/react-dom@^18.3.1": "18.3.7_@types+react@18.3.28",
     "npm:@types/react@^18.3.12": "18.3.28",
     "npm:@vitejs/plugin-react@^4.3.4": "4.7.0_vite@6.4.1__@types+node@25.5.0__picomatch@4.0.4_@babel+core@7.29.0_@types+node@25.5.0",
@@ -35,6 +36,7 @@
     "npm:cmdk@^1.1.1": "1.1.1_react@18.3.1_react-dom@18.3.1__react@18.3.1_@types+react@18.3.28_@types+react-dom@18.3.7__@types+react@18.3.28",
     "npm:lucide-react@^1.7.0": "1.7.0_react@18.3.1",
     "npm:mammoth@1.8.0": "1.8.0",
+    "npm:papaparse@^5.5.3": "5.5.3",
     "npm:pdf-parse@1.1.1": "1.1.1",
     "npm:postcss@^8.4.49": "8.5.8",
     "npm:react-dom@^18.3.1": "18.3.1_react@18.3.1",
@@ -1282,6 +1284,12 @@
         "undici-types@7.18.2"
       ]
     },
+    "@types/papaparse@5.5.2": {
+      "integrity": "sha512-gFnFp/JMzLHCwRf7tQHrNnfhN4eYBVYYI897CGX4MY1tzY9l2aLkVyx2IlKZ/SAqDbB3I1AOZW5gTMGGsqWliA==",
+      "dependencies": [
+        "@types/node@25.5.0"
+      ]
+    },
     "@types/prop-types@15.7.15": {
       "integrity": "sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw=="
     },
@@ -2421,6 +2429,9 @@
     "pako@1.0.11": {
       "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="
     },
+    "papaparse@5.5.3": {
+      "integrity": "sha512-5QvjGxYVjxO59MGU2lHVYpRWBBtKHnlIAcSe1uNFCkkptUh63NFRj0FJQm7nR67puEruUci/ZkjmEFrjCAyP4A=="
+    },
     "parse-entities@4.0.2": {
       "integrity": "sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==",
       "dependencies": [
@@ -3076,6 +3087,7 @@
             "npm:@tailwindcss/typography@~0.5.19",
             "npm:@tanstack/react-query@^5.90.2",
             "npm:@types/node@^25.5.0",
+            "npm:@types/papaparse@^5.5.2",
             "npm:@types/react-dom@^18.3.1",
             "npm:@types/react@^18.3.12",
             "npm:@vitejs/plugin-react@^4.3.4",
@@ -3084,6 +3096,7 @@
             "npm:clsx@^2.1.1",
             "npm:cmdk@^1.1.1",
             "npm:lucide-react@^1.7.0",
+            "npm:papaparse@^5.5.3",
             "npm:postcss@^8.4.49",
             "npm:react-dom@^18.3.1",
             "npm:react-markdown@^10.1.0",

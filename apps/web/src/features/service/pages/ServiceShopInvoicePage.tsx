@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { ServiceSubNav } from "../components/ServiceSubNav";
+import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { ArrowLeft } from "lucide-react";
 
 type LineRow = {
@@ -25,6 +26,7 @@ type InvoiceRow = {
   status: string;
   service_job_id: string | null;
   crm_company_id: string | null;
+  branch_id: string | null;
   customer_invoice_line_items?: LineRow[] | null;
 };
 
@@ -37,10 +39,27 @@ function money(n: number | null | undefined): string {
   }).format(Number(n));
 }
 
-/**
- * Read-only internal view of a customer_invoices row (shop / portal invoices).
- * Linked from service job after posting billing staging (P1-A follow-up).
- */
+function useInvoiceBranchSlug(invoice: InvoiceRow | null | undefined) {
+  const jobId = invoice?.service_job_id;
+
+  const { data: jobBranch } = useQuery({
+    queryKey: ["service-job-branch", jobId],
+    enabled: !!jobId && !invoice?.branch_id,
+    staleTime: 120_000,
+    queryFn: async () => {
+      if (!jobId) return null;
+      const { data } = await supabase
+        .from("service_jobs")
+        .select("branch_id")
+        .eq("id", jobId)
+        .maybeSingle();
+      return (data?.branch_id as string) ?? null;
+    },
+  });
+
+  return invoice?.branch_id ?? jobBranch ?? null;
+}
+
 export function ServiceShopInvoicePage() {
   const { invoiceId } = useParams<{ invoiceId: string }>();
   const id = invoiceId?.trim() ?? "";
@@ -63,6 +82,7 @@ export function ServiceShopInvoicePage() {
           status,
           service_job_id,
           crm_company_id,
+          branch_id,
           customer_invoice_line_items (
             id,
             line_number,
@@ -81,6 +101,7 @@ export function ServiceShopInvoicePage() {
     enabled: id.length > 0,
   });
 
+  const branchSlug = useInvoiceBranchSlug(invoice);
   const lines = (invoice?.customer_invoice_line_items ?? []).slice().sort((a, b) => a.line_number - b.line_number);
   const commandCenterHref =
     invoice?.service_job_id != null && invoice.service_job_id.length > 0
@@ -118,6 +139,9 @@ export function ServiceShopInvoicePage() {
 
       {!isLoading && !error && invoice && (
         <div className="rounded-xl border bg-card p-4 space-y-4">
+          {/* Branch letterhead */}
+          <BranchDocumentHeader branchSlug={branchSlug} className="pb-3 border-b" />
+
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-lg font-semibold">#{invoice.invoice_number}</p>
@@ -187,6 +211,9 @@ export function ServiceShopInvoicePage() {
               </table>
             </div>
           )}
+
+          {/* Branch document footer */}
+          <BranchDocumentFooter branchSlug={branchSlug} />
         </div>
       )}
 
