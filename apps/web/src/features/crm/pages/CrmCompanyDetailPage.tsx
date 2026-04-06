@@ -13,6 +13,7 @@ import { CrmCompanyHierarchyCard } from "../components/CrmCompanyHierarchyCard";
 import { CrmCompanySubtreeEquipmentSection } from "../components/CrmCompanySubtreeEquipmentSection";
 import { CrmCustomFieldsCard } from "../components/CrmCustomFieldsCard";
 import { CrmPageHeader } from "../components/CrmPageHeader";
+import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
@@ -451,6 +452,8 @@ export function CrmCompanyDetailPage({ userId, userRole }: CrmCompanyDetailPageP
             recordId={companyId}
             canManageDefinitions={canManageDefinitions}
           />
+
+          <CustomerPartsIntelCard companyId={companyId} />
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">

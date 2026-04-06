@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/table";
 import { PartsSubNav } from "../components/PartsSubNav";
 import { OrderStatusBadge } from "../components/OrderStatusBadge";
+import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
+import { OrderTimelineCard } from "../components/OrderTimelineCard";
+import { VoiceOrderBadge, MachineDownBadge } from "../components/VoicePartsOrderButton";
+import { PhotoPartIdentifier } from "../components/PhotoPartIdentifier";
 import { validNextStatuses } from "../lib/order-status-machine";
 import {
   invokeSubmitInternalOrder,
@@ -186,6 +190,8 @@ export function PartsOrderDetailPage() {
             <div className="flex flex-wrap gap-2 items-center">
               <OrderStatusBadge status={status} />
               <Badge variant="outline">{orderSource}</Badge>
+              <VoiceOrderBadge orderSource={orderSource} />
+              <MachineDownBadge isMachineDown={!!(row as Record<string, unknown>)?.is_machine_down} />
             </div>
             <p>
               <span className="text-muted-foreground">Customer: </span>
@@ -282,7 +288,10 @@ export function PartsOrderDetailPage() {
 
           <Card className="overflow-x-auto">
             <div className="flex items-center justify-between p-4 pb-2">
-              <h2 className="text-sm font-medium">Line items</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-medium">Line items</h2>
+                {status === "draft" && <PhotoPartIdentifier />}
+              </div>
               {canPick && (
                 <div className="flex items-center gap-2">
                   <Input
@@ -367,6 +376,23 @@ export function PartsOrderDetailPage() {
               </p>
             )}
           </Card>
+
+          {(linesQ.data ?? []).length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-medium">Substitutes & alternatives</h2>
+              {[...new Set((linesQ.data ?? []).map((ln) => ln.part_number as string))].map(
+                (pn) => (
+                  <PartCrossRefPanel
+                    key={pn}
+                    partNumber={pn}
+                    branchId={pickBranch.trim() || null}
+                  />
+                ),
+              )}
+            </div>
+          )}
+
+          <OrderTimelineCard orderId={id} />
         </>
       )}
     </div>

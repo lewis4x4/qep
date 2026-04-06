@@ -557,20 +557,23 @@ Deno.serve(async (req) => {
     }
 
     // ── 10. Create CRM activity note ──────────────────────────────────────
+    // crm_activities_check: exactly one of contact_id / deal_id / company_id (migration 021).
     if (dealId) {
       await supabaseAdmin.from("crm_activities").insert({
         workspace_id: workspace,
         activity_type: "note",
         body: extracted.qrm_narrative || `Voice capture: ${transcript.substring(0, 500)}`,
         deal_id: dealId,
-        contact_id: contactId,
-        company_id: companyId,
+        contact_id: null,
+        company_id: null,
         created_by: user.id,
         metadata: {
           source: "voice_to_qrm",
           voice_capture_id: capture?.id,
           buying_intent: extracted.intelligence?.buying_intent,
           sentiment: extracted.intelligence?.sentiment,
+          resolved_contact_id: contactId,
+          resolved_company_id: companyId,
         },
       });
     }

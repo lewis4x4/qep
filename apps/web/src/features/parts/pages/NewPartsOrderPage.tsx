@@ -1,5 +1,7 @@
 import { PartsSubNav } from "../components/PartsSubNav";
 import { CounterSaleForm } from "../components/CounterSaleForm";
+import { VoicePartsOrderButton } from "../components/VoicePartsOrderButton";
+import { PhotoPartIdentifier } from "../components/PhotoPartIdentifier";
 
 export function NewPartsOrderPage() {
   return (
@@ -10,6 +12,10 @@ export function NewPartsOrderPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Counter or phone sale — ties to a CRM company and optional catalog pricing.
         </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <VoicePartsOrderButton />
+        <PhotoPartIdentifier />
       </div>
       <CounterSaleForm />
     </div>

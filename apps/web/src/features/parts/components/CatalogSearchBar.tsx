@@ -23,8 +23,9 @@ export function CatalogSearchBar({
   return (
     <div className="flex flex-wrap gap-2 items-end">
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Search</label>
+        <label htmlFor="catalog-search" className="text-xs text-muted-foreground">Search</label>
         <Input
+          id="catalog-search"
           className="w-[220px]"
           placeholder="Part #, description, mfr"
           value={query}
@@ -32,8 +33,9 @@ export function CatalogSearchBar({
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">Category</label>
+        <label htmlFor="catalog-category" className="text-xs text-muted-foreground">Category</label>
         <Input
+          id="catalog-category"
           className="w-[160px]"
           placeholder="Filter"
           value={category}

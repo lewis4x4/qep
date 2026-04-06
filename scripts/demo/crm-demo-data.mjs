@@ -1030,8 +1030,18 @@ async function ensureDemoUsers(admin) {
 
   for (const demoUser of DEMO_USERS) {
     let authUser = byEmail.get(demoUser.email.toLowerCase()) ?? null;
+    if (authUser && authUser.id !== demoUser.id) {
+      console.warn(
+        `[crm-demo-data] Replacing ${demoUser.email}: auth id ${authUser.id} → seed id ${demoUser.id} (required for service/parts demo FKs).`,
+      );
+      const { error: delErr } = await admin.auth.admin.deleteUser(authUser.id);
+      if (delErr) throw delErr;
+      authUser = null;
+      byEmail.delete(demoUser.email.toLowerCase());
+    }
     if (!authUser) {
       const created = await admin.auth.admin.createUser({
+        id: demoUser.id,
         email: demoUser.email,
         password: DEMO_PASSWORD,
         email_confirm: true,
@@ -2118,7 +2128,47 @@ async function deleteByIds(admin, table, ids) {
   if (error) throw error;
 }
 
+/**
+ * crm_activities_check requires exactly one of contact_id, deal_id, company_id (migration 021).
+ * Orphan rows (all null) can appear if a referenced deal was removed (FK on delete set null) or
+ * from legacy bugs. Multi-FK rows can come from edge functions that set several columns.
+ * Mirrors supabase/migrations/135_crm_activities_subject_cleanup.sql so seed succeeds without a manual SQL run.
+ */
+async function repairCrmActivitySubjects(admin) {
+  const { error: e1 } = await admin
+    .from("crm_activities")
+    .update({ contact_id: null, company_id: null })
+    .not("deal_id", "is", null)
+    .is("deleted_at", null);
+  if (e1) throw e1;
+
+  const { error: e2 } = await admin
+    .from("crm_activities")
+    .update({ company_id: null })
+    .is("deal_id", null)
+    .not("contact_id", "is", null)
+    .not("company_id", "is", null)
+    .is("deleted_at", null);
+  if (e2) throw e2;
+
+  const { data: orphans, error: selErr } = await admin
+    .from("crm_activities")
+    .select("id")
+    .is("contact_id", null)
+    .is("deal_id", null)
+    .is("company_id", null)
+    .is("deleted_at", null);
+  if (selErr) throw selErr;
+  const orphanIds = (orphans ?? []).map((r) => r.id);
+  if (orphanIds.length > 0) {
+    const { error: delErr } = await admin.from("crm_activities").delete().in("id", orphanIds);
+    if (delErr) throw delErr;
+  }
+}
+
 async function resetDemoData(admin) {
+  await repairCrmActivitySubjects(admin);
+
   await deleteByIds(
     admin,
     "crm_hubspot_import_errors",
@@ -2171,6 +2221,16 @@ async function resetDemoData(admin) {
     "crm_contact_companies",
     Object.values(DEMO_IDS.contactCompanies),
   );
+  // Any activity (including non-demo / voice_capture) linked to a demo deal must be
+  // removed before deleting deals. ON DELETE SET NULL on deal_id would otherwise
+  // produce rows with no contact_id/deal_id/company_id, violating crm_activities_check.
+  const demoDealIds = Object.values(DEMO_IDS.deals);
+  const { error: actOnDemoDealsErr } = await admin
+    .from("crm_activities")
+    .delete()
+    .in("deal_id", demoDealIds);
+  if (actOnDemoDealsErr) throw actOnDemoDealsErr;
+
   await deleteByIds(admin, "crm_deals", Object.values(DEMO_IDS.deals));
   await deleteByIds(admin, "crm_contacts", Object.values(DEMO_IDS.contacts));
   await deleteByIds(admin, "crm_companies", Object.values(DEMO_IDS.companies));
@@ -2193,6 +2253,7 @@ async function resetDemoData(admin) {
 }
 
 async function seedDemoData(admin) {
+  await repairCrmActivitySubjects(admin);
   const userIds = await ensureDemoUsers(admin);
   const stageIds = await ensureDealStages(admin);
   await seedDemoIntegrationStatuses(admin);

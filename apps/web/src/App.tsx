@@ -130,6 +130,16 @@ const PartsFulfillmentPage = lazy(() =>
     default: m.PartsFulfillmentPage,
   }))
 );
+const PartsForecastPage = lazy(() =>
+  import("./features/parts/pages/PartsForecastPage").then((m) => ({
+    default: m.PartsForecastPage,
+  }))
+);
+const PartsAnalyticsPage = lazy(() =>
+  import("./features/parts/pages/PartsAnalyticsPage").then((m) => ({
+    default: m.PartsAnalyticsPage,
+  }))
+);
 const LogisticsShowcase = lazy(() =>
   import("./components/LogisticsShowcase").then((m) => ({ default: m.LogisticsShowcase }))
 );
@@ -870,6 +880,30 @@ function App() {
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsFulfillmentPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/forecast"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsForecastPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/analytics"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PartsAnalyticsPage />
                     </Suspense>
                   ) : (
                     <Navigate to="/dashboard" replace />

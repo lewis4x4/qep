@@ -42,6 +42,36 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   shipped: ["delivered"],
 };
 
+async function emitOrderEvent(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  opts: {
+    workspaceId: string;
+    orderId: string;
+    eventType: string;
+    source?: string;
+    actorId?: string | null;
+    fromStatus?: string | null;
+    toStatus?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await supabase.from("parts_order_events").insert({
+      workspace_id: opts.workspaceId,
+      parts_order_id: opts.orderId,
+      event_type: opts.eventType,
+      source: opts.source ?? "manual",
+      actor_id: opts.actorId ?? null,
+      from_status: opts.fromStatus ?? null,
+      to_status: opts.toStatus ?? null,
+      metadata: opts.metadata ?? {},
+    });
+  } catch (e) {
+    console.warn("emitOrderEvent failed (non-blocking):", e);
+  }
+}
+
 function num(x: unknown): number | null {
   if (x == null) return null;
   const n = Number(x);
@@ -169,7 +199,7 @@ Deno.serve(async (req) => {
 
     if (insErr) {
       console.error("parts-order-manager create:", insErr);
-      return safeJsonError(insErr.message ?? "Failed to create order", 400, origin);
+      return safeJsonError("Failed to create order", 400, origin);
     }
 
     const orderId = order?.id as string;
@@ -192,6 +222,15 @@ Deno.serve(async (req) => {
       await supabase.from("parts_orders").delete().eq("id", orderId);
       return safeJsonError("Failed to create order lines", 500, origin);
     }
+
+    await emitOrderEvent(supabase, {
+      workspaceId: wsRow.workspace_id,
+      orderId,
+      eventType: "created",
+      actorId: userId,
+      toStatus: "draft",
+      metadata: { order_source: orderSource, line_count: lineRows.length },
+    });
 
     return safeJsonOk({ order }, origin, 201);
   }
@@ -258,6 +297,16 @@ Deno.serve(async (req) => {
       console.warn("parts-order-manager event:", evErr);
     }
 
+    await emitOrderEvent(supabase, {
+      workspaceId: row.workspace_id,
+      orderId,
+      eventType: "submitted",
+      actorId: userId,
+      fromStatus: "draft",
+      toStatus: "submitted",
+      metadata: { fulfillment_run_id: run.id },
+    });
+
     return safeJsonOk({ order: updated, fulfillment_run_id: run.id }, origin);
   }
 
@@ -307,8 +356,16 @@ Deno.serve(async (req) => {
 
     if (upErr) {
       console.error("parts-order-manager update:", upErr);
-      return safeJsonError(upErr.message ?? "Failed to update order", 400, origin);
+      return safeJsonError("Failed to update order", 400, origin);
     }
+
+    await emitOrderEvent(supabase, {
+      workspaceId: (updated as Record<string, unknown>)?.workspace_id as string ?? "default",
+      orderId,
+      eventType: "fields_updated",
+      actorId: userId,
+      metadata: { updated_fields: Object.keys(patch) },
+    });
 
     return safeJsonOk({ order: updated }, origin);
   }
@@ -404,6 +461,14 @@ Deno.serve(async (req) => {
       return safeJsonError("Failed to sync order totals", 500, origin);
     }
 
+    await emitOrderEvent(supabase, {
+      workspaceId: row.workspace_id,
+      orderId,
+      eventType: "lines_updated",
+      actorId: userId,
+      metadata: { new_line_count: lineRows.length },
+    });
+
     return safeJsonOk({ lines: lineRows.length }, origin);
   }
 
@@ -466,8 +531,18 @@ Deno.serve(async (req) => {
 
     if (upErr) {
       console.error("parts-order-manager advance:", upErr);
-      return safeJsonError(upErr.message ?? "Failed to advance status", 500, origin);
+      return safeJsonError("Failed to advance status", 500, origin);
     }
+
+    await emitOrderEvent(supabase, {
+      workspaceId: row.workspace_id,
+      orderId,
+      eventType: newStatus as string,
+      actorId: userId,
+      fromStatus: row.status,
+      toStatus: newStatus,
+      metadata: patch,
+    });
 
     return safeJsonOk({ order: updated }, origin);
   }
@@ -564,6 +639,19 @@ Deno.serve(async (req) => {
         console.warn("parts-order-manager pick event:", evErr);
       }
     }
+
+    await emitOrderEvent(supabase, {
+      workspaceId: order.workspace_id,
+      orderId,
+      eventType: "pick_completed",
+      actorId: userId,
+      metadata: {
+        line_id: lineId,
+        part_number: line.part_number,
+        quantity: line.quantity,
+        branch_id: branchId,
+      },
+    });
 
     return safeJsonOk({
       picked: { line_id: lineId, part_number: line.part_number, quantity: line.quantity, branch_id: branchId },

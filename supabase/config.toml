@@ -177,3 +177,31 @@ verify_jwt = false
 # Internal/counter parts orders (JWT validated in function).
 [functions.parts-order-manager]
 verify_jwt = false
+
+# Reorder intelligence cron (service_role auth).
+[functions.parts-reorder-compute]
+verify_jwt = false
+
+# Demand forecast engine cron (service_role auth).
+[functions.parts-demand-forecast]
+verify_jwt = false
+
+# Autonomous replenishment engine cron (service_role auth).
+[functions.parts-auto-replenish]
+verify_jwt = false
+
+# Voice-to-parts-order (JWT validated in function).
+[functions.voice-to-parts-order]
+verify_jwt = false
+
+# Photo-based part identification (JWT validated in function).
+[functions.parts-identify-photo]
+verify_jwt = false
+
+# Predictive failure parts kitting cron (service_role auth).
+[functions.parts-predictive-kitter]
+verify_jwt = false
+
+# Network optimizer + analytics cron (service_role auth).
+[functions.parts-network-optimizer]
+verify_jwt = false

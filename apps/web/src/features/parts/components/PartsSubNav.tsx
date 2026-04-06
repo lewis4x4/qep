@@ -8,6 +8,8 @@ import {
   Boxes,
   ChevronLeft,
   PlusCircle,
+  TrendingUp,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,8 @@ const PRIMARY_LINKS = [
   { to: "/parts/fulfillment", label: "Fulfillment", icon: Package, end: false },
   { to: "/parts/inventory", label: "Inventory", icon: Boxes, end: false },
   { to: "/parts/vendors", label: "Vendors", icon: Truck, end: false },
+  { to: "/parts/forecast", label: "Forecast", icon: TrendingUp, end: false },
+  { to: "/parts/analytics", label: "Analytics", icon: BarChart3, end: false },
 ] as const;
 
 const pillBase = cn(
