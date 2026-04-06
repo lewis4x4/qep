@@ -23,6 +23,9 @@ const PortalSettingsPage = lazy(() =>
 const PortalDocumentsPage = lazy(() =>
   import("./pages/PortalDocumentsPage").then((m) => ({ default: m.PortalDocumentsPage })),
 );
+const PortalFleetMapPage = lazy(() =>
+  import("./pages/PortalFleetMapPage").then((m) => ({ default: m.PortalFleetMapPage })),
+);
 
 /**
  * Portal route elements — returned as an array so they can be spread
@@ -39,5 +42,6 @@ export function portalRouteElements(): ReactElement[] {
     <Route key="portal-quotes" path="/portal/quotes" element={<PortalQuotesPage />} />,
     <Route key="portal-settings" path="/portal/settings" element={<PortalSettingsPage />} />,
     <Route key="portal-documents" path="/portal/documents" element={<PortalDocumentsPage />} />,
+    <Route key="portal-fleet-map" path="/portal/fleet" element={<PortalFleetMapPage />} />,
   ];
 }
