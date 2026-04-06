@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { buildPipelineHealthByRep, type PipelineDealRow, type DealStageRow, type RepProfileRow } from "../lib/pipeline-health";
 
 /** Fleet / registry rows older than this many days surface as aging inventory (punch list: Iron Manager). */
 const INVENTORY_AGING_DAYS = 90;
+
+/** Open deals sampled for manager pipeline health (per-rep swim lanes). */
+const PIPELINE_DEALS_SAMPLE = 250;
 
 export function useIronManagerData() {
   return useQuery({
@@ -19,13 +23,20 @@ export function useIronManagerData() {
         { data: marginFlags },
         { data: kpis },
         { data: pipelineDeals },
+        { data: dealStages },
         { data: agingEquipment },
       ] = await Promise.all([
         sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested"),
         sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review"),
         sb.from("crm_deals").select("id, name, margin_pct, margin_check_status").eq("margin_check_status", "flagged"),
         sb.from("prospecting_kpis").select("rep_id, positive_visits, target, target_met, kpi_date").eq("kpi_date", new Date().toISOString().split("T")[0]),
-        sb.from("crm_deals").select("id, name, stage_id, amount, assigned_rep_id, last_activity_at").is("deleted_at", null).order("last_activity_at", { ascending: false }).limit(50),
+        sb
+          .from("crm_deals")
+          .select("id, name, stage_id, amount, assigned_rep_id, last_activity_at")
+          .is("deleted_at", null)
+          .order("last_activity_at", { ascending: false })
+          .limit(PIPELINE_DEALS_SAMPLE),
+        sb.from("crm_deal_stages").select("id, sort_order, name").order("sort_order", { ascending: true }),
         sb
           .from("crm_equipment")
           .select("id, name, created_at, company_id, crm_companies(name)")
@@ -35,12 +46,26 @@ export function useIronManagerData() {
           .limit(40),
       ]);
 
+      const deals = (pipelineDeals ?? []) as PipelineDealRow[];
+      const stages = (dealStages ?? []) as DealStageRow[];
+      const repIds = [...new Set(deals.map((d) => d.assigned_rep_id).filter((id): id is string => Boolean(id)))];
+
+      let repProfiles: RepProfileRow[] = [];
+      if (repIds.length > 0) {
+        const { data: profiles } = await sb.from("profiles").select("id, full_name, email").in("id", repIds);
+        repProfiles = (profiles ?? []) as RepProfileRow[];
+      }
+
+      const pipelineHealthByRep = buildPipelineHealthByRep(deals, stages, repProfiles);
+
       return {
         pendingDemos: pendingDemos ?? [],
         pendingTrades: pendingTrades ?? [],
         marginFlags: marginFlags ?? [],
         kpis: kpis ?? [],
         pipelineDeals: pipelineDeals ?? [],
+        dealStages: stages,
+        pipelineHealthByRep,
         agingEquipment: agingEquipment ?? [],
         approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
       };

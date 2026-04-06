@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { ApprovalQueue } from "../components/ApprovalQueue";
 import { InventoryAgingCard } from "../components/InventoryAgingCard";
+import { PipelineHealthByRepCard } from "../components/PipelineHealthByRepCard";
 import { useIronManagerData } from "../hooks/useDashboardData";
 import { Users, TrendingUp, AlertTriangle, DollarSign, Package } from "lucide-react";
 
@@ -61,6 +62,8 @@ export function IronManagerDashboard() {
           accent={agingCount > 0 ? "text-amber-400" : "text-foreground"}
         />
       </div>
+
+      <PipelineHealthByRepCard rows={data?.pipelineHealthByRep ?? []} />
 
       <ApprovalQueue items={approvalItems} />
 
