@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
+import { PartsReorderHistory } from "../components/PartsReorderHistory";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 
 type LineDraft = { part_number: string; quantity: number };
@@ -47,8 +49,10 @@ type SuggestPmKitResponse =
 
 export function PortalPartsPage() {
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const initialFleetId = searchParams.get("fleet_id") ?? "";
   const [lines, setLines] = useState<LineDraft[]>([{ part_number: "", quantity: 1 }]);
-  const [fleetId, setFleetId] = useState<string>("");
+  const [fleetId, setFleetId] = useState<string>(initialFleetId);
   const [aiReason, setAiReason] = useState<string | null>(null);
   const [matchedJobLabel, setMatchedJobLabel] = useState<string | null>(null);
   /** When true, draft submit includes ai_suggested_pm_kit + ai_suggestion_reason. Cleared if user edits lines. */
@@ -153,6 +157,22 @@ export function PortalPartsPage() {
     setMatchedJobLabel(null);
   };
 
+  /** Populate the line draft from a past order (one-click reorder). */
+  const handleReorder = (
+    items: Array<{ part_number: string; quantity: number; description?: string }>,
+  ) => {
+    const mapped: LineDraft[] = items
+      .filter((i) => i.part_number)
+      .map((i) => ({ part_number: i.part_number, quantity: Math.max(1, i.quantity) }));
+    if (mapped.length > 0) {
+      setLines(mapped);
+      resetSuggestionContext();
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  };
+
   return (
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Parts orders</h1>
@@ -160,6 +180,14 @@ export function PortalPartsPage() {
         Build a cart, save it as a draft, then submit it to the dealership when you are ready. AI-suggested PM kits use
         the same service templates your shop relies on.
       </p>
+
+      {/* Wave 6 Task 7 — one-click reorder from purchase history */}
+      <div className="mb-6">
+        <PartsReorderHistory
+          fleetFilterId={fleetId || undefined}
+          onReorder={handleReorder}
+        />
+      </div>
 
       {fleet.length > 0 && (
         <Card className="p-4 mb-6 space-y-3">
