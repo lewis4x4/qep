@@ -2,7 +2,14 @@ import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { useIronWomanData } from "../hooks/useDashboardData";
-import { Package, DollarSign, Boxes, CreditCard } from "lucide-react";
+import { Package, DollarSign, Boxes, CreditCard, ArrowUpRight } from "lucide-react";
+
+function dealStageName(deal: { crm_deal_stages?: { name?: string | null } | { name?: string | null }[] | null }): string {
+  const s = deal.crm_deal_stages;
+  if (!s) return "—";
+  if (Array.isArray(s)) return s[0]?.name?.trim() || "—";
+  return s.name?.trim() || "—";
+}
 
 export function IronWomanDashboard() {
   const { data, isLoading, isError } = useIronWomanData();
@@ -19,9 +26,18 @@ export function IronWomanDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Iron Woman Command Center</h1>
-        <p className="text-sm text-muted-foreground">Order processing, deposits, equipment intake, credit tracking</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Iron Woman Command Center</h1>
+          <p className="text-sm text-muted-foreground">Order processing, deposits, equipment intake, credit tracking</p>
+        </div>
+        <Link
+          to="/ops/intake"
+          className="inline-flex items-center gap-1 text-sm font-medium text-qep-orange hover:underline shrink-0"
+        >
+          Intake board
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -30,6 +46,60 @@ export function IronWomanDashboard() {
         <DashboardKpiCard label="Intake Pipeline" value={data?.intakeItems?.length ?? 0} sublabel="equipment in process" icon={<Boxes className="h-4 w-4 text-violet-400" />} />
         <DashboardKpiCard label="Credit Apps" value={data?.creditApps?.length ?? 0} sublabel="pending approval" icon={<CreditCard className="h-4 w-4 text-emerald-400" />} />
       </div>
+
+      {/* Order processing (stages 13–16) — loaded in hook but previously not listed */}
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold text-foreground mb-1">Order processing</h3>
+        <p className="text-xs text-muted-foreground mb-3">Deals from sales order signed through deposit collected (pipeline steps 13–16).</p>
+        {(data?.orderProcessing ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No deals in this stage band.</p>
+        ) : (
+          <div className="space-y-2">
+            {(data?.orderProcessing ?? []).map((deal: any) => (
+              <Link
+                key={deal.id}
+                to={`/crm/deals/${deal.id}`}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{deal.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{dealStageName(deal)}</p>
+                </div>
+                <span className="text-sm font-semibold tabular-nums shrink-0">
+                  {deal.amount != null ? `$${Number(deal.amount).toLocaleString()}` : "—"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Credit applications (stage 14) */}
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold text-foreground mb-1">Credit applications</h3>
+        <p className="text-xs text-muted-foreground mb-3">Deals in credit-submitted stage awaiting bank status.</p>
+        {(data?.creditApps ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No deals in credit review.</p>
+        ) : (
+          <div className="space-y-2">
+            {(data?.creditApps ?? []).map((deal: any) => (
+              <Link
+                key={deal.id}
+                to={`/crm/deals/${deal.id}`}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{deal.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{dealStageName(deal)}</p>
+                </div>
+                <span className="text-sm font-semibold tabular-nums shrink-0">
+                  {deal.amount != null ? `$${Number(deal.amount).toLocaleString()}` : "—"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Deposit tracker */}
       <Card className="p-4">
@@ -66,7 +136,11 @@ export function IronWomanDashboard() {
         ) : (
           <div className="space-y-2">
             {(data?.intakeItems ?? []).map((item: any) => (
-              <div key={item.id} className="flex items-center justify-between rounded-lg border border-border p-2.5">
+              <Link
+                key={item.id}
+                to="/ops/intake"
+                className="flex items-center justify-between rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
+              >
                 <span className="text-sm font-medium">{item.stock_number || "No stock #"}</span>
                 <div className="flex items-center gap-2">
                   <div className="flex gap-0.5">
@@ -76,7 +150,7 @@ export function IronWomanDashboard() {
                   </div>
                   <span className="text-[10px] text-muted-foreground">{item.current_stage}/8</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

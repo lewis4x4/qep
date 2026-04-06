@@ -151,7 +151,11 @@ export function useIronWomanData() {
         sb.from("crm_deals").select("id, name, amount, stage_id, crm_deal_stages!inner(sort_order, name)").gte("crm_deal_stages.sort_order", 13).lte("crm_deal_stages.sort_order", 16).is("deleted_at", null),
         sb.from("deposits").select("id, deal_id, required_amount, status, created_at").in("status", ["pending", "requested", "received"]),
         sb.from("equipment_intake").select("id, stock_number, current_stage, created_at").lt("current_stage", 8).order("current_stage"),
-        sb.from("crm_deals").select("id, name, amount, crm_deal_stages!inner(sort_order)").eq("crm_deal_stages.sort_order", 14).is("deleted_at", null),
+        sb
+          .from("crm_deals")
+          .select("id, name, amount, crm_deal_stages!inner(sort_order, name)")
+          .eq("crm_deal_stages.sort_order", 14)
+          .is("deleted_at", null),
       ]);
 
       return {
