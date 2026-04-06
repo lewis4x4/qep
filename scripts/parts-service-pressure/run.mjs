@@ -132,6 +132,16 @@ mustContain(
   "logServiceCronRun",
   "escalator cron observability",
 );
+mustContain(
+  "apps/web/src/features/service/hooks/usePartsQueue.ts",
+  "fulfillment_run_id",
+  "parts queue query embeds fulfillment_run_id",
+);
+mustContain(
+  "apps/web/src/features/service/components/PartsQueueBucket.tsx",
+  "/service/fulfillment/",
+  "parts queue UI links to fulfillment audit",
+);
 
 const base = (
   process.env.SUPABASE_URL ||

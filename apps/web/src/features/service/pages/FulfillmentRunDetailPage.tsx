@@ -122,6 +122,7 @@ export function FulfillmentRunDetailPage() {
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
       <ServiceSubNav />
+      <main aria-labelledby="fulfillment-run-title" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Link
           to="/service/parts"
@@ -133,7 +134,9 @@ export function FulfillmentRunDetailPage() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold">Fulfillment run</h1>
+        <h1 id="fulfillment-run-title" className="text-2xl font-semibold">
+          Fulfillment run
+        </h1>
         <p className="text-sm text-muted-foreground">
           Shared audit trail: portal order status, shop picks/plans, and vendor inbound/escalations
           (when the run is linked to a service job).
@@ -145,8 +148,17 @@ export function FulfillmentRunDetailPage() {
       )}
 
       {runQuery.isLoading && (
-        <div className="flex justify-center py-16">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <div
+          className="flex justify-center py-16"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading fulfillment run</span>
+          <div
+            className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
+            aria-hidden
+          />
         </div>
       )}
 
@@ -273,6 +285,7 @@ export function FulfillmentRunDetailPage() {
           </div>
         </>
       )}
+      </main>
     </div>
   );
 }
