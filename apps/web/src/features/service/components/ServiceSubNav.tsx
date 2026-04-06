@@ -112,17 +112,20 @@ export function ServiceSubNav() {
       )}
 
       {/* Core service links */}
-      {SUB_NAV_LINKS.map((link) => (
-        <Link
-          key={link.to}
-          to={link.to}
-          aria-current={isActive(link.to) ? "page" : undefined}
-          className={isActive(link.to) ? pillActive : pillBase}
-        >
-          <link.icon className="h-3.5 w-3.5 shrink-0" />
-          {link.label}
-        </Link>
-      ))}
+      {SUB_NAV_LINKS.map((navItem) => {
+        const NavIcon = navItem.icon;
+        return (
+          <Link
+            key={navItem.to}
+            to={navItem.to}
+            aria-current={isActive(navItem.to) ? "page" : undefined}
+            className={isActive(navItem.to) ? pillActive : pillBase}
+          >
+            <NavIcon className="h-3.5 w-3.5 shrink-0" />
+            {navItem.label}
+          </Link>
+        );
+      })}
 
       {/* Admin-only group */}
       {isAdmin && (
@@ -135,17 +138,20 @@ export function ServiceSubNav() {
             <Settings2 className="h-2.5 w-2.5" />
             Ops
           </span>
-          {ADMIN_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              aria-current={isActive(link.to) ? "page" : undefined}
-              className={isActive(link.to) ? pillActive : pillBase}
-            >
-              <link.icon className="h-3.5 w-3.5 shrink-0" />
-              {link.label}
-            </Link>
-          ))}
+          {ADMIN_LINKS.map((navItem) => {
+            const NavIcon = navItem.icon;
+            return (
+              <Link
+                key={navItem.to}
+                to={navItem.to}
+                aria-current={isActive(navItem.to) ? "page" : undefined}
+                className={isActive(navItem.to) ? pillActive : pillBase}
+              >
+                <NavIcon className="h-3.5 w-3.5 shrink-0" />
+                {navItem.label}
+              </Link>
+            );
+          })}
         </>
       )}
 

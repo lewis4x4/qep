@@ -28,7 +28,7 @@ function sortByBinThenPart(items: PartsQueueItem[]) {
     const ba = latestBin(a);
     const bb = latestBin(b);
     if (ba !== bb) return ba.localeCompare(bb);
-    return a.part_number.localeCompare(b.part_number);
+    return String(a.part_number ?? "").localeCompare(String(b.part_number ?? ""));
   });
 }
 
@@ -45,7 +45,8 @@ function bucketize(items: PartsQueueItem[]) {
   const other: PartsQueueItem[] = [];
 
   for (const item of items) {
-    const isMD = item.job?.status_flags?.includes("machine_down");
+    const flags = item.job?.status_flags;
+    const isMD = Array.isArray(flags) && flags.includes("machine_down");
     if (isMD) { machineDown.push(item); continue; }
 
     const latestAction = item.actions?.find((a) => !a.completed_at);
@@ -88,7 +89,7 @@ function bucketize(items: PartsQueueItem[]) {
 }
 
 export function PartsWorkQueuePage() {
-  const { data: items = [], isLoading } = usePartsQueue();
+  const { data: items = [], isLoading, isError, error } = usePartsQueue();
   const qc = useQueryClient();
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [pendingRequirementId, setPendingRequirementId] = useState<string | null>(null);
@@ -169,6 +170,13 @@ export function PartsWorkQueuePage() {
             className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
             aria-hidden
           />
+        </div>
+      ) : isError ? (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          <p className="font-medium">Could not load parts queue</p>
+          <p className="mt-1 text-xs opacity-90">
+            {error instanceof Error ? error.message : String(error)}
+          </p>
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-12 italic">No active parts requirements</p>

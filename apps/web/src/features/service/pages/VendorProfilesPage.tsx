@@ -213,7 +213,12 @@ export function VendorProfilesPage() {
                 <span className="text-muted-foreground ml-2">{v.supplier_type}</span>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Lead {v.avg_lead_time_hours != null ? `${v.avg_lead_time_hours}h` : "—"} · score{" "}
-                  {v.responsiveness_score != null ? Number(v.responsiveness_score).toFixed(2) : "—"}
+                  {v.responsiveness_score != null
+                    ? Number(v.responsiveness_score).toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2,
+                      })
+                    : "—"}
                 </p>
               </div>
               {canManage && (

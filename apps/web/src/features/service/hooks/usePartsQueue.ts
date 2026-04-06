@@ -40,10 +40,10 @@ export function usePartsQueue() {
         .from("service_parts_requirements")
         .select(`
           *,
-          job:service_jobs(
+          job:service_jobs!service_parts_requirements_job_id_fkey(
             id, fulfillment_run_id, customer_problem_summary, priority, status_flags,
-            customer:crm_companies(id, name),
-            machine:crm_equipment(id, make, model, serial_number)
+            customer:crm_companies!service_jobs_customer_id_fkey(id, name),
+            machine:crm_equipment!service_jobs_machine_id_fkey(id, make, model, serial_number)
           ),
           actions:service_parts_actions(id, action_type, completed_at, expected_date, po_reference),
           staging:service_parts_staging(bin_location, staged_at)

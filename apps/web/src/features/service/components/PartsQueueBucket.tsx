@@ -20,7 +20,9 @@ export function PartsQueueBucket({ title, items, accentColor = "bg-slate-100", o
       </div>
       <div className="divide-y">
         {items.map((item) => {
-          const isMachineDown = item.job?.status_flags?.includes("machine_down");
+          const flags = item.job?.status_flags;
+          const isMachineDown =
+            Array.isArray(flags) && flags.includes("machine_down");
           return (
             <div key={item.id} className={`px-4 py-3 flex items-center gap-4 ${isMachineDown ? "bg-red-50/50" : ""}`}>
               <div className="flex-1 min-w-0">
