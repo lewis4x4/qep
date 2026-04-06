@@ -7,6 +7,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import { shouldSkipHubSpotSequenceTaskForNativeFollowUp } from "../_shared/crm-follow-up-reminders.ts";
+import { timingSafeEqualString } from "../_shared/timing-safe.ts";
 
 const STALLED_THRESHOLD_DAYS = 7;
 
@@ -207,9 +208,13 @@ interface HubSpotTokenRefreshResponse {
 }
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get("Authorization")?.trim();
   const cronSecret = Deno.env.get("CRON_SECRET") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || !authHeader?.startsWith("Bearer ")) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const token = authHeader.slice(7);
+  if (!timingSafeEqualString(token, cronSecret)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

@@ -24,7 +24,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, escapeHtml } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "@/features/crm/lib/crm-supabase";
 import type { UserRole } from "@/lib/database.types";
@@ -1047,7 +1047,7 @@ function MorningBriefingSection({
             <div className="prose prose-sm prose-invert max-w-none text-foreground/90 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_p]:text-sm [&_li]:text-sm [&_strong]:text-foreground [&_ul]:pl-4 [&_ol]:pl-4">
               <div
                 dangerouslySetInnerHTML={{
-                  __html: briefing.content.replace(/\n/g, "<br/>"),
+                  __html: escapeHtml(briefing.content).replace(/\n/g, "<br/>"),
                 }}
               />
             </div>
