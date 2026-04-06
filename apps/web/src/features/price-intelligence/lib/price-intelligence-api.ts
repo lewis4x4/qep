@@ -136,3 +136,23 @@ export async function draftRequote(quotePackageId: string): Promise<RequoteDraft
   }
   return res.json();
 }
+
+export interface BatchRequoteResult {
+  ok: boolean;
+  generated: number;
+  failed: number;
+  results: Array<{ quote_package_id: string; draft_id: string | null; error?: string }>;
+}
+
+export async function batchRequote(quotePackageIds: string[]): Promise<BatchRequoteResult> {
+  const res = await fetch(`${REQUOTE_URL}/batch`, {
+    method: "POST",
+    headers: await authHeadersJson(),
+    body: JSON.stringify({ quote_package_ids: quotePackageIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Batch requote failed" }));
+    throw new Error((err as { error?: string }).error ?? `Batch failed (${res.status})`);
+  }
+  return res.json();
+}

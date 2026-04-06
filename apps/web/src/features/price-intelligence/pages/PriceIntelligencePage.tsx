@@ -9,6 +9,7 @@ import {
 import {
   fetchImpactReport,
   draftRequote,
+  batchRequote,
   type ImpactItem,
   type RequoteDraftResult,
 } from "../lib/price-intelligence-api";
@@ -36,6 +37,13 @@ export function PriceIntelligencePage() {
     mutationFn: draftRequote,
     onSuccess: (data) => {
       setSelectedDraft(data);
+      queryClient.invalidateQueries({ queryKey: ["price-intelligence", "impact"] });
+    },
+  });
+
+  const batchMutation = useMutation({
+    mutationFn: batchRequote,
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["price-intelligence", "impact"] });
     },
   });
@@ -102,7 +110,31 @@ export function PriceIntelligencePage() {
               <AlertTriangle className="h-4 w-4 text-amber-400" aria-hidden />
               <h3 className="text-sm font-bold text-foreground">Affected Quotes</h3>
               <span className="text-[10px] text-muted-foreground">(sorted by $ impact)</span>
+              {items.length > 0 && (
+                <Button
+                  size="sm"
+                  className="ml-auto h-7 text-[10px]"
+                  onClick={() => {
+                    const ids = Array.from(new Set(items.map((i) => i.quote_package_id))).slice(0, 50);
+                    batchMutation.mutate(ids);
+                  }}
+                  disabled={batchMutation.isPending}
+                >
+                  <Mail className="mr-1 h-3 w-3" />
+                  {batchMutation.isPending ? "Drafting…" : `Generate all drafts (${Math.min(50, new Set(items.map((i) => i.quote_package_id)).size)})`}
+                </Button>
+              )}
             </div>
+            {batchMutation.isSuccess && batchMutation.data && (
+              <div className="mb-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-[11px] text-emerald-400">
+                ✓ Generated {batchMutation.data.generated} drafts ({batchMutation.data.failed} failed) — review in Email Drafts inbox
+              </div>
+            )}
+            {batchMutation.isError && (
+              <div className="mb-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[11px] text-red-400">
+                Batch failed: {(batchMutation.error as Error)?.message ?? "unknown"}
+              </div>
+            )}
 
             {reportLoading && (
               <div className="space-y-2">
