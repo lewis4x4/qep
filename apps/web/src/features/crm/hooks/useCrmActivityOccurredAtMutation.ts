@@ -13,7 +13,11 @@ function sortActivities(items: CrmActivityItem[]): CrmActivityItem[] {
   return [...items].sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
 }
 
-export function useCrmActivityOccurredAtMutation(queryKey: QueryKey) {
+interface ActivityMutationOptions {
+  extraInvalidateKeys?: QueryKey[];
+}
+
+export function useCrmActivityOccurredAtMutation(queryKey: QueryKey, options?: ActivityMutationOptions) {
   const queryClient = useQueryClient();
   const [pendingOccurredAtId, setPendingOccurredAtId] = useState<string | null>(null);
 
@@ -35,6 +39,11 @@ export function useCrmActivityOccurredAtMutation(queryKey: QueryKey) {
     onSettled: async () => {
       setPendingOccurredAtId(null);
       await queryClient.invalidateQueries({ queryKey });
+      if (options?.extraInvalidateKeys) {
+        for (const key of options.extraInvalidateKeys) {
+          await queryClient.invalidateQueries({ queryKey: key });
+        }
+      }
     },
   });
 

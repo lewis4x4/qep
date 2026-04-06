@@ -30,7 +30,11 @@ function readTaskMetadata(activity: CrmActivityItem): CrmTaskMetadata | null {
   return task as CrmTaskMetadata;
 }
 
-export function useCrmActivityTaskMutation(queryKey: QueryKey) {
+interface ActivityMutationOptions {
+  extraInvalidateKeys?: QueryKey[];
+}
+
+export function useCrmActivityTaskMutation(queryKey: QueryKey, options?: ActivityMutationOptions) {
   const queryClient = useQueryClient();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
@@ -72,6 +76,11 @@ export function useCrmActivityTaskMutation(queryKey: QueryKey) {
     onSettled: async () => {
       setPendingTaskId(null);
       await queryClient.invalidateQueries({ queryKey });
+      if (options?.extraInvalidateKeys) {
+        for (const key of options.extraInvalidateKeys) {
+          await queryClient.invalidateQueries({ queryKey: key });
+        }
+      }
     },
   });
 

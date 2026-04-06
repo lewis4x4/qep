@@ -3,28 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { dealCompositeQueryKey } from "../lib/deal-composite-keys";
+import type { CrmDealDemoSummary } from "../lib/deal-composite-types";
+
+export type { CrmDealDemoSummary } from "../lib/deal-composite-types";
 
 interface DemoRequestCardProps {
   dealId: string;
-}
-
-interface Demo {
-  id: string;
-  status: string;
-  equipment_category: string | null;
-  max_hours: number;
-  starting_hours: number | null;
-  ending_hours: number | null;
-  hours_used: number | null;
-  total_demo_cost: number | null;
-  scheduled_date: string | null;
-  followup_due_at: string | null;
-  followup_completed: boolean;
-  customer_decision: string | null;
-  needs_assessment_complete: boolean;
-  quote_presented: boolean;
-  buying_intent_confirmed: boolean;
-  created_at: string;
+  /** When provided (including empty array), skips fetching — used with get_deal_composite. */
+  prefetched?: CrmDealDemoSummary[] | null;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -37,7 +24,7 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
+export function DemoRequestCard({ dealId, prefetched }: DemoRequestCardProps) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [category, setCategory] = useState<"construction" | "forestry">("construction");
@@ -51,9 +38,11 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
         .eq("deal_id", dealId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Demo[];
+      return (data ?? []) as CrmDealDemoSummary[];
     },
-    staleTime: 30_000,
+    staleTime: prefetched !== undefined ? Infinity : 30_000,
+    enabled: Boolean(dealId),
+    initialData: prefetched !== undefined ? (prefetched ?? []) : undefined,
   });
 
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -81,6 +70,7 @@ export function DemoRequestCard({ dealId }: DemoRequestCardProps) {
     onSuccess: () => {
       setMutationError(null);
       queryClient.invalidateQueries({ queryKey: ["crm", "demos", dealId] });
+      queryClient.invalidateQueries({ queryKey: dealCompositeQueryKey(dealId) });
       setShowForm(false);
     },
     onError: (err: Error) => {

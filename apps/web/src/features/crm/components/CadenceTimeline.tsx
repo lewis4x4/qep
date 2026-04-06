@@ -1,29 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
+import type { Cadence } from "../lib/deal-composite-types";
+
+export type { Cadence, CadenceTouchpoint } from "../lib/deal-composite-types";
 
 interface CadenceTimelineProps {
   dealId: string;
-}
-
-interface Touchpoint {
-  id: string;
-  touchpoint_type: string;
-  scheduled_date: string;
-  purpose: string;
-  suggested_message: string | null;
-  value_type: string | null;
-  status: "pending" | "completed" | "skipped" | "overdue";
-  completed_at: string | null;
-  delivery_method: string | null;
-}
-
-interface Cadence {
-  id: string;
-  cadence_type: "sales" | "post_sale";
-  status: string;
-  started_at: string;
-  follow_up_touchpoints: Touchpoint[];
+  /** When provided (including empty array), skips fetching — used with get_deal_composite. */
+  prefetched?: Cadence[] | null;
 }
 
 const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
@@ -48,7 +33,7 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / 86400000);
 }
 
-export function CadenceTimeline({ dealId }: CadenceTimelineProps) {
+export function CadenceTimeline({ dealId, prefetched }: CadenceTimelineProps) {
   const { data: cadences, isLoading, isError } = useQuery({
     queryKey: ["crm", "cadences", dealId],
     queryFn: async () => {
@@ -66,7 +51,9 @@ export function CadenceTimeline({ dealId }: CadenceTimelineProps) {
       if (error) throw error;
       return (data ?? []) as Cadence[];
     },
-    staleTime: 30_000,
+    staleTime: prefetched !== undefined ? Infinity : 30_000,
+    enabled: Boolean(dealId),
+    initialData: prefetched !== undefined ? (prefetched ?? []) : undefined,
   });
 
   if (isLoading) {

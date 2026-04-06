@@ -16,7 +16,11 @@ function mergeBody(activity: CrmActivityItem, body: string): CrmActivityItem {
   };
 }
 
-export function useCrmActivityBodyMutation(queryKey: QueryKey) {
+interface ActivityMutationOptions {
+  extraInvalidateKeys?: QueryKey[];
+}
+
+export function useCrmActivityBodyMutation(queryKey: QueryKey, options?: ActivityMutationOptions) {
   const queryClient = useQueryClient();
   const [pendingBodyId, setPendingBodyId] = useState<string | null>(null);
 
@@ -49,6 +53,11 @@ export function useCrmActivityBodyMutation(queryKey: QueryKey) {
     onSettled: async () => {
       setPendingBodyId(null);
       await queryClient.invalidateQueries({ queryKey });
+      if (options?.extraInvalidateKeys) {
+        for (const key of options.extraInvalidateKeys) {
+          await queryClient.invalidateQueries({ queryKey: key });
+        }
+      }
     },
   });
 

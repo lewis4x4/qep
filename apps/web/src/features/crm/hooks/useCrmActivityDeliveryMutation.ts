@@ -8,7 +8,11 @@ interface DeliverActivityInput {
   updatedAt: string;
 }
 
-export function useCrmActivityDeliveryMutation(queryKey: QueryKey) {
+interface ActivityMutationOptions {
+  extraInvalidateKeys?: QueryKey[];
+}
+
+export function useCrmActivityDeliveryMutation(queryKey: QueryKey, options?: ActivityMutationOptions) {
   const queryClient = useQueryClient();
   const [pendingDeliveryId, setPendingDeliveryId] = useState<string | null>(null);
 
@@ -27,6 +31,11 @@ export function useCrmActivityDeliveryMutation(queryKey: QueryKey) {
     onSettled: async () => {
       setPendingDeliveryId(null);
       await queryClient.invalidateQueries({ queryKey });
+      if (options?.extraInvalidateKeys) {
+        for (const key of options.extraInvalidateKeys) {
+          await queryClient.invalidateQueries({ queryKey: key });
+        }
+      }
     },
   });
 

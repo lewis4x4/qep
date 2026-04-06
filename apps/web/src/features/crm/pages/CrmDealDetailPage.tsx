@@ -22,14 +22,12 @@ import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation"
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import {
   createCrmActivity,
-  getCrmCompany,
-  getCrmContact,
-  getCrmDeal,
-  getCrmDealLossFields,
-  listCrmDealStages,
   listDealActivities,
+  listCrmDealStages,
   patchCrmDeal,
 } from "../lib/crm-api";
+import { dealCompositeQueryKey } from "../lib/deal-composite-keys";
+import { fetchDealComposite } from "../lib/deal-composite-api";
 import type { CrmDealPatchInput } from "../lib/types";
 
 interface CrmDealDetailPageProps {
@@ -51,10 +49,11 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   const [editorOpen, setEditorOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const dealQuery = useQuery({
-    queryKey: ["crm", "deal", dealId],
-    queryFn: () => getCrmDeal(dealId!),
+  const compositeQuery = useQuery({
+    queryKey: dealCompositeQueryKey(dealId!),
+    queryFn: () => fetchDealComposite(dealId!),
     enabled: Boolean(dealId),
+    staleTime: 30_000,
   });
 
   const stagesQuery = useQuery({
@@ -66,53 +65,48 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
   const activitiesQuery = useQuery({
     queryKey: ["crm", "deal", dealId, "activities"],
     queryFn: () => listDealActivities(dealId!),
-    enabled: Boolean(dealId) && dealQuery.data !== null,
-  });
-
-  const lossFieldsQuery = useQuery({
-    queryKey: ["crm", "deal", dealId, "loss-fields"],
-    queryFn: () => getCrmDealLossFields(dealId!),
-    enabled: Boolean(dealId) && isElevatedRole && dealQuery.data !== null,
-    staleTime: 60_000,
-  });
-
-  const contactQuery = useQuery({
-    queryKey: ["crm", "contact", dealQuery.data?.primaryContactId],
-    queryFn: () => getCrmContact(dealQuery.data?.primaryContactId ?? ""),
-    enabled: Boolean(dealQuery.data?.primaryContactId),
-  });
-
-  const companyQuery = useQuery({
-    queryKey: ["crm", "company", dealQuery.data?.companyId],
-    queryFn: () => getCrmCompany(dealQuery.data?.companyId ?? ""),
-    enabled: Boolean(dealQuery.data?.companyId),
+    enabled: Boolean(dealId) && compositeQuery.isError,
   });
 
   useEffect(() => {
-    if (!dealQuery.data) return;
-    setStageId(dealQuery.data.stageId);
-    setNextFollowUpInput(toDateTimeLocalValue(dealQuery.data.nextFollowUpAt));
+    if (compositeQuery.data?.activities) {
+      queryClient.setQueryData(["crm", "deal", dealId, "activities"], compositeQuery.data.activities);
+    }
+  }, [compositeQuery.data, dealId, queryClient]);
+
+  const dealQueryData = compositeQuery.data?.deal ?? null;
+  const contactQueryData = compositeQuery.data?.contact ?? null;
+  const companyQueryData = compositeQuery.data?.company ?? null;
+  const lossFieldsData = isElevatedRole ? compositeQuery.data?.lossFields : null;
+
+  const activitiesData = activitiesQuery.data ?? compositeQuery.data?.activities ?? [];
+
+  useEffect(() => {
+    if (!dealQueryData) return;
+    setStageId(dealQueryData.stageId);
+    setNextFollowUpInput(toDateTimeLocalValue(dealQueryData.nextFollowUpAt));
     setFormError(null);
-  }, [dealQuery.data?.id, dealQuery.data?.stageId, dealQuery.data?.nextFollowUpAt]);
+  }, [dealQueryData?.id, dealQueryData?.stageId, dealQueryData?.nextFollowUpAt]);
 
   useEffect(() => {
     if (!isElevatedRole) return;
-    setLossReason(lossFieldsQuery.data?.lossReason ?? "");
-    setCompetitor(lossFieldsQuery.data?.competitor ?? "");
-  }, [isElevatedRole, lossFieldsQuery.data?.lossReason, lossFieldsQuery.data?.competitor]);
+    setLossReason(lossFieldsData?.lossReason ?? "");
+    setCompetitor(lossFieldsData?.competitor ?? "");
+  }, [isElevatedRole, lossFieldsData?.lossReason, lossFieldsData?.competitor]);
 
   const selectedStage = useMemo(
     () => stagesQuery.data?.find((stage) => stage.id === stageId) ?? null,
-    [stageId, stagesQuery.data]
+    [stageId, stagesQuery.data],
   );
+
+  const compositeInvalidate = dealId ? [dealCompositeQueryKey(dealId)] : [];
 
   const saveMutation = useMutation({
     mutationFn: (input: CrmDealPatchInput) => patchCrmDeal(dealId!, input),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId] }),
-        queryClient.invalidateQueries({ queryKey: ["crm", "contact", dealQuery.data?.primaryContactId, "rep-safe-deals"] }),
-        queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId, "loss-fields"] }),
+        queryClient.invalidateQueries({ queryKey: dealCompositeQueryKey(dealId!) }),
+        queryClient.invalidateQueries({ queryKey: ["crm", "contact", dealQueryData?.primaryContactId, "rep-safe-deals"] }),
       ]);
       setFormError(null);
     },
@@ -133,34 +127,44 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     onSuccess: async () => {
       setComposerOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["crm", "deal", dealId, "activities"] });
+      await queryClient.invalidateQueries({ queryKey: dealCompositeQueryKey(dealId!) });
     },
   });
 
-  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(["crm", "deal", dealId, "activities"]);
-  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(["crm", "deal", dealId, "activities"]);
-  const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(["crm", "deal", dealId, "activities"]);
-  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation([
-    "crm",
-    "deal",
-    dealId,
-    "activities",
-  ]);
+  const activityHooksOpts = { extraInvalidateKeys: compositeInvalidate };
+
+  const { pendingBodyId, patchBody } = useCrmActivityBodyMutation(
+    ["crm", "deal", dealId, "activities"],
+    activityHooksOpts,
+  );
+  const { pendingOccurredAtId, patchOccurredAt } = useCrmActivityOccurredAtMutation(
+    ["crm", "deal", dealId, "activities"],
+    activityHooksOpts,
+  );
+  const { pendingTaskId, patchTask } = useCrmActivityTaskMutation(
+    ["crm", "deal", dealId, "activities"],
+    activityHooksOpts,
+  );
+  const { pendingDeliveryId, deliverActivity } = useCrmActivityDeliveryMutation(
+    ["crm", "deal", dealId, "activities"],
+    activityHooksOpts,
+  );
 
   if (!dealId) {
     return <Navigate to="/crm/contacts" replace />;
   }
 
   async function handleSave(): Promise<void> {
-    if (!dealQuery.data) return;
+    if (!dealQueryData) return;
     setFormError(null);
 
     const payload: CrmDealPatchInput = {};
-    if (stageId && stageId !== dealQuery.data.stageId) {
+    if (stageId && stageId !== dealQueryData.stageId) {
       payload.stageId = stageId;
     }
 
     const normalizedNextFollowUp = toIsoOrNull(nextFollowUpInput);
-    const currentFollowUp = dealQuery.data.nextFollowUpAt ? new Date(dealQuery.data.nextFollowUpAt).toISOString() : null;
+    const currentFollowUp = dealQueryData.nextFollowUpAt ? new Date(dealQueryData.nextFollowUpAt).toISOString() : null;
     if (normalizedNextFollowUp !== currentFollowUp) {
       payload.nextFollowUpAt = normalizedNextFollowUp;
       payload.followUpReminderSource = "deal_detail";
@@ -169,8 +173,8 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     if (isElevatedRole && selectedStage?.isClosedLost) {
       const nextLossReason = lossReason.trim() || null;
       const nextCompetitor = competitor.trim() || null;
-      const existingLossReason = lossFieldsQuery.data?.lossReason ?? null;
-      const existingCompetitor = lossFieldsQuery.data?.competitor ?? null;
+      const existingLossReason = lossFieldsData?.lossReason ?? null;
+      const existingCompetitor = lossFieldsData?.competitor ?? null;
 
       if (!nextLossReason && !existingLossReason) {
         setFormError("Loss reason is required when the deal is moved to Closed Lost.");
@@ -192,7 +196,10 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
     await saveMutation.mutateAsync(payload);
   }
 
-  const dealName = dealQuery.data?.name ?? "deal";
+  const dealName = dealQueryData?.name ?? "deal";
+  const isLoading = compositeQuery.isLoading;
+  const hasError = compositeQuery.isError;
+  const hasDeal = Boolean(dealQueryData);
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -211,8 +218,8 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
               to={`/chat?deal_id=${dealId}${
-                dealQuery.data?.primaryContactId ? `&contact_id=${dealQuery.data.primaryContactId}` : ""
-              }${dealQuery.data?.companyId ? `&company_id=${dealQuery.data.companyId}` : ""}`}
+                dealQueryData?.primaryContactId ? `&contact_id=${dealQueryData.primaryContactId}` : ""
+              }${dealQueryData?.companyId ? `&company_id=${dealQueryData.companyId}` : ""}`}
             >
               Ask Knowledge
             </Link>
@@ -220,7 +227,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
               to={`/quote?crm_deal_id=${dealId}${
-                dealQuery.data?.primaryContactId ? `&crm_contact_id=${dealQuery.data.primaryContactId}` : ""
+                dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""
               }`}
             >
               <FileText className="mr-2 h-4 w-4" />
@@ -234,44 +241,54 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
         </div>
       </div>
 
-      {dealQuery.isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
-      {dealQuery.isError && (
+      {isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
+      {hasError && (
         <Card className="p-6 text-center">
           <p className="text-sm text-muted-foreground">Unable to load this deal right now. Please refresh and try again.</p>
         </Card>
       )}
-      {!dealQuery.isLoading && !dealQuery.isError && !dealQuery.data && (
+      {!isLoading && !hasError && !hasDeal && (
         <Card className="p-6 text-center">
           <p className="text-sm text-muted-foreground">This deal isn&apos;t available or you don&apos;t have access.</p>
         </Card>
       )}
 
-      {dealQuery.data && (
+      {dealQueryData && (
         <>
-          <CrmPageHeader title={dealQuery.data.name} subtitle="Deal detail, follow-up cadence, and close controls." />
+          <CrmPageHeader title={dealQueryData.name} subtitle="Deal detail, follow-up cadence, and close controls." />
 
           <Card className="p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">Amount</dt>
                 <dd className="font-medium text-foreground">
-                  {typeof dealQuery.data.amount === "number" ? `$${dealQuery.data.amount.toLocaleString()}` : "Amount TBD"}
+                  {typeof dealQueryData.amount === "number" ? `$${dealQueryData.amount.toLocaleString()}` : "Amount TBD"}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Closed at</dt>
-                <dd className="font-medium text-foreground">{formatTimestamp(dealQuery.data.closedAt)}</dd>
+                <dd className="font-medium text-foreground">{formatTimestamp(dealQueryData.closedAt)}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Primary contact</dt>
                 <dd className="font-medium text-foreground">
-                  {contactQuery.data ? <Link to={`/crm/contacts/${contactQuery.data.id}`}>{contactQuery.data.firstName} {contactQuery.data.lastName}</Link> : "Not linked"}
+                  {contactQueryData ? (
+                    <Link to={`/crm/contacts/${contactQueryData.id}`}>
+                      {contactQueryData.firstName} {contactQueryData.lastName}
+                    </Link>
+                  ) : (
+                    "Not linked"
+                  )}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Company</dt>
                 <dd className="font-medium text-foreground">
-                  {companyQuery.data ? <Link to={`/crm/companies/${companyQuery.data.id}`}>{companyQuery.data.name}</Link> : "Not linked"}
+                  {companyQueryData ? (
+                    <Link to={`/crm/companies/${companyQueryData.id}`}>{companyQueryData.name}</Link>
+                  ) : (
+                    "Not linked"
+                  )}
                 </dd>
               </div>
             </dl>
@@ -296,53 +313,43 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
             onSave={() => void handleSave()}
           />
 
-          <NeedsAssessmentCard dealId={dealId!} />
+          <NeedsAssessmentCard dealId={dealId!} prefetched={compositeQuery.data?.needsAssessment ?? null} />
 
-          <CadenceTimeline dealId={dealId!} />
+          <CadenceTimeline dealId={dealId!} prefetched={compositeQuery.data?.cadences ?? null} />
 
-          <DemoRequestCard dealId={dealId!} />
+          <DemoRequestCard dealId={dealId!} prefetched={compositeQuery.data?.demos ?? null} />
 
           <DgeScenarioPanel dealId={dealId!} />
 
-          <CrmDealEquipmentSection dealId={dealId} companyId={dealQuery.data?.companyId ?? null} />
+          <CrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
             </div>
-            {activitiesQuery.isLoading ? (
-              <div className="space-y-3" role="status" aria-label="Loading activities">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-24 animate-pulse rounded-xl border border-border bg-card" />
-                ))}
-              </div>
-            ) : activitiesQuery.isError ? (
-              <Card className="p-4 text-sm text-muted-foreground">Couldn&apos;t load activities for this deal.</Card>
-            ) : (
-              <CrmActivityTimeline
-                activities={activitiesQuery.data ?? []}
-                onLogActivity={() => setComposerOpen(true)}
-                entityLabel={dealName}
-                showEntityLabel={false}
-                pendingBodyId={pendingBodyId}
-                pendingOccurredAtId={pendingOccurredAtId}
-                pendingTaskId={pendingTaskId}
-                pendingDeliveryId={pendingDeliveryId}
-                onPatchBody={async (activity, body, updatedAt) => {
-                  await patchBody({ activityId: activity.id, body, updatedAt });
-                }}
-                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
-                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
-                }}
-                onPatchTask={async (activity, task, updatedAt) => {
-                  await patchTask({ activityId: activity.id, task, updatedAt });
-                }}
-                onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
-                }}
-              />
-            )}
+            <CrmActivityTimeline
+              activities={activitiesData}
+              onLogActivity={() => setComposerOpen(true)}
+              entityLabel={dealName}
+              showEntityLabel={false}
+              pendingBodyId={pendingBodyId}
+              pendingOccurredAtId={pendingOccurredAtId}
+              pendingTaskId={pendingTaskId}
+              pendingDeliveryId={pendingDeliveryId}
+              onPatchBody={async (activity, body, updatedAt) => {
+                await patchBody({ activityId: activity.id, body, updatedAt });
+              }}
+              onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
+              }}
+              onPatchTask={async (activity, task, updatedAt) => {
+                await patchTask({ activityId: activity.id, task, updatedAt });
+              }}
+              onDeliverCommunication={async (activity) => {
+                await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
+              }}
+            />
           </section>
         </>
       )}
@@ -367,7 +374,7 @@ export function CrmDealDetailPage({ userId, userRole }: CrmDealDetailPageProps) 
       <CrmDealEditorSheet
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        deal={dealQuery.data}
+        deal={dealQueryData}
         onArchived={() => navigate("/crm/deals")}
       />
     </div>

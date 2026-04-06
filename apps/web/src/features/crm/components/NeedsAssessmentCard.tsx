@@ -1,37 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
+import type { NeedsAssessment } from "../lib/deal-composite-types";
+
+export type { NeedsAssessment } from "../lib/deal-composite-types";
 
 interface NeedsAssessmentCardProps {
   dealId: string;
-}
-
-interface NeedsAssessment {
-  id: string;
-  application: string | null;
-  work_type: string | null;
-  terrain_material: string | null;
-  current_equipment: string | null;
-  current_equipment_issues: string | null;
-  machine_interest: string | null;
-  attachments_needed: string[] | null;
-  brand_preference: string | null;
-  timeline_description: string | null;
-  timeline_urgency: string | null;
-  budget_type: string | null;
-  budget_amount: number | null;
-  monthly_payment_target: number | null;
-  financing_preference: string | null;
-  has_trade_in: boolean;
-  trade_in_details: string | null;
-  is_decision_maker: boolean | null;
-  decision_maker_name: string | null;
-  next_step: string | null;
-  entry_method: string;
-  qrm_narrative: string | null;
-  completeness_pct: number | null;
-  fields_populated: number;
-  fields_total: number;
+  /** When provided (including `null`), skips fetching — used with get_deal_composite. */
+  prefetched?: NeedsAssessment | null;
 }
 
 function AssessmentField({ label, value }: { label: string; value: string | null | undefined }) {
@@ -49,7 +26,7 @@ function formatMoney(value: number | null): string | null {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
 }
 
-export function NeedsAssessmentCard({ dealId }: NeedsAssessmentCardProps) {
+export function NeedsAssessmentCard({ dealId, prefetched }: NeedsAssessmentCardProps) {
   const { data: assessment, isLoading, isError } = useQuery({
     queryKey: ["crm", "needs-assessment", dealId],
     queryFn: async () => {
@@ -63,7 +40,9 @@ export function NeedsAssessmentCard({ dealId }: NeedsAssessmentCardProps) {
       if (error) throw error;
       return data as NeedsAssessment | null;
     },
-    staleTime: 30_000,
+    staleTime: prefetched !== undefined ? Infinity : 30_000,
+    enabled: Boolean(dealId),
+    initialData: prefetched !== undefined ? prefetched ?? undefined : undefined,
   });
 
   if (isLoading) {
