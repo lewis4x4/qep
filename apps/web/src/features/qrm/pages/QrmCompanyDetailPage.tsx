@@ -24,6 +24,7 @@ import {
   AccountARTab,
 } from "../components/Account360Tabs";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
+import { ARCreditBlockBanner } from "../components/ARCreditBlockBanner";
 import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -331,6 +332,16 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
               <AskIronAdvisorButton contextType="company" contextId={companyId} variant="inline" />
             </div>
           </div>
+
+          {/* AR credit block banner with embedded override dialog (Phase D) */}
+          {account360Query.data?.ar_block && (
+            <ARCreditBlockBanner
+              block={account360Query.data.ar_block}
+              currentUserId={userId}
+              currentUserRole={userRole}
+              onOverridden={() => account360Query.refetch()}
+            />
+          )}
 
           {/* Recommended Next Best Actions composite */}
           {account360Query.data && (
