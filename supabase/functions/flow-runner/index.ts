@@ -27,6 +27,8 @@ import { voiceCaptureToQrm } from "../_shared/flow-workflows/voice-capture-to-qr
 import { quoteExpiringSoon } from "../_shared/flow-workflows/quote-expiring-soon.ts";
 import { partsReceivedForOpenJob } from "../_shared/flow-workflows/parts-received-for-open-job.ts";
 import { arAgedPastThreshold } from "../_shared/flow-workflows/ar-aged-past-threshold.ts";
+import { serviceDelayStrategicAccount } from "../_shared/flow-workflows/service-delay-strategic-account.ts";
+import { arOverrideRequest } from "../_shared/flow-workflows/ar-override-request.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
 const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
@@ -34,6 +36,8 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   quoteExpiringSoon,
   partsReceivedForOpenJob,
   arAgedPastThreshold,
+  serviceDelayStrategicAccount,
+  arOverrideRequest,
 ];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -104,11 +108,25 @@ function patternMatches(pattern: string, eventType: string): boolean {
   return false;
 }
 
-/** Build a minimal FlowContext. Slice 3 fills in company/deal/health hydration. */
-function buildContextFromEvent(event: FlowEvent): FlowContext {
+/** Build a FlowContext: calls flow_resolve_context (Slice 3) for hydration. */
+async function buildContextFromEvent(admin: SupabaseClient, event: FlowEvent): Promise<FlowContext> {
+  let resolved: Record<string, unknown> | null = null;
+  try {
+    const { data } = await admin.rpc("flow_resolve_context", { p_event_id: event.event_id });
+    if (data && typeof data === "object") resolved = data as Record<string, unknown>;
+  } catch (err) {
+    console.warn(`[flow-runner] context resolve failed for ${event.event_id}:`, (err as Error).message);
+  }
   return {
     event,
-    recent_runs: [],
+    company: (resolved?.company as Record<string, unknown>) ?? null,
+    deal: (resolved?.deal as Record<string, unknown>) ?? null,
+    health_score: (resolved?.health_score as number) ?? null,
+    ar_block_status: (resolved?.ar_block_status as string) ?? null,
+    customer_tier: (resolved?.customer_tier as string) ?? null,
+    recent_runs: Array.isArray(resolved?.recent_runs)
+      ? (resolved.recent_runs as FlowContext["recent_runs"])
+      : [],
   };
 }
 
@@ -135,7 +153,19 @@ async function executeRun(
   }
 
   const runId = runRow.id as string;
-  const context = buildContextFromEvent(event);
+  const context = await buildContextFromEvent(admin, event);
+
+  // Freeze the resolved context into the run row so historical drill-downs
+  // see the same data the workflow saw at execution time.
+  await admin.from("flow_workflow_runs").update({
+    resolved_context: {
+      company: context.company,
+      deal: context.deal,
+      health_score: context.health_score,
+      ar_block_status: context.ar_block_status,
+      customer_tier: context.customer_tier,
+    },
+  }).eq("id", runId);
 
   // Audit: run start
   try {

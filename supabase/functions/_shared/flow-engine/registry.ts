@@ -327,35 +327,30 @@ const create_audit_event: FlowAction = {
   },
 };
 
-/* ─── 12. request_approval (stub — Slice 3 fills in flow_approvals) ─────── */
+/* ─── 12. request_approval (Slice 3: real flow_approvals table) ─────────── */
 
 const request_approval: FlowAction = {
   key: "request_approval",
-  description: "Pause workflow pending human approval",
+  description: "Pause workflow pending human approval (writes flow_approvals)",
   affects_modules: ["governance"],
   idempotency_key_template: "approval:${event.entity_type}:${event.entity_id}:${params.subject}",
   async execute(params, ctx, deps) {
     if (deps.dry_run) return dryRunSkip(deps, "request_approval");
     const p = resolveParams(params, ctx);
-    // Slice 3 inserts into flow_approvals + suspends run. Slice 2 stub:
-    // create an exception row tagged 'approval_request' so it surfaces in
-    // the inbox until the dedicated table ships.
-    const { data, error } = await deps.admin.rpc("enqueue_exception", {
-      p_source: "data_quality",
-      p_title: `Approval needed: ${p.subject}`,
-      p_severity: "warn",
-      p_detail: (p.detail as string) ?? null,
-      p_payload: {
-        flow_run_id: deps.run_id,
-        approval_assigned_role: p.assigned_role,
-        original_event_id: ctx.event.event_id,
-        approval_subject: p.subject,
-      },
-      p_entity_table: ctx.event.entity_type,
-      p_entity_id: ctx.event.entity_id,
+    const { data, error } = await deps.admin.rpc("request_flow_approval", {
+      p_run_id: deps.run_id,
+      p_step_id: null,
+      p_workflow_slug: ctx.event.flow_event_type, // best available label at action time
+      p_subject: p.subject,
+      p_detail: p.detail ?? null,
+      p_assigned_role: p.assigned_role ?? null,
+      p_assigned_to: p.assigned_to ?? null,
+      p_due_in_hours: Number(p.due_in_hours ?? 24),
+      p_escalate_in_hours: Number(p.escalate_in_hours ?? 48),
+      p_context_summary: p.context_summary ?? {},
     });
     if (error) return { status: "failed", error: error.message, retryable: true };
-    return { status: "succeeded", result: { approval_request_id: data, slice: "stub_until_3" } };
+    return { status: "succeeded", result: { approval_id: data, suspended_run: deps.run_id } };
   },
 };
 
