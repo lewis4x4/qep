@@ -20,6 +20,99 @@ interface DrawerPayload {
   delta_90d: number | null;
 }
 
+interface DrawerQueryPayload extends DrawerPayload {
+  blockers: HealthScoreBlocker[];
+}
+
+interface CustomerProfileLinkRow {
+  crm_company_id: string | null;
+}
+
+interface ArBlockRow {
+  id: string;
+  block_reason: string;
+  current_max_aging_days: number | null;
+  blocked_at: string;
+}
+
+interface HealthScoreBlocker {
+  id: string;
+  severity: "warning" | "critical";
+  title: string;
+  detail: string;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function deriveHealthBlockers(
+  score: number | null,
+  components: DrawerPayload["components"],
+  arBlock: ArBlockRow | null,
+): HealthScoreBlocker[] {
+  const blockers: HealthScoreBlocker[] = [];
+  const signals = (components.financial_health?.signals ?? components.deal_velocity?.signals ?? {}) as Record<string, unknown>;
+  const avgDaysToPay = asNumber(signals.avg_days_to_pay);
+  const quoteCloseRatio = asNumber(signals.quote_close_ratio);
+  const partsSpend90d = asNumber(signals.parts_spend_90d);
+  const serviceVisits90d = asNumber(signals.service_visits_90d);
+
+  if (arBlock) {
+    blockers.push({
+      id: `ar-${arBlock.id}`,
+      severity: "critical",
+      title: "AR credit block active",
+      detail: `${arBlock.block_reason} · ${arBlock.current_max_aging_days ?? "—"}d max aging · blocked ${new Date(arBlock.blocked_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+    });
+  }
+
+  if (avgDaysToPay !== null && avgDaysToPay > 60) {
+    blockers.push({
+      id: "signal-avg-days-to-pay",
+      severity: "critical",
+      title: "Payment behavior is beyond the credit threshold",
+      detail: `Average days to pay is ${Math.round(avgDaysToPay)} days.`,
+    });
+  } else if (avgDaysToPay !== null && avgDaysToPay > 45) {
+    blockers.push({
+      id: "signal-avg-days-to-pay",
+      severity: "warning",
+      title: "Payment behavior is trending late",
+      detail: `Average days to pay is ${Math.round(avgDaysToPay)} days.`,
+    });
+  }
+
+  if (quoteCloseRatio !== null && quoteCloseRatio < 0.15) {
+    blockers.push({
+      id: "signal-quote-close-ratio",
+      severity: "warning",
+      title: "Commercial conversion is weak",
+      detail: `Quote close rate is ${(quoteCloseRatio * 100).toFixed(0)}% over the current scoring window.`,
+    });
+  }
+
+  if ((partsSpend90d ?? 0) === 0 && (serviceVisits90d ?? 0) === 0 && (score ?? 0) < 50) {
+    blockers.push({
+      id: "signal-low-engagement",
+      severity: "warning",
+      title: "Cross-department engagement is cold",
+      detail: "No parts spend and no service visits are showing in the last 90 days.",
+    });
+  }
+
+  if ((score ?? 0) < 40) {
+    blockers.push({
+      id: "signal-health-score",
+      severity: "warning",
+      title: "Customer health is in the at-risk band",
+      detail: `Current score is ${Math.round(score ?? 0)} / 100.`,
+    });
+  }
+
+  return blockers;
+}
+
 /**
  * Health Score Explainability Drawer (Wave 5C v1 non-negotiable, v2 §1 note 4).
  *
@@ -36,13 +129,61 @@ export function HealthScoreDrawer({
 }: HealthScoreDrawerProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["health-score-drawer", customerProfileId],
-    queryFn: async () => {
+    queryFn: async (): Promise<DrawerQueryPayload | null> => {
       if (!customerProfileId) return null;
       const { data, error } = await (supabase as unknown as {
         rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: DrawerPayload | null; error: unknown }>;
       }).rpc("get_health_score_with_deltas", { p_customer_profile_id: customerProfileId });
       if (error) throw new Error("RPC failed");
-      return data;
+
+      const { data: profileLink } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            eq: (column: string, value: string) => {
+              maybeSingle: () => Promise<{ data: CustomerProfileLinkRow | null; error: unknown }>;
+            };
+          };
+        };
+      })
+        .from("customer_profiles_extended")
+        .select("crm_company_id")
+        .eq("id", customerProfileId)
+        .maybeSingle();
+
+      let arBlock: ArBlockRow | null = null;
+      if (profileLink?.crm_company_id) {
+        const blockResult = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            eq: (column: string, value: string) => {
+              eq: (column: string, value: string) => {
+                maybeSingle: () => Promise<{ data: ArBlockRow | null; error: unknown }>;
+              };
+            };
+          };
+        };
+      })
+          .from("ar_credit_blocks")
+          .select("id, block_reason, current_max_aging_days, blocked_at")
+          .eq("company_id", profileLink.crm_company_id)
+          .eq("status", "active")
+          .maybeSingle();
+
+        arBlock = blockResult.data;
+      }
+
+      return {
+        current_score: data?.current_score ?? null,
+        components: data?.components ?? {},
+        delta_7d: data?.delta_7d ?? null,
+        delta_30d: data?.delta_30d ?? null,
+        delta_90d: data?.delta_90d ?? null,
+        blockers: deriveHealthBlockers(
+          data?.current_score ?? null,
+          data?.components ?? {},
+          arBlock,
+        ),
+      };
     },
     enabled: open && !!customerProfileId,
     staleTime: 30_000,
@@ -50,6 +191,7 @@ export function HealthScoreDrawer({
 
   const score = data?.current_score ?? null;
   const components = data?.components ?? {};
+  const blockers = data?.blockers ?? [];
 
   // Component → score map (handles either {component: number} or {component: {score: number}})
   const componentScores: Array<{ name: string; weight: number }> = Object.entries(components).map(([name, val]) => ({
@@ -143,9 +285,31 @@ export function HealthScoreDrawer({
                 <AlertCircle className="h-3 w-3 text-amber-400" aria-hidden />
                 <p className="text-[10px] uppercase tracking-wider text-amber-400">Active blockers</p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                AR credit blocks, overdue invoices, churn flags. Wired to the cross-department alerts feed once Phase 4 ar_credit_blocks data populates.
-              </p>
+              {blockers.length === 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No active blockers detected from AR or the current scoring signals.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {blockers.map((blocker) => (
+                    <div
+                      key={blocker.id}
+                      className={`rounded-md border px-2 py-2 text-xs ${
+                        blocker.severity === "critical"
+                          ? "border-red-500/30 bg-red-500/5"
+                          : "border-amber-500/30 bg-amber-500/5"
+                      }`}
+                    >
+                      <p className={`font-semibold ${
+                        blocker.severity === "critical" ? "text-red-400" : "text-amber-400"
+                      }`}>
+                        {blocker.title}
+                      </p>
+                      <p className="mt-0.5 text-muted-foreground">{blocker.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* 6. Advisory-only banner */}
