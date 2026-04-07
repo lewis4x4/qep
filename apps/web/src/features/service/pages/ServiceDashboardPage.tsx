@@ -201,6 +201,7 @@ function DashboardPivot({
                   <th className="py-2 text-left">Days late</th>
                   <th className="py-2 text-left">Open Deal $</th>
                   <th className="py-2 text-left">Trade-Up</th>
+                  <th className="py-2 text-left">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,6 +225,18 @@ function DashboardPivot({
                       </td>
                       <td className="py-2 tabular-nums">
                         {sj.trade_up_score != null ? sj.trade_up_score : "—"}
+                      </td>
+                      <td className="py-2">
+                        {sj.machine_id ? (
+                          <Link
+                            to={`/equipment/${sj.machine_id}`}
+                            className="text-[10px] font-semibold text-qep-orange hover:underline"
+                          >
+                            Open Asset 360 →
+                          </Link>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">no asset</span>
+                        )}
                       </td>
                     </tr>
                   );

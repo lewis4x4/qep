@@ -93,3 +93,67 @@ These defaults ship UNLESS Brian explicitly overrides.
 ✅ This punch list exists and is maintained
 
 **Phase 1 status: COMPLETE.** Phase 2A blocked on tax-mode contract decision; Phases 1 → 3+ can proceed in parallel since Phase 3 (Track A) has no Phase 2 dependency for primitives + Asset 360 + AskIronAdvisor button drops.
+
+---
+
+## Post-Phase-1 progress (added 2026-04-06 evening session)
+
+All v2 roadmap phases shipped through migration 171. CRM → QRM rename
+completed across all four tiers.
+
+### Phase 2 — Wave 5 closeout — DONE
+- 2A: tax breakdown disclaimer + manufacturer incentives (mig 167, edge fn `quote-incentive-resolver`, IncentiveStack + IncentiveCatalogPage)
+- 2B: bulk requote launcher (POST /batch on requote-drafts, frontend bulk action)
+- 2C: health drawer + lifecycle/revenue/AR override schema (mig 168, HealthScoreDrawer with all 6 v1 panels)
+- 2D: portal Stripe + canonical state + document visibility audit (mig 169, portal-stripe edge fn with HMAC-SHA256 signature verification + zero-blocking mailto fallback, PayInvoiceButton)
+- 2E: SOP false-positive protection (mig 171, completion_state column, suppression queue, NA path in execution UI, recomputed compliance view)
+
+### Phase 3 — Track A — DONE (commits 836f327 + 6b708a1 + f974f5a)
+- 10 shared primitives in `apps/web/src/components/primitives/`
+- Asset 360 page at `/equipment/:id` with Commercial Action tab
+- AskIronAdvisorButton drops on Contact / Company / Deal detail pages
+
+### Phase 4 — Track B — DONE (commit d3633a1 + b50a13c)
+- Service Dashboard at `/service/dashboard` with QEP-only Open Deal $ + Trade-Up + Open Asset 360 columns
+- Fleet Map at `/fleet` (layout-only — Mapbox canvas slot pending VITE_MAPBOX_TOKEN)
+- Geofences with PostGIS (mig 162) — restrained v1: customer_jobsite, branch_territory, competitor_yard
+- Service Knowledge Base (mig 163) with match_service_knowledge RPC
+- Portal Fleet Mirror at `/portal/fleet`
+
+### Phase 5 — New v2 layers — DONE (commit a1d2473)
+- Data Quality Layer at `/admin/data-quality` (mig 164 + run_data_quality_audit RPC)
+- Exception Inbox at `/exceptions` (mig 165 + enqueue_exception SECURITY DEFINER RPC)
+- Executive Command Center at `/exec` (mig 166, 6 security_invoker views)
+
+### CRM → QRM rename — DONE across all four tiers
+- Tier 1 (commit 7832cd2): user-facing strings — 51 files
+- Tier 2 (commit 7c63ad9): route paths /crm/* → /qrm/* + LegacyCrmRedirect catch-all
+- Tier 3 + Tier 4-DB (commit 5deb149): 78 frontend file renames + mig 170 with 26 ALTER TABLE RENAMEs and backwards-compat updatable views
+- Tier 4-fn (commit 73c653d): qrm-router / qrm-hubspot-import / qrm-reminder-dispatcher / embed-qrm shim directories that re-import legacy handlers; frontend repointed to new URLs
+
+### External coordination still pending
+| Item | Action required | Owner |
+|------|-----------------|-------|
+| HubSpot webhook config | Update target from `/functions/v1/crm-hubspot-import` to `/functions/v1/qrm-hubspot-import` | Ops at next maintenance window |
+| Cron schedules | Re-register against `qrm-reminder-dispatcher` slug | Ops |
+| Embedding pipeline callers | Update to call `embed-qrm` | Ops |
+| Mapbox API token | Set `VITE_MAPBOX_TOKEN` in Netlify env | Ops |
+
+Until those external callers migrate, the legacy `crm-*` URLs and the
+`crm_*` compat views remain live. A future cutover migration will drop
+both layers after every consumer is on the QRM names.
+
+### Phase 6 cross-cutting audit — DONE
+- New edge fns (quote-incentive-resolver, portal-stripe) verified to use safeCorsHeaders + auth check + workspace from caller profile
+- Service Dashboard overdue WO rows now have inline "Open Asset 360 →" action button (playbook pattern)
+- Asset 360 Commercial Action tab already carries AI confidence label on trade-up score and one-click draft buttons on every risk surface
+- Health Score Drawer carries the explicit "Advisory only — v1" banner (no auto-actions)
+- Institutional memory placeholder on Asset 360; KB content lights up automatically once mig 163 seed entries land
+
+### Open follow-ups (carry to v2-next)
+- Map provider integration on `/fleet` and `/portal/fleet`
+- Lifecycle timeline page (`LifecyclePage.tsx`) — mig 168 schema in place, page deferred
+- Revenue attribution edge fn — schema in place
+- AR override frontend UI — `apply_ar_override` RPC in place
+- 271K-asset synthetic stress test
+- Storybook polish pass for primitives
