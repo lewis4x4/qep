@@ -30,6 +30,87 @@ const STAFF_NOTIFY_CHUNK = 80;
 
 const STAFF_NOTIFY_ROLES = ["rep", "admin", "manager", "owner"] as const;
 
+const PORTAL_JOB_STAGE_LABELS: Record<string, string> = {
+  request_received: "Request received",
+  triaging: "Being reviewed",
+  diagnosis_selected: "Diagnosis confirmed",
+  quote_drafted: "Quote in progress",
+  quote_sent: "Quote sent",
+  approved: "Approved",
+  parts_pending: "Waiting on parts",
+  parts_staged: "Parts ready",
+  haul_scheduled: "Transport scheduled",
+  scheduled: "Appointment scheduled",
+  in_progress: "In progress",
+  blocked_waiting: "Waiting",
+  quality_check: "Quality review",
+  ready_for_pickup: "Ready for pickup",
+  invoice_ready: "Invoice ready",
+  invoiced: "Invoiced",
+  paid_closed: "Completed",
+};
+
+const PORTAL_REQUEST_STATUS_LABELS: Record<string, string> = {
+  submitted: "Request received",
+  received: "Request received",
+  triaging: "Being reviewed",
+  in_review: "Being reviewed",
+  scheduled: "Appointment scheduled",
+  in_progress: "In progress",
+  waiting: "Waiting",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+function titleCaseStatus(raw: string | null | undefined): string {
+  if (!raw) return "Status unavailable";
+  return raw.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function normalizePortalStatus(input: {
+  requestStatus?: string | null;
+  requestEta?: string | null;
+  requestUpdatedAt?: string | null;
+  jobStage?: string | null;
+  jobEta?: string | null;
+  jobUpdatedAt?: string | null;
+  idleUpdatedAt?: string | null;
+}): {
+  label: string;
+  source: "service_job" | "portal_request" | "default";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+} {
+  if (input.jobStage) {
+    return {
+      label: PORTAL_JOB_STAGE_LABELS[input.jobStage] ?? titleCaseStatus(input.jobStage),
+      source: "service_job",
+      source_label: "Live shop status",
+      eta: input.jobEta ?? input.requestEta ?? null,
+      last_updated_at: input.jobUpdatedAt ?? input.requestUpdatedAt ?? null,
+    };
+  }
+
+  if (input.requestStatus) {
+    return {
+      label: PORTAL_REQUEST_STATUS_LABELS[input.requestStatus] ?? titleCaseStatus(input.requestStatus),
+      source: "portal_request",
+      source_label: "Portal request",
+      eta: input.requestEta ?? null,
+      last_updated_at: input.requestUpdatedAt ?? null,
+    };
+  }
+
+  return {
+    label: "Operational",
+    source: "default",
+    source_label: "Equipment status",
+    eta: null,
+    last_updated_at: input.idleUpdatedAt ?? null,
+  };
+}
+
 /** Internal users in profile_workspaces for this tenant + eligible roles (no cross-workspace blast). */
 async function workspaceStaffRecipientIds(
   admin: SupabaseClient,
@@ -169,13 +250,35 @@ Deno.serve(async (req) => {
               current_stage,
               priority,
               updated_at,
-              closed_at
+              closed_at,
+              scheduled_end_at
             )
           `)
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load requests", 500, origin);
-        return safeJsonOk({ requests: data }, origin);
+        const requests = ((data ?? []) as Array<Record<string, unknown>>).map((request) => {
+          const internalJobRaw = request.internal_job;
+          const internalJob = Array.isArray(internalJobRaw)
+            ? (internalJobRaw[0] as Record<string, unknown> | undefined)
+            : (internalJobRaw as Record<string, unknown> | null);
+
+          const portalStatus = normalizePortalStatus({
+            requestStatus: typeof request.status === "string" ? request.status : null,
+            requestEta: typeof request.estimated_completion === "string" ? request.estimated_completion : null,
+            requestUpdatedAt: typeof request.updated_at === "string" ? request.updated_at : null,
+            jobStage: typeof internalJob?.current_stage === "string" ? internalJob.current_stage : null,
+            jobEta: typeof internalJob?.scheduled_end_at === "string" ? internalJob.scheduled_end_at : null,
+            jobUpdatedAt: typeof internalJob?.updated_at === "string" ? internalJob.updated_at : null,
+          });
+
+          return {
+            ...request,
+            portal_status: portalStatus,
+          };
+        });
+
+        return safeJsonOk({ requests }, origin);
       }
 
       if (req.method === "POST") {
@@ -720,7 +823,30 @@ Deno.serve(async (req) => {
         p_portal_customer_id: portalCustomer.id,
       });
       if (error) return safeJsonError("Failed to load fleet with status", 500, origin);
-      return safeJsonOk({ fleet: data }, origin);
+      const fleet = ((data ?? []) as Array<Record<string, unknown>>).map((row) => {
+        const activeServiceJob = row.active_service_job as Record<string, unknown> | null;
+        const portalStatus = normalizePortalStatus({
+          jobStage: typeof activeServiceJob?.current_stage === "string" ? activeServiceJob.current_stage : null,
+          jobEta: typeof activeServiceJob?.estimated_completion === "string"
+            ? activeServiceJob.estimated_completion
+            : null,
+          jobUpdatedAt: typeof activeServiceJob?.last_updated_at === "string"
+            ? activeServiceJob.last_updated_at
+            : null,
+          idleUpdatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+        });
+
+        return {
+          ...row,
+          stage_label: portalStatus.label,
+          stage_source: portalStatus.source,
+          stage_source_label: portalStatus.source_label,
+          eta: portalStatus.eta,
+          last_updated_at: portalStatus.last_updated_at,
+          portal_status: portalStatus,
+        };
+      });
+      return safeJsonOk({ fleet }, origin);
     }
 
     // ── /parts/reorder-history — Parts history by machine + one-click ─

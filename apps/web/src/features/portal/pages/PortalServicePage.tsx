@@ -9,8 +9,7 @@ import { supabase } from "@/lib/supabase";
 
 const REQUEST_TYPES = ["repair", "maintenance", "warranty", "parts", "inspection", "emergency"];
 
-/** Customer-safe labels — no internal codes or employee names. */
-const JOB_STAGE_LABEL: Record<string, string> = {
+const SHOP_TIMELINE_STAGE_LABEL: Record<string, string> = {
   request_received: "Request received",
   triaging: "Being reviewed",
   diagnosis_selected: "Diagnosis confirmed",
@@ -29,6 +28,14 @@ const JOB_STAGE_LABEL: Record<string, string> = {
   invoiced: "Invoiced",
   paid_closed: "Completed",
 };
+
+interface PortalStatusSummary {
+  label: string;
+  source: "service_job" | "portal_request" | "default";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+}
 
 /** Linked-job timeline (P1-D) — same underlying events as staff, customer-safe labels only. */
 function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
@@ -103,7 +110,7 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
             </div>
             {ev.new_stage && ev.event_type === "stage_transition" && (
               <span className="text-[11px] text-muted-foreground">
-                {JOB_STAGE_LABEL[ev.new_stage] ?? ev.new_stage}
+                {SHOP_TIMELINE_STAGE_LABEL[ev.new_stage] ?? ev.new_stage}
               </span>
             )}
           </li>
@@ -248,11 +255,13 @@ export function PortalServicePage() {
             request_type: string;
             description: string;
             status: string;
+            portal_status?: PortalStatusSummary | null;
             internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
           };
           const ij = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
-          const shopStage = ij?.current_stage
-            ? (JOB_STAGE_LABEL[ij.current_stage] ?? "In progress")
+          const portalStatus = req.portal_status ?? null;
+          const etaLabel = portalStatus?.eta
+            ? new Date(portalStatus.eta).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
             : null;
           return (
             <Card key={req.id} className="p-3 space-y-1">
@@ -267,10 +276,21 @@ export function PortalServicePage() {
                   "bg-amber-500/10 text-amber-400"
                 }`}>{req.status}</span>
               </div>
-              {shopStage && (
-                <p className="text-xs text-muted-foreground">
-                  Shop status: <span className="text-foreground font-medium">{shopStage}</span>
-                </p>
+              {portalStatus && (
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>
+                    Status: <span className="text-foreground font-medium">{portalStatus.label}</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>Source: {portalStatus.source_label}</span>
+                    {etaLabel && <span>ETA: <span className="text-foreground font-medium">{etaLabel}</span></span>}
+                    {portalStatus.last_updated_at && (
+                      <span>
+                        Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
               {ij?.id ? (
                 <PortalRequestShopTimeline requestId={req.id} />

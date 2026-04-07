@@ -35,6 +35,14 @@ interface ServiceJobSummary {
   last_updated_at: string;
 }
 
+interface PortalStatusSummary {
+  label: string;
+  source: "service_job" | "portal_request" | "default";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+}
+
 interface FleetItem {
   id: string;
   make: string;
@@ -46,6 +54,7 @@ interface FleetItem {
   next_service_due: string | null;
   trade_in_interest?: boolean;
   active_service_job?: ServiceJobSummary | null;
+  portal_status?: PortalStatusSummary | null;
 }
 
 function statusColor(stage: string): { bg: string; text: string } {
@@ -97,8 +106,9 @@ export function PortalFleetPage() {
         {fleet.map((item) => {
           const job = item.active_service_job;
           const inShop = !!job;
-          const stageInfo = inShop ? statusColor(job.current_stage) : null;
-          const etaLabel = job?.estimated_completion ? formatETA(job.estimated_completion) : null;
+          const portalStatus = item.portal_status ?? null;
+          const stageInfo = inShop && job ? statusColor(job.current_stage) : null;
+          const etaLabel = portalStatus?.eta ? formatETA(portalStatus.eta) : null;
 
           return (
             <Card key={item.id} className={`p-4 ${inShop ? "border-l-4 border-l-blue-500" : ""}`}>
@@ -129,15 +139,21 @@ export function PortalFleetPage() {
                 </div>
               </div>
 
-              {/* Live service job status block (Bobby's "your Yanmar is in the shop") */}
-              {inShop && job && stageInfo && (
+              {/* Canonical portal status block */}
+              {portalStatus && (
                 <div className="mt-3 rounded-md border border-border/60 bg-muted/30 p-3">
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-blue-400" aria-hidden />
-                      <p className="text-xs font-bold uppercase tracking-wider text-blue-400">In the shop</p>
-                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${stageInfo.bg} ${stageInfo.text}`}>
-                        {JOB_STAGE_LABEL[job.current_stage] ?? job.current_stage}
+                      <Activity className={`h-4 w-4 ${portalStatus.source === "service_job" ? "text-blue-400" : "text-amber-400"}`} aria-hidden />
+                      <p className={`text-xs font-bold uppercase tracking-wider ${
+                        portalStatus.source === "service_job" ? "text-blue-400" : "text-amber-400"
+                      }`}>
+                        {portalStatus.source === "service_job" ? "Live shop status" : "Portal status"}
+                      </p>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                        stageInfo ? `${stageInfo.bg} ${stageInfo.text}` : "bg-blue-500/10 text-blue-400"
+                      }`}>
+                        {portalStatus.label}
                       </span>
                     </div>
                     {etaLabel && (
@@ -146,9 +162,14 @@ export function PortalFleetPage() {
                       </p>
                     )}
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    Last updated: {new Date(job.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+                    <span>Source: {portalStatus.source_label}</span>
+                    {portalStatus.last_updated_at && (
+                      <span>
+                        Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
