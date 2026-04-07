@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -59,12 +59,29 @@ export function CompanyMergeDialog({ pair, onClose }: CompanyMergeDialogProps) {
       if (data.dry_run) {
         setDryRunResult(data);
       } else {
+        // Round-5 audit fix: clear the dry-run preview on real-merge success
+        // so the success banner doesn't render alongside a stale preview card.
+        setDryRunResult(null);
+        setConfirmText("");
         setLastMergeAuditId(data.audit_id);
         queryClient.invalidateQueries({ queryKey: ["duplicate-companies"] });
         queryClient.invalidateQueries({ queryKey: ["account-360"] });
       }
     },
   });
+
+  // Round-5 audit fix: reset transient state every time the dialog opens
+  // with a new pair, so reopening after a cancel doesn't carry "MERGE"
+  // confirmation, prior dry-run output, or stale notes forward.
+  useEffect(() => {
+    if (pair) {
+      setNotes("");
+      setConfirmText("");
+      setDryRunResult(null);
+      setLastMergeAuditId(null);
+      setKeepSide("a");
+    }
+  }, [pair?.company_a_id, pair?.company_b_id]);
 
   const undoMutation = useMutation({
     mutationFn: async (auditId: string) => {

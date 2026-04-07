@@ -298,8 +298,33 @@ function writeReport(results) {
 
 async function cleanup() {
   console.log(`\n[cleanup] Deleting all rows in workspace=${WORKSPACE}…`);
-  await supa.from("qrm_equipment").delete().eq("workspace_id", WORKSPACE);
-  await supa.from("qrm_companies").delete().eq("workspace_id", WORKSPACE);
+
+  // Round-5 fix: batch the deletes by ID instead of one giant DELETE.
+  // A 271k-row DELETE locks the table and can hit query timeouts.
+  async function batchDelete(table) {
+    let totalDeleted = 0;
+    while (true) {
+      const { data: ids, error: selErr } = await supa
+        .from(table)
+        .select("id")
+        .eq("workspace_id", WORKSPACE)
+        .limit(1000);
+      if (selErr) throw new Error(`${table} select failed: ${selErr.message}`);
+      if (!ids || ids.length === 0) break;
+      const idArray = ids.map((r) => r.id);
+      const { error: delErr } = await supa
+        .from(table)
+        .delete()
+        .in("id", idArray);
+      if (delErr) throw new Error(`${table} delete failed: ${delErr.message}`);
+      totalDeleted += idArray.length;
+      process.stdout.write(`\r[cleanup]   ${table}: ${totalDeleted.toLocaleString()} deleted`);
+    }
+    console.log(`\n[cleanup] ✓ ${table}: ${totalDeleted.toLocaleString()} rows deleted`);
+  }
+
+  await batchDelete("qrm_equipment");
+  await batchDelete("qrm_companies");
   console.log(`[cleanup] ✓ workspace=${WORKSPACE} wiped`);
 }
 
