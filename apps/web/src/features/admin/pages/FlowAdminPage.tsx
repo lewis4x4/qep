@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap, Lightbulb, X } from "lucide-react";
+import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap, Lightbulb, X, Activity } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
@@ -46,6 +46,29 @@ interface IronSuggestionRow {
   last_seen_at: string;
   status: string;
   promoted_flow_id: string | null;
+}
+
+interface IronSloSnapshot {
+  computed_at: string;
+  workspace_id: string;
+  classify_p95_ms: number | null;
+  classify_target_ms: number;
+  classify_pass: boolean;
+  execute_p95_ms: number | null;
+  execute_target_ms: number;
+  execute_pass: boolean;
+  undo_success_rate: number | null;
+  undo_target_rate: number;
+  undo_attempts: number;
+  undo_pass: boolean;
+  dead_letter_rate: number | null;
+  dead_letter_target_rate: number;
+  iron_runs_total: number;
+  dead_letter_pass: boolean;
+  cost_escalation_pct: number | null;
+  cost_target_pct: number;
+  active_users_24h: number;
+  cost_pass: boolean;
 }
 
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
@@ -277,6 +300,20 @@ export function FlowAdminPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["iron-flow-suggestions"] }),
   });
 
+  // ── Wave 7 v1.6: Iron SLO compliance snapshot ─────────────────────────
+  const { data: ironSlos } = useQuery({
+    queryKey: ["iron-slo-snapshot"],
+    queryFn: async (): Promise<IronSloSnapshot | null> => {
+      const { data, error } = await (supabase as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: IronSloSnapshot | null; error: { message?: string } | null }>;
+      }).rpc("iron_compute_slos", { p_workspace_id: "default" });
+      if (error) return null;
+      return data;
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
   // Rollup tile counts
   const last24h = recentRuns.filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
   const succeeded = last24h.filter((r) => r.status === "succeeded").length;
@@ -386,6 +423,65 @@ export function FlowAdminPage() {
           </button>
         ))}
       </div>
+
+      {/* Iron health card (SLO compliance snapshot — surfaced when not viewing automated only) */}
+      {surfaceFilter !== "automated" && ironSlos && (
+        <Card className="p-4">
+          <p className="mb-2 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Activity className="h-3 w-3 text-qep-orange" /> Iron health
+            <span className="ml-1 normal-case text-muted-foreground/70">
+              (computed {new Date(ironSlos.computed_at).toLocaleTimeString()})
+            </span>
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <SloPill
+              label="Classify p95"
+              value={ironSlos.classify_p95_ms != null ? `${ironSlos.classify_p95_ms} ms` : "—"}
+              target={`< ${ironSlos.classify_target_ms} ms`}
+              pass={ironSlos.classify_pass}
+            />
+            <SloPill
+              label="Execute p95"
+              value={ironSlos.execute_p95_ms != null ? `${ironSlos.execute_p95_ms} ms` : "—"}
+              target={`< ${ironSlos.execute_target_ms} ms`}
+              pass={ironSlos.execute_pass}
+            />
+            <SloPill
+              label="Undo success"
+              value={
+                ironSlos.undo_success_rate != null
+                  ? `${(ironSlos.undo_success_rate * 100).toFixed(1)}%`
+                  : "—"
+              }
+              target={`> ${(ironSlos.undo_target_rate * 100).toFixed(1)}%`}
+              pass={ironSlos.undo_pass}
+              footnote={`${ironSlos.undo_attempts} attempts (30d)`}
+            />
+            <SloPill
+              label="Dead letter rate"
+              value={
+                ironSlos.dead_letter_rate != null
+                  ? `${(ironSlos.dead_letter_rate * 100).toFixed(2)}%`
+                  : "—"
+              }
+              target={`< ${(ironSlos.dead_letter_target_rate * 100).toFixed(1)}%`}
+              pass={ironSlos.dead_letter_pass}
+              footnote={`${ironSlos.iron_runs_total} runs (7d)`}
+            />
+            <SloPill
+              label="Cost escalations"
+              value={
+                ironSlos.cost_escalation_pct != null
+                  ? `${(ironSlos.cost_escalation_pct * 100).toFixed(1)}%`
+                  : "—"
+              }
+              target={`< ${(ironSlos.cost_target_pct * 100).toFixed(0)}%`}
+              pass={ironSlos.cost_pass}
+              footnote={`${ironSlos.active_users_24h} active 24h`}
+            />
+          </div>
+        </Card>
+      )}
 
       {/* Workflows table */}
       <Card className="p-4">
@@ -594,6 +690,42 @@ export function FlowAdminPage() {
       )}
 
       <FlowRunHistoryDrawer run={selectedRun} onClose={() => setSelectedRun(null)} />
+    </div>
+  );
+}
+
+/* ─── Wave 7 v1.6: Iron SLO pill ──────────────────────────────────────── */
+
+interface SloPillProps {
+  label: string;
+  value: string;
+  target: string;
+  pass: boolean;
+  footnote?: string;
+}
+
+function SloPill({ label, value, target, pass, footnote }: SloPillProps) {
+  return (
+    <div
+      className={`rounded border p-2 ${
+        pass
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-red-500/40 bg-red-500/5"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</p>
+        {pass ? (
+          <CheckCircle2 className="h-3 w-3 text-emerald-400" aria-label="passing" />
+        ) : (
+          <AlertOctagon className="h-3 w-3 text-red-400" aria-label="breach" />
+        )}
+      </div>
+      <p className={`mt-0.5 text-sm font-semibold ${pass ? "text-foreground" : "text-red-300"}`}>
+        {value}
+      </p>
+      <p className="mt-0.5 text-[9px] text-muted-foreground">target {target}</p>
+      {footnote && <p className="mt-0.5 text-[9px] text-muted-foreground/70">{footnote}</p>}
     </div>
   );
 }
