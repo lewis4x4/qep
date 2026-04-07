@@ -155,8 +155,69 @@ export function DealTimingDashboardPage() {
       )}
 
       {!isLoading && !isError && filteredAlerts.length > 0 && (
+        <BuyingWindowBoard alerts={filteredAlerts} />
+      )}
+    </div>
+  );
+}
+
+/* ── Buying Window 3-column board ─────────────────────────────────── */
+
+function BuyingWindowBoard({ alerts }: { alerts: DealTimingAlert[] }) {
+  const today = alerts.filter((a) => a.urgency === "immediate");
+  const week  = alerts.filter((a) => a.urgency === "upcoming");
+  const watch = alerts.filter((a) => a.urgency === "future");
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <BoardColumn
+        title="Today"
+        subtitle="Immediate — touch now"
+        accent="border-red-500/30"
+        textAccent="text-red-400"
+        alerts={today}
+      />
+      <BoardColumn
+        title="This Week"
+        subtitle="Touch within 7 days"
+        accent="border-qep-orange/30"
+        textAccent="text-qep-orange"
+        alerts={week}
+      />
+      <BoardColumn
+        title="Watch"
+        subtitle="Stay aware"
+        accent="border-blue-500/30"
+        textAccent="text-blue-400"
+        alerts={watch}
+      />
+    </div>
+  );
+}
+
+function BoardColumn({
+  title, subtitle, accent, textAccent, alerts,
+}: {
+  title: string;
+  subtitle: string;
+  accent: string;
+  textAccent: string;
+  alerts: DealTimingAlert[];
+}) {
+  return (
+    <div className={`rounded-lg border ${accent} bg-card/40 p-3`}>
+      <div className="mb-3">
+        <div className="flex items-baseline justify-between">
+          <h3 className={`text-sm font-bold ${textAccent}`}>{title}</h3>
+          <span className="text-[10px] tabular-nums text-muted-foreground">{alerts.length}</span>
+        </div>
+        <p className="text-[10px] text-muted-foreground">{subtitle}</p>
+      </div>
+      {alerts.length === 0 ? (
+        <p className="text-[11px] italic text-muted-foreground">Nothing here. Clean board.</p>
+      ) : (
         <div className="space-y-2">
-          {filteredAlerts.map((alert) => (
+          {alerts.map((alert) => (
             <DealTimingAlertCard key={alert.id} alert={alert} />
           ))}
         </div>
