@@ -23,9 +23,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, X, ChevronLeft, ChevronRight, CheckCircle2, AlertOctagon } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, CheckCircle2, AlertOctagon, Sparkles } from "lucide-react";
 import { useIronStore, computeIronFlowTotalCents } from "./store";
-import { ironExecuteFlowStep, ironSearchEntities } from "./api";
+import { ironExecuteFlowStep, ironSearchEntities, ironBumpMemory } from "./api";
 import { VoiceFillButton } from "./voice/VoiceFillButton";
 import { ironSpeak, cancelIronSpeech } from "./voice/tts";
 import type { IronLineItem, IronSlotDefinition } from "./types";
@@ -211,10 +211,17 @@ function SlotRenderer({ slot }: { slot: IronSlotDefinition }) {
   );
 }
 
+interface PickerResult {
+  id: string;
+  label: string;
+  updated_at?: string;
+  affinity_score?: number;
+}
+
 function EntityPickerSlot({ slot }: { slot: IronSlotDefinition }) {
   const store = useIronStore();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Array<{ id: string; label: string; updated_at?: string }>>([]);
+  const [results, setResults] = useState<PickerResult[]>([]);
   const [loading, setLoading] = useState(false);
   const value = store.state.activeFlow!.slot_values[slot.id] as string | undefined;
 
@@ -263,12 +270,27 @@ function EntityPickerSlot({ slot }: { slot: IronSlotDefinition }) {
                 type="button"
                 onClick={() => {
                   store.setSlot(slot.id, r.id, r.updated_at);
+                  // v1.8: Iron's own picks reinforce affinity. Fire-and-forget;
+                  // failures are swallowed inside ironBumpMemory because affinity
+                  // is a UX layer, not a correctness invariant.
+                  if (slot.entity_table) {
+                    void ironBumpMemory(slot.entity_table, r.id, "iron_pick");
+                  }
                   setQuery(r.label);
                   setResults([]);
                 }}
-                className="w-full px-2 py-1.5 text-left text-xs hover:bg-muted/30"
+                className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/30"
               >
-                {r.label}
+                <span className="truncate">{r.label}</span>
+                {r.affinity_score != null && r.affinity_score > 0.05 && (
+                  <span
+                    className="flex shrink-0 items-center gap-0.5 text-[9px] text-qep-orange"
+                    title={`Iron remembers you've touched this recently (score ${r.affinity_score.toFixed(2)})`}
+                  >
+                    <Sparkles className="h-2.5 w-2.5" />
+                    recent
+                  </span>
+                )}
               </button>
             </li>
           ))}
