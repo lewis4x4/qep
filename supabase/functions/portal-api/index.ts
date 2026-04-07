@@ -10,6 +10,7 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   buildPmKitLinesFromJobCode,
   deterministicPmReason,
@@ -91,6 +92,18 @@ interface PortalQuoteReviewRow {
   expires_at: string | null;
   updated_at: string;
   signer_name: string | null;
+}
+
+interface PortalPaymentIntentRow {
+  id: string;
+  invoice_id: string | null;
+  status: string;
+  webhook_signature_verified: boolean;
+  created_at: string;
+  updated_at: string;
+  succeeded_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
 }
 
 function titleCaseStatus(raw: string | null | undefined): string {
@@ -293,6 +306,49 @@ function normalizePortalDealStatus(input: {
     eta: input.expectedCloseOn ?? null,
     last_updated_at: input.dealUpdatedAt ?? null,
     next_action: "Your dealership team is actively working this opportunity.",
+  };
+}
+
+function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
+  label: string;
+  tone: "blue" | "amber" | "emerald" | "red";
+  detail: string;
+  last_updated_at: string | null;
+} | null {
+  if (!intent) return null;
+
+  if (intent.status === "succeeded" && intent.webhook_signature_verified) {
+    return {
+      label: "Payment verified",
+      tone: "emerald",
+      detail: "Your payment was received and verified by the dealership payment workflow.",
+      last_updated_at: intent.succeeded_at ?? intent.updated_at,
+    };
+  }
+
+  if (intent.status === "failed") {
+    return {
+      label: "Payment failed",
+      tone: "red",
+      detail: intent.failure_reason?.trim() || "The payment attempt did not complete. Try again or contact the dealership.",
+      last_updated_at: intent.failed_at ?? intent.updated_at,
+    };
+  }
+
+  if (intent.status === "processing") {
+    return {
+      label: "Payment processing",
+      tone: "blue",
+      detail: "Your payment is still processing with the checkout provider.",
+      last_updated_at: intent.updated_at,
+    };
+  }
+
+  return {
+    label: "Checkout started",
+    tone: "amber",
+    detail: "A payment session was created, but the dealership has not received a verified success event yet.",
+    last_updated_at: intent.updated_at ?? intent.created_at,
   };
 }
 
@@ -804,7 +860,42 @@ Deno.serve(async (req) => {
           .order("invoice_date", { ascending: false });
 
         if (error) return safeJsonError("Failed to load invoices", 500, origin);
-        return safeJsonOk({ invoices: data }, origin);
+
+        const invoiceRows = (data ?? []) as Array<Record<string, unknown>>;
+        const invoiceIds = invoiceRows
+          .map((row) => typeof row.id === "string" ? row.id : null)
+          .filter((value): value is string => Boolean(value));
+
+        let intentsByInvoice = new Map<string, PortalPaymentIntentRow>();
+        const crmCompanyId = typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null;
+        if (invoiceIds.length > 0 && crmCompanyId) {
+          const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data: intentRows } = await admin
+            .from("portal_payment_intents")
+            .select("id, invoice_id, status, webhook_signature_verified, created_at, updated_at, succeeded_at, failed_at, failure_reason")
+            .eq("company_id", crmCompanyId)
+            .in("invoice_id", invoiceIds)
+            .order("created_at", { ascending: false });
+
+          for (const row of ((intentRows ?? []) as PortalPaymentIntentRow[])) {
+            if (row.invoice_id && !intentsByInvoice.has(row.invoice_id)) {
+              intentsByInvoice.set(row.invoice_id, row);
+            }
+          }
+        }
+
+        const invoices = invoiceRows.map((invoice) => {
+          const invoiceId = typeof invoice.id === "string" ? invoice.id : null;
+          const latestIntent = invoiceId ? intentsByInvoice.get(invoiceId) ?? null : null;
+          return {
+            ...invoice,
+            portal_payment_status: normalizePortalPaymentStatus(latestIntent),
+          };
+        });
+
+        return safeJsonOk({ invoices }, origin);
       }
 
       if (req.method === "POST" && subRoute === "pay") {
@@ -1249,6 +1340,7 @@ Deno.serve(async (req) => {
     return safeJsonError("Not found", 404, origin);
   } catch (err) {
     console.error("portal-api error:", err);
+    captureEdgeException(err, { fn: "portal-api", req });
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });

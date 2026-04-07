@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { PayInvoiceButton } from "../components/PayInvoiceButton";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 function formatCurrency(v: number | null): string {
   if (v == null) return "—";
@@ -28,6 +29,26 @@ type LineItem = {
   unit_price?: number;
   line_total?: number;
 };
+
+type PortalPaymentStatus = {
+  label: string;
+  tone: "blue" | "amber" | "emerald" | "red";
+  detail: string;
+  last_updated_at: string | null;
+};
+
+function paymentToneStyles(tone: PortalPaymentStatus["tone"]): string {
+  if (tone === "emerald") return "border-emerald-500/20 bg-emerald-500/5 text-emerald-400";
+  if (tone === "red") return "border-red-500/20 bg-red-500/5 text-red-400";
+  if (tone === "blue") return "border-blue-500/20 bg-blue-500/5 text-blue-400";
+  return "border-amber-500/20 bg-amber-500/5 text-amber-400";
+}
+
+function PaymentStatusIcon({ tone }: { tone: PortalPaymentStatus["tone"] }) {
+  if (tone === "emerald") return <CheckCircle2 className="h-3.5 w-3.5" />;
+  if (tone === "red") return <AlertCircle className="h-3.5 w-3.5" />;
+  return <Loader2 className="h-3.5 w-3.5" />;
+}
 
 export function PortalInvoicesPage() {
   const qc = useQueryClient();
@@ -62,6 +83,7 @@ export function PortalInvoicesPage() {
           const lines = (inv.customer_invoice_line_items as LineItem[] | undefined) ?? [];
           const invoiceId = String(inv.id);
           const companyId = typeof inv.crm_company_id === "string" ? inv.crm_company_id : "";
+          const paymentStatus = (inv.portal_payment_status as PortalPaymentStatus | null | undefined) ?? null;
           const offlineOpen = showOfflineForm[invoiceId] === true;
           return (
             <Card key={invoiceId} className="p-4 space-y-3">
@@ -78,6 +100,20 @@ export function PortalInvoicesPage() {
                   )}
                 </div>
               </div>
+              {paymentStatus && (
+                <div className={`rounded-md border px-3 py-2 ${paymentToneStyles(paymentStatus.tone)}`}>
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <PaymentStatusIcon tone={paymentStatus.tone} />
+                    <span>{paymentStatus.label}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{paymentStatus.detail}</p>
+                  {paymentStatus.last_updated_at && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Last updated: {new Date(paymentStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </p>
+                  )}
+                </div>
+              )}
               {lines.length > 0 && (
                 <div className="rounded border border-border/60 text-xs overflow-hidden">
                   <table className="w-full text-left">
