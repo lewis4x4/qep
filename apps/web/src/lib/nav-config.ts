@@ -117,10 +117,9 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
   {
     label: "Executive",
-    href: "/exec",
+    href: "/executive",
     icon: Gauge,
     roles: ["manager", "owner"],
-    showcase: true,
   },
   {
     label: "People",

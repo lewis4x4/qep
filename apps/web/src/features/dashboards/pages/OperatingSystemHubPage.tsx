@@ -105,9 +105,9 @@ const MODULES: ModuleCard[] = [
     tone: "border-red-500/30 bg-red-500/5 text-red-400",
   },
   {
-    title: "Executive Command Center",
-    description: "CEO, CFO, and COO operating lenses with drill, alerts, packet generation, and actions.",
-    href: "/exec",
+    title: "Executive Intelligence Center",
+    description: "The live leadership control room for CEO, CFO, and COO posture, alerts, drill paths, and packet generation.",
+    href: "/executive",
     roles: ["manager", "owner"],
     icon: Gauge,
     tone: "border-white/20 bg-white/5 text-white",

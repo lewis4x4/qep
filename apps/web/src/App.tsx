@@ -12,6 +12,7 @@ import { NotFoundPage } from "./components/NotFoundPage";
 import { NoProfileShell } from "./components/NoProfileShell";
 import { Toaster } from "@/components/ui/toaster";
 import { FlareProvider } from "@/lib/flare/FlareProvider";
+import { IronShell } from "@/lib/iron/IronShell";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
@@ -1048,7 +1049,7 @@ function App() {
                 path="/exec"
                 element={
                   ["owner", "manager"].includes(profile.role) ? (
-                    <ExecCommandCenterPage />
+                    <Navigate to="/executive" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1232,6 +1233,26 @@ function App() {
                 path="/executive"
                 element={
                   ["manager", "owner"].includes(profile.role) ? (
+                    profile.role === "owner" ? <CommandCenterPage /> : <ExecCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive/summary"
+                element={
+                  ["manager", "owner"].includes(profile.role) ? (
+                    <ExecCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive/vision"
+                element={
+                  ["manager", "owner"].includes(profile.role) ? (
                     <ExecutiveIntelligenceShowcase />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1391,10 +1412,10 @@ function App() {
                 }
               />
               <Route
-                path="/exec"
+                path="/executive/live"
                 element={
-                  profile.role === "owner" ? (
-                    <CommandCenterPage />
+                  ["manager", "owner"].includes(profile.role) ? (
+                    <Navigate to="/executive" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1501,6 +1522,7 @@ function App() {
               <Route path="*" element={<NotFoundPage />} />
             </AnimatedRoutes>
           </AppLayout>
+          <IronShell />
           </FlareProvider>
         </AppErrorBoundary>
         <Toaster />

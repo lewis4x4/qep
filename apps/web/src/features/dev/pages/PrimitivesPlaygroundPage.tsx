@@ -99,7 +99,7 @@ export function PrimitivesPlaygroundPage() {
           <ForwardForecastBar
             counters={[
               { label: "Open quotes", value: 12, tone: "blue", href: "/quotes" },
-              { label: "Revenue", value: "$1.2M", tone: "green", icon: <DollarSign className="h-4 w-4" />, href: "/exec" },
+              { label: "Revenue", value: "$1.2M", tone: "green", icon: <DollarSign className="h-4 w-4" />, href: "/executive" },
             ]}
           />
         </VariantRow>
