@@ -77,17 +77,18 @@ export function PartsSubNav() {
     <nav
       aria-label="Parts module navigation"
       className={cn(
-        "inline-flex flex-wrap items-center gap-1.5 rounded-2xl p-1.5",
+        "flex max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl p-1.5",
+        "scrollbar-thin scrollbar-thumb-border/50",
         "border border-border/40 bg-white/40 backdrop-blur-md",
         "shadow-[0_1px_3px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.8)]",
         "dark:border-white/[0.07] dark:bg-white/[0.025]",
       )}
     >
-      <Link to="/dashboard" className={backPill} title="Back to Command Center">
+      <Link to="/dashboard" className={cn(backPill, "shrink-0")} title="Back to Command Center">
         <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
         Home
       </Link>
-      <div className="mx-0.5 h-4 w-px bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
+      <div className="mx-0.5 h-4 w-px shrink-0 bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
       {PRIMARY_LINKS.map((link) => {
         const NavIcon = link.icon;
         const active = isActive(link.to, link.end);
@@ -96,15 +97,15 @@ export function PartsSubNav() {
             key={link.to}
             to={link.to}
             aria-current={active ? "page" : undefined}
-            className={active ? pillActive : pillBase}
+            className={cn(active ? pillActive : pillBase, "shrink-0 whitespace-nowrap")}
           >
             <NavIcon className="h-3.5 w-3.5 shrink-0" />
             {link.label}
           </Link>
         );
       })}
-      <div className="mx-0.5 h-4 w-px bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
-      <Link to="/service" className={pillBase} title="Service engine">
+      <div className="mx-0.5 h-4 w-px shrink-0 bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
+      <Link to="/service" className={cn(pillBase, "shrink-0 whitespace-nowrap")} title="Service engine">
         Service
       </Link>
     </nav>

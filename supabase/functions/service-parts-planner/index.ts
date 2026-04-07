@@ -12,6 +12,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface PlanRequest {
   job_id: string;
 }
@@ -558,6 +559,7 @@ Deno.serve(async (req) => {
       },
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-parts-planner", req });
     console.error("service-parts-planner error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

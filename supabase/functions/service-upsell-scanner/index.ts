@@ -5,6 +5,7 @@
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -100,6 +101,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ machine_id: machineId, recommendations }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-upsell-scanner", req });
     console.error("service-upsell-scanner:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
   }

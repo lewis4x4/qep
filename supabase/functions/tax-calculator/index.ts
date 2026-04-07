@@ -14,6 +14,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface TaxLine {
   description: string;
   rate: number;
@@ -154,6 +155,7 @@ Deno.serve(async (req) => {
       equipment_cost: equipmentCost,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "tax-calculator", req });
     console.error("tax-calculator error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

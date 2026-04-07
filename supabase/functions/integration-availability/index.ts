@@ -2,6 +2,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { fail, ok, optionsResponse, readJsonObject } from "../_shared/dge-http.ts";
 import type { IntegrationStatusEnum } from "../_shared/integration-types.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface AvailabilityRequestBody {
   integration_key?: string;
 }
@@ -146,6 +147,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       { origin }
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "integration-availability", req });
     if (error instanceof Error && error.message === "WORKSPACE_RESOLUTION_FAILED") {
       return fail({
         origin,

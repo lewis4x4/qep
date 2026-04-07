@@ -37,6 +37,7 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || Deno.env.get("OPENAI_KEY");
 
 type Scenario =
@@ -211,7 +212,7 @@ Deno.serve(async (req) => {
 
       const { data: profile } = await supabaseAdmin
         .from("profiles")
-        .select("role, workspace_id")
+        .select("role, active_workspace_id")
         .eq("id", user.id)
         .single();
 
@@ -220,7 +221,7 @@ Deno.serve(async (req) => {
       }
 
       userId = user.id;
-      workspace = profile.workspace_id || "default";
+      workspace = profile.active_workspace_id || "default";
     }
 
     if (!supabaseAdmin) return safeJsonError("Server misconfiguration", 500, origin);
@@ -374,6 +375,7 @@ Deno.serve(async (req) => {
 
     return safeJsonError("Unknown action", 400, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "draft-email", req });
     console.error("draft-email error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

@@ -25,6 +25,7 @@ import {
 import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
 import { safeCorsHeaders } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 type ExtractedDealData = VoiceCaptureExtractedDealData;
 
 Deno.serve(async (req) => {
@@ -652,6 +653,7 @@ Return ONLY valid JSON matching this exact structure:
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "voice-capture", req });
     const raw = err instanceof Error ? err.message : String(err);
     console.error("Voice capture function error:", raw, err);
     const lower = raw.toLowerCase();

@@ -3,6 +3,7 @@
  * Auth: user JWT only (same as service-parts-manager).
  */
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -44,6 +45,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk(data ?? {}, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-billing-post", req });
     console.error("service-billing-post error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

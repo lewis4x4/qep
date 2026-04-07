@@ -6469,6 +6469,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          active_workspace_id: string
           created_at: string
           email: string | null
           full_name: string | null
@@ -6481,6 +6482,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active_workspace_id?: string
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -6493,6 +6495,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active_workspace_id?: string
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -10179,6 +10182,7 @@ export type Database = {
         Args: { p_actor_id: string; p_service_job_id: string }
         Returns: Json
       }
+      set_active_workspace: { Args: { target: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       signature_in_my_workspace: {

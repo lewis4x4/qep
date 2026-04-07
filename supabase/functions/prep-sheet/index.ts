@@ -9,6 +9,7 @@
  * Returns markdown formatted for printing or display.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -347,7 +348,7 @@ Deno.serve(async (req) => {
     // Enforce role: only reps, managers, admins, and owners
     const { data: profile } = await adminDb
       .from("profiles")
-      .select("role, workspace_id")
+      .select("role")
       .eq("id", user.id)
       .single();
 
@@ -389,6 +390,7 @@ Deno.serve(async (req) => {
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "prep-sheet", req });
     console.error("prep-sheet error:", err);
     return jsonError("Failed to generate prep sheet", 500, ch);
   }

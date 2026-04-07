@@ -6,6 +6,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -127,6 +128,7 @@ Deno.serve(async (req) => {
       mode,
     );
   } catch (oauthError) {
+    captureEdgeException(oauthError, { fn: "onedrive-oauth", req });
     console.error("OneDrive OAuth error:", oauthError);
     return respondError("Internal error during OAuth flow", mode, 500);
   }

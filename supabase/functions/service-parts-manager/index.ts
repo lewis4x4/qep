@@ -13,6 +13,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { mirrorToFulfillmentRun } from "../_shared/parts-fulfillment-mirror.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 type Action =
   | "add"
   | "update"
@@ -86,6 +87,7 @@ Deno.serve(async (req) => {
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
   } catch (err) {
+    captureEdgeException(err, { fn: "service-parts-manager", req });
     console.error("service-parts-manager error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

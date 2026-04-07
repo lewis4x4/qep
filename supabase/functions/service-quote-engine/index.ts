@@ -12,6 +12,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface QuoteRequest {
   action: string;
   job_id?: string;
@@ -58,6 +59,7 @@ Deno.serve(async (req) => {
         return safeJsonError(`Unknown action: ${body.action}`, 400, origin);
     }
   } catch (err) {
+    captureEdgeException(err, { fn: "service-quote-engine", req });
     console.error("service-quote-engine error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

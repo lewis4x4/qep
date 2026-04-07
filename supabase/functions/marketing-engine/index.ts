@@ -15,6 +15,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 async function generateCampaignContent(
@@ -202,6 +203,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "marketing-engine", req });
     console.error("marketing-engine error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

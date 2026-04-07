@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   buildVoiceCaptureNoteBody,
   getVoiceCaptureContactName,
@@ -394,6 +395,7 @@ Deno.serve(async (req) => {
       }
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "voice-capture-sync", req });
     console.error("voice-capture-sync failed:", error);
     return jsonError("Internal server error", 500, headers);
   }

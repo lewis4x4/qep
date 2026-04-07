@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptCredential } from "../_shared/integration-crypto.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   createEventTracker,
   emitIntegrationConfigUpdated,
@@ -773,6 +774,7 @@ Deno.serve(async (req: Request) => {
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "admin-users", req });
     const message = err instanceof Error
       ? err.message
       : "Internal server error";

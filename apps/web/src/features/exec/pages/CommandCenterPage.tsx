@@ -28,8 +28,8 @@ import {
 import { DashboardPivotToggle } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
 import { CfoCommandCenterView } from "../views/CfoCommandCenterView";
 import { CooCommandCenterView } from "../views/CooCommandCenterView";
@@ -104,24 +104,12 @@ export function CommandCenterPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<ExecutiveTab>("overview");
 
-  // Resolve the calling user's workspace once. Threaded into the drill drawer
+  // Resolve the calling user's active workspace. Threaded into the drill drawer
   // so its snapshot history + alerts queries can explicitly filter by
-  // workspace_id (P1-2 fix). Cached indefinitely — workspace doesn't change.
-  const { data: workspaceId = "default" } = useQuery({
-    queryKey: ["exec", "my-workspace"],
-    queryFn: async (): Promise<string> => {
-      const { data: userRes } = await supabase.auth.getUser();
-      const uid = userRes?.user?.id;
-      if (!uid) return "default";
-      const res = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => { eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: { workspace_id: string | null } | null; error: unknown }> } };
-        };
-      }).from("profiles").select("workspace_id").eq("id", uid).maybeSingle();
-      return res.data?.workspace_id ?? "default";
-    },
-    staleTime: Infinity,
-  });
+  // workspace_id. Sourced from profiles.active_workspace_id via useAuth
+  // (migration 203) — no extra query.
+  const workspaceQuery = useMyWorkspaceId();
+  const workspaceId = workspaceQuery.data ?? "default";
   const [drillMetric, setDrillMetric] = useState<string | null>(null);
 
   const handleDrill = useCallback((metricKey: string) => {

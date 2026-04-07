@@ -43,9 +43,9 @@ async function authorizeOwner(req: Request, admin: SupabaseClient): Promise<{ ok
     const { data: userRes } = await admin.auth.getUser(auth.slice(7));
     const userId = userRes?.user?.id;
     if (!userId) return { ok: false };
-    const { data: profile } = await admin.from("profiles").select("role, workspace_id").eq("id", userId).maybeSingle();
+    const { data: profile } = await admin.from("profiles").select("role, active_workspace_id").eq("id", userId).maybeSingle();
     if (profile?.role !== "owner") return { ok: false };
-    return { ok: true, userId, workspace: profile.workspace_id };
+    return { ok: true, userId, workspace: profile.active_workspace_id };
   } catch {
     return { ok: false };
   }

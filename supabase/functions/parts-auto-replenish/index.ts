@@ -13,6 +13,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const VENDOR_SCORE_WEIGHTS = {
   lead_time: 0.25,
   fill_rate: 0.30,
@@ -407,6 +408,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results, elapsed_ms: elapsedMs }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "parts-auto-replenish", req });
     console.error("parts-auto-replenish error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

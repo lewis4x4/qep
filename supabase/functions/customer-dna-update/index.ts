@@ -27,6 +27,7 @@ import {
 } from "../_shared/dge-http.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req): Promise<Response> => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -265,6 +266,7 @@ Deno.serve(async (req): Promise<Response> => {
       { origin },
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "customer-dna-update", req });
     if (error instanceof SyntaxError) {
       return fail({
         origin,

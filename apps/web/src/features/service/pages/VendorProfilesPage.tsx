@@ -146,7 +146,7 @@ export function VendorProfilesPage({ subNav = "service" }: { subNav?: "service" 
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       {subNav === "parts" ? <PartsSubNav /> : <ServiceSubNav />}
       <div>
         <h1 className="text-2xl font-semibold">Vendor profiles</h1>

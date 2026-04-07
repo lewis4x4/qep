@@ -14,6 +14,10 @@ interface Profile {
   full_name: string | null;
   email: string | null;
   role: UserRole;
+  iron_role: string | null;
+  iron_role_display: string | null;
+  is_support: boolean;
+  active_workspace_id: string;
 }
 
 interface AuthState {
@@ -262,7 +266,7 @@ async function fetchProfile(userId: string): Promise<{ profile: Profile | null; 
       () => Promise.resolve(
         supabase
           .from("profiles")
-          .select("id, full_name, email, role")
+          .select("id, full_name, email, role, iron_role, iron_role_display, is_support, active_workspace_id")
           .eq("id", userId)
           .single()
       ),

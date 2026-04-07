@@ -198,9 +198,163 @@ function ChatInsightsPanel() {
 
 interface KnowledgeGap {
   id: string;
+  frequency: number;
   question: string;
-  created_at: string;
+  last_asked_at: string;
   resolved: boolean;
+}
+
+interface KbHealthSnapshot {
+  documents: {
+    published: number;
+    pending_review: number;
+    draft: number;
+    archived: number;
+    ingest_failed: number;
+    overdue_review: number;
+  };
+  top_knowledge_gaps: Array<{
+    id: string;
+    question: string;
+    frequency: number;
+    last_asked_at: string;
+  }>;
+  embeddings: {
+    total: number;
+    fresh_last_24h: number;
+    fresh_pct: number;
+  };
+  last_embed_crm_run: {
+    status: string;
+    processed_count: number;
+    error_count: number;
+    finished_at: string | null;
+    created_at: string;
+  } | null;
+  retrieval_events_last_24h: number;
+}
+
+function KnowledgeBaseHealthPanel() {
+  const [snapshot, setSnapshot] = useState<KbHealthSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const db = supabase as unknown as {
+        rpc: (fn: string, args?: Record<string, never>) => Promise<{ data: KbHealthSnapshot | null; error: { message: string } | null }>;
+      };
+      const { data, error } = await db.rpc("kb_health_snapshot");
+      if (!error) setSnapshot(data);
+      setLoading(false);
+    }
+
+    void load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading KB health...
+      </div>
+    );
+  }
+
+  if (!snapshot) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          KB health snapshot unavailable.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Card><CardContent className="pt-6"><p className="text-2xl font-bold">{snapshot.documents.published}</p><p className="text-xs text-muted-foreground">Published Docs</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-2xl font-bold">{snapshot.documents.pending_review}</p><p className="text-xs text-muted-foreground">Pending Review</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className={cn("text-2xl font-bold", snapshot.documents.overdue_review > 0 && "text-amber-600")}>{snapshot.documents.overdue_review}</p><p className="text-xs text-muted-foreground">Overdue Review</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-2xl font-bold">{snapshot.embeddings.fresh_pct}%</p><p className="text-xs text-muted-foreground">Embeddings Fresh (24h)</p></CardContent></Card>
+        <Card><CardContent className="pt-6"><p className="text-2xl font-bold">{snapshot.retrieval_events_last_24h}</p><p className="text-xs text-muted-foreground">Retrievals (24h)</p></CardContent></Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold">Top Unresolved Gaps</h3>
+              <p className="text-xs text-muted-foreground">Prioritized by repeated misses, not just recency.</p>
+            </div>
+            {snapshot.top_knowledge_gaps.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No unresolved gaps.</p>
+            ) : (
+              <div className="space-y-2">
+                {snapshot.top_knowledge_gaps.map((gap) => (
+                  <div key={gap.id} className="rounded-md border border-border p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm text-foreground">{gap.question}</p>
+                      <Badge variant="secondary">{gap.frequency}x</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Last asked {new Date(gap.last_asked_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold">Embedding Health</h3>
+              <p className="text-xs text-muted-foreground">
+                {snapshot.embeddings.fresh_last_24h} of {snapshot.embeddings.total} CRM embeddings refreshed in the last 24 hours.
+              </p>
+            </div>
+            <div>
+              <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Last embed-crm run</h4>
+              {snapshot.last_embed_crm_run ? (
+                <div className="mt-2 rounded-md border border-border p-3 text-sm">
+                  <p className="font-medium capitalize">{snapshot.last_embed_crm_run.status}</p>
+                  <p className="text-muted-foreground">
+                    Processed {snapshot.last_embed_crm_run.processed_count} with {snapshot.last_embed_crm_run.error_count} errors.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(snapshot.last_embed_crm_run.finished_at ?? snapshot.last_embed_crm_run.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">No embed-crm run recorded yet.</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-md border border-border p-3">
+                <p className="font-medium">{snapshot.documents.draft}</p>
+                <p className="text-xs text-muted-foreground">Draft docs</p>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="font-medium">{snapshot.documents.ingest_failed}</p>
+                <p className="text-xs text-muted-foreground">Ingest failed</p>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="font-medium">{snapshot.documents.archived}</p>
+                <p className="text-xs text-muted-foreground">Archived docs</p>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="font-medium">{snapshot.documents.pending_review}</p>
+                <p className="text-xs text-muted-foreground">Needs review</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 function KnowledgeGapsPanel() {
@@ -212,9 +366,10 @@ function KnowledgeGapsPanel() {
       const db = supabase;
       const { data } = await db
         .from("knowledge_gaps")
-        .select("id, question, created_at, resolved")
+        .select("id, question, frequency, last_asked_at, resolved")
         .eq("resolved", false)
-        .order("created_at", { ascending: false })
+        .order("frequency", { ascending: false })
+        .order("last_asked_at", { ascending: false })
         .limit(50);
       setGaps((data ?? []) as KnowledgeGap[]);
       setLoading(false);
@@ -263,12 +418,13 @@ function KnowledgeGapsPanel() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-foreground">{gap.question}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {new Date(gap.created_at).toLocaleDateString([], {
+                  {new Date(gap.last_asked_at).toLocaleDateString([], {
                     month: "short", day: "numeric", year: "numeric",
                     hour: "numeric", minute: "2-digit",
                   })}
                 </p>
               </div>
+              <Badge variant="secondary" className="shrink-0">{gap.frequency}x</Badge>
               <Button
                 variant="outline"
                 size="sm"
@@ -645,6 +801,12 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground data-[state=active]:text-foreground"
           >
             Knowledge Gaps
+          </TabsTrigger>
+          <TabsTrigger
+            value="kb-health"
+            className="rounded-none px-4 pb-3 pt-1 text-sm data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary -mb-px"
+          >
+            KB Health
           </TabsTrigger>
           <TabsTrigger
             value="chat-insights"
@@ -1109,6 +1271,10 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
 
         <TabsContent value="knowledge-gaps">
           <KnowledgeGapsPanel />
+        </TabsContent>
+
+        <TabsContent value="kb-health">
+          <KnowledgeBaseHealthPanel />
         </TabsContent>
 
         <TabsContent value="chat-insights">

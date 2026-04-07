@@ -18,6 +18,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const DEFAULT_VELOCITY_WINDOW_DAYS = 90;
 const DEFAULT_LEAD_TIME_DAYS = 7;
 const DEFAULT_LEAD_TIME_STD_DEV = 2;
@@ -309,6 +310,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results, elapsed_ms: elapsedMs }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "parts-reorder-compute", req });
     console.error("parts-reorder-compute error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

@@ -15,6 +15,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const HOURS_THRESHOLD_FRACTION = 0.9;
 const DATE_WINDOW_DAYS = 60;
 const MIN_CONFIDENCE = 0.3;
@@ -345,6 +346,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results, elapsed_ms: elapsedMs }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "parts-predictive-kitter", req });
     console.error("parts-predictive-kitter error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

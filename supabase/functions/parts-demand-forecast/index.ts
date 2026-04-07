@@ -15,6 +15,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const MODEL_VERSION = "v1_weighted_avg";
 const LOOKBACK_MONTHS = 12;
 const FORECAST_MONTHS = 3;
@@ -395,6 +396,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results, elapsed_ms: elapsedMs, batch_id: batchId }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "parts-demand-forecast", req });
     console.error("parts-demand-forecast error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

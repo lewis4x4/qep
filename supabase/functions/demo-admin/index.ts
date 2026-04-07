@@ -1,4 +1,5 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import { resetServicePartsDemoData, seedServicePartsDemoData } from "./service-parts-demo.ts";
 
 const ALLOWED_ORIGINS = [
@@ -1212,6 +1213,7 @@ Deno.serve(async (req) => {
       servicePartsSummary,
     }, 200, ch);
   } catch (error) {
+    captureEdgeException(error, { fn: "demo-admin", req });
     console.error("[demo-admin] failed:", error);
     return jsonResponse(
       { error: describeError(error) },

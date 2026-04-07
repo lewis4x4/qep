@@ -222,12 +222,14 @@ async function executeActionChain(
 /* ─── Workspace lookup helper ───────────────────────────────────────────── */
 
 async function lookupWorkspace(supabase: SupabaseClient, userId: string): Promise<string> {
+  // Read the user's current active workspace from profiles.active_workspace_id
+  // (migration 203). This is the authoritative source for Iron flow-step scoping.
   const { data } = await supabase
     .from("profiles")
-    .select("workspace_id")
+    .select("active_workspace_id")
     .eq("id", userId)
     .maybeSingle();
-  return ((data as Record<string, unknown> | null)?.workspace_id as string) ?? "default";
+  return ((data as Record<string, unknown> | null)?.active_workspace_id as string) ?? "default";
 }
 
 /* ─── Main handler ──────────────────────────────────────────────────────── */

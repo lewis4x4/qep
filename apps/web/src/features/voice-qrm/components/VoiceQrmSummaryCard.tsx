@@ -52,20 +52,40 @@ function matchBadge(method: string | null) {
   );
 }
 
+const EMPTY_COUNT_RESULT = {
+  count: 0,
+  ids: [],
+  crm_equipment_ids: [],
+};
+
 export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
-  const contentStyle = CONTENT_TYPE_STYLES[result.content_type] ?? CONTENT_TYPE_STYLES.general;
+  const contentType = result.content_type ?? "general";
+  const contentStyle = CONTENT_TYPE_STYLES[contentType] ?? CONTENT_TYPE_STYLES.general;
   const sentiment = sentimentDisplay(result.sentiment_score, result.intelligence?.sentiment);
   const SentimentIcon = sentiment?.icon;
+  const entities = result.entities ?? {
+    contact: { id: null, match_method: null, confidence: null, name: "" },
+    company: { id: null, match_method: null, confidence: null, name: null },
+    deal: { id: null, action: null, stage_suggestion: null },
+    needs_assessment: { id: null, completeness: 0 },
+    cadence: { id: null },
+    additional_deals: EMPTY_COUNT_RESULT,
+    equipment: EMPTY_COUNT_RESULT,
+    scheduled_follow_ups: EMPTY_COUNT_RESULT,
+    budget_timeline_captured: false,
+  };
+  const pipelineDurationMs = result.pipeline_duration_ms ?? 0;
+  const followUpSuggestions = result.follow_up_suggestions ?? [];
 
   const entitiesCreatedCount =
-    (result.entities.contact.id ? 1 : 0) +
-    (result.entities.company.id ? 1 : 0) +
-    (result.entities.deal.id ? 1 : 0) +
-    result.entities.additional_deals.count +
-    result.entities.equipment.count +
-    result.entities.scheduled_follow_ups.count +
-    (result.entities.needs_assessment.id ? 1 : 0) +
-    (result.entities.cadence.id ? 1 : 0);
+    (entities.contact.id ? 1 : 0) +
+    (entities.company.id ? 1 : 0) +
+    (entities.deal.id ? 1 : 0) +
+    entities.additional_deals.count +
+    entities.equipment.count +
+    entities.scheduled_follow_ups.count +
+    (entities.needs_assessment.id ? 1 : 0) +
+    (entities.cadence.id ? 1 : 0);
 
   return (
     <div className="space-y-3">
@@ -92,7 +112,7 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
           </div>
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap">
             <Clock className="h-3 w-3" aria-hidden />
-            {(result.pipeline_duration_ms / 1000).toFixed(1)}s
+            {(pipelineDurationMs / 1000).toFixed(1)}s
           </div>
         </div>
 
@@ -120,20 +140,20 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
         <EntityRow
           icon={User}
           label="Contact"
-          primary={result.entities.contact.name || "—"}
-          detail={result.entities.contact.confidence !== null ? `similarity ${(result.entities.contact.confidence * 100).toFixed(0)}%` : undefined}
-          badge={matchBadge(result.entities.contact.match_method)}
-          to={result.entities.contact.id ? `/crm/contacts/${result.entities.contact.id}` : undefined}
+          primary={entities.contact.name || "—"}
+          detail={entities.contact.confidence !== null ? `similarity ${(entities.contact.confidence * 100).toFixed(0)}%` : undefined}
+          badge={matchBadge(entities.contact.match_method)}
+          to={entities.contact.id ? `/crm/contacts/${entities.contact.id}` : undefined}
         />
 
         {/* Company */}
         <EntityRow
           icon={Building2}
           label="Company"
-          primary={result.entities.company.name ?? "—"}
-          detail={result.entities.company.confidence !== null ? `similarity ${(result.entities.company.confidence * 100).toFixed(0)}%` : undefined}
-          badge={matchBadge(result.entities.company.match_method)}
-          to={result.entities.company.id ? `/crm/companies/${result.entities.company.id}` : undefined}
+          primary={entities.company.name ?? "—"}
+          detail={entities.company.confidence !== null ? `similarity ${(entities.company.confidence * 100).toFixed(0)}%` : undefined}
+          badge={matchBadge(entities.company.match_method)}
+          to={entities.company.id ? `/crm/companies/${entities.company.id}` : undefined}
         />
 
         {/* Primary deal */}
@@ -141,38 +161,38 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
           icon={Briefcase}
           label="Primary deal"
           primary={
-            result.entities.deal.id
-              ? `Deal ${result.entities.deal.action ?? ""}${result.entities.deal.stage_suggestion ? ` · stage ${result.entities.deal.stage_suggestion}` : ""}`
+            entities.deal.id
+              ? `Deal ${entities.deal.action ?? ""}${entities.deal.stage_suggestion ? ` · stage ${entities.deal.stage_suggestion}` : ""}`
               : "Not created"
           }
-          badge={result.entities.deal.action ? <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-blue-400">{result.entities.deal.action}</span> : null}
-          to={result.entities.deal.id ? `/crm/deals/${result.entities.deal.id}` : undefined}
+          badge={entities.deal.action ? <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-blue-400">{entities.deal.action}</span> : null}
+          to={entities.deal.id ? `/crm/deals/${entities.deal.id}` : undefined}
         />
 
         {/* Needs assessment */}
-        {result.entities.needs_assessment.id && (
+        {entities.needs_assessment.id && (
           <EntityRow
             icon={FileText}
             label="Needs assessment"
-            primary={`${result.entities.needs_assessment.completeness} field${result.entities.needs_assessment.completeness === 1 ? "" : "s"} populated`}
+            primary={`${entities.needs_assessment.completeness} field${entities.needs_assessment.completeness === 1 ? "" : "s"} populated`}
           />
         )}
       </Card>
 
       {/* Additional deals (multi-deal extraction) */}
-      {result.entities.additional_deals.count > 0 && (
+      {entities.additional_deals.count > 0 && (
         <Card className="border-qep-orange/30 bg-qep-orange/5 p-4">
           <div className="flex items-center gap-2 mb-2">
             <Briefcase className="h-4 w-4 text-qep-orange" aria-hidden />
             <h3 className="text-sm font-semibold text-foreground">
-              +{result.entities.additional_deals.count} additional deal{result.entities.additional_deals.count === 1 ? "" : "s"} created
+              +{entities.additional_deals.count} additional deal{entities.additional_deals.count === 1 ? "" : "s"} created
             </h3>
           </div>
           <p className="text-xs text-muted-foreground">
             The voice note mentioned multiple opportunities. Each is now a separate deal in the pipeline.
           </p>
           <ul className="mt-2 space-y-1">
-            {result.entities.additional_deals.ids.map((id) => (
+            {entities.additional_deals.ids.map((id) => (
               <li key={id}>
                 <Link to={`/crm/deals/${id}`} className="text-xs text-qep-orange hover:underline flex items-center gap-1">
                   <ExternalLink className="h-3 w-3" aria-hidden />
@@ -185,20 +205,20 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
       )}
 
       {/* Equipment mentions */}
-      {result.entities.equipment.count > 0 && (
+      {entities.equipment.count > 0 && (
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <Wrench className="h-4 w-4 text-violet-400" aria-hidden />
             <h3 className="text-sm font-semibold text-foreground">
-              {result.entities.equipment.count} equipment record{result.entities.equipment.count === 1 ? "" : "s"} extracted
+              {entities.equipment.count} equipment record{entities.equipment.count === 1 ? "" : "s"} extracted
             </h3>
           </div>
           <p className="text-xs text-muted-foreground">
             Machines mentioned in the voice note (current fleet, trade-ins, or items of interest) are now tracked.
           </p>
-          {result.entities.equipment.crm_equipment_ids && result.entities.equipment.crm_equipment_ids.length > 0 && (
+          {entities.equipment.crm_equipment_ids && entities.equipment.crm_equipment_ids.length > 0 && (
             <ul className="mt-2 space-y-1">
-              {result.entities.equipment.crm_equipment_ids.map((id) => (
+              {entities.equipment.crm_equipment_ids.map((id) => (
                 <li key={id}>
                   <Link to={`/crm/equipment/${id}`} className="text-xs text-violet-400 hover:underline flex items-center gap-1">
                     <ExternalLink className="h-3 w-3" aria-hidden />
@@ -212,12 +232,12 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
       )}
 
       {/* Scheduled follow-ups */}
-      {result.entities.scheduled_follow_ups.count > 0 && (
+      {entities.scheduled_follow_ups.count > 0 && (
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <CalendarClock className="h-4 w-4 text-blue-400" aria-hidden />
             <h3 className="text-sm font-semibold text-foreground">
-              {result.entities.scheduled_follow_ups.count} future task{result.entities.scheduled_follow_ups.count === 1 ? "" : "s"} scheduled
+              {entities.scheduled_follow_ups.count} future task{entities.scheduled_follow_ups.count === 1 ? "" : "s"} scheduled
             </h3>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -227,7 +247,7 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
       )}
 
       {/* Budget timeline captured */}
-      {result.entities.budget_timeline_captured && (
+      {entities.budget_timeline_captured && (
         <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="flex items-center gap-2 mb-1">
             <Calendar className="h-4 w-4 text-emerald-400" aria-hidden />
@@ -241,14 +261,14 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
       )}
 
       {/* Follow-up suggestions */}
-      {result.follow_up_suggestions.length > 0 && (
+      {followUpSuggestions.length > 0 && (
         <Card className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="h-4 w-4 text-qep-orange" aria-hidden />
             <h3 className="text-sm font-semibold text-foreground">Suggested follow-ups</h3>
           </div>
           <ul className="space-y-1.5">
-            {result.follow_up_suggestions.map((suggestion, i) => (
+            {followUpSuggestions.map((suggestion, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                 <span className="mt-0.5 inline-block h-1.5 w-1.5 rounded-full bg-qep-orange" aria-hidden />
                 <span>{suggestion}</span>

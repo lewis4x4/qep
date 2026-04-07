@@ -16,6 +16,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200 });
@@ -229,6 +230,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "pipeline-enforcer", req });
     console.error("pipeline-enforcer error:", err);
     return safeJsonError("Internal server error", 500, null);
   }

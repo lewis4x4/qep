@@ -1,32 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 
-function chooseWorkspaceId(rows: Array<{ workspace_id: string }> | null | undefined): string | null {
-  const ids = (rows ?? [])
-    .map((row) => row.workspace_id?.trim())
-    .filter((id): id is string => Boolean(id));
-  if (ids.length === 0) return null;
-  if (ids.includes("default")) return "default";
-  return [...ids].sort((a, b) => a.localeCompare(b))[0] ?? null;
-}
-
+/**
+ * The caller's currently-active workspace id.
+ *
+ * Prior to migration 203 this hook queried `profile_workspaces` and
+ * heuristically picked one membership (prefer 'default', else alphabetical
+ * first). That produced per-device drift and was not persisted.
+ *
+ * With migration 203, `profiles.active_workspace_id` is the single source
+ * of truth. It is loaded by `useAuth` as part of the profile SELECT, so
+ * this hook is now a zero-query read. The `useQuery`-compatible shape is
+ * preserved so the 11 existing consumers don't need edits.
+ */
 export function useMyWorkspaceId() {
-  const { user } = useAuth();
+  const { profile, loading } = useAuth();
+  const workspaceId = profile?.active_workspace_id ?? null;
 
-  return useQuery({
-    queryKey: ["my-workspace-id", user?.id],
-    enabled: Boolean(user?.id),
-    staleTime: 60_000,
-    queryFn: async () => {
-      const userId = user?.id;
-      if (!userId) return null;
-      const { data, error } = await supabase
-        .from("profile_workspaces")
-        .select("workspace_id")
-        .eq("profile_id", userId);
-      if (error) throw error;
-      return chooseWorkspaceId(data);
-    },
-  });
+  return {
+    data: workspaceId,
+    isLoading: loading,
+    isPending: loading,
+    isError: false as const,
+    error: null,
+    isSuccess: !loading && workspaceId !== null,
+  };
 }

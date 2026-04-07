@@ -6,6 +6,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { timingSafeEqualString } from "../_shared/timing-safe.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization")?.trim();
   const cronSecret = Deno.env.get("CRON_SECRET") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -53,6 +54,7 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (fatal) {
+    captureEdgeException(fatal, { fn: "crm-reminder-dispatcher", req });
     console.error("[crm-reminder-dispatcher] fatal", fatal);
     const detail = fatal instanceof Error ? fatal.message : String(fatal);
     return new Response(

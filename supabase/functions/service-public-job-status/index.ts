@@ -8,6 +8,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { publicServiceStatusFromStage } from "../_shared/public-service-status.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
@@ -72,6 +73,7 @@ Deno.serve(async (req) => {
     };
     return safeJsonOk({ job: safeJob }, null);
   } catch (e) {
+    captureEdgeException(e, { fn: "service-public-job-status", req });
     console.error("service-public-job-status:", e);
     return safeJsonError("Internal error", 500, null);
   }

@@ -9,7 +9,9 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface FeedbackRequest {
   job_id: string;
   actual_problem_fixed?: boolean;
@@ -20,6 +22,15 @@ interface FeedbackRequest {
   return_visit_risk?: string;
   upsell_suggestions?: unknown[];
   actual_hours?: number;
+}
+
+async function buildKnowledgeEmbedding(content: string): Promise<string | null> {
+  try {
+    return formatVectorLiteral(await embedText(content));
+  } catch (error) {
+    console.warn("service-completion-feedback embedding skipped:", error);
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
@@ -79,6 +90,7 @@ Deno.serve(async (req) => {
         job_id: body.job_id,
         note_type: "serial_specific",
         content: body.serial_specific_note,
+        embedding: await buildKnowledgeEmbedding(body.serial_specific_note),
         source_user_id: userId,
       });
     }
@@ -91,6 +103,7 @@ Deno.serve(async (req) => {
         job_id: body.job_id,
         note_type: "field_hack",
         content: body.time_saver_notes,
+        embedding: await buildKnowledgeEmbedding(body.time_saver_notes),
         source_user_id: userId,
       });
     }
@@ -143,6 +156,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ feedback }, origin, 201);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-completion-feedback", req });
     console.error("service-completion-feedback error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

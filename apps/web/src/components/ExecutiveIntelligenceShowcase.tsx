@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   TrendingUp,
@@ -283,6 +284,7 @@ function FutureItem({ icon: Icon, label, delay }: { icon: React.ElementType; lab
 
 /* ═══════════════════════════════════════════════════ */
 export function ExecutiveIntelligenceShowcase(): React.ReactElement {
+  const navigate = useNavigate();
   const [heroLoaded, setHeroLoaded] = useState(false);
   useEffect(() => { const t = setTimeout(() => setHeroLoaded(true), 100); return () => clearTimeout(t); }, []);
   const scrollTo = useCallback((id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, []);
@@ -341,8 +343,8 @@ export function ExecutiveIntelligenceShowcase(): React.ReactElement {
                 </div>
               </div>
               <div className={cn("mt-8 flex flex-wrap gap-3 transition-all duration-700 delay-500", heroLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6")}>
-                <button onClick={() => scrollTo("kpis")} className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]">
-                  See the dashboard <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                <button onClick={() => navigate("/executive")} className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]">
+                  Open the live command center <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </button>
                 <button onClick={() => scrollTo("value")} className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]">What it unlocks</button>
               </div>
@@ -605,7 +607,7 @@ export function ExecutiveIntelligenceShowcase(): React.ReactElement {
                 <p className="max-w-2xl text-sm leading-relaxed text-white/50 mb-4">It is the future leadership operating layer for how QEP sees the business, manages risk, and makes better decisions with greater clarity — across sales, rental, parts, logistics, and service.</p>
                 <p className="max-w-2xl text-sm leading-relaxed text-white/50 mb-8">When ownership can see the full picture in real time, the business stops managing by exception and starts managing with precision.</p>
                 <div className="flex flex-wrap gap-3">
-                  <button onClick={() => scrollTo("kpis")} className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]">View the dashboard <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" /></button>
+                  <button onClick={() => navigate("/executive")} className="group inline-flex items-center gap-2 rounded-full bg-[#B87333] px-6 py-3 text-sm font-bold text-[#111] shadow-lg shadow-[#B87333]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#B87333]/30 hover:brightness-110 active:scale-[0.98]">Open the live command center <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" /></button>
                   <button onClick={() => scrollTo("intelligence")} className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]">Business intelligence</button>
                   <button onClick={() => scrollTo("future")} className="inline-flex items-center gap-2 rounded-full border border-white/[0.1] bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-all duration-200 hover:border-white/[0.2] hover:bg-white/[0.07] active:scale-[0.98]">See the full vision</button>
                 </div>

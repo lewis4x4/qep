@@ -5,7 +5,7 @@ import { PhotoPartIdentifier } from "../components/PhotoPartIdentifier";
 
 export function NewPartsOrderPage() {
   return (
-    <div className="max-w-3xl mx-auto py-6 px-4 space-y-6">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       <PartsSubNav />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">New parts order</h1>

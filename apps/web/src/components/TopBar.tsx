@@ -36,12 +36,17 @@ import type { UserRole } from "@/lib/database.types";
 import { getInitials } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
 import { QrmGlobalSearchCommand } from "@/features/qrm/components/QrmGlobalSearchCommand";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 
 interface Profile {
   id: string;
   full_name: string | null;
   email: string | null;
   role: UserRole;
+  iron_role: string | null;
+  iron_role_display: string | null;
+  is_support: boolean;
+  active_workspace_id: string;
 }
 
 interface TopBarProps {
@@ -301,6 +306,8 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
               {BRAND_NAME}
             </span>
           </Link>
+
+          <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
 
           {breadcrumbLabel && (
             <nav

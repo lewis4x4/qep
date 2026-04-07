@@ -119,22 +119,18 @@ export async function buildContext(): Promise<FlareContext> {
   const session = (await supabase.auth.getSession()).data.session;
   const user = session?.user;
 
-  // Caller workspace + role pulled from profile if available
-  let workspaceId = "default";
-  let role = "unknown";
-  let ironRole: string | null = null;
-  if (user?.id) {
-    try {
-      const { data: profile } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: { workspace_id?: string; role?: string; iron_role?: string } | null; error: unknown }> } } };
-      }).from("profiles").select("workspace_id, role, iron_role").eq("id", user.id).maybeSingle();
-      if (profile) {
-        workspaceId = profile.workspace_id ?? "default";
-        role = profile.role ?? "unknown";
-        ironRole = profile.iron_role ?? null;
-      }
-    } catch { /* ignore */ }
-  }
+  // Caller workspace + role pulled from JWT app_metadata. Migration 203
+  // wires a trigger that syncs profiles.active_workspace_id, iron_role, and
+  // role into auth.users.raw_app_meta_data, so these claims are always the
+  // authoritative identity without a second query hop.
+  const appMeta = (user?.app_metadata ?? {}) as {
+    workspace_id?: string;
+    iron_role?: string;
+    role?: string;
+  };
+  const workspaceId = appMeta.workspace_id ?? "default";
+  const role = appMeta.role ?? "unknown";
+  const ironRole = appMeta.iron_role ?? null;
 
   const ring = snapshotRingBuffers();
   const ua = navigator.userAgent;

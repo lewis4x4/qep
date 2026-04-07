@@ -14,6 +14,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface DepositRequest {
   deal_id: string;
   equipment_value: number;
@@ -175,6 +176,7 @@ Deno.serve(async (req) => {
       },
     }, origin, 201);
   } catch (err) {
+    captureEdgeException(err, { fn: "deposit-calculator", req });
     console.error("deposit-calculator error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

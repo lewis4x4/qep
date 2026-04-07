@@ -3,6 +3,8 @@
  * CDO gate stub: `segment:gates --ui` invokes this via `bun run design:review`.
  * Replace with real visual/a11y checks when ready.
  */
+require("./instrument.js");
+
 const fs = require("node:fs");
 const report = {
   gate: "cdo.design-review",

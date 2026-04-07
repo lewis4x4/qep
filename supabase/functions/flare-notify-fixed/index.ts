@@ -15,6 +15,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -199,6 +200,7 @@ ${fixDeploySha ? `<p>Deploy SHA: <code>${fixDeploySha}</code></p>` : ""}
       side_channel_errors: sideChannelErrors,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "flare-notify-fixed", req });
     console.error("[flare-notify-fixed] error:", err);
     return safeJsonError("internal", 500, req.headers.get("origin"));
   }

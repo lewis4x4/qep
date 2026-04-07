@@ -4,6 +4,12 @@ Use this after migrations (including `042_hybrid_retrieve_document_evidence.sql`
 
 Record pass/fail, notes, and **trace IDs** from chat errors or the footer (`Trace: …`) when filing issues.
 
+Automated companion coverage now lives in:
+
+- `bun run kb:eval`
+- `bun run test:kb-integration`
+- `bun run kb:workspace-isolation`
+
 ---
 
 ## 1. Reliability and retrieval

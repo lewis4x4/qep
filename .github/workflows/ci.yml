@@ -33,5 +33,35 @@ jobs:
       - name: Parts service pressure matrix (static)
         run: bun run pressure:parts
 
+      - name: Knowledge retrieval eval
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          KB_EVAL_REQUIRED: "true"
+        run: node ./scripts/kb-eval/run-eval.mjs
+
+      - name: Knowledge base integration tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          KB_TEST_ADMIN_TOKEN: ${{ secrets.KB_TEST_ADMIN_TOKEN }}
+          KB_TEST_REP_TOKEN: ${{ secrets.KB_TEST_REP_TOKEN }}
+          KB_INTEGRATION_REQUIRED: "true"
+        run: bun run test:kb-integration
+
+      - name: Knowledge workspace isolation
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          KB_ISOLATION_CASES: ${{ secrets.KB_ISOLATION_CASES }}
+          KB_ISOLATION_REQUIRED: "true"
+        run: node ./scripts/kb-eval/workspace-isolation.mjs
+
       - name: Build (full gate)
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: bun run build

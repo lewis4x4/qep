@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { MoreHorizontal, Link as LinkIcon, Copy, Search, ArrowUpDown } from "lucide-react";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
-import { useActiveBranches, type Branch } from "@/hooks/useBranches";
+import { useBranches, type Branch } from "@/hooks/useBranches";
 import { ServiceSubNav } from "../components/ServiceSubNav";
 import { PartsSubNav } from "@/features/parts/components/PartsSubNav";
 import { toast } from "@/hooks/use-toast";
@@ -21,7 +21,7 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
   const qc = useQueryClient();
   const workspaceQ = useMyWorkspaceId();
   const workspaceId = workspaceQ.data;
-  const branchesQ = useActiveBranches();
+  const branchesQ = useBranches();
   const branches = branchesQ.data ?? [];
 
   const [filterBranch, setFilterBranch] = useState("");
@@ -34,17 +34,33 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
     return m;
   }, [branches]);
 
+  /** Inventory may use branch_id casing that differs from `branches.slug` (e.g. Main vs main). */
+  const branchBySlugLower = useMemo(() => {
+    const m = new Map<string, Branch>();
+    for (const b of branches) m.set(b.slug.toLowerCase(), b);
+    return m;
+  }, [branches]);
+
+  const resolveBranch = useMemo(() => {
+    return (branchId: string | null | undefined): Branch | undefined => {
+      if (branchId == null || branchId === "") return undefined;
+      return branchMap.get(branchId) ?? branchBySlugLower.get(branchId.toLowerCase());
+    };
+  }, [branchMap, branchBySlugLower]);
+
   const {
     data: rows = [],
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ["parts-inventory"],
+    queryKey: ["parts-inventory", workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("parts_inventory")
         .select("*")
+        .eq("workspace_id", workspaceId!)
         .is("deleted_at", null)
         .order("branch_id")
         .order("part_number");
@@ -57,7 +73,12 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
     let result = [...rows];
     
     if (filterBranch) {
-        result = result.filter(r => r.branch_id === filterBranch);
+        const selected = resolveBranch(filterBranch);
+        if (selected) {
+          result = result.filter((r) => resolveBranch(r.branch_id)?.id === selected.id);
+        } else {
+          result = result.filter((r) => r.branch_id === filterBranch);
+        }
     }
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -82,7 +103,7 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
         });
     }
     return result;
-  }, [rows, filterBranch, searchQuery, sortConfig]);
+  }, [rows, filterBranch, searchQuery, sortConfig, resolveBranch]);
 
   const handleSort = (key: string) => {
     let dir: 'asc' | 'desc' = 'asc';
@@ -154,6 +175,7 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
     }
   });
 
+  /** Raw branch_id from rows -> row count (used for orphan chips and merging). */
   const branchCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of rows) {
@@ -161,6 +183,22 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
     }
     return counts;
   }, [rows]);
+
+  /** Total inventory rows tied to a branch record (handles slug case drift). */
+  const countForBranch = useMemo(() => {
+    return (b: Branch): number => {
+      let n = 0;
+      for (const [rawId, c] of branchCounts) {
+        const rb = resolveBranch(rawId);
+        if (rb?.id === b.id) n += c;
+      }
+      return n;
+    };
+  }, [branchCounts, resolveBranch]);
+
+  const orphanBranchIds = useMemo(() => {
+    return Array.from(branchCounts.keys()).filter((rawId) => resolveBranch(rawId) == null);
+  }, [branchCounts, resolveBranch]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -194,16 +232,9 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
         </div>
       </div>
 
-      {workspaceQ.isError && (
-        <Card className="p-4 text-sm bg-destructive/10 text-destructive border-destructive/20 flex items-center gap-2">
-          <div className="flex-1">
-            <span className="font-semibold">Workspace connect error:</span> {(workspaceQ.error as Error)?.message ?? "Could not resolve your workspace."}
-          </div>
-        </Card>
-      )}
-
       <div className="space-y-4">
-        {/* Modern Filter Ribbon */}
+        {/* Modern Filter Ribbon — useBranches (not active-only) so inventory for inactive branches still maps */}
+        <TooltipProvider delayDuration={200}>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x mask-fade-edges">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0 mr-1">Filter by Branch</span>
           <button
@@ -225,26 +256,39 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
                 {b.display_name.charAt(0)}
               </div>
               {b.display_name}
-              {branchCounts.get(b.slug) != null && (
-                <Badge variant="secondary" className={`ml-0.5 ${filterBranch === b.slug ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted/50"}`}>{branchCounts.get(b.slug)}</Badge>
+              {!b.is_active && (
+                <Badge variant="outline" className="ml-0.5 text-[10px] font-normal text-muted-foreground border-muted-foreground/30">
+                  inactive
+                </Badge>
+              )}
+              {countForBranch(b) > 0 && (
+                <Badge variant="secondary" className={`ml-0.5 ${filterBranch === b.slug ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted/50"}`}>{countForBranch(b)}</Badge>
               )}
             </button>
           ))}
           
-          {Array.from(branchCounts.keys())
-            .filter((slug) => !branchMap.has(slug))
-            .map((slug) => (
-              <button
-                key={slug}
-                type="button"
-                onClick={() => setFilterBranch(slug)}
-                className={`text-sm px-3 py-1.5 rounded-full font-medium transition-all shrink-0 snap-start border flex items-center gap-1.5 ${filterBranch === slug ? "bg-orange-500 text-white border-orange-600" : "bg-card border-border/50 text-orange-600 hover:bg-orange-50"}`}
-              >
-                {slug}
-                <Badge variant="secondary" className="ml-0.5 text-[10px] bg-orange-500/20 text-orange-700">unmapped context</Badge>
-              </button>
+          {orphanBranchIds.map((rawId) => (
+              <Tooltip key={rawId}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setFilterBranch(rawId)}
+                    className={`text-sm px-3 py-1.5 rounded-full font-medium transition-all shrink-0 snap-start border flex items-center gap-1.5 ${filterBranch === rawId ? "bg-muted text-foreground border-border shadow-sm" : "bg-card border-border/50 text-muted-foreground hover:bg-muted"}`}
+                  >
+                    <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold border border-border/60">
+                      {rawId.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-mono text-xs">{rawId}</span>
+                    <Badge variant="secondary" className="ml-0.5 bg-muted/80">{branchCounts.get(rawId) ?? 0}</Badge>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  Inventory uses this branch id, but no branch row matches (check casing or add the branch in Administration).
+                </TooltipContent>
+              </Tooltip>
             ))}
         </div>
+        </TooltipProvider>
 
         {/* Data Table */}
         <Card className="border-border/50 shadow-sm overflow-hidden bg-card">
@@ -291,7 +335,7 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
                   </TableHeader>
                   <TableBody>
                     {sortedAndFilteredRows.map((r) => {
-                      const branch = branchMap.get(r.branch_id);
+                      const branch = resolveBranch(r.branch_id);
                       return (
                         <TableRow key={r.id} className="transition-colors hover:bg-muted/10 group">
                           <TableCell className="font-medium py-2">

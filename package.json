@@ -25,6 +25,9 @@
     "supabase:types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
     "supabase:types:remote": "sh -c 'supabase gen types typescript --project-id iciddijgonywtxoelous --schema public > apps/web/src/lib/database.types.ts && printf \"\\nexport type UserRole = Database[\\\"public\\\"][\\\"Enums\\\"][\\\"user_role\\\"]\\n\" >> apps/web/src/lib/database.types.ts'",
     "smoke:edge": "bun ./scripts/smoke-edge-functions.mjs",
+    "kb:eval": "node ./scripts/kb-eval/run-eval.mjs",
+    "kb:eval:report": "node ./scripts/kb-eval/eval-report.mjs",
+    "kb:workspace-isolation": "node ./scripts/kb-eval/workspace-isolation.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "service:cron:path-check": "bun ./scripts/service-cron-path-guard.mjs",
     "edge:deno-check": "bun ./scripts/deno-check-edge-functions.mjs",
@@ -36,8 +39,12 @@
     "verify:parts-contracts": "bun ./scripts/verify/parts-engine-contracts.mjs",
     "verify:service-cron-logging": "bun ./scripts/verify/service-cron-logging.mjs",
     "test:planner-rules": "bun test apps/web/src/features/service/lib/planner-rules.test.ts",
+    "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net",
     "test:vendor-inbound-contract": "deno test supabase/functions/_shared/vendor-inbound-contract.test.ts",
     "test:vendor-escalation-resend": "deno test supabase/functions/_shared/vendor-escalation-resend.test.ts",
     "verify:service-slice": "bun run verify:parts-contracts && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:vendor-inbound-contract && bun run test:vendor-escalation-resend"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.47.0"
   }
 }

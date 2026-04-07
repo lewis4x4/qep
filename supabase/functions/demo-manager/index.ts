@@ -13,6 +13,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -191,6 +192,7 @@ Deno.serve(async (req) => {
 
     return safeJsonError("Method not allowed", 405, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "demo-manager", req });
     console.error("demo-manager error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

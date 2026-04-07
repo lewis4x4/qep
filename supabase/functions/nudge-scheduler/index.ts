@@ -9,6 +9,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 /** Workspace for notifications — from profile_workspaces (migration 115), not profiles.workspace_id. */
 function primaryWorkspaceId(advisor: {
   profile_workspaces?: { workspace_id: string }[] | null;
@@ -105,6 +106,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "nudge-scheduler", req });
     console.error("nudge-scheduler error:", err);
     return safeJsonError("Internal server error", 500, null);
   }

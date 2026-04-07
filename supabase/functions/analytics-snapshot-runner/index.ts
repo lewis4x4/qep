@@ -294,8 +294,11 @@ async function isAuthorizedCaller(req: Request, admin: SupabaseClient): Promise<
 /* ─── Workspaces to process ──────────────────────────────────────────── */
 
 async function listWorkspaces(admin: SupabaseClient): Promise<string[]> {
-  // Pull distinct workspaces from profiles. Skip null/empty.
-  const { data, error } = await admin.from("profiles").select("workspace_id");
+  // Pull distinct workspaces from the profile_workspaces junction table,
+  // which is the canonical source for workspace membership (migration 115).
+  // The prior implementation queried profiles.workspace_id which has never
+  // existed as a column — it always returned all nulls and fell to ['default'].
+  const { data, error } = await admin.from("profile_workspaces").select("workspace_id");
   if (error) {
     console.warn("listWorkspaces fallback to default:", error.message);
     return ["default"];

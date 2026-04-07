@@ -14,6 +14,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { populatePartsFromJobCode } from "../_shared/service-parts-from-job-code.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -229,6 +230,7 @@ Deno.serve(async (req) => {
         : "Manual diagnosis required — no matching job codes found",
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-intake", req });
     console.error("service-intake error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

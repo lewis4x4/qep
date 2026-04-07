@@ -14,6 +14,10 @@ interface Profile {
   full_name: string | null;
   email: string | null;
   role: UserRole;
+  iron_role: string | null;
+  iron_role_display: string | null;
+  is_support: boolean;
+  active_workspace_id: string;
 }
 
 export interface AppLayoutProps {

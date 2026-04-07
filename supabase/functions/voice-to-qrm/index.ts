@@ -20,6 +20,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 /** Parsed GPT JSON; fields are optional at runtime. */
@@ -252,7 +253,7 @@ Deno.serve(async (req) => {
     // Verify role and get workspace
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, iron_role, workspace_id")
+      .select("role, iron_role, active_workspace_id")
       .eq("id", user.id)
       .single();
 
@@ -346,10 +347,10 @@ Deno.serve(async (req) => {
       try {
         const { data: profile } = await supabaseAdmin
           .from("profiles")
-          .select("workspace_id")
+          .select("active_workspace_id")
           .eq("id", user.id)
           .maybeSingle();
-        if (profile?.workspace_id) workspace = String(profile.workspace_id);
+        if (profile?.active_workspace_id) workspace = String(profile.active_workspace_id);
       } catch { /* fall back to default */ }
 
       const tagsArray: string[] = [];
@@ -435,7 +436,7 @@ Deno.serve(async (req) => {
     // ── 5. Entity resolution: fuzzy match or create ───────────────────────
     const entityStart = Date.now();
     const errors: string[] = [];
-    const workspace = profile.workspace_id;
+    const workspace = profile.active_workspace_id;
 
     // 5a. Company resolution
     let companyId: string | null = null;
@@ -1069,6 +1070,7 @@ Deno.serve(async (req) => {
       errors: errors.length > 0 ? errors : undefined,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "voice-to-qrm", req });
     console.error("voice-to-qrm error:", err);
     // Log full error server-side, return generic message to client
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));

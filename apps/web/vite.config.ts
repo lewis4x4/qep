@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import path from "path";
 import { execSync } from "node:child_process";
 
@@ -35,8 +36,23 @@ const GIT_SHA = process.env.VITE_GIT_SHA ?? getGitSha();
 const APP_VERSION = process.env.VITE_APP_VERSION ?? getAppVersion();
 const BUILD_TIMESTAMP = process.env.VITE_BUILD_TIMESTAMP ?? new Date().toISOString();
 
+/** When SENTRY_* are set in CI, upload source maps and use hidden sourcemaps in the bundle. */
+const sentrySourceMapUpload =
+  Boolean(process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT);
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    ...(sentrySourceMapUpload
+      ? [
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG!,
+            project: process.env.SENTRY_PROJECT!,
+            authToken: process.env.SENTRY_AUTH_TOKEN!,
+          }),
+        ]
+      : []),
+  ],
   define: {
     "import.meta.env.VITE_GIT_SHA": JSON.stringify(GIT_SHA),
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(APP_VERSION),
@@ -48,6 +64,7 @@ export default defineConfig({
     },
   },
   build: {
+    ...(sentrySourceMapUpload ? { sourcemap: "hidden" as const } : {}),
     // Maplibre-gl is a monolithic WebGL renderer (~1MB raw / ~280KB gzip)
     // and lives in its own route-split chunk that ONLY downloads when the
     // user opens /fleet or /portal/fleet. The 500KB warning is noise for

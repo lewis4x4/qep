@@ -9,6 +9,7 @@ import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 import { sendVendorEscalationEmail } from "../_shared/vendor-escalation-resend.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 type EscalationRow = {
   id: string;
   workspace_id: string;
@@ -361,6 +362,7 @@ Deno.serve(async (req) => {
     });
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-vendor-escalator", req });
     console.error("service-vendor-escalator:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

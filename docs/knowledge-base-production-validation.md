@@ -16,6 +16,38 @@ bun run smoke:edge
 
 Expect `OK (200)` for **chat**, **ingest**, and **document-admin**. A **404** means the function name or project URL is wrong.
 
+## Automated regression checks
+
+These are required release gates. Missing credentials or skipped execution is a failure for KB-affecting changes.
+
+With live Supabase credentials:
+
+```bash
+KB_EVAL_REQUIRED=true bun run kb:eval
+bun run kb:eval:report
+```
+
+With live role tokens:
+
+```bash
+SUPABASE_URL=... \
+SUPABASE_ANON_KEY=... \
+KB_TEST_ADMIN_TOKEN=... \
+KB_TEST_REP_TOKEN=... \
+KB_INTEGRATION_REQUIRED=true \
+bun run test:kb-integration
+```
+
+Required workspace-isolation guard when retrieval, auth, RLS, or workspace scoping changes:
+
+```bash
+SUPABASE_URL=... \
+SUPABASE_SERVICE_ROLE_KEY=... \
+KB_ISOLATION_CASES='[{"workspace_id":"default","query":"What are our core values?","forbidden_title_contains":["Finance"]}]' \
+KB_ISOLATION_REQUIRED=true \
+bun run kb:workspace-isolation
+```
+
 ## Preconditions
 
 - Remote DB migrations through **042** applied; Edge Functions **chat**, **ingest**, **document-admin** deployed.
@@ -46,6 +78,8 @@ Optional release gate:
 ```bash
 bun run segment:gates --segment knowledge-base-module-1 --ui
 ```
+
+`segment:gates` now treats KB eval, KB integration, and KB workspace isolation as hard failures when the live inputs are missing.
 
 ## Types vs remote schema
 

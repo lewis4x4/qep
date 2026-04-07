@@ -11,6 +11,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const DEFAULT_TARGETS: Record<string, number> = {
   request_received: 2,
   triaging: 4,
@@ -272,6 +273,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-tat-monitor", req });
     console.error("service-tat-monitor error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

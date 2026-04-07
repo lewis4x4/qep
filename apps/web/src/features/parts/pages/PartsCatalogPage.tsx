@@ -230,12 +230,6 @@ export function PartsCatalogPage() {
         onToggleCreate={() => setCreating((c) => !c)}
       />
 
-      {workspaceQ.isError && (
-        <Card className="p-3 text-sm text-destructive border-destructive/40">
-          {(workspaceQ.error as Error)?.message ?? "Could not resolve your workspace."}
-        </Card>
-      )}
-
       {creating && (
         <Card className="p-4 space-y-3">
           <p className="text-sm font-medium">New catalog row</p>

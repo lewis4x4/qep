@@ -42,6 +42,7 @@ interface QrmHubPageProps {
   userId: string;
   userName: string | null;
   userEmail: string | null;
+  ironRoleFromProfile?: string | null;
 }
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -706,10 +707,10 @@ function QrmSkeleton() {
 
 // ─── Main Component ─────────────────────────────────────────────
 
-export function QrmHubPage({ userRole, userId }: QrmHubPageProps) {
+export function QrmHubPage({ userRole, userId, ironRoleFromProfile }: QrmHubPageProps) {
   const queryClient = useQueryClient();
   const isElevated = ["admin", "manager", "owner"].includes(userRole);
-  const ironRole = getIronRole(userRole);
+  const ironRole = getIronRole(userRole, ironRoleFromProfile);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["crm-intel", userId],

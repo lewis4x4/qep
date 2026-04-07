@@ -1,5 +1,6 @@
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
@@ -289,6 +290,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ success: true, document: updatedDocument }, 200, ch);
   } catch (error) {
+    captureEdgeException(error, { fn: "document-admin", req });
     console.error("document-admin error:", error);
     return jsonResponse({ error: "Internal server error" }, 500, ch);
   }

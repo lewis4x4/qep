@@ -12,6 +12,7 @@ import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 import { fail, ok, optionsResponse, readJsonObject } from "../_shared/dge-http.ts";
 import { createEventTracker } from "../_shared/event-tracker.ts";
 import { decryptCredential, decryptOneDriveToken } from "../_shared/integration-crypto.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import type {
   AdapterConfig,
   IntegrationAdapter,
@@ -702,6 +703,7 @@ Deno.serve(async (req): Promise<Response> => {
       { origin },
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "integration-test-connection", req });
     if (error instanceof Error && error.message === "WORKSPACE_RESOLUTION_FAILED") {
       return fail({
         origin,

@@ -12,6 +12,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
@@ -156,6 +157,7 @@ Deno.serve(async (req) => {
     });
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-stage-enforcer", req });
     console.error("service-stage-enforcer error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

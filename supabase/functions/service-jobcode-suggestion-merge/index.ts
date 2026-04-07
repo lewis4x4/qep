@@ -2,6 +2,7 @@
  * Apply a pending job_code_template_suggestions row to job_codes (admin/manager/owner).
  */
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -61,6 +62,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, job_code_id: row.job_code_id }, origin);
   } catch (e) {
+    captureEdgeException(e, { fn: "service-jobcode-suggestion-merge", req });
     console.error("service-jobcode-suggestion-merge:", e);
     if (e instanceof SyntaxError) {
       return safeJsonError("Invalid JSON", 400, origin);

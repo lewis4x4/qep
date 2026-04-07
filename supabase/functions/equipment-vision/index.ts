@@ -8,6 +8,7 @@
  * 4. Return a structured analysis with estimated value range
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -318,6 +319,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "equipment-vision", req });
     console.error("equipment-vision error:", err);
     return jsonError("Internal server error", 500, ch);
   }

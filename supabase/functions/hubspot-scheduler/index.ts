@@ -9,6 +9,7 @@ import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.t
 import { shouldSkipHubSpotSequenceTaskForNativeFollowUp } from "../_shared/crm-follow-up-reminders.ts";
 import { timingSafeEqualString } from "../_shared/timing-safe.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const STALLED_THRESHOLD_DAYS = 7;
 
 type FollowUpStepType = "task" | "email" | "call_log" | "stalled_alert";
@@ -260,6 +261,7 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (fatalErr) {
+    captureEdgeException(fatalErr, { fn: "hubspot-scheduler", req });
     console.error("Scheduler fatal error:", fatalErr);
     const detail = fatalErr instanceof Error ? fatalErr.message : String(fatalErr);
     return new Response(

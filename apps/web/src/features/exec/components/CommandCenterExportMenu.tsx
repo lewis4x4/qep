@@ -5,14 +5,14 @@
  *
  * Slice 6.
  */
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FileDown, Loader2, Download, Check } from "lucide-react";
+import { FileDown, Loader2, Download, Check, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { ExecRoleTab } from "../lib/types";
 
@@ -27,13 +27,48 @@ interface PacketResponse {
   error?: string;
 }
 
+interface PacketRunRow {
+  id: string;
+  generated_at: string;
+  packet_md: string;
+  metrics_count: number;
+  alerts_count: number;
+  delivery_status: string | null;
+  delivered_at: string | null;
+}
+
 interface Props {
   role: ExecRoleTab;
 }
 
 export function CommandCenterExportMenu({ role }: Props) {
+  const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [packet, setPacket] = useState<PacketResponse | null>(null);
+
+  const { data: history = [] } = useQuery({
+    queryKey: ["exec", "packet-runs", role],
+    queryFn: async (): Promise<PacketRunRow[]> => {
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (c: string, v: string) => {
+              order: (c: string, o: { ascending: boolean }) => {
+                limit: (n: number) => Promise<{ data: PacketRunRow[] | null; error: unknown }>;
+              };
+            };
+          };
+        };
+      }).from("exec_packet_runs")
+        .select("id, generated_at, packet_md, metrics_count, alerts_count, delivery_status, delivered_at")
+        .eq("role", role)
+        .order("generated_at", { ascending: false })
+        .limit(5);
+      if (error) throw new Error("packet history load failed");
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
 
   const generate = useMutation({
     mutationFn: async (): Promise<PacketResponse> => {
@@ -48,8 +83,39 @@ export function CommandCenterExportMenu({ role }: Props) {
     onSuccess: (data) => {
       setPacket(data);
       setPreviewOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["exec", "packet-runs", role] });
     },
   });
+
+  const markDelivered = useMutation({
+    mutationFn: async (input: { runId: string; deliveryStatus: "previewed" | "downloaded" }) => {
+      const patch: Record<string, unknown> = {
+        delivery_status: input.deliveryStatus,
+      };
+      if (input.deliveryStatus === "downloaded") {
+        patch.delivered_at = new Date().toISOString();
+      }
+      const { error } = await (supabase as unknown as {
+        from: (t: string) => {
+          update: (v: Record<string, unknown>) => {
+            eq: (c: string, v: string) => Promise<{ error: unknown }>;
+          };
+        };
+      }).from("exec_packet_runs").update(patch).eq("id", input.runId);
+      if (error) throw new Error("packet status update failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exec", "packet-runs", role] });
+    },
+  });
+
+  useEffect(() => {
+    if (!previewOpen || !packet?.run_id) return;
+    if (packet.run_id && history.some((row) => row.id === packet.run_id && row.delivery_status === "previewed")) {
+      return;
+    }
+    markDelivered.mutate({ runId: packet.run_id, deliveryStatus: "previewed" });
+  }, [previewOpen, packet?.run_id]);
 
   function downloadPacket() {
     if (!packet) return;
@@ -64,10 +130,33 @@ export function CommandCenterExportMenu({ role }: Props) {
     URL.revokeObjectURL(url);
 
     // Audit + status update
-    void (supabase as unknown as {
-      from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } };
-      rpc: (fn: string, args: Record<string, unknown>) => Promise<unknown>;
-    }).from("exec_packet_runs").update({ delivery_status: "downloaded", delivered_at: new Date().toISOString() }).eq("id", packet.run_id ?? "");
+    if (packet.run_id) {
+      markDelivered.mutate({ runId: packet.run_id, deliveryStatus: "downloaded" });
+    }
+  }
+
+  function openHistoryRun(run: PacketRunRow) {
+    setPacket({
+      ok: true,
+      run_id: run.id,
+      role,
+      generated_at: run.generated_at,
+      markdown: run.packet_md,
+      json: {},
+      stats: {
+        definitions: run.metrics_count,
+        snapshots: 0,
+        alerts: run.alerts_count,
+      },
+    });
+    setPreviewOpen(true);
+  }
+
+  function deliveryLabel(status: string | null): string {
+    if (status === "downloaded") return "Downloaded";
+    if (status === "emailed") return "Emailed";
+    if (status === "previewed") return "Previewed";
+    return "Generated";
   }
 
   return (
@@ -109,6 +198,38 @@ export function CommandCenterExportMenu({ role }: Props) {
               </p>
             </>
           )}
+
+          <Card className="mt-4 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <History className="h-3.5 w-3.5 text-qep-orange" />
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Recent packet runs</p>
+            </div>
+            {history.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">No prior packet runs for this lens yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {history.map((run) => (
+                  <div key={run.id} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-muted/10 p-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-medium text-foreground">
+                        {new Date(run.generated_at).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {run.metrics_count} metrics · {run.alerts_count} alerts
+                        {run.delivered_at ? ` · delivered ${new Date(run.delivered_at).toLocaleDateString()}` : ""}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                      {deliveryLabel(run.delivery_status)}
+                    </span>
+                    <Button size="sm" variant="outline" onClick={() => openHistoryRun(run)}>
+                      Open
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </SheetContent>
       </Sheet>
     </>

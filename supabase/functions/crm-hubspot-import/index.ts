@@ -4,6 +4,7 @@ import {
   extractRequestIp,
 } from "../_shared/crm-auth-audit.ts";
 import { errorResponse, jsonResponse } from "../_shared/crm-error.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import { loadCrmHubspotImportEnv } from "./env.ts";
 import { runHubSpotImport } from "./import-runner.ts";
 import { loadOrCreateImportState, updateRun } from "./run-state.ts";
@@ -285,6 +286,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       { headers: ch },
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "crm-hubspot-import", req });
     const message = error instanceof Error ? error.message : String(error);
     try {
       await updateRun(supabaseAdmin, state, "failed", message);

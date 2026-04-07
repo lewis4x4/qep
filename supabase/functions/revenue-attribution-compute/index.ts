@@ -23,6 +23,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface Touch {
   source_table: string;
   source_id: string;
@@ -69,10 +70,10 @@ Deno.serve(async (req) => {
 
       const { data: profile } = await supabaseAdmin
         .from("profiles")
-        .select("workspace_id")
+        .select("active_workspace_id")
         .eq("id", user.id)
         .maybeSingle();
-      workspace = (profile?.workspace_id as string | undefined) ?? "default";
+      workspace = (profile?.active_workspace_id as string | undefined) ?? "default";
     }
 
     const url = new URL(req.url);
@@ -244,6 +245,7 @@ Deno.serve(async (req) => {
       results,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "revenue-attribution-compute", req });
     console.error("revenue-attribution-compute error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

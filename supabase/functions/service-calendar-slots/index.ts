@@ -6,6 +6,7 @@ import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface WeekdayRule {
   dow: number;
   open: string;
@@ -129,6 +130,7 @@ Deno.serve(async (req) => {
       origin,
     );
   } catch (err) {
+    captureEdgeException(err, { fn: "service-calendar-slots", req });
     console.error("service-calendar-slots:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
   }

@@ -1,4 +1,5 @@
 import { resolveCallerContext } from "../_shared/dge-auth.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   crmFail,
   crmOk,
@@ -696,6 +697,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       message: "QRM route not found.",
     });
   } catch (error) {
+    captureEdgeException(error, { fn: "crm-router", req });
     const message = error instanceof Error ? error.message : String(error);
     if (message === "UNAUTHORIZED") {
       await deny(ctx, "caller_identity_unresolved");

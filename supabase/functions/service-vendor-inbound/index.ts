@@ -15,6 +15,7 @@ import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { parseVendorInboundContract } from "../_shared/vendor-inbound-contract.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { status: 200 });
 
@@ -282,6 +283,7 @@ Deno.serve(async (req) => {
       message: "No matching open order action — pass requirement_id or job_id+part_number",
     }, null);
   } catch (e) {
+    captureEdgeException(e, { fn: "service-vendor-inbound", req });
     console.error("service-vendor-inbound:", e);
     return safeJsonError("Bad request", 400, null);
   }

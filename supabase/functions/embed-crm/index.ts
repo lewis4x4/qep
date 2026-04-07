@@ -9,6 +9,9 @@
  * Only processes records that are new or updated since last embedding.
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
+import { logKbJobRunFinish, logKbJobRunStart } from "../_shared/kb-observability.ts";
+import { embedTexts, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -27,7 +30,6 @@ const ENTITY_TYPES = ["contact", "company", "deal", "equipment", "voice_capture"
 type EntityType = (typeof ENTITY_TYPES)[number];
 
 const BATCH_SIZE = 20;
-const EMBED_MODEL = "text-embedding-3-small";
 
 // ── Text summary builders ──────────────────────────────────────────────
 
@@ -80,6 +82,9 @@ function equipmentSummary(r: Record<string, unknown>): string {
 
 function voiceCaptureSummary(r: Record<string, unknown>): string {
   const parts = [`Voice Note (${r.created_at ?? "unknown date"})`];
+  if (r.contact_name) parts.push(`Linked Contact: ${r.contact_name}`);
+  if (r.company_name) parts.push(`Linked Company: ${r.company_name}`);
+  if (r.deal_name) parts.push(`Linked Deal: ${r.deal_name}`);
   if (r.transcript) parts.push(String(r.transcript).slice(0, 1500));
   if (r.extracted_data && typeof r.extracted_data === "object") {
     try {
@@ -94,27 +99,6 @@ function activitySummary(r: Record<string, unknown>): string {
   const parts = [`QRM Activity (${r.activity_type ?? "note"}) on ${r.occurred_at ?? "unknown date"}`];
   if (r.body) parts.push(String(r.body).slice(0, 1500));
   return parts.join("\n");
-}
-
-// ── Embedding via OpenAI ───────────────────────────────────────────────
-
-async function embedTexts(texts: string[]): Promise<number[][]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`Embedding API error: ${JSON.stringify(data)}`);
-  }
-  return (data.data as Array<{ embedding: number[]; index?: number }>)
-    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-    .map((d) => d.embedding);
 }
 
 // ── Per-entity-type fetchers ───────────────────────────────────────────
@@ -244,16 +228,58 @@ async function fetchPendingEquipment(db: AdminClient, since: string | null): Pro
 async function fetchPendingVoiceCaptures(db: AdminClient, since: string | null): Promise<PendingRecord[]> {
   let query = db
     .from("voice_captures")
-    .select("id, transcript, extracted_data, created_at, updated_at")
+    .select("id, transcript, extracted_data, created_at, updated_at, linked_contact_id, linked_company_id, linked_deal_id")
     .not("transcript", "is", null)
     .order("updated_at", { ascending: true })
     .limit(200);
   if (since) query = query.gt("updated_at", since);
   const { data } = await query;
   if (!data) return [];
-  return (data as Record<string, unknown>[]).map((r) => ({
+
+  const rows = data as Record<string, unknown>[];
+  const contactIds = [...new Set(rows.map((r) => r.linked_contact_id).filter(Boolean))];
+  const companyIds = [...new Set(rows.map((r) => r.linked_company_id).filter(Boolean))];
+  const dealIds = [...new Set(rows.map((r) => r.linked_deal_id).filter(Boolean))];
+
+  let contactMap: Record<string, string> = {};
+  let companyMap: Record<string, string> = {};
+  let dealMap: Record<string, string> = {};
+
+  if (contactIds.length > 0) {
+    const { data: contacts } = await db
+      .from("crm_contacts")
+      .select("id, first_name, last_name")
+      .in("id", contactIds);
+    if (contacts) {
+      contactMap = Object.fromEntries(
+        (contacts as { id: string; first_name: string | null; last_name: string | null }[])
+          .map((contact) => [contact.id, [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim()]),
+      );
+    }
+  }
+
+  if (companyIds.length > 0) {
+    const { data: companies } = await db.from("crm_companies").select("id, name").in("id", companyIds);
+    if (companies) {
+      companyMap = Object.fromEntries((companies as { id: string; name: string }[]).map((company) => [company.id, company.name]));
+    }
+  }
+
+  if (dealIds.length > 0) {
+    const { data: deals } = await db.from("crm_deals").select("id, name").in("id", dealIds);
+    if (deals) {
+      dealMap = Object.fromEntries((deals as { id: string; name: string }[]).map((deal) => [deal.id, deal.name]));
+    }
+  }
+
+  return rows.map((r) => ({
     id: r.id as string,
-    summary: voiceCaptureSummary(r),
+    summary: voiceCaptureSummary({
+      ...r,
+      contact_name: contactMap[r.linked_contact_id as string],
+      company_name: companyMap[r.linked_company_id as string],
+      deal_name: dealMap[r.linked_deal_id as string],
+    }),
     metadata: { updated_at: r.updated_at ?? r.created_at },
   }));
 }
@@ -328,85 +354,113 @@ Deno.serve(async (req) => {
   } catch { /* use defaults */ }
 
   const results: Record<string, { processed: number; errors: number }> = {};
+  const runId = await logKbJobRunStart(adminClient, {
+    jobName: "embed_crm",
+    metadata: {
+      requested_types: requestedTypes,
+      force_all: forceAll,
+    },
+  });
 
-  for (const entityType of requestedTypes) {
-    let processed = 0;
-    let errors = 0;
+  try {
+    for (const entityType of requestedTypes) {
+      let processed = 0;
+      let errors = 0;
 
-    try {
-      // Find the latest embedding timestamp for this entity type (for incremental sync)
-      let since: string | null = null;
-      if (!forceAll) {
-        const { data: latest } = await adminClient
-          .from("crm_embeddings")
-          .select("updated_at")
-          .eq("entity_type", entityType)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        since = (latest?.updated_at as string) ?? null;
-      }
-
-      const pending = await FETCHERS[entityType](adminClient, since);
-      if (pending.length === 0) {
-        results[entityType] = { processed: 0, errors: 0 };
-        continue;
-      }
-
-      // Process in batches
-      for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-        const batch = pending.slice(i, i + BATCH_SIZE);
-        try {
-          const texts = batch.map((r) => r.summary);
-          const embeddings = await embedTexts(texts);
-
-          const rows = batch.map((r, idx) => ({
-            entity_type: entityType,
-            entity_id: r.id,
-            content: r.summary,
-            embedding: `[${embeddings[idx].join(",")}]`,
-            metadata: r.metadata,
-            updated_at: new Date().toISOString(),
-          }));
-
-          const { error } = await adminClient
+      try {
+        // Find the latest embedding timestamp for this entity type (for incremental sync)
+        let since: string | null = null;
+        if (!forceAll) {
+          const { data: latest } = await adminClient
             .from("crm_embeddings")
-            .upsert(rows, { onConflict: "entity_type,entity_id", ignoreDuplicates: false });
-
-          if (error) {
-            console.error(`[embed-crm] upsert error for ${entityType}:`, error.message);
-            errors += batch.length;
-          } else {
-            processed += batch.length;
-          }
-        } catch (batchErr) {
-          console.error(`[embed-crm] batch error for ${entityType}:`, batchErr);
-          errors += batch.length;
+            .select("updated_at")
+            .eq("entity_type", entityType)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          since = (latest?.updated_at as string) ?? null;
         }
+
+        const pending = await FETCHERS[entityType](adminClient, since);
+        if (pending.length === 0) {
+          results[entityType] = { processed: 0, errors: 0 };
+          continue;
+        }
+
+        // Process in batches
+        for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+          const batch = pending.slice(i, i + BATCH_SIZE);
+          try {
+            const texts = batch.map((r) => r.summary);
+            const embeddings = await embedTexts(texts);
+
+            const rows = batch.map((r, idx) => ({
+              entity_type: entityType,
+              entity_id: r.id,
+              content: r.summary,
+              embedding: formatVectorLiteral(embeddings[idx]),
+              metadata: r.metadata,
+              updated_at: new Date().toISOString(),
+            }));
+
+            const { error } = await adminClient
+              .from("crm_embeddings")
+              .upsert(rows, { onConflict: "entity_type,entity_id", ignoreDuplicates: false });
+
+            if (error) {
+              console.error(`[embed-crm] upsert error for ${entityType}:`, error.message);
+              errors += batch.length;
+            } else {
+              processed += batch.length;
+            }
+          } catch (batchErr) {
+            console.error(`[embed-crm] batch error for ${entityType}:`, batchErr);
+            errors += batch.length;
+          }
+        }
+      } catch (typeErr) {
+        console.error(`[embed-crm] error processing ${entityType}:`, typeErr);
+        errors += 1;
       }
-    } catch (typeErr) {
-      console.error(`[embed-crm] error processing ${entityType}:`, typeErr);
-      errors++;
+
+      results[entityType] = { processed, errors };
     }
 
-    results[entityType] = { processed, errors };
+    const totalProcessed = Object.values(results).reduce((sum, r) => sum + r.processed, 0);
+    const totalErrors = Object.values(results).reduce((sum, r) => sum + r.errors, 0);
+
+    console.log(`[embed-crm] complete: ${totalProcessed} embedded, ${totalErrors} errors`, results);
+
+    await logKbJobRunFinish(adminClient, {
+      runId,
+      status: totalErrors > 0 ? "error" : "success",
+      processedCount: totalProcessed,
+      errorCount: totalErrors,
+      metadata: { details: results },
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        total_processed: totalProcessed,
+        total_errors: totalErrors,
+        details: results,
+      }),
+      {
+        status: 200,
+        headers: { ...ch, "Content-Type": "application/json" },
+      },
+    );
+  } catch (fatalError) {
+    await logKbJobRunFinish(adminClient, {
+      runId,
+      status: "error",
+      errorCount: 1,
+      metadata: {
+        fatal_error: fatalError instanceof Error ? fatalError.message : String(fatalError),
+      },
+    });
+    captureEdgeException(fatalError, { fn: "embed-crm", req, extra: { runId } });
+    throw fatalError;
   }
-
-  const totalProcessed = Object.values(results).reduce((sum, r) => sum + r.processed, 0);
-  const totalErrors = Object.values(results).reduce((sum, r) => sum + r.errors, 0);
-
-  console.log(`[embed-crm] complete: ${totalProcessed} embedded, ${totalErrors} errors`, results);
-
-  return new Response(
-    JSON.stringify({
-      success: true,
-      total_processed: totalProcessed,
-      total_errors: totalErrors,
-      details: results,
-    }),
-    {
-      status: 200,
-      headers: { ...ch, "Content-Type": "application/json" },
-    },
-  );
 });

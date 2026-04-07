@@ -17,6 +17,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface Incentive {
   id: string;
   manufacturer: string;
@@ -141,6 +142,7 @@ Deno.serve(async (req) => {
       dry_run: dryRun,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "quote-incentive-resolver", req });
     console.error("quote-incentive-resolver error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

@@ -8,10 +8,11 @@ import { IronManDashboard } from "./IronManDashboard";
 interface DashboardRouterProps {
   userId: string;
   userRole: UserRole;
+  ironRoleFromProfile?: string | null;
 }
 
-export function DashboardRouter({ userId, userRole }: DashboardRouterProps) {
-  const ironRole = getIronRole(userRole);
+export function DashboardRouter({ userId, userRole, ironRoleFromProfile }: DashboardRouterProps) {
+  const ironRole = getIronRole(userRole, ironRoleFromProfile);
 
   switch (ironRole.role) {
     case "iron_manager":

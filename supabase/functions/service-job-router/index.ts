@@ -13,6 +13,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   populatePartsFromJobCode,
   resyncPartsFromJobCode,
@@ -163,6 +164,7 @@ Deno.serve(async (req) => {
         return safeJsonError(`Unknown action: ${action}`, 400, origin);
     }
   } catch (err) {
+    captureEdgeException(err, { fn: "service-job-router", req });
     console.error("service-job-router error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

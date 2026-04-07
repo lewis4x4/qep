@@ -8,42 +8,60 @@ export interface IronRoleInfo {
   description: string;
 }
 
-const IRON_ROLE_MAP: Record<string, IronRoleInfo> = {
-  manager: {
+const IRON_ROLE_INFO: Record<IronRole, IronRoleInfo> = {
+  iron_manager: {
     role: "iron_manager",
     display: "Iron Manager",
     description: "Pipeline oversight, approvals, pricing authority, forecasting, KPI enforcement",
   },
-  owner: {
-    role: "iron_manager",
-    display: "Iron Manager",
-    description: "Pipeline oversight, approvals, pricing authority, forecasting, KPI enforcement",
-  },
-  admin: {
-    role: "iron_woman",
-    display: "Iron Woman",
-    description: "Order processing, credit apps, deposits, invoicing, warranty, inventory management",
-  },
-  rep: {
+  iron_advisor: {
     role: "iron_advisor",
     display: "Iron Advisor",
     description: "Customer relationships, 10 visits/day, 15-min lead response SLA",
   },
+  iron_woman: {
+    role: "iron_woman",
+    display: "Iron Woman",
+    description: "Order processing, credit apps, deposits, invoicing, warranty, inventory management",
+  },
+  iron_man: {
+    role: "iron_man",
+    display: "Iron Man",
+    description: "Support tech — service-specific flows, customer site response",
+  },
 };
 
+const LEGACY_ROLE_MAP: Record<string, IronRole> = {
+  manager: "iron_manager",
+  owner: "iron_manager",
+  admin: "iron_woman",
+  rep: "iron_advisor",
+};
+
+function isIronRole(value: string): value is IronRole {
+  return value === "iron_manager" || value === "iron_advisor" || value === "iron_woman" || value === "iron_man";
+}
+
 /**
- * Derive Iron role from system role.
- * When the iron_role column is populated (migration 067), this can be
- * replaced with a direct database read.
+ * Resolve the operator's Iron role.
+ *
+ * Prefer the authoritative `iron_role` column on profiles (migration 067,
+ * auto-synced from `role` + `is_support`). Fall back to deriving from the
+ * system role enum when `ironRoleFromProfile` is null — needed for anonymous
+ * contexts and as a transitional safety net for any caller that hasn't yet
+ * been updated to load iron_role from the profile.
  */
-export function getIronRole(userRole: UserRole): IronRoleInfo {
-  return IRON_ROLE_MAP[userRole] ?? IRON_ROLE_MAP.rep;
+export function getIronRole(userRole: UserRole, ironRoleFromProfile?: string | null): IronRoleInfo {
+  if (ironRoleFromProfile && isIronRole(ironRoleFromProfile)) {
+    return IRON_ROLE_INFO[ironRoleFromProfile];
+  }
+  const derived = LEGACY_ROLE_MAP[userRole] ?? "iron_advisor";
+  return IRON_ROLE_INFO[derived];
 }
 
 /**
  * Check if user has an elevated Iron role (manager-level).
  */
-export function isIronElevated(userRole: UserRole): boolean {
-  const iron = getIronRole(userRole);
-  return iron.role === "iron_manager";
+export function isIronElevated(userRole: UserRole, ironRoleFromProfile?: string | null): boolean {
+  return getIronRole(userRole, ironRoleFromProfile).role === "iron_manager";
 }

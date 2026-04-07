@@ -11,6 +11,7 @@ import {
 import { fail, ok, optionsResponse } from "../_shared/dge-http.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 function clean(value: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -220,6 +221,7 @@ Deno.serve(async (req): Promise<Response> => {
 
     return ok(response, { origin });
   } catch (error) {
+    captureEdgeException(error, { fn: "customer-profile", req });
     return fail({
       origin,
       status: 500,

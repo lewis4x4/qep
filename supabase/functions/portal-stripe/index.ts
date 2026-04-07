@@ -22,6 +22,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
@@ -59,10 +60,10 @@ Deno.serve(async (req) => {
     // Resolve caller workspace from profiles (never trust the request)
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("workspace_id")
+      .select("active_workspace_id")
       .eq("id", user.id)
       .maybeSingle();
-    const workspace = (profile?.workspace_id as string | undefined) ?? "default";
+    const workspace = (profile?.active_workspace_id as string | undefined) ?? "default";
 
     // ── /create-checkout ──────────────────────────────────────────────
     if (action === "create-checkout" && req.method === "POST") {
@@ -152,6 +153,7 @@ Deno.serve(async (req) => {
 
     return safeJsonError("Not found", 404, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "portal-stripe", req });
     console.error("portal-stripe error:", err);
     return safeJsonError("Internal server error", 500, origin);
   }

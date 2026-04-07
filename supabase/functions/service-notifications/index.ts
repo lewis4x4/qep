@@ -4,6 +4,7 @@
  * Auth: user JWT only
  */
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -85,6 +86,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ sent: true, notification_type: body.notification_type }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-notifications", req });
     console.error("service-notifications error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

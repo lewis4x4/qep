@@ -11,6 +11,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 interface EscalationInput {
@@ -173,6 +174,7 @@ Deno.serve(async (req) => {
       contact_name: contactName,
     }, origin, 201);
   } catch (err) {
+    captureEdgeException(err, { fn: "escalation-router", req });
     console.error("escalation-router error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

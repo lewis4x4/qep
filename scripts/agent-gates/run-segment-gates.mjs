@@ -148,6 +148,24 @@ pushCheck({
 });
 
 pushCheck({
+  id: "qa.kb-retrieval-eval",
+  command: "KB_EVAL_REQUIRED=true node ./scripts/kb-eval/run-eval.mjs",
+  required: true,
+});
+
+pushCheck({
+  id: "qa.kb-integration-tests",
+  command: "KB_INTEGRATION_REQUIRED=true bun run test:kb-integration",
+  required: true,
+});
+
+pushCheck({
+  id: "qa.kb-workspace-isolation",
+  command: "KB_ISOLATION_REQUIRED=true node ./scripts/kb-eval/workspace-isolation.mjs",
+  required: true,
+});
+
+pushCheck({
   id: "chaos.stress-suite",
   command: "bun run stress:test",
   required: options.chaos,

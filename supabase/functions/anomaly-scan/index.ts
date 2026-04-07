@@ -12,6 +12,7 @@
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
@@ -38,6 +39,20 @@ interface Alert {
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
+
+type StaleSourceConfig = {
+  entityType: "contact" | "company" | "deal" | "equipment" | "activity" | "voice_capture";
+  table: "crm_contacts" | "crm_companies" | "crm_deals" | "crm_equipment" | "crm_activities" | "voice_captures";
+  select: string;
+  defaultWorkspaceId?: string;
+  limit?: number;
+};
+
+type StaleSourceRow = {
+  id: string;
+  updated_at: string;
+  workspace_id?: string;
+};
 
 async function detectStallingDeals(db: AdminClient): Promise<Alert[]> {
   const alerts: Alert[] = [];
@@ -316,6 +331,145 @@ async function scoreDealsPredictively(db: AdminClient): Promise<number> {
   return updates.length;
 }
 
+async function detectStaleEmbeddingsForSource(
+  db: AdminClient,
+  config: StaleSourceConfig,
+): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  const staleCutoff = new Date(Date.now() - 24 * 86_400_000).toISOString();
+
+  const { data: sourceRows } = await db
+    .from(config.table)
+    .select(config.select)
+    .order("updated_at", { ascending: false })
+    .limit(config.limit ?? 80);
+
+  const sources = ((sourceRows ?? []) as unknown as StaleSourceRow[])
+    .filter((row) => typeof row.id === "string" && typeof row.updated_at === "string")
+    .filter((row) => row.updated_at <= staleCutoff);
+
+  if (sources.length === 0) return alerts;
+
+  const { data: embeddingRows } = await db
+    .from("crm_embeddings")
+    .select("entity_id, updated_at")
+    .eq("entity_type", config.entityType)
+    .in("entity_id", sources.map((row) => row.id as string));
+
+  const embeddingMap = new Map(
+    ((embeddingRows ?? []) as Array<{ entity_id: string; updated_at: string }>)
+      .map((row) => [row.entity_id, row.updated_at]),
+  );
+
+  for (const source of sources.slice(0, 20)) {
+    const sourceId = source.id as string;
+    const sourceUpdatedAt = source.updated_at as string;
+    const embeddingUpdatedAt = embeddingMap.get(sourceId);
+    if (embeddingUpdatedAt && embeddingUpdatedAt >= sourceUpdatedAt) continue;
+
+    alerts.push({
+      workspace_id: (source.workspace_id as string | undefined) ?? config.defaultWorkspaceId ?? "default",
+      alert_type: "embedding_stale",
+      severity: embeddingUpdatedAt ? "medium" : "high",
+      title: `Stale embedding for ${config.entityType} ${sourceId.slice(0, 8)}`,
+      description: embeddingUpdatedAt
+        ? `${config.entityType} changed at ${sourceUpdatedAt}, but its embedding is still from ${embeddingUpdatedAt}.`
+        : `${config.entityType} changed at ${sourceUpdatedAt}, but no CRM embedding row exists yet.`,
+      entity_type: config.entityType,
+      entity_id: sourceId,
+      assigned_to: null,
+      data: {
+        source_updated_at: sourceUpdatedAt,
+        embedding_updated_at: embeddingUpdatedAt ?? null,
+      },
+    });
+  }
+
+  return alerts;
+}
+
+async function detectStaleEmbeddings(db: AdminClient): Promise<Alert[]> {
+  const alertGroups = await Promise.all([
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "contact",
+      table: "crm_contacts",
+      select: "id, workspace_id, updated_at",
+    }),
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "company",
+      table: "crm_companies",
+      select: "id, workspace_id, updated_at",
+    }),
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "deal",
+      table: "crm_deals",
+      select: "id, workspace_id, updated_at",
+    }),
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "equipment",
+      table: "crm_equipment",
+      select: "id, workspace_id, updated_at",
+    }),
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "activity",
+      table: "crm_activities",
+      select: "id, workspace_id, updated_at",
+    }),
+    detectStaleEmbeddingsForSource(db, {
+      entityType: "voice_capture",
+      table: "voice_captures",
+      select: "id, updated_at",
+      defaultWorkspaceId: "default",
+    }),
+  ]);
+
+  return alertGroups.flat();
+}
+
+async function detectOrphanChunks(db: AdminClient): Promise<Alert[]> {
+  const alerts: Alert[] = [];
+  const { data: documents } = await db
+    .from("documents")
+    .select("id, title, status")
+    .neq("status", "published")
+    .limit(50);
+
+  const docRows = (documents ?? []) as Array<{ id: string; title: string; status: string }>;
+  if (docRows.length === 0) return alerts;
+
+  const { data: chunkRows } = await db
+    .from("chunks")
+    .select("document_id")
+    .in("document_id", docRows.map((doc) => doc.id));
+
+  const chunkCounts = new Map<string, number>();
+  for (const row of (chunkRows ?? []) as Array<{ document_id: string }>) {
+    chunkCounts.set(row.document_id, (chunkCounts.get(row.document_id) ?? 0) + 1);
+  }
+
+  for (const doc of docRows) {
+    const chunkCount = chunkCounts.get(doc.id) ?? 0;
+    if (chunkCount === 0) continue;
+
+    alerts.push({
+      workspace_id: "default",
+      alert_type: "orphan_chunks",
+      severity: "medium",
+      title: `Orphan chunks for "${doc.title}"`,
+      description: `Document is ${doc.status}, but ${chunkCount} indexed chunks still exist and can drift out of sync.`,
+      entity_type: "document",
+      entity_id: doc.id,
+      assigned_to: null,
+      data: {
+        document_status: doc.status,
+        chunk_count: chunkCount,
+      },
+    });
+  }
+
+  return alerts;
+}
+
 Deno.serve(async (req) => {
   const ch = corsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
@@ -340,12 +494,14 @@ Deno.serve(async (req) => {
 
   try {
     // Run all detectors and deal scoring in parallel
-    const [stallingDeals, overdueFollowUps, activityGaps, pipelineRisks, dealsScored] =
+    const [stallingDeals, overdueFollowUps, activityGaps, pipelineRisks, staleEmbeddings, orphanChunks, dealsScored] =
       await Promise.all([
         detectStallingDeals(adminClient),
         detectOverdueFollowUps(adminClient),
         detectActivityGaps(adminClient),
         detectPipelineRisk(adminClient),
+        detectStaleEmbeddings(adminClient),
+        detectOrphanChunks(adminClient),
         scoreDealsPredictively(adminClient),
       ]);
 
@@ -354,6 +510,8 @@ Deno.serve(async (req) => {
       ...overdueFollowUps,
       ...activityGaps,
       ...pipelineRisks,
+      ...staleEmbeddings,
+      ...orphanChunks,
     ];
 
     // Deduplicate: skip alerts that already exist for the same entity today
@@ -382,7 +540,8 @@ Deno.serve(async (req) => {
     console.log(
       `[anomaly-scan] detected=${allAlerts.length} new=${newAlerts.length} scored=${dealsScored} ` +
       `(stalling=${stallingDeals.length} overdue=${overdueFollowUps.length} ` +
-      `gaps=${activityGaps.length} pipeline=${pipelineRisks.length})`,
+      `gaps=${activityGaps.length} pipeline=${pipelineRisks.length} ` +
+      `embedding_stale=${staleEmbeddings.length} orphan_chunks=${orphanChunks.length})`,
     );
 
     return new Response(JSON.stringify({
@@ -394,12 +553,15 @@ Deno.serve(async (req) => {
         overdue_follow_ups: overdueFollowUps.length,
         activity_gaps: activityGaps.length,
         pipeline_risks: pipelineRisks.length,
+        embedding_stale: staleEmbeddings.length,
+        orphan_chunks: orphanChunks.length,
       },
     }), {
       status: 200,
       headers: { ...ch, "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "anomaly-scan", req });
     console.error("[anomaly-scan] error:", err);
     return new Response(JSON.stringify({ error: "Scan failed" }), {
       status: 500,

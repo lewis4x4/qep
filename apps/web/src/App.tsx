@@ -606,6 +606,7 @@ function App() {
                   <DashboardRouter
                     userId={profile.id}
                     userRole={profile.role}
+                    ironRoleFromProfile={profile.iron_role}
                   />
                 }
               />
@@ -1283,7 +1284,7 @@ function App() {
                 path="/qrm"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} />
+                    <QrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

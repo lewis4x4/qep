@@ -11,6 +11,7 @@ import {
 } from "../_shared/dge-http.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
 import { createIntegrationManager } from "../_shared/integration-manager.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import type {
   AdapterResult,
   AuctionDataRequest,
@@ -305,6 +306,7 @@ Deno.serve(async (req): Promise<Response> => {
       { origin },
     );
   } catch (error) {
+    captureEdgeException(error, { fn: "market-valuation", req });
     if (error instanceof SyntaxError) {
       return fail({
         origin,

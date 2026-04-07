@@ -12,6 +12,7 @@ import {
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface HaulRequest {
   action: string;
   job_id?: string;
@@ -40,6 +41,7 @@ Deno.serve(async (req) => {
         return safeJsonError(`Unknown action: ${body.action}`, 400, origin);
     }
   } catch (err) {
+    captureEdgeException(err, { fn: "service-haul-router", req });
     console.error("service-haul-router error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

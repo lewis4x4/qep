@@ -17,6 +17,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const ESTIMATED_TRANSFER_COST_PER_UNIT = 5;
 const STOCKOUT_COST_MULTIPLIER = 20;
 const DEAD_STOCK_DAYS = 180;
@@ -526,6 +527,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results, elapsed_ms: elapsedMs }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "parts-network-optimizer", req });
     console.error("parts-network-optimizer error:", err);
     try {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

@@ -10,7 +10,9 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 interface CaptureRequest {
   equipment_id?: string;
   job_id?: string;
@@ -58,6 +60,13 @@ Deno.serve(async (req) => {
       if (eq?.workspace_id) workspaceId = eq.workspace_id as string;
     }
 
+    let embeddingLiteral: string | null = null;
+    try {
+      embeddingLiteral = formatVectorLiteral(await embedText(body.content));
+    } catch (embeddingError) {
+      console.warn("knowledge capture embedding skipped:", embeddingError);
+    }
+
     const { data: note, error } = await supabase
       .from("machine_knowledge_notes")
       .insert({
@@ -66,6 +75,7 @@ Deno.serve(async (req) => {
         job_id: body.job_id || null,
         note_type: body.note_type,
         content: body.content,
+        embedding: embeddingLiteral,
         source_user_id: userId,
         metadata: body.metadata ?? {},
       })
@@ -79,6 +89,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ note }, origin, 201);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-knowledge-capture", req });
     console.error("service-knowledge-capture error:", err);
     if (err instanceof SyntaxError) {
       return safeJsonError("Invalid JSON body", 400, origin);

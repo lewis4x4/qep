@@ -10,6 +10,7 @@ import pdfParse from "npm:pdf-parse@1.1.1";
 import XLSX from "npm:xlsx@0.18.5";
 import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
   "https://qep.blackrockai.co",
@@ -822,6 +823,7 @@ Deno.serve(async (req) => {
 
     return jsonResponse({ error: "Unknown action" }, 400, ch);
   } catch (error) {
+    captureEdgeException(error, { fn: "ingest", req });
     console.error("Ingest error:", error);
     return jsonResponse({ error: "Internal server error" }, 500, ch);
   }

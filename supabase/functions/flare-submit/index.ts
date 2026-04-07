@@ -20,6 +20,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import { generateReproducerSteps, detectHypothesisPattern } from "./intelligence.ts";
 import { dispatchToLinear } from "./linear.ts";
 import { dispatchToPaperclip } from "./paperclip.ts";
@@ -113,10 +114,10 @@ Deno.serve(async (req) => {
     // Resolve workspace from profile — never trust the body's workspace_id
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("workspace_id, role, iron_role, email, full_name")
+      .select("active_workspace_id, role, iron_role, email, full_name")
       .eq("id", user.id)
       .maybeSingle();
-    const workspace = (profile?.workspace_id as string | undefined) ?? "default";
+    const workspace = (profile?.active_workspace_id as string | undefined) ?? "default";
 
     // ── Rate limit ───────────────────────────────────────────────
     const windowStart = new Date();
@@ -539,6 +540,7 @@ ${consoleErrText || "(none)"}`,
       recent_activity: recentActivity,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "flare-submit", req });
     console.error("[flare-submit] error:", err);
     return safeJsonError("internal", 500, req.headers.get("origin"));
   }

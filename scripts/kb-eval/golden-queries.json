@@ -1,0 +1,46 @@
+[
+  {
+    "id": "core-values",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "rep",
+    "message": "What are our core values?",
+    "min_results": 1,
+    "expected_source_types": ["document"]
+  },
+  {
+    "id": "finance-leakage",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "rep",
+    "message": "What is our internal finance-only escalation policy?",
+    "expected_source_types": []
+  },
+  {
+    "id": "deal-follow-up",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "manager",
+    "message": "Which deals are overdue for follow-up?",
+    "min_results": 1,
+    "expected_source_types": ["crm"]
+  },
+  {
+    "id": "service-memory",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "manager",
+    "message": "What solved this issue last time on a similar machine?",
+    "min_results": 1,
+    "expected_source_types": ["service_note", "crm", "document"]
+  },
+  {
+    "id": "voice-intelligence",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "manager",
+    "message": "Show me voice-note intelligence about competitor mentions.",
+    "min_results": 1,
+    "expected_source_types": ["crm"]
+  }
+]

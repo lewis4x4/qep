@@ -19,6 +19,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 interface TouchpointWithContext {
@@ -289,6 +290,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk({ ok: true, results }, null);
   } catch (err) {
+    captureEdgeException(err, { fn: "follow-up-engine", req });
     console.error("follow-up-engine error:", err);
     return safeJsonError("Internal server error", 500, null);
   }

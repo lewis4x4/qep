@@ -69,7 +69,7 @@ export function JobCodeSuggestionsPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
+    <div className="max-w-6xl mx-auto py-6 px-4 space-y-6">
       <ServiceSubNav />
       <div>
         <h1 className="text-2xl font-semibold">Job code suggestions</h1>

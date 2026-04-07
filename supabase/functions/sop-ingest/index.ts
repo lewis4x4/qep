@@ -17,6 +17,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 interface ParsedStep {
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, workspace_id")
+      .select("role, active_workspace_id")
       .eq("id", user.id)
       .single();
 
@@ -166,7 +167,7 @@ Deno.serve(async (req) => {
       return safeJsonError("SOP ingestion requires admin, manager, or owner role", 403, origin);
     }
 
-    const workspace = profile.workspace_id || "default";
+    const workspace = profile.active_workspace_id || "default";
 
     const body = await req.json();
     let documentText = body.text || "";
@@ -284,6 +285,7 @@ Deno.serve(async (req) => {
       next_action: "Review the parsed template and publish when ready",
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "sop-ingest", req });
     console.error("sop-ingest error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

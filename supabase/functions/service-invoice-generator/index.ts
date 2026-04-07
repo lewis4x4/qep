@@ -6,6 +6,7 @@ import { requireServiceUser } from "../_shared/service-auth.ts";
 import { generateInvoiceForServiceJob } from "../_shared/service-invoice.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -21,6 +22,7 @@ Deno.serve(async (req) => {
     if (r.error) return safeJsonError(r.error, 400, origin);
     return safeJsonOk({ invoice_id: r.invoice_id }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "service-invoice-generator", req });
     console.error("service-invoice-generator:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("Origin"));
   }

@@ -75,7 +75,7 @@ const backPill = cn(
 /** Divider between pill groups */
 function Divider() {
   return (
-    <div className="mx-0.5 h-4 w-px bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
+    <div className="mx-0.5 h-4 w-px shrink-0 bg-gradient-to-b from-transparent via-border to-transparent dark:via-white/[0.12]" />
   );
 }
 
@@ -99,7 +99,8 @@ export function ServiceSubNav() {
     <nav
       aria-label="Service section navigation"
       className={cn(
-        "inline-flex flex-wrap items-center gap-1.5 rounded-2xl p-1.5",
+        "flex max-w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto rounded-2xl p-1.5",
+        "scrollbar-thin scrollbar-thumb-border/50",
         // frosted rail container
         "border border-border/40 bg-white/40 backdrop-blur-md",
         "shadow-[0_1px_3px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.8)]",
@@ -111,7 +112,7 @@ export function ServiceSubNav() {
       {/* Back to Command Center — only on sub-pages */}
       {!isCommandCenter && (
         <>
-          <Link to="/service" className={backPill} aria-label="Back to Command Center">
+          <Link to="/service" className={cn(backPill, "shrink-0")} aria-label="Back to Command Center">
             <ChevronLeft className="h-3 w-3" />
             <span>Command Center</span>
           </Link>
@@ -127,7 +128,7 @@ export function ServiceSubNav() {
             key={navItem.to}
             to={navItem.to}
             aria-current={isActive(navItem.to) ? "page" : undefined}
-            className={isActive(navItem.to) ? pillActive : pillBase}
+            className={cn(isActive(navItem.to) ? pillActive : pillBase, "shrink-0 whitespace-nowrap")}
           >
             <NavIcon className="h-3.5 w-3.5 shrink-0" />
             {navItem.label}
@@ -140,7 +141,7 @@ export function ServiceSubNav() {
         <>
           <Divider />
           <span className={cn(
-            "inline-flex items-center gap-1 px-1.5 text-[9px] font-bold uppercase tracking-[0.12em]",
+            "inline-flex shrink-0 items-center gap-1 px-1.5 text-[9px] font-bold uppercase tracking-[0.12em]",
             "text-muted-foreground/40 dark:text-white/20 select-none"
           )}>
             <Settings2 className="h-2.5 w-2.5" />
@@ -153,7 +154,7 @@ export function ServiceSubNav() {
                 key={navItem.to}
                 to={navItem.to}
                 aria-current={isActive(navItem.to) ? "page" : undefined}
-                className={isActive(navItem.to) ? pillActive : pillBase}
+                className={cn(isActive(navItem.to) ? pillActive : pillBase, "shrink-0 whitespace-nowrap")}
               >
                 <NavIcon className="h-3.5 w-3.5 shrink-0" />
                 {navItem.label}
@@ -171,6 +172,7 @@ export function ServiceSubNav() {
         aria-current={isActive("/service/track") ? "page" : undefined}
         className={cn(
           isActive("/service/track") ? pillActive : pillBase,
+          "shrink-0 whitespace-nowrap",
           // Extra: dashed border when inactive to signal it's an external-facing link
           !isActive("/service/track") && "border-dashed opacity-80 hover:opacity-100",
         )}

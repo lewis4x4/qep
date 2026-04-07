@@ -666,7 +666,7 @@ mustContain(
   "customer intel card shows churn risk",
 );
 mustContain(
-  "apps/web/src/features/crm/pages/CrmCompanyDetailPage.tsx",
+  "apps/web/src/features/qrm/pages/QrmCompanyDetailPage.tsx",
   "CustomerPartsIntelCard",
   "CRM company detail shows parts intelligence card",
 );

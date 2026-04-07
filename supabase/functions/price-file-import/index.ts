@@ -14,6 +14,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import XLSX from "npm:xlsx@0.18.5";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
 function parseCsvRows(csvText: string): Record<string, string>[] {
   const lines = csvText.trim().split("\n");
   if (lines.length < 2) return [];
@@ -261,6 +262,7 @@ Deno.serve(async (req) => {
       impact_report: impactReport,
     }, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "price-file-import", req });
     console.error("price-file-import error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
