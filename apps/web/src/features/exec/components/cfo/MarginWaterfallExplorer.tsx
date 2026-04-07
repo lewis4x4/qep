@@ -1,0 +1,87 @@
+/**
+ * Margin Waterfall Explorer — month-by-month gross → loaded margin breakdown.
+ *
+ * Reads from `mv_exec_margin_waterfall` (mig 190). Shows revenue, gross
+ * margin $, load $, net contribution, and loaded margin % for each of the
+ * last 6 months. Click a row to drill (Slice 5 wires the drawer).
+ */
+import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
+import { TrendingDown } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { formatKpiValue } from "../../lib/formatters";
+
+interface WaterfallRow {
+  month: string;
+  revenue: number;
+  gross_margin_dollars: number;
+  net_contribution_dollars: number | null;
+  load_dollars: number;
+  loaded_margin_pct: number | null;
+}
+
+export function MarginWaterfallExplorer() {
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["cfo", "margin-waterfall"],
+    queryFn: async (): Promise<WaterfallRow[]> => {
+      const res = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: WaterfallRow[] | null; error: unknown }> };
+          };
+        };
+      }).from("mv_exec_margin_waterfall")
+        .select("month, revenue, gross_margin_dollars, net_contribution_dollars, load_dollars, loaded_margin_pct")
+        .order("month", { ascending: false })
+        .limit(6);
+      if (res.error) return [];
+      return res.data ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  return (
+    <Card className="p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <TrendingDown className="h-3.5 w-3.5 text-amber-400" />
+        <p className="text-[11px] uppercase tracking-wider font-semibold text-foreground">Margin waterfall</p>
+        <span className="ml-auto text-[10px] text-muted-foreground">last 6 months</span>
+      </div>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading waterfall…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No closed-won data yet. Once deals close + the snapshot runner refreshes
+          the materialized view, the waterfall populates here.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-border/40 text-left text-muted-foreground">
+                <th className="py-1.5 pr-2 font-medium">Month</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Revenue</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Gross $</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Load $</th>
+                <th className="py-1.5 pr-2 text-right font-medium">Net contrib</th>
+                <th className="py-1.5 text-right font-medium">Loaded %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.month} className="border-b border-border/20 hover:bg-muted/20">
+                  <td className="py-1.5 pr-2 font-mono">{r.month.slice(0, 7)}</td>
+                  <td className="py-1.5 pr-2 text-right">{formatKpiValue(r.revenue, "currency_compact")}</td>
+                  <td className="py-1.5 pr-2 text-right text-emerald-400">{formatKpiValue(r.gross_margin_dollars, "currency_compact")}</td>
+                  <td className="py-1.5 pr-2 text-right text-amber-400">{formatKpiValue(r.load_dollars, "currency_compact")}</td>
+                  <td className="py-1.5 pr-2 text-right">{formatKpiValue(r.net_contribution_dollars ?? 0, "currency_compact")}</td>
+                  <td className="py-1.5 text-right font-semibold">{r.loaded_margin_pct != null ? `${r.loaded_margin_pct.toFixed(1)}%` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}

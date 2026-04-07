@@ -66,7 +66,7 @@ export function CommandCenterPage() {
 
       {/* Lens content */}
       {tab === "ceo" && <CeoCommandCenterView onDrill={handleDrill} />}
-      {tab === "cfo" && <CfoCommandCenterView />}
+      {tab === "cfo" && <CfoCommandCenterView onDrill={handleDrill} />}
       {tab === "coo" && <CooCommandCenterView />}
     </div>
   );

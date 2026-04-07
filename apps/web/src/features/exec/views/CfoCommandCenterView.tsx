@@ -1,18 +1,88 @@
 /**
- * CFO lens — placeholder until Slice 3 ships finance KPIs + sub-views.
+ * CFO lens — Slice 3.
+ *
+ * Cash, A/R, deposits, payment exceptions, refund exposure, receipt
+ * compliance, hauling recovery, and loaded margin %. Composes the same
+ * KPI tile + alerts inbox primitives as the CEO view, plus three
+ * domain panels: PolicyEnforcementWall, MarginWaterfallExplorer,
+ * CashPressureView.
  */
+import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Wallet } from "lucide-react";
+import { Wallet, AlertOctagon, Receipt } from "lucide-react";
+import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
+import { AlertsInboxPanel } from "../components/AlertsInboxPanel";
+import { PolicyEnforcementWall } from "../components/cfo/PolicyEnforcementWall";
+import { MarginWaterfallExplorer } from "../components/cfo/MarginWaterfallExplorer";
+import { useMetricDefinitions, useLatestSnapshots } from "../lib/useExecData";
 
-export function CfoCommandCenterView() {
+interface Props {
+  onDrill?: (metricKey: string) => void;
+}
+
+export function CfoCommandCenterView({ onDrill }: Props) {
+  const { data: definitions = [], isLoading } = useMetricDefinitions("cfo");
+  const metricKeys = useMemo(() => definitions.map((d) => d.metric_key), [definitions]);
+  const { data: snapshots = [] } = useLatestSnapshots(metricKeys);
+
+  const snapshotByKey = useMemo(() => {
+    const m = new Map<string, (typeof snapshots)[number]>();
+    for (const s of snapshots) m.set(s.metric_key, s);
+    return m;
+  }, [snapshots]);
+
   return (
-    <Card className="p-8 text-center">
-      <Wallet className="mx-auto h-6 w-6 text-muted-foreground" />
-      <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-foreground">CFO lens</p>
-      <p className="mt-2 max-w-md mx-auto text-[11px] text-muted-foreground">
-        Cash, A/R, deposits, refund exposure, payment exceptions, receipt compliance,
-        hauling recovery, and the loaded margin waterfall ship in Slice 3.
-      </p>
-    </Card>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="space-y-4">
+        {/* CFO header strip */}
+        <Card className="border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent p-4">
+          <div className="flex items-start gap-3">
+            <Wallet className="mt-0.5 h-4 w-4 text-emerald-400" />
+            <div className="flex-1">
+              <p className="text-[10px] uppercase tracking-wider text-emerald-400">Finance discipline</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cash position, deposit verification SLA, payment compliance, refund exposure,
+                and the margin waterfall from gross to loaded.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {isLoading ? (
+          <Card className="p-6 text-center text-xs text-muted-foreground">Loading CFO metrics…</Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {definitions.map((def) => (
+              <ExecutiveKpiCard
+                key={def.metric_key}
+                definition={def}
+                snapshot={snapshotByKey.get(def.metric_key) ?? null}
+                fallbackValue={null}
+                fallbackSource="snapshot pipeline"
+                onDrill={onDrill}
+              />
+            ))}
+          </div>
+        )}
+
+        <PolicyEnforcementWall />
+        <MarginWaterfallExplorer />
+      </div>
+
+      <div className="space-y-4">
+        <AlertsInboxPanel role="cfo" />
+        {/* Receipt compliance quick-glance */}
+        <Card className="p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Receipt className="h-3 w-3 text-blue-400" />
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Receipt compliance</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Surfaced via the <code>receipt_compliance_rate</code> KPI tile.
+            Drill there for the daily trend and exception list.
+          </p>
+        </Card>
+      </div>
+    </div>
   );
 }
