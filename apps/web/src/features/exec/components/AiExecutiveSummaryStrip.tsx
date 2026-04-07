@@ -123,9 +123,9 @@ function SummaryMarkdown({ markdown }: { markdown: string }) {
       out.push(<h3 key={i} className="mt-2 text-[11px] uppercase tracking-wider text-muted-foreground">{line.slice(3)}</h3>);
     } else if (line.startsWith("- ")) {
       out.push(
-        <p key={i} className="text-[11px] text-foreground" dangerouslySetInnerHTML={{
-          __html: line.slice(2).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'),
-        }} />
+        <p key={i} className="text-[11px] text-foreground">
+          {renderInlineMarkdown(line.slice(2))}
+        </p>
       );
     } else if (line.startsWith("_") && line.endsWith("_")) {
       out.push(<p key={i} className="mt-2 text-[10px] italic text-muted-foreground">{line.slice(1, -1)}</p>);
@@ -136,4 +136,14 @@ function SummaryMarkdown({ markdown }: { markdown: string }) {
     }
   }
   return <div className="mt-1 space-y-0.5">{out}</div>;
+}
+
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*.*?\*\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
 }

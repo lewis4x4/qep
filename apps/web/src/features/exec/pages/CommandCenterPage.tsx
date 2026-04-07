@@ -156,96 +156,98 @@ export function CommandCenterPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.45fr_0.95fr]">
-        <Card className="overflow-hidden border-qep-orange/20 bg-[radial-gradient(circle_at_top_left,rgba(184,115,51,0.16),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5">
-          <div className="flex flex-col gap-5">
-            <div className="space-y-2">
-              <div className="inline-flex items-center rounded-full border border-qep-orange/25 bg-qep-orange/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-qep-orange">
-                Leadership signal stack
-              </div>
+      {tab !== "overview" && (
+        <div className="grid gap-4 xl:grid-cols-[1.45fr_0.95fr]">
+          <Card className="overflow-hidden border-qep-orange/20 bg-[radial-gradient(circle_at_top_left,rgba(184,115,51,0.16),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5">
+            <div className="flex flex-col gap-5">
               <div className="space-y-2">
-                <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                  Run the business from one analytical command surface.
-                </h2>
-                <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                  Every lens is built to answer four questions in real time: what changed, what is off track, what
-                  requires intervention today, and exactly where leadership should go next.
-                </p>
+                <div className="inline-flex items-center rounded-full border border-qep-orange/25 bg-qep-orange/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-qep-orange">
+                  Leadership signal stack
+                </div>
+                <div className="space-y-2">
+                  <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+                    Run the business from one analytical command surface.
+                  </h2>
+                  <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                    Every lens is built to answer four questions in real time: what changed, what is off track, what
+                    requires intervention today, and exactly where leadership should go next.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {TABS.filter((entry) => entry.key !== "overview").map((entry) => {
+                  const active = tab === entry.key;
+                  const lens = LENS_SUMMARIES[entry.key as ExecRoleTab];
+                  return (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      onClick={() => setTab(entry.key as ExecRoleTab)}
+                      className={`rounded-2xl border p-4 text-left transition ${
+                        active
+                          ? "border-qep-orange/40 bg-qep-orange/10 shadow-[0_0_0_1px_rgba(184,115,51,0.14)]"
+                          : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${active ? "bg-qep-orange/15 text-qep-orange" : "bg-white/8 text-white/70"}`}>
+                          {entry.icon}
+                        </span>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground">
+                            {entry.label}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{lens.title}</p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-muted-foreground">{lens.detail}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
+          </Card>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              {TABS.filter((entry) => entry.key !== "overview").map((entry) => {
-                const active = tab === entry.key;
-                const lens = LENS_SUMMARIES[entry.key as ExecRoleTab];
+          <Card className="p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-qep-orange">Intervention paths</p>
+                <h2 className="mt-1 text-base font-semibold text-foreground">Where leadership can act now</h2>
+              </div>
+              <Link
+                to="/os"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted/20"
+              >
+                OS Hub <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              {CONTROL_LINKS.map((link) => {
+                const Icon = link.icon;
                 return (
-                  <button
-                    key={entry.key}
-                    type="button"
-                    onClick={() => setTab(entry.key as ExecRoleTab)}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      active
-                        ? "border-qep-orange/40 bg-qep-orange/10 shadow-[0_0_0_1px_rgba(184,115,51,0.14)]"
-                        : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]"
-                    }`}
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className={`block rounded-xl border p-3 transition hover:border-qep-orange/35 hover:bg-white/[0.04] ${link.tone}`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${active ? "bg-qep-orange/15 text-qep-orange" : "bg-white/8 text-white/70"}`}>
-                        {entry.icon}
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground">
-                          {entry.label}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">{lens.title}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5" />
+                          <p className="text-xs font-semibold text-foreground">{link.title}</p>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{link.detail}</p>
                       </div>
+                      <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-muted-foreground">{lens.detail}</p>
-                  </button>
+                  </Link>
                 );
               })}
             </div>
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-qep-orange">Intervention paths</p>
-              <h2 className="mt-1 text-base font-semibold text-foreground">Where leadership can act now</h2>
-            </div>
-            <Link
-              to="/os"
-              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted/20"
-            >
-              OS Hub <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <div className="mt-4 space-y-2.5">
-            {CONTROL_LINKS.map((link) => {
-              const Icon = link.icon;
-              return (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className={`block rounded-xl border p-3 transition hover:border-qep-orange/35 hover:bg-white/[0.04] ${link.tone}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-3.5 w-3.5" />
-                        <p className="text-xs font-semibold text-foreground">{link.title}</p>
-                      </div>
-                      <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{link.detail}</p>
-                    </div>
-                    <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
+      )}
 
       {/* Lens switcher */}
       <DashboardPivotToggle
