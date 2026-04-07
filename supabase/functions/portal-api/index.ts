@@ -106,6 +106,13 @@ interface PortalPaymentIntentRow {
   failure_reason: string | null;
 }
 
+interface DocumentVisibilityAuditRow {
+  document_id: string;
+  visibility_after: boolean | null;
+  created_at: string;
+  reason: string | null;
+}
+
 function titleCaseStatus(raw: string | null | undefined): string {
   if (!raw) return "Status unavailable";
   return raw.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -349,6 +356,24 @@ function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
     tone: "amber",
     detail: "A payment session was created, but the dealership has not received a verified success event yet.",
     last_updated_at: intent.updated_at ?? intent.created_at,
+  };
+}
+
+function normalizePortalDocumentVisibility(input: {
+  createdAt: string;
+  latestAudit: DocumentVisibilityAuditRow | null;
+}): {
+  label: string;
+  detail: string;
+  released_at: string;
+} {
+  const releaseAt = input.latestAudit?.created_at ?? input.createdAt;
+  const reason = input.latestAudit?.reason?.trim() || "Shared by your dealership team for portal access.";
+
+  return {
+    label: "Visible in customer portal",
+    detail: reason,
+    released_at: releaseAt,
   };
 }
 
@@ -1302,6 +1327,14 @@ Deno.serve(async (req) => {
     // ── /documents — Document library by fleet/serial ────────────────
     if (route === "documents") {
       if (req.method === "GET") {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("Document library is not configured on this environment.", 503, origin);
+        }
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
         const url2 = new URL(req.url);
         const fleetId = url2.searchParams.get("fleet_id");
         let query = supabase
@@ -1314,7 +1347,40 @@ Deno.serve(async (req) => {
 
         const { data, error } = await query;
         if (error) return safeJsonError("Failed to load documents", 500, origin);
-        return safeJsonOk({ documents: data }, origin);
+
+        const docs = (data ?? []) as Array<Record<string, unknown>>;
+        const docIds = docs
+          .map((doc) => typeof doc.id === "string" ? doc.id : null)
+          .filter((value): value is string => Boolean(value));
+
+        let latestAuditByDocument = new Map<string, DocumentVisibilityAuditRow>();
+        if (docIds.length > 0) {
+          const { data: auditRows } = await admin
+            .from("document_visibility_audit")
+            .select("document_id, visibility_after, created_at, reason")
+            .in("document_id", docIds)
+            .order("created_at", { ascending: false });
+
+          for (const row of ((auditRows ?? []) as DocumentVisibilityAuditRow[])) {
+            if (!row.document_id || latestAuditByDocument.has(row.document_id)) continue;
+            if (row.visibility_after === false) continue;
+            latestAuditByDocument.set(row.document_id, row);
+          }
+        }
+
+        const documents = docs.map((doc) => {
+          const docId = typeof doc.id === "string" ? doc.id : "";
+          const latestAudit = latestAuditByDocument.get(docId) ?? null;
+          return {
+            ...doc,
+            portal_visibility: normalizePortalDocumentVisibility({
+              createdAt: typeof doc.created_at === "string" ? doc.created_at : new Date().toISOString(),
+              latestAudit,
+            }),
+          };
+        });
+
+        return safeJsonOk({ documents }, origin);
       }
     }
 

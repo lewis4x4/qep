@@ -34,6 +34,11 @@ interface EquipmentDocument {
   mime_type: string | null;
   customer_visible: boolean;
   created_at: string;
+  portal_visibility?: {
+    label: string;
+    detail: string;
+    released_at: string;
+  } | null;
 }
 
 const TYPE_META: Record<DocumentType, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -192,6 +197,17 @@ export function PortalDocumentsPage() {
                             {doc.mime_type && <span>{doc.mime_type}</span>}
                             {doc.file_size_bytes !== null && <span>{formatBytes(doc.file_size_bytes)}</span>}
                           </div>
+                          {doc.portal_visibility && (
+                            <div className="mt-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+                              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                {doc.portal_visibility.label}
+                              </p>
+                              <p className="mt-1 text-[11px] text-foreground">{doc.portal_visibility.detail}</p>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                Released: {new Date(doc.portal_visibility.released_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Button asChild size="sm" variant="outline" className="h-7 shrink-0 text-[11px]">
                           <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
