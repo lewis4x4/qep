@@ -33,6 +33,7 @@ import { priceFileImported } from "../_shared/flow-workflows/price-file-imported
 import { equipmentHoursCrossedInterval } from "../_shared/flow-workflows/equipment-hours-crossed-interval.ts";
 import { rentalNearingEnd } from "../_shared/flow-workflows/rental-nearing-end.ts";
 import { competitorSignalFromVoice } from "../_shared/flow-workflows/competitor-signal-from-voice.ts";
+import { IRON_FLOW_DEFINITIONS } from "../_shared/flow-workflows/iron-flows.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
 const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
@@ -46,6 +47,8 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   equipmentHoursCrossedInterval,
   rentalNearingEnd,
   competitorSignalFromVoice,
+  // Wave 7 Iron Companion conversational flows (6 v1 flows)
+  ...IRON_FLOW_DEFINITIONS,
 ];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -416,7 +419,18 @@ Deno.serve(async (req: Request) => {
     // automatically without a migration.
     for (const wf of REGISTERED_WORKFLOWS) {
       try {
-        const hash = await sha256(JSON.stringify({ p: wf.trigger_event_pattern, c: wf.conditions, a: wf.actions }));
+        // Iron metadata is part of the hash so changes to slot schema or
+        // surface trigger a re-sync without needing the manifest to dirty
+        // its trigger pattern.
+        const hash = await sha256(JSON.stringify({
+          p: wf.trigger_event_pattern,
+          c: wf.conditions,
+          a: wf.actions,
+          s: wf.surface,
+          im: wf.iron_metadata,
+          ff: wf.feature_flag,
+          uh: wf.undo_handler,
+        }));
         const { data: existing } = await admin
           .from("flow_workflow_definitions")
           .select("id, definition_hash, enabled, dry_run")
@@ -437,6 +451,15 @@ Deno.serve(async (req: Request) => {
             enabled: wf.enabled !== false,
             dry_run: wf.dry_run ?? false,
             definition_hash: hash,
+            // Wave 7 Iron columns (added in migration 197). Defaults are safe
+            // for non-Iron workflows: surface = 'automated', metadata = null.
+            surface: wf.surface ?? "automated",
+            iron_metadata: wf.iron_metadata ?? null,
+            feature_flag: wf.feature_flag ?? null,
+            undo_handler: wf.undo_handler ?? null,
+            undo_semantic_rule: wf.undo_semantic_rule ?? null,
+            high_value_threshold_cents: wf.high_value_threshold_cents ?? null,
+            roles_allowed: wf.roles_allowed ?? null,
           });
         } else if (existing.definition_hash !== hash) {
           await admin.from("flow_workflow_definitions").update({
@@ -449,6 +472,14 @@ Deno.serve(async (req: Request) => {
             affects_modules: wf.affects_modules,
             definition_hash: hash,
             version: 1, // bump in Slice 4 admin UI
+            // Wave 7 Iron columns — also resync on hash change
+            surface: wf.surface ?? "automated",
+            iron_metadata: wf.iron_metadata ?? null,
+            feature_flag: wf.feature_flag ?? null,
+            undo_handler: wf.undo_handler ?? null,
+            undo_semantic_rule: wf.undo_semantic_rule ?? null,
+            high_value_threshold_cents: wf.high_value_threshold_cents ?? null,
+            roles_allowed: wf.roles_allowed ?? null,
           }).eq("id", existing.id);
         }
       } catch (err) {

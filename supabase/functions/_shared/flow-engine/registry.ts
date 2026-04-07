@@ -10,6 +10,7 @@
  * crm_in_app_notifications, exception_queue) — no parallel side-effect code.
  */
 import type { FlowAction, FlowActionDeps, FlowActionResult, FlowContext } from "./types.ts";
+import { IRON_ACTION_REGISTRY } from "./iron-actions.ts";
 
 /* ─── Helper: param resolution against context ─────────────────────────── */
 
@@ -369,6 +370,8 @@ export const ACTION_REGISTRY: Record<string, FlowAction> = {
   escalate_parts_vendor,
   create_audit_event,
   request_approval,
+  // Wave 7 Iron Companion actions (6 v1 flows)
+  ...IRON_ACTION_REGISTRY,
 };
 
 export function getAction(key: string): FlowAction {

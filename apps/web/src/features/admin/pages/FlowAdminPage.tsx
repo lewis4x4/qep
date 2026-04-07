@@ -5,11 +5,11 @@
  * a "Run now" button to manually invoke the flow-runner edge fn. Drill
  * any run row → FlowRunHistoryDrawer with full step trace.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles } from "lucide-react";
+import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
@@ -27,7 +27,13 @@ interface WorkflowDef {
   dry_run: boolean;
   version: number;
   updated_at: string;
+  // Wave 7 Iron columns (additive, may be null for legacy automated flows)
+  surface?: string | null;
+  iron_metadata?: { short_label?: string; iron_role?: string } | null;
+  feature_flag?: string | null;
 }
+
+type SurfaceFilter = "all" | "automated" | "iron";
 
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
   pending: "neutral",
@@ -46,6 +52,7 @@ export function FlowAdminPage() {
   const [synthBrief, setSynthBrief] = useState("");
   const [synthOpen, setSynthOpen] = useState(false);
   const [synthResult, setSynthResult] = useState<{ definition_id: string | null; missing: string[] } | null>(null);
+  const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>("all");
 
   const { data: workflows = [], isLoading: workflowsLoading } = useQuery({
     queryKey: ["flow-admin-workflows"],
@@ -53,13 +60,27 @@ export function FlowAdminPage() {
       const { data, error } = await (supabase as unknown as {
         from: (t: string) => { select: (c: string) => { order: (c: string, o: { ascending: boolean }) => Promise<{ data: WorkflowDef[] | null; error: unknown }> } };
       }).from("flow_workflow_definitions")
-        .select("id, slug, name, description, owner_role, enabled, trigger_event_pattern, affects_modules, dry_run, version, updated_at")
+        .select("id, slug, name, description, owner_role, enabled, trigger_event_pattern, affects_modules, dry_run, version, updated_at, surface, iron_metadata, feature_flag")
         .order("updated_at", { ascending: false });
       if (error) throw new Error("workflows load failed");
       return data ?? [];
     },
     staleTime: 30_000,
   });
+
+  // Surface-filtered subset, computed before render
+  const filteredWorkflows = useMemo(() => {
+    if (surfaceFilter === "all") return workflows;
+    if (surfaceFilter === "iron") {
+      return workflows.filter((w) => w.surface === "iron_conversational" || w.surface === "iron_voice");
+    }
+    return workflows.filter((w) => !w.surface || w.surface === "automated");
+  }, [workflows, surfaceFilter]);
+
+  const ironCount = useMemo(
+    () => workflows.filter((w) => w.surface === "iron_conversational" || w.surface === "iron_voice").length,
+    [workflows],
+  );
 
   const { data: recentRuns = [] } = useQuery({
     queryKey: ["flow-admin-recent-runs"],
@@ -234,44 +255,85 @@ export function FlowAdminPage() {
         ]}
       />
 
+      {/* Surface filter chips: All / Automated / Iron */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Surface:</span>
+        {(["all", "automated", "iron"] as SurfaceFilter[]).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSurfaceFilter(s)}
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+              surfaceFilter === s
+                ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
+                : "border-border bg-muted/10 text-muted-foreground hover:bg-muted/30"
+            }`}
+          >
+            {s === "iron" && <Bot className="h-3 w-3" />}
+            {s === "all" ? `All (${workflows.length})` : s === "iron" ? `Iron (${ironCount})` : `Automated (${workflows.length - ironCount})`}
+          </button>
+        ))}
+      </div>
+
       {/* Workflows table */}
       <Card className="p-4">
-        <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Workflows</p>
+        <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          {surfaceFilter === "iron" ? "Iron Companion flows" : surfaceFilter === "automated" ? "Automated workflows" : "Workflows"}
+        </p>
         {workflowsLoading ? (
           <p className="text-xs text-muted-foreground">Loading…</p>
-        ) : workflows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No workflows registered yet. Run the runner once to auto-sync the TS files.</p>
+        ) : filteredWorkflows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {surfaceFilter === "iron"
+              ? "No Iron flows registered yet. Run the flow-runner once to auto-sync the iron-flows.ts manifest."
+              : "No workflows registered yet. Run the runner once to auto-sync the TS files."}
+          </p>
         ) : (
           <div className="space-y-2">
-            {workflows.map((wf) => (
-              <div key={wf.id} className="flex items-start justify-between gap-3 rounded border border-border/60 bg-muted/10 p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold text-foreground">{wf.name}</p>
-                    <code className="rounded bg-muted px-1 text-[9px] text-muted-foreground">{wf.slug}</code>
-                    {wf.dry_run && (
-                      <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-400">dry-run</span>
-                    )}
+            {filteredWorkflows.map((wf) => {
+              const isIron = wf.surface === "iron_conversational" || wf.surface === "iron_voice";
+              return (
+                <div key={wf.id} className="flex items-start justify-between gap-3 rounded border border-border/60 bg-muted/10 p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {isIron && <Zap className="h-3 w-3 shrink-0 text-qep-orange" aria-hidden />}
+                      <p className="text-xs font-semibold text-foreground">{wf.name}</p>
+                      <code className="rounded bg-muted px-1 text-[9px] text-muted-foreground">{wf.slug}</code>
+                      {isIron && wf.iron_metadata?.iron_role && (
+                        <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[9px] uppercase text-qep-orange">
+                          {wf.iron_metadata.iron_role.replace(/^iron_/, "")}
+                        </span>
+                      )}
+                      {wf.dry_run && (
+                        <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] uppercase text-amber-400">dry-run</span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{wf.description}</p>
+                    <div className="mt-1 flex items-center gap-2 text-[10px]">
+                      <span className="text-muted-foreground">trigger:</span>
+                      <code className="text-foreground">{wf.trigger_event_pattern}</code>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">role: {wf.owner_role}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">v{wf.version}</span>
+                      {wf.feature_flag && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">flag: {wf.feature_flag}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{wf.description}</p>
-                  <div className="mt-1 flex items-center gap-2 text-[10px]">
-                    <span className="text-muted-foreground">trigger:</span>
-                    <code className="text-foreground">{wf.trigger_event_pattern}</code>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">role: {wf.owner_role}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">v{wf.version}</span>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant={wf.enabled ? "default" : "outline"}
+                    onClick={() => toggleEnabled.mutate({ id: wf.id, enabled: !wf.enabled })}
+                  >
+                    {wf.enabled ? "Enabled" : "Disabled"}
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant={wf.enabled ? "default" : "outline"}
-                  onClick={() => toggleEnabled.mutate({ id: wf.id, enabled: !wf.enabled })}
-                >
-                  {wf.enabled ? "Enabled" : "Disabled"}
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

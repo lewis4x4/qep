@@ -56,6 +56,65 @@ export interface FlowWorkflowDefinition {
   enabled?: boolean;
   dry_run?: boolean;
   run_cadence_seconds?: number;
+  // Wave 7 Iron Companion (additive, optional). Plain `automated` workflows
+  // omit these. Iron-conversational workflows declare their slot schema and
+  // metadata here so the flow-runner sync persists it into
+  // flow_workflow_definitions.iron_metadata + .surface columns.
+  surface?: "automated" | "iron_conversational" | "iron_voice";
+  iron_metadata?: IronFlowMetadata;
+  feature_flag?: string;
+  undo_handler?: string;
+  undo_semantic_rule?: string;
+  high_value_threshold_cents?: number;
+  roles_allowed?: string[];
+}
+
+/* ─── Iron Companion: slot schema for conversational flows ─────────────── */
+
+export type IronSlotType =
+  | "text"
+  | "longtext"
+  | "number"
+  | "currency"
+  | "entity_picker"
+  | "choice"
+  | "line_items"
+  | "review";
+
+export interface IronSlotDefinition {
+  id: string;
+  label: string;
+  type: IronSlotType;
+  required?: boolean;
+  /** entity_picker: which table to search (e.g. 'crm_companies'). */
+  entity_table?: string;
+  /** entity_picker: column to search by (e.g. 'name'). */
+  entity_search_column?: string;
+  /** choice: enum of options. */
+  choices?: Array<{ value: string; label: string }>;
+  placeholder?: string;
+  helper_text?: string;
+  /** Pre-fill rule keyed against the resolved orchestrator context. */
+  prefill_from?: string;
+  /** Default value if no pre-fill matches. */
+  default_value?: unknown;
+  /** Slot is shown only if another slot satisfies this condition. */
+  show_if?: { slot_id: string; equals?: unknown; in?: unknown[]; truthy?: boolean };
+  /** Optimistic-lock merge strategy when the underlying entity drifts. */
+  merge_strategy?: "reject" | "auto_if_unrelated" | "prompt_diff";
+}
+
+export interface IronFlowMetadata {
+  iron_role: "iron_man" | "iron_woman" | "iron_advisor" | "iron_manager";
+  short_label: string;
+  voice_intent_keywords: string[];
+  voice_open_prompt: string;
+  voice_review_prompt: string;
+  slot_schema: IronSlotDefinition[];
+  /** Action key in IRON_ACTION_REGISTRY this flow dispatches to on review accept. */
+  action_key: string;
+  /** Maps slot id → client-side context path for pre-fill (e.g. {customer: 'route.crm_company'}). */
+  prefill_from_route?: Record<string, string>;
 }
 
 export interface FlowEvent {

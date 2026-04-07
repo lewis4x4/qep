@@ -24,6 +24,10 @@ supabase/functions/hubspot-webhook/index.ts
 supabase/functions/ingest/index.ts
 supabase/functions/integration-availability/index.ts
 supabase/functions/integration-test-connection/index.ts
+supabase/functions/iron-execute-flow-step/index.ts
+supabase/functions/iron-orchestrator/index.ts
+supabase/functions/iron-undo-flow-run/index.ts
+supabase/functions/kb-maintenance/index.ts
 supabase/functions/market-valuation/index.ts
 supabase/functions/marketing-engine/index.ts
 supabase/functions/meta-social/index.ts
