@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap } from "lucide-react";
+import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles, Bot, Zap, Lightbulb, X } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
@@ -34,6 +34,19 @@ interface WorkflowDef {
 }
 
 type SurfaceFilter = "all" | "automated" | "iron";
+
+interface IronSuggestionRow {
+  id: string;
+  pattern_signature: string;
+  short_label: string | null;
+  intent_examples: Array<{ message: string; conversation_id: string; occurred_at: string }>;
+  occurrence_count: number;
+  unique_users: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  status: string;
+  promoted_flow_id: string | null;
+}
 
 const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red" | "neutral"> = {
   pending: "neutral",
@@ -179,6 +192,91 @@ export function FlowAdminPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["flow-admin-workflows"] }),
   });
 
+  // ── Wave 7 v1.3: Iron flow suggestions (pattern-mined) ────────────────
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ["iron-flow-suggestions"],
+    queryFn: async (): Promise<IronSuggestionRow[]> => {
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              order: (col: string, opts: { ascending: boolean }) => {
+                limit: (n: number) => Promise<{ data: IronSuggestionRow[] | null; error: unknown }>;
+              };
+            };
+          };
+        };
+      }).from("iron_flow_suggestions")
+        .select("id, pattern_signature, short_label, intent_examples, occurrence_count, unique_users, first_seen_at, last_seen_at, status, promoted_flow_id")
+        .eq("status", "open")
+        .order("occurrence_count", { ascending: false })
+        .limit(20);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const runPatternMining = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; suggestions_upserted?: number; error?: string } | null; error: { message?: string } | null }> };
+      }).functions.invoke("iron-pattern-mining", { body: {} });
+      if (error) throw new Error(error.message ?? "pattern mining failed");
+      if (!data?.ok) throw new Error(data?.error ?? "pattern mining failed");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["iron-flow-suggestions"] });
+    },
+  });
+
+  const promoteSuggestion = useMutation({
+    mutationFn: async (suggestion: IronSuggestionRow) => {
+      // Build the flow-synthesize brief from the most representative example
+      const exemplar = suggestion.intent_examples?.[0]?.message ?? suggestion.short_label ?? suggestion.pattern_signature;
+      const brief = `Pattern observed ${suggestion.occurrence_count} times across ${suggestion.unique_users} user(s): "${exemplar}". Build an Iron-conversational flow that handles this intent.`;
+
+      const { data: synthData, error: synthErr } = await (supabase as unknown as {
+        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; definition_id: string | null; error?: string } | null; error: { message?: string } | null }> };
+      }).functions.invoke("flow-synthesize", { body: { brief } });
+      if (synthErr) throw new Error(synthErr.message ?? "synth failed");
+      if (!synthData?.ok || !synthData.definition_id) {
+        throw new Error(synthData?.error ?? "synth failed");
+      }
+
+      // Link the new draft back to the suggestion
+      const { error: updateErr } = await (supabase as unknown as {
+        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message?: string } | null }> } };
+      }).from("iron_flow_suggestions").update({
+        status: "promoted",
+        promoted_flow_id: synthData.definition_id,
+        promoted_at: new Date().toISOString(),
+      }).eq("id", suggestion.id);
+      if (updateErr) throw new Error(updateErr.message ?? "link failed");
+
+      return synthData.definition_id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["iron-flow-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["flow-admin-workflows"] });
+    },
+  });
+
+  const dismissSuggestion = useMutation({
+    mutationFn: async (suggestionId: string) => {
+      const { error } = await (supabase as unknown as {
+        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: { message?: string } | null }> } };
+      }).from("iron_flow_suggestions").update({
+        status: "dismissed",
+        dismissed_at: new Date().toISOString(),
+        dismissed_reason: "manager declined from admin UI",
+      }).eq("id", suggestionId);
+      if (error) throw new Error(error.message ?? "dismiss failed");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["iron-flow-suggestions"] }),
+  });
+
   // Rollup tile counts
   const last24h = recentRuns.filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
   const succeeded = last24h.filter((r) => r.status === "succeeded").length;
@@ -197,6 +295,20 @@ export function FlowAdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={runPatternMining.isPending}
+            onClick={() => runPatternMining.mutate()}
+            title="Mine iron_messages for repeated CLARIFY/READ_ANSWER intents and write to iron_flow_suggestions"
+          >
+            {runPatternMining.isPending ? (
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Lightbulb className="mr-1 h-3 w-3" />
+            )}
+            Mine patterns
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setSynthOpen((p) => !p)}>
             <Sparkles className="mr-1 h-3 w-3" /> Synthesize
           </Button>
@@ -337,6 +449,79 @@ export function FlowAdminPage() {
           </div>
         )}
       </Card>
+
+      {/* Iron flow suggestions (pattern-mined) — only shown when not filtered to automated */}
+      {surfaceFilter !== "automated" && suggestions.length > 0 && (
+        <Card className="border-qep-orange/30 p-4">
+          <p className="mb-2 flex items-center gap-1 text-[10px] uppercase tracking-wider text-qep-orange">
+            <Lightbulb className="h-3 w-3" /> Iron flow suggestions
+            <span className="ml-1 rounded-full bg-qep-orange/15 px-1.5 py-0.5 text-[9px] normal-case">
+              pattern-mined · {suggestions.length} open
+            </span>
+          </p>
+          <p className="mb-2 text-[10px] text-muted-foreground">
+            Iron observed these intents repeatedly without a flow to dispatch to. Click <span className="text-foreground">Promote</span> to draft a flow definition via flow-synthesize.
+          </p>
+          <div className="space-y-2">
+            {suggestions.map((s) => (
+              <div key={s.id} className="flex items-start justify-between gap-3 rounded border border-qep-orange/20 bg-qep-orange/5 p-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-foreground line-clamp-1">
+                    {s.short_label ?? s.pattern_signature}
+                  </p>
+                  {s.intent_examples?.[0]?.message && (
+                    <p className="mt-0.5 line-clamp-2 text-[10px] italic text-muted-foreground">
+                      "{s.intent_examples[0].message}"
+                    </p>
+                  )}
+                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>{s.occurrence_count}× hits</span>
+                    <span>·</span>
+                    <span>{s.unique_users} user{s.unique_users === 1 ? "" : "s"}</span>
+                    <span>·</span>
+                    <span>last seen {new Date(s.last_seen_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => promoteSuggestion.mutate(s)}
+                    disabled={promoteSuggestion.isPending}
+                  >
+                    {promoteSuggestion.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1 h-3 w-3" /> Promote
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => dismissSuggestion.mutate(s.id)}
+                    disabled={dismissSuggestion.isPending}
+                    aria-label="Dismiss suggestion"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {promoteSuggestion.error && (
+            <p className="mt-2 text-[10px] text-red-400">
+              Promote failed: {(promoteSuggestion.error as Error).message}
+            </p>
+          )}
+          {runPatternMining.data && (
+            <p className="mt-2 text-[10px] text-emerald-400">
+              ✓ Mining run complete · {runPatternMining.data.suggestions_upserted ?? 0} suggestions upserted
+            </p>
+          )}
+        </Card>
+      )}
 
       {/* Recent runs */}
       <Card className="p-4">
