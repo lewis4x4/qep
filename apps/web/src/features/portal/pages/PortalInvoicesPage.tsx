@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
+import { PayInvoiceButton } from "../components/PayInvoiceButton";
 
 function formatCurrency(v: number | null): string {
   if (v == null) return "—";
@@ -30,6 +31,7 @@ type LineItem = {
 
 export function PortalInvoicesPage() {
   const qc = useQueryClient();
+  const [showOfflineForm, setShowOfflineForm] = useState<Record<string, boolean>>({});
   const [payAmount, setPayAmount] = useState<Record<string, string>>({});
   const [payMethod, setPayMethod] = useState<Record<string, string>>({});
   const [payRef, setPayRef] = useState<Record<string, string>>({});
@@ -49,7 +51,7 @@ export function PortalInvoicesPage() {
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Invoices & Payments</h1>
       <p className="text-sm text-muted-foreground mb-4">
-        Record a payment you have already made (ACH, check, card, or other). Your dealership reconciles against their processor.
+        Pay open invoices online when Stripe is available. If you already paid by check, ACH, or another offline method, record that below so the dealership can reconcile it.
       </p>
 
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
@@ -58,8 +60,11 @@ export function PortalInvoicesPage() {
         {(data?.invoices ?? []).map((inv: Record<string, unknown>) => {
           const balance = Number(inv.balance_due ?? 0);
           const lines = (inv.customer_invoice_line_items as LineItem[] | undefined) ?? [];
+          const invoiceId = String(inv.id);
+          const companyId = typeof inv.crm_company_id === "string" ? inv.crm_company_id : "";
+          const offlineOpen = showOfflineForm[invoiceId] === true;
           return (
-            <Card key={inv.id as string} className="p-4 space-y-3">
+            <Card key={invoiceId} className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
                   <p className="text-sm font-semibold text-foreground">#{String(inv.invoice_number)}</p>
@@ -96,55 +101,95 @@ export function PortalInvoicesPage() {
                 </div>
               )}
               {balance > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2 items-end flex-wrap pt-1 border-t border-dashed">
-                  <div className="flex-1 min-w-[100px]">
-                    <label className="text-[10px] text-muted-foreground">Amount</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0.01}
-                      max={balance}
-                      value={payAmount[inv.id as string] ?? ""}
-                      onChange={(e) => setPayAmount((m) => ({ ...m, [inv.id as string]: e.target.value }))}
-                      placeholder={String(balance)}
-                      className="h-9 text-sm"
-                    />
+                <div className="space-y-3 pt-1 border-t border-dashed">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-foreground">Pay online</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Secure checkout opens in a new tab. If card payments are unavailable, we fall back to a payment-coordination email.
+                      </p>
+                    </div>
+                    {companyId ? (
+                      <PayInvoiceButton
+                        invoiceId={invoiceId}
+                        companyId={companyId}
+                        amountCents={Math.round(balance * 100)}
+                        description={`Invoice ${String(inv.invoice_number)}`}
+                      />
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        Online payment is unavailable for this invoice.
+                      </p>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-[120px]">
-                    <label className="text-[10px] text-muted-foreground">Method</label>
-                    <Input
-                      value={payMethod[inv.id as string] ?? ""}
-                      onChange={(e) => setPayMethod((m) => ({ ...m, [inv.id as string]: e.target.value }))}
-                      placeholder="ach / check / card"
-                      className="h-9 text-sm"
-                    />
+
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowOfflineForm((current) => ({
+                        ...current,
+                        [invoiceId]: !current[invoiceId],
+                      }))}
+                    >
+                      {offlineOpen ? "Hide offline payment form" : "Already paid another way?"}
+                    </Button>
                   </div>
-                  <div className="flex-1 min-w-[140px]">
-                    <label className="text-[10px] text-muted-foreground">Reference #</label>
-                    <Input
-                      value={payRef[inv.id as string] ?? ""}
-                      onChange={(e) => setPayRef((m) => ({ ...m, [inv.id as string]: e.target.value }))}
-                      placeholder="Confirmation / check #"
-                      className="h-9 text-sm"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={payMutation.isPending}
-                    onClick={() => {
-                      const amt = Number(payAmount[inv.id as string] ?? balance);
-                      if (!Number.isFinite(amt) || amt <= 0 || amt > balance) return;
-                      payMutation.mutate({
-                        invoice_id: inv.id,
-                        amount: amt,
-                        payment_method: payMethod[inv.id as string] || null,
-                        payment_reference: payRef[inv.id as string] || null,
-                      });
-                    }}
-                  >
-                    {payMutation.isPending ? "Recording…" : "Record payment"}
-                  </Button>
+
+                  {offlineOpen && (
+                    <div className="flex flex-col sm:flex-row gap-2 items-end flex-wrap">
+                      <div className="flex-1 min-w-[100px]">
+                        <label className="text-[10px] text-muted-foreground">Amount</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0.01}
+                          max={balance}
+                          value={payAmount[invoiceId] ?? ""}
+                          onChange={(e) => setPayAmount((m) => ({ ...m, [invoiceId]: e.target.value }))}
+                          placeholder={String(balance)}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-[120px]">
+                        <label className="text-[10px] text-muted-foreground">Method</label>
+                        <Input
+                          value={payMethod[invoiceId] ?? ""}
+                          onChange={(e) => setPayMethod((m) => ({ ...m, [invoiceId]: e.target.value }))}
+                          placeholder="ach / check / card"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-[140px]">
+                        <label className="text-[10px] text-muted-foreground">Reference #</label>
+                        <Input
+                          value={payRef[invoiceId] ?? ""}
+                          onChange={(e) => setPayRef((m) => ({ ...m, [invoiceId]: e.target.value }))}
+                          placeholder="Confirmation / check #"
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={payMutation.isPending}
+                        onClick={() => {
+                          const amt = Number(payAmount[invoiceId] ?? balance);
+                          if (!Number.isFinite(amt) || amt <= 0 || amt > balance) return;
+                          payMutation.mutate({
+                            invoice_id: inv.id,
+                            amount: amt,
+                            payment_method: payMethod[invoiceId] || null,
+                            payment_reference: payRef[invoiceId] || null,
+                          });
+                        }}
+                      >
+                        {payMutation.isPending ? "Recording…" : "Record offline payment"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
