@@ -48,7 +48,7 @@ async function gatherUserData(
     .from("profiles")
     .select("id, full_name, role")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
   if (!profile) return null;
 

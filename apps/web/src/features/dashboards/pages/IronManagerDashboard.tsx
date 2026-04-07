@@ -4,16 +4,6 @@ import { useIronManagerData } from "../hooks/useDashboardData";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Users, TrendingUp, AlertTriangle, DollarSign, Package } from "lucide-react";
 
-/** PostgREST may return numeric columns as strings; calling .toFixed on a string throws. */
-function formatPercentLabel(value: unknown): string {
-  if (value === null || value === undefined) return "N/A";
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return "N/A";
-  return n.toFixed(1);
-}
-// formatPercentLabel is exported here in case future KPI cards need it.
-void formatPercentLabel;
-
 export function IronManagerDashboard() {
   const { data } = useIronManagerData();
 

@@ -7,7 +7,6 @@
  * reordering is an explicit non-goal of this slice — the widget order comes
  * from the role defaults until per-user customization ships.
  */
-import { Fragment } from "react";
 import { resolveWidgets } from "./registry";
 
 interface WidgetGridProps {
@@ -23,11 +22,7 @@ export function WidgetGrid({ widgetIds }: WidgetGridProps) {
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {resolved.map((descriptor) => {
         const Component = descriptor.component;
-        return (
-          <Fragment key={descriptor.id}>
-            <Component />
-          </Fragment>
-        );
+        return <Component key={descriptor.id} />;
       })}
     </div>
   );

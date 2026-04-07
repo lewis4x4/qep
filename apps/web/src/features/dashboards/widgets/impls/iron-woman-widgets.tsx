@@ -86,7 +86,9 @@ export function DepositTrackerWidget() {
                 {dep.status}
               </span>
               <span className="font-semibold text-foreground">
-                ${dep.required_amount?.toLocaleString()}
+                {dep.required_amount != null
+                  ? `$${Number(dep.required_amount).toLocaleString()}`
+                  : "—"}
               </span>
             </Link>
           ))}
