@@ -11,15 +11,17 @@
  */
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import { Card } from "@/components/ui/card";
-import { Activity, AlertOctagon, History, MessageCircle, ExternalLink } from "lucide-react";
+import { Activity, AlertOctagon, History, MessageCircle, ExternalLink, ArrowRight } from "lucide-react";
 import { AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { formatKpiValue, formatForMetric, relativeRefresh } from "../lib/formatters";
 import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "../lib/types";
+import { resolveMetricPlaybook, resolveMetricRecordLink } from "../lib/metric-actions";
 
 interface Props {
   metricKey: string | null;
@@ -111,6 +113,8 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
   const latest = snapshots[0] ?? null;
   const prior = snapshots[1] ?? null;
   const format = useMemo(() => metricKey ? formatForMetric(metricKey) : "number" as const, [metricKey]);
+  const playbookLink = useMemo(() => resolveMetricPlaybook(metricKey), [metricKey]);
+  const recordLink = useMemo(() => resolveMetricRecordLink(metricKey), [metricKey]);
 
   const sparkline = useMemo(() => {
     if (snapshots.length < 2) return null;
@@ -210,6 +214,33 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
                   </ul>
                 </div>
               )}
+            </Card>
+          )}
+
+          {/* Action path */}
+          {(playbookLink || recordLink) && (
+            <Card className="border-qep-orange/20 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Action path</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {playbookLink && (
+                  <Link
+                    to={playbookLink.href}
+                    className="inline-flex items-center gap-1 rounded-md border border-qep-orange/30 bg-qep-orange/5 px-3 py-2 text-[11px] font-medium text-qep-orange hover:bg-qep-orange/10"
+                  >
+                    {playbookLink.label}
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                )}
+                {recordLink && (
+                  <Link
+                    to={recordLink.href}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-[11px] font-medium text-foreground hover:bg-muted/20"
+                  >
+                    {recordLink.label}
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                )}
+              </div>
             </Card>
           )}
 
