@@ -2,11 +2,45 @@ import { supabase } from "@/lib/supabase";
 
 const PORTAL_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portal-api`;
 
+export interface PortalCanonicalStatus {
+  label: string;
+  source: "quote_review" | "deal_progress" | "service_job" | "portal_request" | "default";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+  next_action?: string | null;
+}
+
+export interface PortalActiveDeal {
+  deal_id: string;
+  deal_name: string;
+  amount: number | null;
+  expected_close_on: string | null;
+  next_follow_up_at: string | null;
+  quote_review_id: string | null;
+  quote_review_status: string | null;
+  portal_status: PortalCanonicalStatus;
+}
+
+export interface PortalQuoteSummary {
+  id: string;
+  deal_id: string | null;
+  deal_name: string | null;
+  amount: number | null;
+  status: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  signer_name: string | null;
+  expires_at: string | null;
+  portal_status: PortalCanonicalStatus;
+}
+
 export type PortalFleetResponse = { fleet?: Record<string, unknown>[] };
 export type PortalServiceRequestsResponse = { requests?: Record<string, unknown>[] };
 export type PortalPartsOrdersResponse = { orders?: Record<string, unknown>[] };
 export type PortalInvoicesResponse = { invoices?: Record<string, unknown>[] };
-export type PortalQuotesResponse = { quotes?: Record<string, unknown>[] };
+export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
+export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };
 export type PortalSubscriptionsResponse = Record<string, unknown>;
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -49,6 +83,8 @@ async function portalFetch<T extends Record<string, unknown> = Record<string, un
 
 export const portalApi = {
   getFleet: (): Promise<PortalFleetResponse> => portalFetch<PortalFleetResponse>("fleet"),
+  getActiveDeals: (): Promise<PortalActiveDealsResponse> =>
+    portalFetch<PortalActiveDealsResponse>("deals/active"),
   /** Wave 5D: fleet with LIVE service job state joined per equipment. */
   getFleetWithStatus: (): Promise<{ fleet?: Record<string, unknown>[] }> =>
     portalFetch<{ fleet?: Record<string, unknown>[] }>("fleet-with-status"),

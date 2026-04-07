@@ -62,6 +62,37 @@ const PORTAL_REQUEST_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+interface PortalDealRow {
+  id: string;
+  name: string;
+  amount: number | null;
+  expected_close_on: string | null;
+  next_follow_up_at: string | null;
+  updated_at: string;
+  stage_id: string | null;
+  primary_contact_id: string | null;
+  company_id: string | null;
+  closed_at?: string | null;
+}
+
+interface PortalDealStageRow {
+  id: string;
+  name: string;
+  is_closed_won: boolean;
+  is_closed_lost: boolean;
+}
+
+interface PortalQuoteReviewRow {
+  id: string;
+  deal_id: string | null;
+  status: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  expires_at: string | null;
+  updated_at: string;
+  signer_name: string | null;
+}
+
 function titleCaseStatus(raw: string | null | undefined): string {
   if (!raw) return "Status unavailable";
   return raw.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -108,6 +139,160 @@ function normalizePortalStatus(input: {
     source_label: "Equipment status",
     eta: null,
     last_updated_at: input.idleUpdatedAt ?? null,
+  };
+}
+
+function normalizePortalDealStatus(input: {
+  dealStageName?: string | null;
+  isClosedWon?: boolean;
+  isClosedLost?: boolean;
+  expectedCloseOn?: string | null;
+  nextFollowUpAt?: string | null;
+  dealUpdatedAt?: string | null;
+  quoteStatus?: string | null;
+  quoteViewedAt?: string | null;
+  quoteSignedAt?: string | null;
+  quoteExpiresAt?: string | null;
+  quoteUpdatedAt?: string | null;
+}): {
+  label: string;
+  source: "quote_review" | "deal_progress";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+  next_action: string | null;
+} {
+  const quoteStatus = input.quoteStatus?.trim().toLowerCase() ?? "";
+  const dealStageName = input.dealStageName?.trim().toLowerCase() ?? "";
+
+  if (quoteStatus === "accepted") {
+    return {
+      label: "Quote accepted",
+      source: "quote_review",
+      source_label: "Your quote response",
+      eta: input.expectedCloseOn ?? null,
+      last_updated_at: input.quoteSignedAt ?? input.quoteUpdatedAt ?? input.dealUpdatedAt ?? null,
+      next_action: "We’re finalizing the paperwork and next dealership steps.",
+    };
+  }
+
+  if (quoteStatus === "rejected") {
+    return {
+      label: "Quote declined",
+      source: "quote_review",
+      source_label: "Your quote response",
+      eta: null,
+      last_updated_at: input.quoteUpdatedAt ?? input.dealUpdatedAt ?? null,
+      next_action: "Contact the dealership if you want a revised option or updated quote.",
+    };
+  }
+
+  if (quoteStatus === "countered") {
+    return {
+      label: "Changes requested",
+      source: "quote_review",
+      source_label: "Your quote response",
+      eta: input.quoteExpiresAt ?? input.expectedCloseOn ?? null,
+      last_updated_at: input.quoteUpdatedAt ?? input.dealUpdatedAt ?? null,
+      next_action: "We’re reviewing your requested changes.",
+    };
+  }
+
+  if (quoteStatus === "viewed") {
+    return {
+      label: "Quote reviewed",
+      source: "quote_review",
+      source_label: "Your quote response",
+      eta: input.quoteExpiresAt ?? input.expectedCloseOn ?? null,
+      last_updated_at: input.quoteViewedAt ?? input.quoteUpdatedAt ?? input.dealUpdatedAt ?? null,
+      next_action: "Review the quote details and sign when you're ready.",
+    };
+  }
+
+  if (quoteStatus === "sent") {
+    return {
+      label: "Quote ready for review",
+      source: "quote_review",
+      source_label: "Quote review",
+      eta: input.quoteExpiresAt ?? input.expectedCloseOn ?? null,
+      last_updated_at: input.quoteUpdatedAt ?? input.dealUpdatedAt ?? null,
+      next_action: "Open the quote to review pricing and next steps.",
+    };
+  }
+
+  if (input.isClosedWon) {
+    return {
+      label: "Deal confirmed",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: null,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "Your dealership team is handling the final delivery or paperwork steps.",
+    };
+  }
+
+  if (input.isClosedLost) {
+    return {
+      label: "Opportunity closed",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: null,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "Reach back out if you want to reopen this opportunity.",
+    };
+  }
+
+  if (dealStageName.includes("demo")) {
+    return {
+      label: "Demo scheduled",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: input.expectedCloseOn ?? input.nextFollowUpAt ?? null,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "We’ll confirm your demo timing and any prep details.",
+    };
+  }
+
+  if (dealStageName.includes("quote")) {
+    return {
+      label: "Quote in progress",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: input.expectedCloseOn ?? input.nextFollowUpAt ?? null,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "Your dealership team is preparing the quote details.",
+    };
+  }
+
+  if (dealStageName.includes("negotiat")) {
+    return {
+      label: "Finalizing options",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: input.expectedCloseOn ?? input.nextFollowUpAt ?? null,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "We’re working through final options and pricing.",
+    };
+  }
+
+  if (input.nextFollowUpAt) {
+    return {
+      label: "In progress with dealership",
+      source: "deal_progress",
+      source_label: "Deal progress",
+      eta: input.nextFollowUpAt,
+      last_updated_at: input.dealUpdatedAt ?? null,
+      next_action: "Expect the next dealership update on the scheduled follow-up.",
+    };
+  }
+
+  return {
+    label: "In progress with dealership",
+    source: "deal_progress",
+    source_label: "Deal progress",
+    eta: input.expectedCloseOn ?? null,
+    last_updated_at: input.dealUpdatedAt ?? null,
+    next_action: "Your dealership team is actively working this opportunity.",
   };
 }
 
@@ -179,7 +364,7 @@ Deno.serve(async (req) => {
     // Verify caller is a portal customer (not internal staff using wrong API)
     const { data: portalCustomer } = await supabase
       .from("portal_customers")
-      .select("id, is_active, workspace_id")
+      .select("id, is_active, workspace_id, crm_company_id, crm_contact_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -660,13 +845,75 @@ Deno.serve(async (req) => {
     // ── /quotes — Quote review + e-signature ───────────────────────────
     if (route === "quotes") {
       if (req.method === "GET") {
-        const { data, error } = await supabase
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("Quote review is not configured on this environment.", 503, origin);
+        }
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data, error } = await admin
           .from("portal_quote_reviews")
           .select("*")
+          .eq("portal_customer_id", portalCustomer.id)
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load quotes", 500, origin);
-        return safeJsonOk({ quotes: data }, origin);
+
+        const quoteRows = (data ?? []) as PortalQuoteReviewRow[];
+        const dealIds = [...new Set(quoteRows.map((row) => row.deal_id).filter((value): value is string => Boolean(value)))];
+
+        let dealsById = new Map<string, PortalDealRow>();
+        let stagesById = new Map<string, PortalDealStageRow>();
+        if (dealIds.length > 0) {
+          const { data: dealRows } = await admin
+            .from("crm_deals")
+            .select("id, name, amount, expected_close_on, next_follow_up_at, updated_at, stage_id, primary_contact_id, company_id, closed_at")
+            .in("id", dealIds)
+            .is("deleted_at", null);
+
+          const deals = (dealRows ?? []) as PortalDealRow[];
+          dealsById = new Map(deals.map((deal) => [deal.id, deal]));
+
+          const stageIds = [...new Set(deals.map((deal) => deal.stage_id).filter((value): value is string => Boolean(value)))];
+          if (stageIds.length > 0) {
+            const { data: stageRows } = await admin
+              .from("crm_deal_stages")
+              .select("id, name, is_closed_won, is_closed_lost")
+              .in("id", stageIds);
+            const stages = (stageRows ?? []) as PortalDealStageRow[];
+            stagesById = new Map(stages.map((stage) => [stage.id, stage]));
+          }
+        }
+
+        const quotes = quoteRows.map((quote) => {
+          const deal = quote.deal_id ? dealsById.get(quote.deal_id) ?? null : null;
+          const stage = deal?.stage_id ? stagesById.get(deal.stage_id) ?? null : null;
+          const portalStatus = normalizePortalDealStatus({
+            dealStageName: stage?.name ?? null,
+            isClosedWon: stage?.is_closed_won ?? false,
+            isClosedLost: stage?.is_closed_lost ?? false,
+            expectedCloseOn: deal?.expected_close_on ?? null,
+            nextFollowUpAt: deal?.next_follow_up_at ?? null,
+            dealUpdatedAt: deal?.updated_at ?? null,
+            quoteStatus: quote.status,
+            quoteViewedAt: quote.viewed_at,
+            quoteSignedAt: quote.signed_at,
+            quoteExpiresAt: quote.expires_at,
+            quoteUpdatedAt: quote.updated_at,
+          });
+
+          return {
+            ...quote,
+            deal_name: deal?.name ?? null,
+            amount: deal?.amount ?? null,
+            portal_status: portalStatus,
+          };
+        });
+
+        return safeJsonOk({ quotes }, origin);
       }
 
       if (req.method === "PUT") {
@@ -735,6 +982,109 @@ Deno.serve(async (req) => {
         if (error) return safeJsonError("Failed to update quote", 500, origin);
         return safeJsonOk({ quote: data }, origin);
       }
+    }
+
+    // ── /deals/active — Active portal commercial work ────────────────
+    if (route === "deals" && subRoute === "active" && req.method === "GET") {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceKey) {
+        return safeJsonError("Active deals are not configured on this environment.", 503, origin);
+      }
+
+      const admin = createClient(supabaseUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const crmCompanyId = typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null;
+      const crmContactId = typeof portalCustomer.crm_contact_id === "string" ? portalCustomer.crm_contact_id : null;
+
+      if (!crmCompanyId && !crmContactId) {
+        return safeJsonOk({ deals: [] }, origin);
+      }
+
+      let dealQuery = admin
+        .from("crm_deals")
+        .select("id, name, amount, expected_close_on, next_follow_up_at, updated_at, stage_id, primary_contact_id, company_id, closed_at")
+        .is("deleted_at", null);
+
+      if (crmCompanyId && crmContactId) {
+        dealQuery = dealQuery.or(`company_id.eq.${crmCompanyId},primary_contact_id.eq.${crmContactId}`);
+      } else if (crmCompanyId) {
+        dealQuery = dealQuery.eq("company_id", crmCompanyId);
+      } else if (crmContactId) {
+        dealQuery = dealQuery.eq("primary_contact_id", crmContactId);
+      }
+
+      const { data: dealRows, error: dealError } = await dealQuery.order("updated_at", { ascending: false }).limit(30);
+      if (dealError) return safeJsonError("Failed to load active deals", 500, origin);
+
+      const deals = (dealRows ?? []) as PortalDealRow[];
+      if (deals.length === 0) {
+        return safeJsonOk({ deals: [] }, origin);
+      }
+
+      const stageIds = [...new Set(deals.map((deal) => deal.stage_id).filter((value): value is string => Boolean(value)))];
+      const { data: stageRows } = stageIds.length > 0
+        ? await admin.from("crm_deal_stages").select("id, name, is_closed_won, is_closed_lost").in("id", stageIds)
+        : { data: [] as PortalDealStageRow[] };
+      const stagesById = new Map(((stageRows ?? []) as PortalDealStageRow[]).map((stage) => [stage.id, stage]));
+
+      const dealIds = deals.map((deal) => deal.id);
+      const { data: quoteRows } = await admin
+        .from("portal_quote_reviews")
+        .select("id, deal_id, status, viewed_at, signed_at, expires_at, updated_at, signer_name")
+        .eq("portal_customer_id", portalCustomer.id)
+        .in("deal_id", dealIds)
+        .order("updated_at", { ascending: false });
+      const latestQuoteByDeal = new Map<string, PortalQuoteReviewRow>();
+      for (const row of ((quoteRows ?? []) as PortalQuoteReviewRow[])) {
+        if (row.deal_id && !latestQuoteByDeal.has(row.deal_id)) {
+          latestQuoteByDeal.set(row.deal_id, row);
+        }
+      }
+
+      const activeDeals = deals
+        .map((deal) => {
+          const stage = deal.stage_id ? stagesById.get(deal.stage_id) ?? null : null;
+          const quote = latestQuoteByDeal.get(deal.id) ?? null;
+          const portalStatus = normalizePortalDealStatus({
+            dealStageName: stage?.name ?? null,
+            isClosedWon: stage?.is_closed_won ?? false,
+            isClosedLost: stage?.is_closed_lost ?? false,
+            expectedCloseOn: deal.expected_close_on,
+            nextFollowUpAt: deal.next_follow_up_at,
+            dealUpdatedAt: deal.updated_at,
+            quoteStatus: quote?.status ?? null,
+            quoteViewedAt: quote?.viewed_at ?? null,
+            quoteSignedAt: quote?.signed_at ?? null,
+            quoteExpiresAt: quote?.expires_at ?? null,
+            quoteUpdatedAt: quote?.updated_at ?? null,
+          });
+
+          return {
+            deal_id: deal.id,
+            deal_name: deal.name,
+            amount: deal.amount,
+            expected_close_on: deal.expected_close_on,
+            next_follow_up_at: deal.next_follow_up_at,
+            quote_review_id: quote?.id ?? null,
+            quote_review_status: quote?.status ?? null,
+            portal_status: portalStatus,
+          };
+        })
+        .filter((deal) => {
+          const stage = deals.find((row) => row.id === deal.deal_id)?.stage_id
+            ? stagesById.get(deals.find((row) => row.id === deal.deal_id)!.stage_id!)
+            : null;
+          if (stage?.is_closed_lost) return false;
+          if (stage?.is_closed_won && !["accepted"].includes((deal.quote_review_status ?? "").toLowerCase())) {
+            return false;
+          }
+          if ((deal.quote_review_status ?? "").toLowerCase() === "rejected") return false;
+          return true;
+        });
+
+      return safeJsonOk({ deals: activeDeals }, origin);
     }
 
     // ── /subscriptions — EaaS subscriptions ────────────────────────────

@@ -8,6 +8,9 @@ const PortalFleetPage = lazy(() =>
 const PortalServicePage = lazy(() =>
   import("./pages/PortalServicePage").then((m) => ({ default: m.PortalServicePage })),
 );
+const PortalDealsPage = lazy(() =>
+  import("./pages/PortalDealsPage").then((m) => ({ default: m.PortalDealsPage })),
+);
 const PortalInvoicesPage = lazy(() =>
   import("./pages/PortalInvoicesPage").then((m) => ({ default: m.PortalInvoicesPage })),
 );
@@ -36,6 +39,7 @@ const PortalFleetMapPage = lazy(() =>
 export function portalRouteElements(): ReactElement[] {
   return [
     <Route key="portal" path="/portal" element={<PortalFleetPage />} />,
+    <Route key="portal-deals" path="/portal/deals" element={<PortalDealsPage />} />,
     <Route key="portal-service" path="/portal/service" element={<PortalServicePage />} />,
     <Route key="portal-parts" path="/portal/parts" element={<PortalPartsPage />} />,
     <Route key="portal-invoices" path="/portal/invoices" element={<PortalInvoicesPage />} />,

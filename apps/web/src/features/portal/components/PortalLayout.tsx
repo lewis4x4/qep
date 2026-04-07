@@ -1,8 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
-import { Boxes, BookOpen, FileText, Package, Receipt, Settings, Wrench } from "lucide-react";
+import { Boxes, BookOpen, BriefcaseBusiness, FileText, Package, Receipt, Settings, Wrench } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/portal", icon: Boxes, label: "Fleet" },
+  { to: "/portal/deals", icon: BriefcaseBusiness, label: "Deals" },
   { to: "/portal/service", icon: Wrench, label: "Service" },
   { to: "/portal/parts", icon: Package, label: "Parts" },
   { to: "/portal/invoices", icon: Receipt, label: "Invoices" },
