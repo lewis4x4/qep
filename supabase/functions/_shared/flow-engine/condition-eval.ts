@@ -6,12 +6,13 @@
  */
 import type { FlowCondition, FlowContext } from "./types.ts";
 
-/** Resolve a dot-walked path against the {event, context} root. */
-function resolveField(field: string, context: FlowContext): unknown {
+/** Resolve a dot-walked path against the {event, context, params} root. */
+function resolveField(field: string, context: FlowContext, extra: Record<string, unknown> = {}): unknown {
   const root: Record<string, unknown> = {
     event: context.event,
     context: context as unknown as Record<string, unknown>,
     payload: context.event.properties,
+    ...extra,
   };
   let cur: unknown = root;
   for (const segment of field.split(".")) {
@@ -91,12 +92,40 @@ export function evaluateConditions(conds: FlowCondition[], ctx: FlowContext): bo
 }
 
 /**
+ * Resolve a single value against context placeholders.
+ * Used by both the runner (idempotency key) and the registry (action params).
+ */
+export function resolveValue(value: unknown, ctx: FlowContext): unknown {
+  if (typeof value !== "string") return value;
+  if (!value.includes("${")) return value;
+  return value.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
+    const v = resolveField(path.trim(), ctx);
+    return v == null ? "" : String(v);
+  });
+}
+
+/** Resolve every value in an action params object. */
+export function resolveParamsForRun(params: Record<string, unknown>, ctx: FlowContext): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) {
+    out[k] = resolveValue(v, ctx);
+  }
+  return out;
+}
+
+/**
  * Compute an idempotency key from a template literal.
  * Replaces ${dot.path} segments with values resolved against the context.
+ * Accepts an extra `params` namespace so templates can reference resolved
+ * action parameters via `${params.X}`.
  */
-export function computeIdempotencyKey(template: string, ctx: FlowContext): string {
+export function computeIdempotencyKey(
+  template: string,
+  ctx: FlowContext,
+  resolvedParams: Record<string, unknown> = {},
+): string {
   return template.replace(/\$\{([^}]+)\}/g, (_, path: string) => {
-    const v = resolveField(path.trim(), ctx);
+    const v = resolveField(path.trim(), ctx, { params: resolvedParams });
     return v == null ? "null" : String(v);
   });
 }

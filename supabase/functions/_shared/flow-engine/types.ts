@@ -114,5 +114,7 @@ export interface FlowActionDeps {
   workspace_id: string;
   run_id: string;
   step_index: number;
+  /** Real flow_workflow_run_steps.id — set by the runner when it inserts the step row first. */
+  step_id?: string;
   dry_run: boolean;
 }

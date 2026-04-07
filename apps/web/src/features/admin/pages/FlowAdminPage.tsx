@@ -13,6 +13,7 @@ import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles } f
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
+import { FlowApprovalsPanel } from "../components/flow/FlowApprovalsPanel";
 
 interface WorkflowDef {
   id: string;
@@ -99,6 +100,31 @@ export function FlowAdminPage() {
       }).functions.invoke("flow-runner", { body: {} });
       if (error) throw new Error(error.message ?? "runner invoke failed");
       return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["flow-admin-dead-letters"] });
+    },
+  });
+
+  const replayDeadLetter = useMutation({
+    mutationFn: async (input: { exceptionId: string; runId: string }) => {
+      // Re-emit the original event by calling flow_resume_run, which copies
+      // the originating event with parent_event_id set so the runner picks
+      // it up next tick. Idempotency keys prevent duplicate side effects.
+      const { error } = await (supabase as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+      }).rpc("flow_resume_run", { p_run_id: input.runId });
+      if (error) throw new Error(error.message ?? "replay failed");
+      // Mark the exception_queue row as resolved so it disappears from the
+      // dead-letter card after a successful replay.
+      await (supabase as unknown as {
+        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } };
+      }).from("exception_queue").update({
+        status: "resolved",
+        resolved_at: new Date().toISOString(),
+        resolution_reason: "replayed via flow_resume_run",
+      }).eq("id", input.exceptionId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
@@ -282,6 +308,8 @@ export function FlowAdminPage() {
         )}
       </Card>
 
+      <FlowApprovalsPanel />
+
       {/* Dead letters */}
       {deadLetters.length > 0 && (
         <Card className="border-red-500/30 p-4">
@@ -289,14 +317,31 @@ export function FlowAdminPage() {
             <AlertOctagon className="h-3 w-3" /> Dead letters
           </p>
           <div className="space-y-1.5">
-            {deadLetters.map((dl) => (
-              <div key={dl.id} className="rounded border border-red-500/30 bg-red-500/5 p-2 text-[11px]">
-                <p className="font-semibold text-foreground">{dl.title}</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {new Date(dl.created_at).toLocaleString()} · run {(dl.payload?.flow_run_id as string)?.slice(0, 8)}…
-                </p>
-              </div>
-            ))}
+            {deadLetters.map((dl) => {
+              const runId = dl.payload?.flow_run_id as string | undefined;
+              return (
+                <div key={dl.id} className="rounded border border-red-500/30 bg-red-500/5 p-2 text-[11px]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground">{dl.title}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {new Date(dl.created_at).toLocaleString()} · run {runId?.slice(0, 8) ?? "—"}…
+                      </p>
+                    </div>
+                    {runId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={replayDeadLetter.isPending}
+                        onClick={() => replayDeadLetter.mutate({ exceptionId: dl.id, runId })}
+                      >
+                        {replayDeadLetter.isPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Replay"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

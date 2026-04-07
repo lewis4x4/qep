@@ -339,7 +339,7 @@ const request_approval: FlowAction = {
     const p = resolveParams(params, ctx);
     const { data, error } = await deps.admin.rpc("request_flow_approval", {
       p_run_id: deps.run_id,
-      p_step_id: null,
+      p_step_id: deps.step_id ?? null,
       p_workflow_slug: ctx.event.flow_event_type, // best available label at action time
       p_subject: p.subject,
       p_detail: p.detail ?? null,

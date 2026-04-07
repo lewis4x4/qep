@@ -15,7 +15,7 @@
  * once the runner is proven). Manual invocations are always allowed.
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { evaluateConditions, computeIdempotencyKey } from "../_shared/flow-engine/condition-eval.ts";
+import { evaluateConditions, computeIdempotencyKey, resolveParamsForRun } from "../_shared/flow-engine/condition-eval.ts";
 import { getAction, ACTION_REGISTRY } from "../_shared/flow-engine/registry.ts";
 import type {
   FlowContext,
@@ -217,32 +217,45 @@ async function executeRun(
   let anyFailed = false;
   let deadLettered = false;
 
+  // Retry policy for this workflow (mig 196 honors it)
+  const retryPolicy = (def as { retry_policy?: { max?: number; backoff?: string; base_seconds?: number } }).retry_policy ?? {};
+  const maxAttempts = Math.max(1, Number(retryPolicy.max ?? 3));
+  const baseDelaySeconds = Number(retryPolicy.base_seconds ?? 30);
+
   for (let i = 0; i < (def.actions ?? []).length; i++) {
     const step = def.actions[i];
     const stepStart = Date.now();
+
+    // Insert step row FIRST as 'pending' so we have step_id for action context
+    // (request_approval needs to link the approval to a real step row).
+    const { data: stepRow } = await admin.from("flow_workflow_run_steps").insert({
+      run_id: runId,
+      step_index: i,
+      step_type: "action",
+      action_key: step.action_key,
+      params: step.params,
+      status: "pending",
+      started_at: new Date(stepStart).toISOString(),
+    }).select("id").maybeSingle();
+    const stepId = stepRow?.id as string | undefined;
 
     // Validate action exists in registry
     let action;
     try {
       action = getAction(step.action_key);
     } catch (err) {
-      // Slice 1: empty registry, so every action will fail this lookup.
-      // We log it as 'skipped' instead of failing the run so the runner
-      // can prove its plumbing without ACTION_REGISTRY entries.
-      await admin.from("flow_workflow_run_steps").insert({
-        run_id: runId,
-        step_index: i,
-        step_type: "action",
-        action_key: step.action_key,
-        params: step.params,
+      await admin.from("flow_workflow_run_steps").update({
         status: "skipped",
         error_text: (err as Error).message,
         finished_at: new Date().toISOString(),
-      });
+      }).eq("id", stepId ?? "");
       continue;
     }
 
-    const idempotencyKey = computeIdempotencyKey(action.idempotency_key_template, context);
+    // P1 fix: resolve params BEFORE computing idempotency so ${params.X}
+    // placeholders in templates resolve correctly.
+    const resolvedParams = resolveParamsForRun(step.params, context);
+    const idempotencyKey = computeIdempotencyKey(action.idempotency_key_template, context, resolvedParams);
 
     // Check idempotency
     const { data: priorResult } = await admin
@@ -252,51 +265,60 @@ async function executeRun(
       .maybeSingle();
 
     if (priorResult?.result) {
-      await admin.from("flow_workflow_run_steps").insert({
-        run_id: runId,
-        step_index: i,
-        step_type: "action",
-        action_key: step.action_key,
-        params: step.params,
+      await admin.from("flow_workflow_run_steps").update({
         idempotency_key: idempotencyKey,
         status: "skipped",
         result: { ...priorResult.result, idempotency_hit: true },
-        started_at: new Date(stepStart).toISOString(),
         finished_at: new Date().toISOString(),
-      });
+      }).eq("id", stepId ?? "");
       continue;
     }
 
-    // Execute the action
-    let result: FlowActionResult;
-    try {
-      result = await action.execute(step.params, context, {
-        admin,
-        workspace_id: event.workspace_id,
-        run_id: runId,
-        step_index: i,
-        dry_run: def.dry_run ?? false,
-      });
-    } catch (err) {
-      result = { status: "failed", error: (err as Error).message, retryable: false };
+    // Retry loop honors retry_policy
+    let result: FlowActionResult = { status: "failed", error: "no_attempt", retryable: true };
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        result = await action.execute(resolvedParams, context, {
+          admin,
+          workspace_id: event.workspace_id,
+          run_id: runId,
+          step_index: i,
+          step_id: stepId,
+          dry_run: def.dry_run ?? false,
+        } as never);
+      } catch (err) {
+        result = { status: "failed", error: (err as Error).message, retryable: false };
+      }
+
+      if (result.status !== "failed") break;
+      if (!result.retryable) break;
+      if (attempt >= maxAttempts) break;
+
+      // Mark step as retrying + sleep before next attempt
+      await admin.from("flow_workflow_run_steps").update({
+        status: "retrying",
+        error_text: `attempt ${attempt}/${maxAttempts}: ${result.error}`,
+      }).eq("id", stepId ?? "");
+
+      const backoffSeconds = retryPolicy.backoff === "exponential"
+        ? baseDelaySeconds * Math.pow(2, attempt - 1)
+        : baseDelaySeconds;
+      const cappedDelay = Math.min(backoffSeconds * 1000, 5000); // cap at 5s within a single tick
+      await new Promise((r) => setTimeout(r, cappedDelay));
     }
 
-    // Persist step row
-    await admin.from("flow_workflow_run_steps").insert({
-      run_id: runId,
-      step_index: i,
-      step_type: "action",
-      action_key: step.action_key,
-      params: step.params,
+    // Persist final step state
+    await admin.from("flow_workflow_run_steps").update({
       idempotency_key: idempotencyKey,
       status: result.status === "succeeded" ? "succeeded" : result.status === "skipped" ? "skipped" : "failed",
       result: result.status !== "failed" ? (result as { result?: Record<string, unknown> }).result ?? null : null,
       error_text: result.status === "failed" ? result.error : null,
-      started_at: new Date(stepStart).toISOString(),
       finished_at: new Date().toISOString(),
-    });
+    }).eq("id", stepId ?? "");
 
-    // On success, write the idempotency record
+    // On success, write idempotency record
     if (result.status === "succeeded" && !def.dry_run) {
       try {
         await admin.from("flow_action_idempotency").insert({
@@ -306,21 +328,19 @@ async function executeRun(
           action_key: step.action_key,
           result: (result as { result: Record<string, unknown> }).result,
         });
-      } catch { /* swallow — race on concurrent runs is fine */ }
+      } catch { /* race-safe */ }
     }
 
     if (result.status === "failed") {
       anyFailed = true;
       allSucceeded = false;
       if (step.on_failure === "abort" || !step.on_failure) {
-        // Dead-letter the run on first hard failure (Slice 1 default).
-        // Slice 2 wires retries via retry_policy.
         await admin.rpc("enqueue_workflow_dead_letter", {
           p_run_id: runId,
           p_workflow_slug: def.slug,
           p_reason: result.error,
           p_failed_step: step.action_key,
-          p_payload: { event_id: event.event_id, step_index: i },
+          p_payload: { event_id: event.event_id, step_index: i, attempts: attempt },
         });
         deadLettered = true;
         break;
@@ -458,12 +478,11 @@ Deno.serve(async (req: Request) => {
         enabled: true,
       }));
 
-    // Poll a batch of unprocessed events
+    // P0 fix: poll the flow_pending_events view (mig 196) instead of the
+    // brittle .eq("consumed_by_runs", "[]") PostgREST filter.
     const { data: events, error: eventsErr } = await admin
-      .from("analytics_events")
+      .from("flow_pending_events")
       .select("event_id, flow_event_type, source_module, workspace_id, entity_type, entity_id, occurred_at, properties, correlation_id, parent_event_id, consumed_by_runs")
-      .not("flow_event_type", "is", null)
-      .eq("consumed_by_runs", "[]")
       .order("occurred_at", { ascending: true })
       .limit(POLL_BATCH_SIZE);
     if (eventsErr) throw new Error(`poll events: ${eventsErr.message}`);
@@ -489,12 +508,13 @@ Deno.serve(async (req: Request) => {
       result.workflows_evaluated += matched.length;
 
       if (matched.length === 0) {
-        // No subscribers — mark consumed with the synthetic 'no_match' run id
-        // so the poll doesn't return it again.
-        await admin
-          .from("analytics_events")
-          .update({ consumed_by_runs: ["no_match"] })
-          .eq("event_id", event.event_id);
+        // No subscribers — mark consumed via mark_event_consumed with a
+        // sentinel UUID so the column shape stays consistent (jsonb array
+        // of UUID-formatted strings).
+        await admin.rpc("mark_event_consumed", {
+          p_event_id: event.event_id,
+          p_run_id: "00000000-0000-0000-0000-000000000000",
+        });
         continue;
       }
 

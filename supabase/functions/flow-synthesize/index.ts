@@ -165,8 +165,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Insert as draft (enabled=false)
-    const slug = (workflow.slug as string) ?? `synthesized-${Date.now()}`;
+    // Insert as draft (enabled=false). Slug collision-proof via UUID suffix.
+    const slug = (workflow.slug as string) ?? `synthesized-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     const { data: inserted, error: insErr } = await admin.from("flow_workflow_definitions").insert({
       workspace_id: auth.workspace ?? "default",
       slug,
