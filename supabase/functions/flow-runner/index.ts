@@ -23,6 +23,18 @@ import type {
   FlowWorkflowDefinition,
   FlowActionResult,
 } from "../_shared/flow-engine/types.ts";
+import { voiceCaptureToQrm } from "../_shared/flow-workflows/voice-capture-to-qrm.ts";
+import { quoteExpiringSoon } from "../_shared/flow-workflows/quote-expiring-soon.ts";
+import { partsReceivedForOpenJob } from "../_shared/flow-workflows/parts-received-for-open-job.ts";
+import { arAgedPastThreshold } from "../_shared/flow-workflows/ar-aged-past-threshold.ts";
+
+/** All workflow files known to this build. Auto-synced into the DB on every tick. */
+const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
+  voiceCaptureToQrm,
+  quoteExpiringSoon,
+  partsReceivedForOpenJob,
+  arAgedPastThreshold,
+];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -45,6 +57,14 @@ function corsHeaders(origin: string | null) {
 
 const POLL_BATCH_SIZE = 200;
 const MAX_RUNTIME_MS = 50_000; // leave headroom under 60s cron tick
+
+async function sha256(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 interface RunnerResult {
   events_processed: number;
@@ -331,6 +351,53 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
+    // Auto-sync TS workflow files into flow_workflow_definitions on every tick.
+    // Idempotent upsert by (workspace_id, slug). The TS file is the source of
+    // truth for trigger pattern + conditions + action chain; the DB row holds
+    // runtime state (enabled, dry_run). On re-deploy, action_chain updates
+    // automatically without a migration.
+    for (const wf of REGISTERED_WORKFLOWS) {
+      try {
+        const hash = await sha256(JSON.stringify({ p: wf.trigger_event_pattern, c: wf.conditions, a: wf.actions }));
+        const { data: existing } = await admin
+          .from("flow_workflow_definitions")
+          .select("id, definition_hash, enabled, dry_run")
+          .eq("workspace_id", "default")
+          .eq("slug", wf.slug)
+          .maybeSingle();
+        if (!existing) {
+          await admin.from("flow_workflow_definitions").insert({
+            workspace_id: "default",
+            slug: wf.slug,
+            name: wf.name,
+            description: wf.description,
+            owner_role: wf.owner_role,
+            trigger_event_pattern: wf.trigger_event_pattern,
+            condition_dsl: wf.conditions,
+            action_chain: wf.actions,
+            affects_modules: wf.affects_modules,
+            enabled: wf.enabled !== false,
+            dry_run: wf.dry_run ?? false,
+            definition_hash: hash,
+          });
+        } else if (existing.definition_hash !== hash) {
+          await admin.from("flow_workflow_definitions").update({
+            name: wf.name,
+            description: wf.description,
+            owner_role: wf.owner_role,
+            trigger_event_pattern: wf.trigger_event_pattern,
+            condition_dsl: wf.conditions,
+            action_chain: wf.actions,
+            affects_modules: wf.affects_modules,
+            definition_hash: hash,
+            version: 1, // bump in Slice 4 admin UI
+          }).eq("id", existing.id);
+        }
+      } catch (err) {
+        console.warn(`[flow-runner] sync failed for ${wf.slug}:`, (err as Error).message);
+      }
+    }
+
     // Load enabled workflow definitions
     const { data: defs, error: defsErr } = await admin
       .from("flow_workflow_definitions")
