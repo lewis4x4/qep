@@ -9,10 +9,10 @@
  * Cmd+K is intentionally NOT used because the existing QrmGlobalSearchCommand
  * already binds it. Cmd+I = "Iron".
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Command } from "cmdk";
-import { Loader2, Send, Sparkles, Bot, AlertCircle } from "lucide-react";
+import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { ironOrchestrate } from "./api";
 import { useIronStore } from "./store";
+import { useIronVoiceRecorder } from "./voice/useIronVoiceRecorder";
+import { ironTranscribe } from "./voice/api";
 
 export function IronBar() {
   const { state, openBar, closeBar, startFlow, setAvatar, setError } = useIronStore();
@@ -30,6 +32,10 @@ export function IronBar() {
   const [response, setResponse] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const location = useLocation();
+  const recorder = useIronVoiceRecorder();
+  const [voicePending, setVoicePending] = useState(false);
+  // Track whether spacebar PTT is currently engaged so we don't double-fire
+  const pttActiveRef = useRef(false);
 
   // Cmd+I / Ctrl+I shortcut
   useEffect(() => {
@@ -65,8 +71,8 @@ export function IronBar() {
     }
   }, [state.barOpen]);
 
-  async function submit() {
-    const text = input.trim();
+  const submit = useCallback(async (explicitText?: string, mode: "text" | "voice" = "text") => {
+    const text = (explicitText ?? input).trim();
     if (!text || pending) return;
     setPending(true);
     setResponse(null);
@@ -76,7 +82,7 @@ export function IronBar() {
       const res = await ironOrchestrate({
         text,
         conversation_id: state.conversationId ?? undefined,
-        input_mode: "text",
+        input_mode: mode,
         route: location.pathname,
       });
       if (!res.ok) {
@@ -134,7 +140,94 @@ export function IronBar() {
     } finally {
       setPending(false);
     }
-  }
+  }, [input, pending, state.conversationId, location.pathname, setAvatar, setError, startFlow]);
+
+  // ── Voice flow: record → transcribe → submit ─────────────────────────
+  const startVoice = useCallback(async () => {
+    if (recorder.state === "recording" || pending || voicePending) return;
+    setResponse(null);
+    setAvatar("listening");
+    await recorder.start();
+  }, [recorder, pending, voicePending, setAvatar]);
+
+  const stopAndTranscribe = useCallback(async () => {
+    if (recorder.state !== "recording") return;
+    setVoicePending(true);
+    setAvatar("thinking");
+    try {
+      const result = await recorder.stop();
+      if (!result) {
+        setResponse("Didn't catch that — try again?");
+        setAvatar("idle");
+        return;
+      }
+      const transcribed = await ironTranscribe(result.blob, result.fileName);
+      if (!transcribed.ok || !transcribed.transcript) {
+        setResponse(transcribed.message ?? "No speech detected.");
+        setAvatar("idle");
+        return;
+      }
+      setInput(transcribed.transcript);
+      // Hand off to the orchestrator with input_mode='voice'. The avatar will
+      // flip to 'thinking' inside submit().
+      await submit(transcribed.transcript, "voice");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Voice transcription failed";
+      setResponse(message);
+      setAvatar("alert");
+    } finally {
+      setVoicePending(false);
+    }
+  }, [recorder, setAvatar, submit]);
+
+  const handleMicClick = useCallback(() => {
+    if (recorder.state === "recording") {
+      void stopAndTranscribe();
+    } else {
+      void startVoice();
+    }
+  }, [recorder.state, stopAndTranscribe, startVoice]);
+
+  // Push-to-hold spacebar (only when bar is open + input field is empty so
+  // we don't fight with the user's typing).
+  useEffect(() => {
+    if (!state.barOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (input.length > 0) return;
+      // Don't fire when an interactive element other than our input is focused
+      const active = document.activeElement;
+      const isOurInput = active === inputRef.current;
+      const isOtherInput =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
+      if (isOtherInput && !isOurInput) return;
+      e.preventDefault();
+      pttActiveRef.current = true;
+      void startVoice();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      if (!pttActiveRef.current) return;
+      pttActiveRef.current = false;
+      e.preventDefault();
+      void stopAndTranscribe();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [state.barOpen, input, startVoice, stopAndTranscribe]);
+
+  // If the bar closes mid-recording, cancel cleanly
+  useEffect(() => {
+    if (!state.barOpen && recorder.state === "recording") {
+      recorder.cancel();
+    }
+  }, [state.barOpen, recorder]);
 
   return (
     <Dialog open={state.barOpen} onOpenChange={(open) => (open ? openBar() : closeBar())}>
@@ -144,7 +237,7 @@ export function IronBar() {
             <Sparkles className="h-4 w-4 text-qep-orange" /> Iron
           </DialogTitle>
           <DialogDescription className="text-[11px] text-muted-foreground">
-            Tell Iron what you need. Cmd+I to toggle. Voice coming soon.
+            Type, speak, or hold space — Cmd+I toggles. Voice runs through Whisper.
           </DialogDescription>
         </DialogHeader>
 
@@ -161,20 +254,56 @@ export function IronBar() {
                   void submit();
                 }
               }}
-              disabled={pending}
-              placeholder="Pull a part for Anderson, log a service call, draft a follow-up email…"
+              disabled={pending || voicePending}
+              placeholder={
+                recorder.state === "recording"
+                  ? "Listening… release space or tap stop"
+                  : "Type, speak, or hold space — pull a part, log service…"
+              }
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
             <button
               type="button"
+              onClick={handleMicClick}
+              disabled={pending || voicePending}
+              className={`rounded-md p-1.5 transition-colors disabled:opacity-30 ${
+                recorder.state === "recording"
+                  ? "bg-red-500/15 text-red-400 animate-pulse"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+              }`}
+              aria-label={recorder.state === "recording" ? "Stop recording" : "Start recording"}
+            >
+              {recorder.state === "error" ? (
+                <MicOff className="h-3.5 w-3.5" />
+              ) : (
+                <Mic className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => void submit()}
-              disabled={pending || input.trim().length === 0}
+              disabled={pending || voicePending || input.trim().length === 0}
               className="rounded-md bg-qep-orange/10 p-1.5 text-qep-orange hover:bg-qep-orange/20 disabled:opacity-30"
               aria-label="Send to Iron"
             >
               {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
           </div>
+
+          {/* Voice level meter — only shown while recording */}
+          {recorder.state === "recording" && (
+            <div className="mx-3 my-1 h-1 overflow-hidden rounded-full bg-muted/30">
+              <div
+                className="h-full bg-red-400 transition-[width] duration-75"
+                style={{ width: `${Math.round(recorder.level * 100)}%` }}
+              />
+            </div>
+          )}
+          {recorder.errorMessage && (
+            <div className="mx-3 my-1 flex items-center gap-1.5 text-[10px] text-red-400">
+              <MicOff className="h-3 w-3" /> {recorder.errorMessage}
+            </div>
+          )}
 
           {response && (
             <div className="mx-3 my-2 rounded border border-border/60 bg-muted/20 p-2 text-[12px] text-foreground">

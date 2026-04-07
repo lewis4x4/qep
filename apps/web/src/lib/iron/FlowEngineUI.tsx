@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, X, ChevronLeft, ChevronRight, CheckCircle2, AlertOctagon } from "lucide-react";
 import { useIronStore, computeIronFlowTotalCents } from "./store";
 import { ironExecuteFlowStep, ironSearchEntities } from "./api";
+import { VoiceFillButton } from "./voice/VoiceFillButton";
 import type { IronLineItem, IronSlotDefinition } from "./types";
 
 function evaluateShowIf(
@@ -116,21 +117,38 @@ function SlotRenderer({ slot }: { slot: IronSlotDefinition }) {
       )}
 
       {slot.type === "text" && (
-        <Input
-          value={(value as string) ?? ""}
-          onChange={(e) => store.setSlot(slot.id, e.target.value)}
-          placeholder={slot.placeholder}
-        />
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={(value as string) ?? ""}
+            onChange={(e) => store.setSlot(slot.id, e.target.value)}
+            placeholder={slot.placeholder}
+            className="flex-1"
+          />
+          <VoiceFillButton
+            currentValue={(value as string) ?? ""}
+            onTranscribed={(merged) => store.setSlot(slot.id, merged)}
+            onError={(message) => store.setError(message)}
+            ariaLabel={`Voice fill for ${slot.label}`}
+          />
+        </div>
       )}
 
       {slot.type === "longtext" && (
-        <textarea
-          value={(value as string) ?? ""}
-          onChange={(e) => store.setSlot(slot.id, e.target.value)}
-          placeholder={slot.placeholder}
-          rows={4}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs"
-        />
+        <div className="flex items-start gap-1.5">
+          <textarea
+            value={(value as string) ?? ""}
+            onChange={(e) => store.setSlot(slot.id, e.target.value)}
+            placeholder={slot.placeholder}
+            rows={4}
+            className="w-full flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs"
+          />
+          <VoiceFillButton
+            currentValue={(value as string) ?? ""}
+            onTranscribed={(merged) => store.setSlot(slot.id, merged)}
+            onError={(message) => store.setError(message)}
+            ariaLabel={`Voice fill for ${slot.label}`}
+          />
+        </div>
       )}
 
       {(slot.type === "number" || slot.type === "currency") && (

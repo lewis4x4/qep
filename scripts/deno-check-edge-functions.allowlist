@@ -26,6 +26,7 @@ supabase/functions/integration-availability/index.ts
 supabase/functions/integration-test-connection/index.ts
 supabase/functions/iron-execute-flow-step/index.ts
 supabase/functions/iron-orchestrator/index.ts
+supabase/functions/iron-transcribe/index.ts
 supabase/functions/iron-undo-flow-run/index.ts
 supabase/functions/kb-maintenance/index.ts
 supabase/functions/market-valuation/index.ts
