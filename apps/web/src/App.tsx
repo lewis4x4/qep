@@ -161,6 +161,9 @@ const IdeaBacklogPage = lazy(() =>
 const PrimitivesPlaygroundPage = lazy(() =>
   import("./features/dev/pages/PrimitivesPlaygroundPage").then((m) => ({ default: m.PrimitivesPlaygroundPage }))
 );
+const CommandCenterPage = lazy(() =>
+  import("./features/exec/pages/CommandCenterPage").then((m) => ({ default: m.CommandCenterPage }))
+);
 const FlareAdminPage = lazy(() =>
   import("./features/admin/pages/FlareAdminPage").then((m) => ({ default: m.FlareAdminPage }))
 );
@@ -1366,6 +1369,16 @@ function App() {
                 element={
                   ["admin", "owner"].includes(profile.role) ? (
                     <PrimitivesPlaygroundPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/exec"
+                element={
+                  profile.role === "owner" ? (
+                    <CommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
