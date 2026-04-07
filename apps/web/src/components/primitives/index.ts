@@ -17,3 +17,4 @@ export { AssetBadgeRow } from "./AssetBadgeRow";
 export { AskIronAdvisorButton } from "./AskIronAdvisorButton";
 export { DashboardPivotToggle } from "./DashboardPivotToggle";
 export { MapWithSidebar, type MapOverlay } from "./MapWithSidebar";
+export { MapLibreCanvas, type MapMarker, type MapPolygon } from "./MapLibreCanvas";

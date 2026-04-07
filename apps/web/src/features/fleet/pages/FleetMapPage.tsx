@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
-import { MapWithSidebar, FilterBar, StatusChipStack, type FilterDef, type MapOverlay } from "@/components/primitives";
+import { MapWithSidebar, MapLibreCanvas, FilterBar, StatusChipStack, type FilterDef, type MapOverlay, type MapMarker } from "@/components/primitives";
 import { Map as MapIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
 interface EquipmentRow {
@@ -31,7 +32,15 @@ const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "service_routes",       label: "Service routes",       enabled: false },
 ];
 
+interface TelemetryRow {
+  equipment_id: string;
+  last_lat: number | null;
+  last_lng: number | null;
+  last_reading_at: string | null;
+}
+
 export function FleetMapPage() {
+  const navigate = useNavigate();
   const [overlays, setOverlays] = useState<MapOverlay[]>(DEFAULT_OVERLAYS);
 
   const { data: equipment = [], isLoading } = useQuery({
@@ -49,6 +58,54 @@ export function FleetMapPage() {
     },
     staleTime: 60_000,
   });
+
+  // Pull telematics feeds in parallel for lat/lng
+  const { data: telemetry = [] } = useQuery({
+    queryKey: ["fleet-map", "telematics"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => { select: (c: string) => { not: (c: string, op: string, v: null) => { limit: (n: number) => Promise<{ data: TelemetryRow[] | null; error: unknown }> } } };
+      }).from("telematics_feeds")
+        .select("equipment_id, last_lat, last_lng, last_reading_at")
+        .not("last_lat", "is", null)
+        .limit(5000);
+      if (error) return [] as TelemetryRow[];
+      return data ?? [];
+    },
+    staleTime: 2 * 60_000,
+  });
+
+  // Build marker list: telematics wins, fall back to metadata.lat/lng
+  const markers = useMemo<MapMarker[]>(() => {
+    const telemByEquipment = new Map<string, TelemetryRow>();
+    for (const t of telemetry) telemByEquipment.set(t.equipment_id, t);
+
+    return equipment.flatMap<MapMarker>((e) => {
+      const t = telemByEquipment.get(e.id);
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (t?.last_lat != null && t?.last_lng != null) {
+        lat = Number(t.last_lat);
+        lng = Number(t.last_lng);
+      } else if (e.metadata && (e.metadata as Record<string, unknown>).lat != null) {
+        lat = Number((e.metadata as Record<string, unknown>).lat);
+        lng = Number((e.metadata as Record<string, unknown>).lng);
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+      const titleParts = [e.year, e.make, e.model].filter(Boolean).join(" ") || e.name;
+      const idleDays = t?.last_reading_at
+        ? (Date.now() - new Date(t.last_reading_at).getTime()) / 86_400_000
+        : null;
+      return [{
+        id: e.id,
+        lat: lat as number,
+        lng: lng as number,
+        label: titleParts,
+        tone: idleDays != null && idleDays > 7 ? "red" : "blue",
+        onClick: () => navigate(`/equipment/${e.id}`),
+      }];
+    });
+  }, [equipment, telemetry, navigate]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-2 pt-2 sm:px-6 lg:px-8">
@@ -98,16 +155,21 @@ export function FleetMapPage() {
           </div>
         }
         mapContent={
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <MapIcon className="mx-auto h-10 w-10 text-muted-foreground mb-3" aria-hidden />
-              <p className="text-sm text-foreground">Map provider integration pending</p>
-              <p className="mt-1 text-xs text-muted-foreground max-w-md">
-                MapWithSidebar is layout-only by design. Drop a Mapbox/MapLibre canvas here once
-                <code className="mx-1 rounded bg-muted px-1">VITE_MAPBOX_TOKEN</code> is configured.
-              </p>
+          markers.length > 0 ? (
+            <MapLibreCanvas markers={markers} cluster />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <MapIcon className="mx-auto h-10 w-10 text-muted-foreground mb-3" aria-hidden />
+                <p className="text-sm text-foreground">
+                  {isLoading ? "Loading fleet…" : "No geolocated equipment yet"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-md">
+                  Markers appear once telematics feeds report lat/lng or equipment metadata carries coordinates.
+                </p>
+              </div>
             </div>
-          </div>
+          )
         }
         overlays={overlays}
         onOverlayToggle={(key, enabled) =>

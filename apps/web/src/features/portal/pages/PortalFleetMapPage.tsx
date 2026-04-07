@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Map as MapIcon } from "lucide-react";
-import { MapWithSidebar, StatusChipStack, type MapOverlay } from "@/components/primitives";
+import { MapWithSidebar, MapLibreCanvas, StatusChipStack, type MapOverlay, type MapMarker } from "@/components/primitives";
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
 import { useState } from "react";
@@ -21,6 +21,8 @@ interface PortalFleetItem {
   year: number | null;
   engine_hours: number | null;
   stage_label?: string | null;
+  last_lat?: number | null;
+  last_lng?: number | null;
 }
 
 /**
@@ -39,6 +41,18 @@ export function PortalFleetMapPage() {
   });
 
   const items = ((data?.fleet ?? []) as unknown as PortalFleetItem[]);
+
+  const markers: MapMarker[] = items.flatMap((e) => {
+    if (e.last_lat == null || e.last_lng == null) return [];
+    const titleParts = [e.year, e.make, e.model].filter(Boolean).join(" ") || e.name;
+    return [{
+      id: e.id,
+      lat: Number(e.last_lat),
+      lng: Number(e.last_lng),
+      label: titleParts,
+      tone: e.stage_label && e.stage_label !== "Operational" ? "orange" : "blue",
+    }];
+  });
 
   return (
     <PortalLayout>
@@ -93,15 +107,21 @@ export function PortalFleetMapPage() {
           </div>
         }
         mapContent={
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <MapIcon className="mx-auto h-10 w-10 text-muted-foreground mb-3" aria-hidden />
-              <p className="text-sm text-foreground">Map view coming soon</p>
-              <p className="mt-1 text-xs text-muted-foreground max-w-md">
-                We're rolling out the live map next. For now, use the list on the left.
-              </p>
+          markers.length > 0 ? (
+            <MapLibreCanvas markers={markers} cluster />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <MapIcon className="mx-auto h-10 w-10 text-muted-foreground mb-3" aria-hidden />
+                <p className="text-sm text-foreground">
+                  {isLoading ? "Loading your fleet…" : "No live location data yet"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground max-w-md">
+                  Your machines appear on the map once their telematics feeds report location.
+                </p>
+              </div>
             </div>
-          </div>
+          )
         }
         overlays={overlays}
         onOverlayToggle={(key, enabled) =>

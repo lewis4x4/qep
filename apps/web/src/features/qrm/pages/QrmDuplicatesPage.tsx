@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { CompanyMergeDialog } from "../components/CompanyMergeDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -261,6 +262,7 @@ interface CompanyDupRow {
 }
 
 function DuplicateCompaniesSection() {
+  const [mergePair, setMergePair] = useState<CompanyDupRow | null>(null);
   const { data: dupes = [], isLoading, isError } = useQuery({
     queryKey: ["duplicate-companies"],
     queryFn: async () => {
@@ -296,10 +298,10 @@ function DuplicateCompaniesSection() {
       {!isLoading && !isError && dupes.length > 0 && (
         <div className="space-y-1.5">
           {dupes.slice(0, 25).map((d, i) => (
-            <div key={`${d.company_a_id}-${d.company_b_id}-${i}`} className="grid grid-cols-5 items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
+            <div key={`${d.company_a_id}-${d.company_b_id}-${i}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
               <a
                 href={`/qrm/companies/${d.company_a_id}`}
-                className="col-span-2 truncate text-foreground hover:text-qep-orange"
+                className="truncate text-foreground hover:text-qep-orange"
               >
                 {d.company_a_name}
               </a>
@@ -308,10 +310,18 @@ function DuplicateCompaniesSection() {
               </span>
               <a
                 href={`/qrm/companies/${d.company_b_id}`}
-                className="col-span-2 truncate text-foreground hover:text-qep-orange"
+                className="truncate text-foreground hover:text-qep-orange"
               >
                 {d.company_b_name}
               </a>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-[10px]"
+                onClick={() => setMergePair(d)}
+              >
+                <GitMerge className="mr-1 h-3 w-3" /> Merge
+              </Button>
             </div>
           ))}
           {dupes.length > 25 && (
@@ -319,6 +329,8 @@ function DuplicateCompaniesSection() {
           )}
         </div>
       )}
+
+      <CompanyMergeDialog pair={mergePair} onClose={() => setMergePair(null)} />
     </Card>
   );
 }

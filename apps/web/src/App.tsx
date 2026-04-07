@@ -157,6 +157,9 @@ const LifecyclePage = lazy(() =>
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
+const PrimitivesPlaygroundPage = lazy(() =>
+  import("./features/dev/pages/PrimitivesPlaygroundPage").then((m) => ({ default: m.PrimitivesPlaygroundPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -1348,6 +1351,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <IdeaBacklogPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/dev/primitives"
+                element={
+                  ["admin", "owner"].includes(profile.role) ? (
+                    <PrimitivesPlaygroundPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

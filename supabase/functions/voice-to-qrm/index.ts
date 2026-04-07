@@ -326,28 +326,19 @@ Deno.serve(async (req) => {
     }
 
     // ── 3.5. Idea / process-improvement short-circuit ─────────────────────
-    // If the transcript starts with an idea lead phrase, route to the
-    // qrm_idea_backlog table instead of the full extraction pipeline.
-    // Owners think in conversation; capture should match. Spec §10.4.
-    const IDEA_LEAD_PATTERNS = [
-      /^\s*idea\s*[:\-]/i,
-      /^\s*process\s+improvement\s*[:\-]/i,
-      /^\s*we\s+should\b/i,
-      /^\s*we\s+need\s+to\b/i,
-      /^\s*(?:can|could)\s+we\s+(?:add|build|improve|change)\b/i,
-      /^\s*(?:here['']?s|here\s+is)\s+an?\s+idea\b/i,
-    ];
+    // Two-pass detection:
+    //   Pass A: regex over known lead phrases (fast, zero network cost)
+    //   Pass B: GPT-4o-mini classifier if regex missed and transcript is
+    //           short enough (<300 chars) that it's PROBABLY a standalone
+    //           thought rather than customer field notes
+    //
+    // The classifier also buckets the idea into a category so we can
+    // later route by tag.
+    const ideaSignal = await detectIdea(transcript, openAiKey);
 
-    const matchedPattern = IDEA_LEAD_PATTERNS.find((re) => re.test(transcript));
-    if (matchedPattern) {
-      // Derive title from first sentence, body from remainder.
-      const firstSentenceMatch = transcript.match(/^[^.!?\n]+/);
-      const title = (firstSentenceMatch?.[0] ?? transcript.substring(0, 120))
-        .replace(/^\s*(idea|process improvement)\s*[:\-]\s*/i, "")
-        .replace(/^\s*we\s+should\s+/i, "")
-        .replace(/^\s*we\s+need\s+to\s+/i, "")
-        .trim()
-        .substring(0, 200) || "Captured idea";
+    if (ideaSignal.isIdea) {
+      const rawTitle = ideaSignal.title || transcript.substring(0, 200);
+      const title = rawTitle.substring(0, 200) || "Captured idea";
       const body = transcript.length > title.length ? transcript : null;
 
       // Resolve caller workspace (voice-to-qrm already did auth above)
@@ -361,6 +352,10 @@ Deno.serve(async (req) => {
         if (profile?.workspace_id) workspace = String(profile.workspace_id);
       } catch { /* fall back to default */ }
 
+      const tagsArray: string[] = [];
+      if (ideaSignal.category) tagsArray.push(ideaSignal.category);
+      if (ideaSignal.matchedVia) tagsArray.push(`detected:${ideaSignal.matchedVia}`);
+
       const { data: ideaRow, error: ideaErr } = await supabaseAdmin
         .from("qrm_idea_backlog")
         .insert({
@@ -369,8 +364,10 @@ Deno.serve(async (req) => {
           body,
           source: "voice",
           status: "new",
+          priority: ideaSignal.priority ?? "medium",
+          tags: tagsArray,
           captured_by: user.id,
-          ai_confidence: 0.85,
+          ai_confidence: ideaSignal.confidence,
         })
         .select("id")
         .single();
@@ -384,7 +381,9 @@ Deno.serve(async (req) => {
           idea_id: ideaRow?.id,
           title,
           transcript,
-          matched_pattern: String(matchedPattern),
+          category: ideaSignal.category,
+          confidence: ideaSignal.confidence,
+          matched_via: ideaSignal.matchedVia,
         }, origin);
       }
     }
@@ -1075,3 +1074,126 @@ Deno.serve(async (req) => {
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });
+
+/* ── Idea detection helpers (Enhancement 2) ─────────────────────── */
+
+type IdeaCategory = "idea" | "process_improvement" | "bug_report" | "feature_request";
+
+interface IdeaSignal {
+  isIdea: boolean;
+  title?: string;
+  category?: IdeaCategory;
+  confidence: number;
+  priority?: "low" | "medium" | "high" | "critical";
+  matchedVia?: "regex" | "classifier";
+}
+
+const IDEA_LEAD_PATTERNS: Array<{ re: RegExp; category: IdeaCategory }> = [
+  { re: /^\s*idea\s*[:\-]/i,                                          category: "idea" },
+  { re: /^\s*process\s+improvement\s*[:\-]/i,                         category: "process_improvement" },
+  { re: /^\s*bug\s*[:\-]/i,                                           category: "bug_report" },
+  { re: /^\s*feature\s+request\s*[:\-]/i,                             category: "feature_request" },
+  { re: /^\s*we\s+should\b/i,                                         category: "idea" },
+  { re: /^\s*we\s+need\s+to\b/i,                                      category: "process_improvement" },
+  { re: /^\s*(?:can|could)\s+we\s+(?:add|build|improve|change)\b/i,   category: "feature_request" },
+  { re: /^\s*(?:here['']?s|here\s+is)\s+an?\s+idea\b/i,               category: "idea" },
+  { re: /^\s*what\s+if\s+we\b/i,                                      category: "idea" },
+  { re: /^\s*one\s+thing\s+that\s+(?:bugs|annoys|bothers)\s+me\b/i,   category: "bug_report" },
+];
+
+/**
+ * Two-pass idea detector:
+ *   Pass A (regex, zero-cost) — known lead phrases
+ *   Pass B (GPT classifier, only for short transcripts) — natural phrasings
+ */
+async function detectIdea(transcript: string, openAiKey: string): Promise<IdeaSignal> {
+  // Pass A: regex — fast path
+  for (const { re, category } of IDEA_LEAD_PATTERNS) {
+    if (re.test(transcript)) {
+      const firstSentence = transcript.match(/^[^.!?\n]+/)?.[0] ?? transcript.substring(0, 200);
+      const cleanedTitle = firstSentence
+        .replace(/^\s*(idea|process improvement|bug|feature request)\s*[:\-]\s*/i, "")
+        .replace(/^\s*we\s+should\s+/i, "")
+        .replace(/^\s*we\s+need\s+to\s+/i, "")
+        .trim();
+      return {
+        isIdea: true,
+        title: cleanedTitle,
+        category,
+        confidence: 0.9,
+        priority: "medium",
+        matchedVia: "regex",
+      };
+    }
+  }
+
+  // Pass B: GPT classifier — only for transcripts short enough to
+  // plausibly be a standalone thought. Anything longer is probably
+  // field notes and should flow through the full QRM extraction.
+  if (transcript.length > 300 || !openAiKey) {
+    return { isIdea: false, confidence: 0 };
+  }
+
+  try {
+    const classifierRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You classify short voice transcripts from a heavy equipment dealership's internal tools.
+Decide if the transcript is:
+  A. A customer field note / activity capture (deal, contact, equipment observation, sales call recap)
+  B. An internal IDEA, process improvement, bug report, or feature request
+
+Output JSON only:
+{
+  "is_idea": boolean,
+  "category": "idea" | "process_improvement" | "bug_report" | "feature_request" | null,
+  "title": "string ≤120 chars, imperative phrasing",
+  "confidence": 0.0-1.0,
+  "priority": "low" | "medium" | "high" | "critical"
+}
+
+Examples:
+- "What if we automated the PM reminders?" → idea, 0.85 confidence
+- "Met with Acme, they want to trade in the DX225" → NOT an idea (field note)
+- "The quote builder is broken on mobile" → bug_report, 0.95 confidence
+- "Budget opens October for Bob's Excavating" → NOT an idea (timing note)
+Lean toward is_idea=false when uncertain.`,
+          },
+          { role: "user", content: transcript },
+        ],
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!classifierRes.ok) return { isIdea: false, confidence: 0 };
+    const data = await classifierRes.json();
+    const rawContent = data.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(rawContent);
+
+    if (parsed.is_idea && (parsed.confidence ?? 0) >= 0.7) {
+      return {
+        isIdea: true,
+        title: typeof parsed.title === "string" ? parsed.title : undefined,
+        category: (["idea", "process_improvement", "bug_report", "feature_request"] as const)
+          .includes(parsed.category) ? parsed.category : "idea",
+        confidence: Number(parsed.confidence),
+        priority: (["low", "medium", "high", "critical"] as const)
+          .includes(parsed.priority) ? parsed.priority : "medium",
+        matchedVia: "classifier",
+      };
+    }
+    return { isIdea: false, confidence: Number(parsed.confidence ?? 0) };
+  } catch (err) {
+    console.warn("[voice-to-qrm] idea classifier failed:", err);
+    return { isIdea: false, confidence: 0 };
+  }
+}
