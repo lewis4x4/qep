@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { resolveDataQualityPlaybook, resolveEntityAction } from "../lib/action-links";
 
 interface DataIssue {
   id: string;
@@ -29,6 +31,10 @@ const ISSUE_LABELS: Record<string, string> = {
   equipment_no_intervals:     "No service intervals",
   documents_unclassified:     "Unclassified documents",
   quotes_no_tax_jurisdiction: "Quotes missing tax",
+  account_no_budget_cycle:    "Company without budget cycle",
+  account_no_tax_treatment:   "Company without tax treatment",
+  contact_stale_ownership:    "Contact stale ownership",
+  quote_no_validity_window:   "Quote without validity window",
 };
 
 const SEVERITY: Record<string, { icon: React.ReactNode; color: string }> = {
@@ -139,6 +145,8 @@ export function DataQualityPage() {
               <div className="space-y-2">
                 {issues.slice(0, 25).map((issue) => {
                   const sev = SEVERITY[issue.severity];
+                  const entityAction = resolveEntityAction(issue);
+                  const playbookAction = resolveDataQualityPlaybook(issue.issue_class, issue);
                   return (
                     <Card key={issue.id} className={`p-3 ${sev?.color ?? ""}`}>
                       <div className="flex items-start justify-between gap-3">
@@ -159,6 +167,16 @@ export function DataQualityPage() {
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-1">
+                          {entityAction && (
+                            <Button asChild size="sm" variant="ghost" className="h-7 text-[10px]">
+                              <Link to={entityAction.href}>{entityAction.label}</Link>
+                            </Button>
+                          )}
+                          {playbookAction && (
+                            <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
+                              <Link to={playbookAction.href}>{playbookAction.label}</Link>
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"

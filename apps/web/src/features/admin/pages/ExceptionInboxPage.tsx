@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton, FilterBar, type FilterDef } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { resolveEntityAction, resolveExceptionPlaybook } from "../lib/action-links";
 
 interface ExceptionRow {
   id: string;
@@ -148,6 +150,8 @@ export function ExceptionInboxPage() {
           {filtered.map((e) => {
             const sev = SEVERITY[e.severity];
             const isExpanded = expandedId === e.id;
+            const entityAction = resolveEntityAction(e);
+            const playbookAction = resolveExceptionPlaybook(e.source, e);
             return (
               <Card key={e.id} className={`p-3 ${sev?.color ?? ""}`}>
                 <button
@@ -189,6 +193,16 @@ export function ExceptionInboxPage() {
                       </details>
                     )}
                     <div className="flex justify-end gap-2 pt-1">
+                      {entityAction && (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link to={entityAction.href}>{entityAction.label}</Link>
+                        </Button>
+                      )}
+                      {playbookAction && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={playbookAction.href}>{playbookAction.label}</Link>
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
