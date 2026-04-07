@@ -143,6 +143,12 @@ const undo_iron_add_equipment: UndoHandler = async (admin, meta, _workspace) => 
 };
 
 /* ─── 4. iron_log_service_call undo ─────────────────────────────────────── */
+//
+// service_jobs has NO `status` column — the lifecycle column is
+// `current_stage` (public.service_stage enum). Fresh Iron-created jobs
+// land at default 'request_received'. We refuse undo once the job has
+// progressed past that stage; the user must use the normal service
+// cancellation flow instead.
 
 const undo_iron_log_service_call: UndoHandler = async (admin, meta, _workspace) => {
   const log: CompensationStep[] = [];
@@ -152,25 +158,28 @@ const undo_iron_log_service_call: UndoHandler = async (admin, meta, _workspace) 
     return { ok: false, error: "no entity_id in run metadata", log };
   }
 
-  // Only allow undo if still in 'intake' status
   const { data: job } = await admin
     .from("service_jobs")
-    .select("id, status")
+    .select("id, current_stage")
     .eq("id", jobId)
     .maybeSingle();
   if (!job) {
     log.push({ step: "fetch_job", ok: true, detail: "already gone" });
     return { ok: true, log };
   }
-  if (job.status !== "intake") {
-    return { ok: false, error: `cannot undo: service job is in status ${job.status}`, log };
+  if (job.current_stage !== "request_received") {
+    return {
+      ok: false,
+      error: `cannot undo: service job has progressed to ${job.current_stage}`,
+      log,
+    };
   }
 
   const { error } = await admin
     .from("service_jobs")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", jobId)
-    .eq("status", "intake");
+    .eq("current_stage", "request_received");
   if (error) {
     return { ok: false, error: `soft delete service_jobs: ${error.message}`, log };
   }

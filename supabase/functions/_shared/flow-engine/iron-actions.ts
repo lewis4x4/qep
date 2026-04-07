@@ -288,6 +288,20 @@ const iron_add_equipment: FlowAction = {
 };
 
 /* ─── 4. iron_log_service_call ──────────────────────────────────────────── */
+//
+// Schema references (from migration 094):
+//   service_jobs.customer_id uuid references crm_companies(id)   — a COMPANY id
+//   service_jobs.contact_id uuid references crm_contacts(id)     — optional contact
+//   service_jobs.machine_id uuid references crm_equipment(id)    — the asset
+//   service_jobs.customer_problem_summary text                   — the complaint
+//   service_jobs.priority public.service_priority enum           — normal|urgent|critical
+//   service_jobs.current_stage public.service_stage enum         — defaults to request_received
+//
+// The slot schema in iron-flows.ts matches these names; the v1.0 action had
+// the wrong column names (equipment_id, complaint, status) which would fail
+// at insert on any real deployment.
+
+const VALID_SERVICE_PRIORITIES = new Set(["normal", "urgent", "critical"]);
 
 const iron_log_service_call: FlowAction = {
   key: "iron_log_service_call",
@@ -307,14 +321,21 @@ const iron_log_service_call: FlowAction = {
       return { status: "failed", error: "iron_log_service_call: description required", retryable: false };
     }
 
+    // Clamp priority to the valid enum set; fall back to column default by
+    // omitting the field entirely if the slot is missing/invalid.
+    const rawPriority = str(s.priority, 16);
+    const priority = rawPriority && VALID_SERVICE_PRIORITIES.has(rawPriority) ? rawPriority : null;
+
     const insertRow: Record<string, unknown> = {
       workspace_id: deps.workspace_id,
-      customer_id: customerId,
-      equipment_id: str(s.equipment_id, 64),
-      complaint: description,
-      priority: str(s.priority, 16) ?? "normal",
-      status: "intake",
+      customer_id: customerId,                       // → crm_companies
+      contact_id: str(s.contact_id, 64),             // optional → crm_contacts
+      machine_id: str(s.equipment_id, 64),           // optional → crm_equipment
+      customer_problem_summary: description,
+      // current_stage intentionally omitted so the column default
+      // ('request_received') applies.
     };
+    if (priority) insertRow.priority = priority;
 
     const { data, error } = await deps.admin
       .from("service_jobs")

@@ -229,6 +229,16 @@ export const ironLogServiceCall: FlowWorkflowDefinition = {
         label: "Customer",
         type: "entity_picker",
         required: true,
+        // service_jobs.customer_id FKs to crm_companies, despite the name
+        entity_table: "qrm_companies",
+        entity_search_column: "name",
+        helper_text: "Search by company name. Iron boosts the customer you last touched.",
+      },
+      {
+        id: "contact_id",
+        label: "Contact (optional)",
+        type: "entity_picker",
+        required: false,
         entity_table: "qrm_contacts",
         entity_search_column: "last_name",
       },
@@ -253,11 +263,11 @@ export const ironLogServiceCall: FlowWorkflowDefinition = {
         type: "choice",
         required: false,
         default_value: "normal",
+        // Must match public.service_priority enum exactly (mig 094)
         choices: [
-          { value: "low", label: "Low" },
           { value: "normal", label: "Normal" },
-          { value: "high", label: "High" },
           { value: "urgent", label: "Urgent" },
+          { value: "critical", label: "Critical" },
         ],
       },
       { id: "review", label: "Review", type: "review", required: true },
