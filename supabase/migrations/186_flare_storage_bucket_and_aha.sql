@@ -101,11 +101,11 @@ begin
       and f.status != 'duplicate'
       and (
         f.route = p_route
-        or extensions.similarity(lower(f.user_description), lower(p_description)) >= p_threshold
+        or public.similarity(lower(f.user_description), lower(p_description)) >= p_threshold
         or (
           p_first_error is not null
           and jsonb_array_length(coalesce(f.console_errors, '[]'::jsonb)) > 0
-          and extensions.similarity(
+          and public.similarity(
             lower(coalesce((f.console_errors -> 0 ->> 'message'), '')),
             lower(p_first_error)
           ) >= p_threshold

@@ -43,18 +43,20 @@ create index if not exists idx_traffic_tickets_completed
   on public.traffic_tickets(completed_at desc)
   where completed_at is not null;
 
-alter table public.crm_equipment
+-- Migration 170 renamed crm_equipment → qrm_equipment; crm_equipment is
+-- now a compat view. Target the underlying table for DDL.
+alter table public.qrm_equipment
   add column if not exists intake_stage integer,
   add column if not exists readiness_status text,
   add column if not exists readiness_blocker_reason text,
   add column if not exists sale_ready_at timestamptz,
   add column if not exists aging_bucket text;
 
-comment on column public.crm_equipment.readiness_status is
+comment on column public.qrm_equipment.readiness_status is
   'COO metric: blocked|in_prep|ready. Drives units_not_ready_count + demo_readiness_rate.';
 
-create index if not exists idx_crm_equipment_readiness
-  on public.crm_equipment(readiness_status)
+create index if not exists idx_qrm_equipment_readiness
+  on public.qrm_equipment(readiness_status)
   where readiness_status is not null;
 
 alter table public.rental_returns
@@ -100,7 +102,10 @@ select
   case when count(*) > 0
        then ((count(*) filter (where e.readiness_status = 'ready'))::numeric / count(*) * 100)::numeric(6,2)
        else 0 end as ready_rate_pct
-from public.crm_equipment e
+-- Read from qrm_equipment directly — the crm_equipment compat view is a
+-- frozen SELECT * snapshot that doesn't see the new readiness_status /
+-- intake_stage columns added at the top of this migration.
+from public.qrm_equipment e
 where e.deleted_at is null
 group by e.workspace_id;
 

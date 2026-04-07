@@ -74,7 +74,7 @@ create policy "fa_assigned_read" on public.flow_approvals
   for select using (
     workspace_id = public.get_my_workspace()
     and (assigned_to = auth.uid()
-         or (assigned_role is not null and assigned_role = public.get_my_role()))
+         or (assigned_role is not null and assigned_role = public.get_my_role()::text))
   );
 
 create policy "fa_admin_decide" on public.flow_approvals

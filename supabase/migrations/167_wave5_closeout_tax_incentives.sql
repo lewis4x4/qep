@@ -43,9 +43,15 @@ create table if not exists public.quote_tax_breakdowns (
   override_delta_pct numeric(5,2),
 
   -- Cache lifecycle
+  -- stale_after was originally a STORED generated column, but Postgres rejects
+  -- non-immutable expressions (interval arithmetic against computed_at) in
+  -- stored generation (SQLSTATE 42P17). Replaced with a regular column that
+  -- defaults to now()+30d on insert and is maintained by a BEFORE UPDATE
+  -- trigger below. Queries that filter on stale_after (mig 181, 184) are
+  -- unaffected.
   computed_at timestamptz not null default now(),
   computed_by_function text,
-  stale_after timestamptz generated always as (computed_at + interval '30 days') stored,
+  stale_after timestamptz not null default (now() + interval '30 days'),
 
   -- Disclaimer version stamp (v2 contract)
   disclaimer_version text not null default 'v1',
@@ -73,6 +79,23 @@ create index idx_qtb_stale on public.quote_tax_breakdowns(stale_after);
 create trigger set_qtb_updated_at
   before update on public.quote_tax_breakdowns
   for each row execute function public.set_updated_at();
+
+-- Keep stale_after = computed_at + 30 days on every insert/update. This
+-- mirrors the original stored-generated-column intent without tripping
+-- the immutable-expression rule.
+create or replace function public.qtb_sync_stale_after()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.stale_after := new.computed_at + interval '30 days';
+  return new;
+end;
+$$;
+
+create trigger trg_qtb_sync_stale_after
+  before insert or update of computed_at on public.quote_tax_breakdowns
+  for each row execute function public.qtb_sync_stale_after();
 
 -- ── 2. Manufacturer incentives ─────────────────────────────────────────────
 
@@ -105,9 +128,37 @@ create table if not exists public.manufacturer_incentives (
   updated_at timestamptz not null default now()
 );
 
+-- Defensive column backfill: manufacturer_incentives may pre-exist on some
+-- environments with a minimal schema (create-table-if-not-exists skips the
+-- full definition above). Ensure every column this migration's policies
+-- and indexes reference is present.
+alter table public.manufacturer_incentives
+  add column if not exists workspace_id text not null default public.get_my_workspace(),
+  add column if not exists manufacturer text,
+  add column if not exists program_name text,
+  add column if not exists program_code text,
+  add column if not exists description text,
+  add column if not exists eligibility_rules jsonb not null default '{}'::jsonb,
+  add column if not exists discount_type text,
+  add column if not exists discount_value numeric(14,2),
+  add column if not exists effective_date date,
+  add column if not exists expiration_date date,
+  add column if not exists stackable boolean not null default false,
+  add column if not exists requires_approval boolean not null default false,
+  add column if not exists source_url text,
+  add column if not exists ai_confidence numeric(3,2),
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
 comment on table public.manufacturer_incentives is 'Active mfr incentives. Manager-only writes via RLS. Auto-applied by quote-incentive-resolver.';
 
 alter table public.manufacturer_incentives enable row level security;
+
+-- Drop-then-create so the migration is idempotent against environments where
+-- these policies already exist from a partial prior apply.
+drop policy if exists "mi_workspace_select" on public.manufacturer_incentives;
+drop policy if exists "mi_workspace_write" on public.manufacturer_incentives;
+drop policy if exists "mi_service" on public.manufacturer_incentives;
 
 -- Read: any authed workspace user
 create policy "mi_workspace_select" on public.manufacturer_incentives for select

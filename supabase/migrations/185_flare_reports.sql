@@ -125,7 +125,7 @@ create index idx_flare_fixed_at
 
 -- pg_trgm index for fuzzy dedupe over user_description (Phase F)
 create index idx_flare_description_trgm
-  on public.flare_reports using gin (user_description extensions.gin_trgm_ops);
+  on public.flare_reports using gin (user_description public.gin_trgm_ops);
 
 -- ── 2. RLS ───────────────────────────────────────────────────────────────
 
@@ -200,7 +200,7 @@ begin
       and f.status != 'duplicate'
       and (
         f.route = p_route
-        or extensions.similarity(lower(f.user_description), lower(p_description)) >= p_threshold
+        or public.similarity(lower(f.user_description), lower(p_description)) >= p_threshold
       );
   return coalesce(v_count, 0);
 end;

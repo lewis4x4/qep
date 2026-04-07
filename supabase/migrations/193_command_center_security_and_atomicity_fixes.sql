@@ -382,5 +382,10 @@ grant execute on function public.enqueue_analytics_alert(
   text, text, text, text, text, text, text, numeric, text, text, uuid, text, text, text, jsonb, text, jsonb
 ) to service_role;
 
-comment on function public.enqueue_analytics_alert is
+-- The unqualified comment can't resolve because a prior migration created
+-- an earlier signature of enqueue_analytics_alert and overloads now coexist.
+-- Comment the specific 17-arg signature directly.
+comment on function public.enqueue_analytics_alert(
+  text, text, text, text, text, text, text, numeric, text, text, uuid, text, text, text, jsonb, text, jsonb
+) is
   'QEP Command Center alert evaluator entry point (mig 193). Accepts explicit p_workspace_id for service-role callers. Dedupes on dedupe_key, dual-writes blockers into exception_queue, returns analytics_alerts.id.';

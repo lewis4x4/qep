@@ -47,10 +47,21 @@ group by sj.workspace_id;
 alter view public.exec_service_backlog set (security_invoker = true);
 
 -- ── 3. Health score movers (top deltas in last 30 days) ──────────────────
+--
+-- customer_profiles_extended has no workspace_id column (it's a DGE-scoped
+-- table). Resolve workspace via the linked crm_contacts row when available,
+-- falling back to NULL so the view still returns unscoped profiles. Drop
+-- first because prior versions of this view had a different column set and
+-- CREATE OR REPLACE VIEW cannot rename columns (SQLSTATE 42P16).
 
-create or replace view public.exec_health_movers as
+drop view if exists public.exec_health_movers;
+
+create view public.exec_health_movers as
 select
-  cpe.workspace_id,
+  (select c.workspace_id
+   from public.crm_contacts c
+   where c.dge_customer_profile_id = cpe.id
+   limit 1) as workspace_id,
   cpe.id as customer_profile_id,
   cpe.health_score,
   cpe.health_score_components,

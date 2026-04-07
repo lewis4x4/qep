@@ -66,8 +66,15 @@ create policy "sop_ingestion_service" on public.sop_ingestion_runs for all
 create index idx_sop_ingestion_template on public.sop_ingestion_runs(sop_template_id) where sop_template_id is not null;
 
 -- ── 3. Enhanced compliance view (includes skip rate per step) ──────────────
+--
+-- Drop first because CREATE OR REPLACE VIEW can append columns but cannot
+-- rename existing ones — the prior version had `t.title` as `title`, this
+-- enhanced version aliases it as `template_title` which trips the
+-- "cannot change name of view column" rule (SQLSTATE 42P16).
 
-create or replace view public.sop_compliance_summary as
+drop view if exists public.sop_compliance_summary;
+
+create view public.sop_compliance_summary as
 with step_execution_stats as (
   select
     s.id as step_id,

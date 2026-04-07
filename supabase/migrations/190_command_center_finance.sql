@@ -20,13 +20,17 @@
 -- ============================================================================
 
 -- ── 1. Targeted column additions ────────────────────────────────────────────
+--
+-- Migration 170 renamed crm_deals → qrm_deals and made crm_deals a compat
+-- VIEW over qrm_deals. DDL must target the underlying qrm_* table; the
+-- compat view inherits new columns automatically.
 
-alter table public.crm_deals
+alter table public.qrm_deals
   add column if not exists loaded_margin_pct numeric,
   add column if not exists net_contribution_after_load numeric,
   add column if not exists forecast_confidence_score numeric;
 
-comment on column public.crm_deals.loaded_margin_pct is
+comment on column public.qrm_deals.loaded_margin_pct is
   'CFO metric: net_contribution_after_load / amount. Computed by deal-composite or set manually for legacy deals.';
 
 alter table public.deposits
@@ -107,8 +111,11 @@ select
   case when sum(d.amount) > 0
        then (sum(coalesce(d.net_contribution_after_load, d.margin_amount)) / sum(d.amount) * 100)::numeric(6,2)
        else null end as loaded_margin_pct
-from public.crm_deals d
-join public.crm_deal_stages s on s.id = d.stage_id
+-- Reference qrm_deals directly because the crm_deals compat view from
+-- mig 170 is a frozen SELECT * snapshot and doesn't surface the new
+-- net_contribution_after_load column added at the top of this migration.
+from public.qrm_deals d
+join public.qrm_deal_stages s on s.id = d.stage_id
 where d.deleted_at is null
   and s.is_closed_won = true
   and d.closed_at is not null

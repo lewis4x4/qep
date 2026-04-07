@@ -32,8 +32,14 @@ comment on column public.sop_step_completions.confidence_score is
 
 -- ── 2. Suppression queue ──────────────────────────────────────────────────
 
+-- Note: an earlier draft referenced a custom `get_my_workspace_id_or_uuid()`
+-- helper that was never actually landed anywhere in the migration history.
+-- Postgres compiles the default expression at CREATE TABLE time, so even a
+-- post-hoc `alter column … set default` can't fix the missing-function error.
+-- Use gen_random_uuid() directly — it's what the fallback DO block below
+-- intended to apply anyway.
 create table if not exists public.sop_suppression_queue (
-  id uuid primary key default public.get_my_workspace_id_or_uuid(),
+  id uuid primary key default gen_random_uuid(),
   workspace_id text not null default public.get_my_workspace(),
   sop_execution_id uuid not null references public.sop_executions(id) on delete cascade,
   sop_step_id uuid not null references public.sop_steps(id) on delete cascade,
@@ -82,8 +88,14 @@ create trigger set_ssq_updated_at
 -- Refresh the existing sop_compliance_summary view to honor completion_state.
 -- The view from mig 158 exists with security_invoker=true (set in 159).
 -- Recreate it here with the v1 false-positive guards baked in.
+--
+-- Drop first because CREATE OR REPLACE VIEW cannot rename or reorder
+-- columns (SQLSTATE 42P16) and this revision adds several new columns
+-- (step_id, deferred_count, etc.) that alter the column layout.
 
-create or replace view public.sop_compliance_summary as
+drop view if exists public.sop_compliance_summary;
+
+create view public.sop_compliance_summary as
 with step_execution_stats as (
   select
     s.id as step_id,

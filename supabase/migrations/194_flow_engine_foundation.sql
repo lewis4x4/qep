@@ -390,9 +390,11 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_flow_emit_deal on public.crm_deals;
+-- Migration 170 turned crm_deals into a compat view; triggers must attach
+-- to the underlying qrm_deals table.
+drop trigger if exists trg_flow_emit_deal on public.qrm_deals;
 create trigger trg_flow_emit_deal
-  after insert or update on public.crm_deals
+  after insert or update on public.qrm_deals
   for each row execute function public.flow_emit_from_deal();
 
 create or replace function public.flow_emit_from_voice_capture()
