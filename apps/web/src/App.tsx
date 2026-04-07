@@ -128,6 +128,9 @@ const EmailDraftInboxPage = lazy(() =>
 const DgeCockpitPage = lazy(() =>
   import("./features/dge/pages/DgeCockpitPage").then((m) => ({ default: m.DgeCockpitPage }))
 );
+const OperatingSystemHubPage = lazy(() =>
+  import("./features/dashboards/pages/OperatingSystemHubPage").then((m) => ({ default: m.OperatingSystemHubPage }))
+);
 const AssetDetailPage = lazy(() =>
   import("./features/equipment/pages/AssetDetailPage").then((m) => ({ default: m.AssetDetailPage }))
 );
@@ -956,6 +959,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <SopExecutionPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/os"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OperatingSystemHubPage userRole={profile.role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

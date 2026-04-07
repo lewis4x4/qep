@@ -13,6 +13,7 @@ import {
   Users,
   UserPlus,
   Wrench,
+  Layers3,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -56,6 +57,12 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
+    label: "Operating System",
+    href: "/os",
+    icon: Layers3,
+    roles: ["rep", "admin", "manager", "owner"],
+  },
+  {
     label: "QRM",
     href: "/qrm",
     icon: LayoutGrid,
@@ -76,7 +83,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   // ── Showcase pages ──────────────────────────────
   {
     label: "Quotes",
-    href: "/quote",
+    href: "/quote-v2",
     icon: FileText,
     roles: ["rep", "admin", "manager", "owner"],
     showcase: true,
@@ -110,7 +117,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
   {
     label: "Executive",
-    href: "/executive",
+    href: "/exec",
     icon: Gauge,
     roles: ["manager", "owner"],
     showcase: true,
@@ -124,7 +131,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
 ];
 
-export const BOTTOM_TAB_HREFS = ["/dashboard", "/service", "/chat", "/voice", "/quote"];
+export const BOTTOM_TAB_HREFS = ["/dashboard", "/service", "/chat", "/voice", "/quote-v2"];
 
 export function resolveNavItems(
   quoteBuilderEnabled: boolean,
