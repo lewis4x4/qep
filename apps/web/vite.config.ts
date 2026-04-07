@@ -1,9 +1,47 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { execSync } from "node:child_process";
+
+/**
+ * Wave 6.11 Flare — stamp git SHA + build timestamp + app version into
+ * the bundle as VITE_GIT_SHA / VITE_BUILD_TIMESTAMP / VITE_APP_VERSION
+ * so every flare report carries an exact deploy fingerprint.
+ *
+ * Falls back to "local" / epoch zero when git or pkg.json is unavailable
+ * (e.g. CI environments without a checkout history).
+ */
+function getGitSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim() || "local";
+  } catch {
+    return "local";
+  }
+}
+
+function getAppVersion(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pkg = require("./package.json");
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const GIT_SHA = process.env.VITE_GIT_SHA ?? getGitSha();
+const APP_VERSION = process.env.VITE_APP_VERSION ?? getAppVersion();
+const BUILD_TIMESTAMP = process.env.VITE_BUILD_TIMESTAMP ?? new Date().toISOString();
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    "import.meta.env.VITE_GIT_SHA": JSON.stringify(GIT_SHA),
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(APP_VERSION),
+    "import.meta.env.VITE_BUILD_TIMESTAMP": JSON.stringify(BUILD_TIMESTAMP),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

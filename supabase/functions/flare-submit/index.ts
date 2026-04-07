@@ -354,13 +354,18 @@ ${consoleErrText || "(none)"}`,
     }
 
     // ── Dedupe peek for response + slack ──────────────────────────
+    // Phase J upgrade: pass first console_error message so the dedupe RPC
+    // can correlate "we all hit the same TypeError on this page" cases
+    // that route + description alone miss.
     let similarCount = 0;
     try {
+      const firstErrorMsg = body.context.console_errors?.[0]?.message ?? null;
       const { data: dedupe } = await supabase
         .rpc("flare_dedupe_count", {
           p_route: body.context.route,
           p_description: body.user_description,
           p_threshold: 0.4,
+          p_first_error: firstErrorMsg,
         });
       similarCount = Number(dedupe ?? 0);
     } catch { /* ignore */ }
@@ -446,6 +451,27 @@ ${consoleErrText || "(none)"}`,
       dispatchErrors.slack = slackResult.reason instanceof Error ? slackResult.reason.message : "dispatch failed";
     if (emailResult.status === "rejected")
       dispatchErrors.email = emailResult.reason instanceof Error ? emailResult.reason.message : "dispatch failed";
+
+    // ── Lane 7 (Phase J upgrade): cross-write idea-mode flares into
+    //    qrm_idea_backlog so they land in /qrm/ideas alongside voice-
+    //    captured ideas. Idempotent enough — best-effort, fail-open.
+    if (body.severity === "idea") {
+      try {
+        await supabaseAdmin.from("qrm_idea_backlog").insert({
+          workspace_id: workspace,
+          title: body.user_description.slice(0, 200),
+          body: body.user_description,
+          source: "flare",
+          status: "new",
+          priority: "medium",
+          tags: ["from:flare", `route:${body.context.route ?? "unknown"}`],
+          captured_by: user.id,
+          ai_confidence: aiConfidence ?? 0.6,
+        });
+      } catch (err) {
+        dispatchErrors.idea_backlog = err instanceof Error ? err.message : "insert failed";
+      }
+    }
 
     // ── Lane 6 (bonus): Wave 6.9 Exception Inbox for blockers ─────
     let exceptionQueueId: string | null = null;

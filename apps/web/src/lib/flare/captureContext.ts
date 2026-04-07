@@ -7,6 +7,7 @@
 import { supabase } from "@/lib/supabase";
 import { snapshotRingBuffers } from "./ringBuffers";
 import { redactDeep } from "./redactPII";
+import { getWebVitals } from "./webVitals";
 import type { FlareContext, FlareVisibleEntity } from "./types";
 
 /* ── Session id — once per tab, persists in sessionStorage ─────── */
@@ -81,15 +82,20 @@ function collectPerformanceMetrics() {
     ? Math.round(perf.memory.usedJSHeapSize / (1024 * 1024))
     : null;
 
-  // LCP / CLS / FID are collected via PerformanceObserver in a real web-vitals
-  // integration; without one we just surface whatever navigation timing exists
-  const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-  const lcp_ms = nav ? Math.round(nav.loadEventEnd - nav.startTime) : null;
+  // Phase I: LCP / FID / CLS read from the cached PerformanceObserver
+  // values populated by webVitals.installWebVitals(). Falls back to nav
+  // timing for LCP if the observer hasn't fired yet (early page captures).
+  const vitals = getWebVitals();
+  let lcp_ms = vitals.lcp_ms;
+  if (lcp_ms == null) {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    lcp_ms = nav ? Math.round(nav.loadEventEnd - nav.startTime) : null;
+  }
 
   return {
     lcp_ms,
-    fid_ms: null,
-    cls: null,
+    fid_ms: vitals.fid_ms,
+    cls: vitals.cls,
     memory_used_mb,
   };
 }

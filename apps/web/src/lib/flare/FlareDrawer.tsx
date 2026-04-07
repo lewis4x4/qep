@@ -6,11 +6,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Flame, Bug, Search, Lightbulb, Loader2, Check, Users, AlertOctagon, Sparkles, ExternalLink,
+  Flame, Bug, Search, Lightbulb, Loader2, Check, Users, AlertOctagon, Sparkles, ExternalLink, PartyPopper,
 } from "lucide-react";
 import { submitFlare, peekDedupeCount } from "./flareClient";
+import { FlareAnnotator } from "./FlareAnnotator";
 import type {
-  FlareContext, FlareSeverity, FlareSubmitPayload, FlareSubmitResponse,
+  FlareAnnotation, FlareContext, FlareSeverity, FlareSubmitPayload, FlareSubmitResponse,
 } from "./types";
 
 interface FlareDrawerProps {
@@ -23,10 +24,11 @@ interface FlareDrawerProps {
 }
 
 const SEVERITY_META: Record<FlareSeverity, { label: string; icon: React.ReactNode; color: string }> = {
-  blocker:   { label: "Blocker",   icon: <AlertOctagon className="h-3 w-3" />, color: "border-red-500/50 text-red-400 bg-red-500/10" },
-  bug:       { label: "Bug",       icon: <Bug className="h-3 w-3" />,          color: "border-orange-500/50 text-qep-orange bg-orange-500/10" },
-  annoyance: { label: "Annoyance", icon: <Search className="h-3 w-3" />,       color: "border-amber-500/50 text-amber-400 bg-amber-500/10" },
-  idea:      { label: "Idea",      icon: <Lightbulb className="h-3 w-3" />,    color: "border-blue-500/50 text-blue-400 bg-blue-500/10" },
+  blocker:    { label: "Blocker",    icon: <AlertOctagon className="h-3 w-3" />, color: "border-red-500/50 text-red-400 bg-red-500/10" },
+  bug:        { label: "Bug",        icon: <Bug className="h-3 w-3" />,          color: "border-orange-500/50 text-qep-orange bg-orange-500/10" },
+  annoyance:  { label: "Annoyance",  icon: <Search className="h-3 w-3" />,       color: "border-amber-500/50 text-amber-400 bg-amber-500/10" },
+  idea:       { label: "Idea",       icon: <Lightbulb className="h-3 w-3" />,    color: "border-blue-500/50 text-blue-400 bg-blue-500/10" },
+  aha_moment: { label: "Aha!",       icon: <PartyPopper className="h-3 w-3" />,  color: "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" },
 };
 
 export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onClose }: FlareDrawerProps) {
@@ -34,6 +36,9 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
   const [description, setDescription] = useState("");
   const [dedupeCount, setDedupeCount] = useState(0);
   const [result, setResult] = useState<FlareSubmitResponse | null>(null);
+  const [annotatorOpen, setAnnotatorOpen] = useState(false);
+  const [annotatedScreenshot, setAnnotatedScreenshot] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<FlareAnnotation[]>([]);
 
   // Reset state every time the drawer opens with a new capture
   useEffect(() => {
@@ -42,6 +47,8 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
       setDescription("");
       setDedupeCount(0);
       setResult(null);
+      setAnnotatedScreenshot(null);
+      setAnnotations([]);
     }
   }, [open, mode, context?.session_id]);
 
@@ -58,9 +65,9 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
       const payload: FlareSubmitPayload = {
         severity,
         user_description: description.trim(),
-        screenshot_base64: screenshot,
+        screenshot_base64: annotatedScreenshot ?? screenshot,
         dom_snapshot_gzipped: domSnapshot,
-        annotations: [],
+        annotations,
         context,
       };
       return submitFlare(payload);
@@ -160,7 +167,7 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
             {/* Severity chips */}
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Severity</p>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {(Object.keys(SEVERITY_META) as FlareSeverity[]).map((s) => {
                   const meta = SEVERITY_META[s];
                   const isActive = severity === s;
@@ -181,12 +188,27 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
               </div>
             </div>
 
-            {/* Screenshot thumbnail */}
+            {/* Screenshot thumbnail + annotate button */}
             {screenshot && (
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Screenshot</p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Screenshot{annotations.length > 0 && ` (${annotations.length} annotation${annotations.length > 1 ? "s" : ""})`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAnnotatorOpen(true)}
+                    className="text-[10px] text-qep-orange hover:underline"
+                  >
+                    Annotate →
+                  </button>
+                </div>
                 <div className="relative overflow-hidden rounded-md border border-border bg-muted/20">
-                  <img src={screenshot} alt="Captured screenshot" className="max-h-48 w-full object-contain" />
+                  <img
+                    src={annotatedScreenshot ?? screenshot}
+                    alt="Captured screenshot"
+                    className="max-h-48 w-full object-contain"
+                  />
                 </div>
               </div>
             )}
@@ -261,6 +283,20 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
           </div>
         )}
       </SheetContent>
+
+      {/* Annotator overlay (Phase G) */}
+      {screenshot && (
+        <FlareAnnotator
+          open={annotatorOpen}
+          screenshotDataUrl={annotatedScreenshot ?? screenshot}
+          onSave={(annotated, anns) => {
+            setAnnotatedScreenshot(annotated);
+            setAnnotations(anns);
+            setAnnotatorOpen(false);
+          }}
+          onCancel={() => setAnnotatorOpen(false)}
+        />
+      )}
     </Sheet>
   );
 }

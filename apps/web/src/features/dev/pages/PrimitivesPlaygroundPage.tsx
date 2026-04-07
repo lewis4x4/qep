@@ -132,6 +132,31 @@ export function PrimitivesPlaygroundPage() {
         </VariantRow>
       </Section>
 
+      {/* Flare (Wave 6.11) */}
+      <Section title="Flare (Wave 6.11)" description="In-app bug capture — severity chip preview + manual trigger">
+        <VariantRow label="Severity chips">
+          <StatusChipStack chips={[
+            { label: "blocker", tone: "red" },
+            { label: "bug", tone: "orange" },
+            { label: "annoyance", tone: "yellow" },
+            { label: "idea", tone: "blue" },
+            { label: "aha_moment", tone: "green" },
+          ]} />
+        </VariantRow>
+        <VariantRow label="Trigger drawer">
+          <button
+            type="button"
+            onClick={() => (window as Window & { flare?: (sev?: "bug" | "idea") => void }).flare?.("bug")}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          >
+            window.flare("bug")
+          </button>
+          <p className="mt-1 text-[10px] text-muted-foreground italic">
+            Or press ⌘+⇧+B (bug) / ⌘+⇧+I (idea) anywhere in the app.
+          </p>
+        </VariantRow>
+      </Section>
+
       {/* Data-backed primitives note */}
       <Section title="Data-backed primitives" description="Skip in playground — they hit live RPCs">
         <p className="text-xs text-muted-foreground">

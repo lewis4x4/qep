@@ -6,7 +6,7 @@
  * without renaming.
  */
 
-export type FlareSeverity = "blocker" | "bug" | "annoyance" | "idea";
+export type FlareSeverity = "blocker" | "bug" | "annoyance" | "idea" | "aha_moment";
 
 export type FlareStatus =
   | "new"

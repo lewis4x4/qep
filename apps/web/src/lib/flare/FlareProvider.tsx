@@ -15,7 +15,10 @@ import { buildContext } from "./captureContext";
 import { captureScreenshot, captureDomSnapshot } from "./screenshot";
 import { useFlareHotkey } from "./useFlareHotkey";
 import { FlareDrawer } from "./FlareDrawer";
-import type { FlareContext } from "./types";
+import { drainPendingSubmissions } from "./submitQueue";
+import { submitFlare } from "./flareClient";
+import { installWebVitals } from "./webVitals";
+import type { FlareContext, FlareSubmitPayload } from "./types";
 
 interface FlareProviderProps {
   children: ReactNode;
@@ -56,6 +59,18 @@ export function FlareProvider({ children }: FlareProviderProps) {
     return uninstall;
   }, []);
 
+  // Phase I: install Web Vitals observers (LCP / FID / CLS)
+  useEffect(() => {
+    const uninstall = installWebVitals();
+    return uninstall;
+  }, []);
+
+  // Phase H: drain any pending submissions from a previous failed session.
+  // Runs once on mount, fires-and-forgets, never blocks UI.
+  useEffect(() => {
+    void drainPendingSubmissions<FlareSubmitPayload>(submitFlare);
+  }, []);
+
   const capture = useCallback(async (targetMode: "bug" | "idea") => {
     if (capturing || open) return;
     setCapturing(true);
@@ -84,6 +99,23 @@ export function FlareProvider({ children }: FlareProviderProps) {
     onBug: () => void capture("bug"),
     onIdea: () => void capture("idea"),
   });
+
+  // Phase J: window.flare() console helper for keyboard-bound users + demos.
+  // Lets you trigger the drawer from devtools without the hotkey.
+  // Usage: window.flare()  or  window.flare("blocker", "the save button hangs")
+  useEffect(() => {
+    interface FlareGlobal {
+      (severity?: "bug" | "idea", _description?: string): void;
+    }
+    const w = window as Window & { flare?: FlareGlobal };
+    w.flare = ((sev?: "bug" | "idea") => {
+      const targetMode: "bug" | "idea" = sev === "idea" ? "idea" : "bug";
+      void capture(targetMode);
+    }) as FlareGlobal;
+    return () => {
+      if (w.flare) delete w.flare;
+    };
+  }, [capture]);
 
   const handleClose = useCallback(() => {
     setOpen(false);

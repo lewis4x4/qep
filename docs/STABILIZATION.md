@@ -260,3 +260,64 @@ it commits (document only my 180 is canonical for audit fixes).
 - 271K-asset synthetic stress test
 - Storybook polish pass for primitives
 - Parallel kb-retrieval work reconciliation at migrations 176–179
+
+---
+
+## Wave 6.11 Flare — In-app context-aware bug capture (Phases A–K)
+
+In-app bug/idea capture with full context freeze (screenshot, gzipped DOM, ring-buffered click/network/console/route trails, perf metrics), edge-side fan-out (Linear, Paperclip, Slack, Resend email for blockers, exception_queue auto-route), AI severity recommendation, hypothesis pattern detection, reproducer-step generation, dedupe chip, fail-open offline queue, admin triage page, close-the-loop notifier, and chat fn flare-context preload.
+
+### Shipped (Phases A–F, commit `2a139c2`)
+- `supabase/migrations/185_flare_reports.sql` — `flare_reports` (60+ cols), `flare_rate_limits`, RLS, indexes (pg_trgm gin on user_description), `flare_dedupe_count`, `flare_recent_voice_capture`, `flare_recent_user_activity` RPCs
+- `apps/web/src/lib/flare/` capture layer — `types`, `redactPII`, `ringBuffers`, `screenshot`, `captureContext`, `flareClient`, `useFlareHotkey`, `FlareDrawer`, `FlareProvider`
+- `supabase/functions/flare-submit/` — `index.ts`, `intelligence.ts`, `linear.ts`, `paperclip.ts`, `slack.ts`, `email.ts`
+- `supabase/functions/flare-notify-fixed/index.ts` — close-the-loop fan-out
+- `apps/web/src/features/admin/pages/FlareAdminPage.tsx` + `components/flare/FlareDetailDrawer.tsx`
+- `supabase/functions/chat/index.ts` — flare preload branch (RLS-gated)
+- `apps/web/src/components/ChatPage.tsx` — `context_type=flare` URL param mapping
+
+### Upgrade pass (Phases G–K, this commit)
+- `supabase/migrations/186_flare_storage_bucket_and_aha.sql` — explicit `flare-artifacts` bucket creation + RLS policies on `storage.objects` (workspace-prefix scoping); adds `aha_moment` 5th severity to CHECK constraint and `ai_severity_recommendation`; upgrades `flare_dedupe_count` with `p_first_error` parameter for console-error similarity matching
+- `apps/web/src/lib/flare/FlareAnnotator.tsx` — canvas annotator (arrow / circle / scribble) with undo, returns annotated PNG + annotations array
+- `apps/web/src/lib/flare/submitQueue.ts` — IndexedDB offline queue (max 50, drops oldest, drains on mount with retry)
+- `apps/web/src/lib/flare/webVitals.ts` — PerformanceObserver-based LCP / FID / CLS collection (session-window CLS), no extra npm dep
+- `apps/web/vite.config.ts` — `VITE_GIT_SHA` / `VITE_APP_VERSION` / `VITE_BUILD_TIMESTAMP` build-time stamping (CI override via env)
+- `apps/web/src/lib/flare/FlareDrawer.tsx` — annotator wiring, 5-col severity grid with `aha_moment`, sends real annotations array (was `[]`)
+- `apps/web/src/lib/flare/FlareProvider.tsx` — installs Web Vitals + drains offline queue on mount + mounts `window.flare()` console helper
+- `apps/web/src/lib/flare/captureContext.ts` — reads from `getWebVitals()` cache instead of stub
+- `apps/web/src/lib/flare/types.ts` — `FlareSeverity` includes `aha_moment`
+- `apps/web/src/lib/flare/flareClient.ts` — splits transient (5xx, network) from user-actionable (4xx, 429); transient errors enqueue for retry
+- `supabase/functions/flare-submit/index.ts` — passes `p_first_error` to dedupe RPC; **Lane 7** cross-writes idea-mode flares into `qrm_idea_backlog` with `source: 'flare'`
+- `apps/web/src/features/dev/pages/PrimitivesPlaygroundPage.tsx` — Flare section with severity chips + manual `window.flare("bug")` trigger
+
+### Spec deltas vs WAVE-6.11-FLARE-BUILD-SPEC.md
+- Migration `185` not `167` (sequence drift); upgrade migration is `186`
+- `flare_reports.workspace_id` is `text` not `uuid` (matches repo convention)
+- No pg_net trigger for close-the-loop — frontend-driven via `flare-notify-fixed` edge fn instead (more debuggable, no DB extension dependency)
+- Storage bucket created declaratively in migration 186, not on-first-run from edge fn
+- `aha_moment` 5th severity shipped (initially deferred — added in upgrade pass; routes Slack-only by default)
+- Idea-mode flares cross-write to `qrm_idea_backlog` (initially deferred — added in upgrade pass)
+- Vitest unit tests (spec §14) deferred — pure functions are exported and testable when a runner is added to `apps/web`
+
+### Required Ops env vars
+| Var | Required for | Fallback |
+|---|---|---|
+| `LINEAR_API_KEY` | Linear issue creation | `dispatch_errors.linear='missing_credentials'`, submission still 200 |
+| `LINEAR_QEP_TEAM_ID` | Linear team scoping | same |
+| `LINEAR_DEFAULT_ASSIGNEE_ID` | Linear default assignee | unassigned |
+| `PAPERCLIP_API_KEY` + `PAPERCLIP_BASE_URL` | Paperclip mirror | `dispatch_errors.paperclip='missing_credentials'` |
+| `SLACK_FLARE_WEBHOOK_URL` | Slack `#qep-flare` post | `dispatch_errors.slack='missing_credentials'` |
+| `RESEND_API_KEY` + `FLARE_FROM_EMAIL` | Blocker email to `brian.lewis@blackrockai.co` | `dispatch_errors.email='missing_credentials'` |
+| `APP_URL` | Deep-links in dispatch payloads | `https://qep.app` |
+
+### Verification
+1. `bun run migrations:check` → `186 files, sequence 001..186`
+2. `cd apps/web && bun run build` → green
+3. ⌘+⇧+B opens drawer with screenshot + click trail
+4. Annotate → arrow/circle/scribble → save → submit → DB row contains annotations array
+5. Submit while offline → IndexedDB queues; reload page → drains and retries
+6. Submit blocker → `exception_queue` row, email fires (or `missing_credentials` recorded)
+7. Submit idea → `qrm_idea_backlog` row with `source='flare'`
+8. Submit `aha_moment` → only Slack lane fires
+9. Devtools `window.flare()` → drawer opens
+10. `/dev/primitives` Flare section renders 5 severity chips
