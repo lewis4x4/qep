@@ -48,6 +48,31 @@ interface IronState {
   activeFlow: IronActiveFlow | null;
   undoToast: IronUndoToast | null;
   errorBanner: string | null;
+  /** v1.2: whether Iron should speak responses out loud (TTS). Persisted to localStorage. */
+  narrationEnabled: boolean;
+  /** v1.2: most recent input mode — drives auto-narration heuristic. */
+  lastInputMode: "text" | "voice";
+}
+
+const NARRATION_LS_KEY = "iron:narration_enabled";
+
+function loadNarrationPref(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const v = window.localStorage.getItem(NARRATION_LS_KEY);
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveNarrationPref(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(NARRATION_LS_KEY, enabled ? "1" : "0");
+  } catch {
+    /* noop */
+  }
 }
 
 const initialState: IronState = {
@@ -57,6 +82,8 @@ const initialState: IronState = {
   activeFlow: null,
   undoToast: null,
   errorBanner: null,
+  narrationEnabled: loadNarrationPref(),
+  lastInputMode: "text",
 };
 
 type Action =
@@ -73,7 +100,9 @@ type Action =
   | { type: "CANCEL_FLOW" }
   | { type: "FLOW_SUCCEEDED"; toast: IronUndoToast }
   | { type: "DISMISS_UNDO_TOAST" }
-  | { type: "SET_ERROR"; message: string | null };
+  | { type: "SET_ERROR"; message: string | null }
+  | { type: "SET_NARRATION_ENABLED"; enabled: boolean }
+  | { type: "SET_LAST_INPUT_MODE"; mode: "text" | "voice" };
 
 function reducer(state: IronState, action: Action): IronState {
   switch (action.type) {
@@ -161,6 +190,11 @@ function reducer(state: IronState, action: Action): IronState {
       return { ...state, undoToast: null, avatarState: "idle" };
     case "SET_ERROR":
       return { ...state, errorBanner: action.message };
+    case "SET_NARRATION_ENABLED":
+      saveNarrationPref(action.enabled);
+      return { ...state, narrationEnabled: action.enabled };
+    case "SET_LAST_INPUT_MODE":
+      return { ...state, lastInputMode: action.mode };
     default:
       return state;
   }
@@ -182,6 +216,8 @@ interface IronStoreApi {
   flowSucceeded: (toast: IronUndoToast) => void;
   dismissUndoToast: () => void;
   setError: (message: string | null) => void;
+  setNarrationEnabled: (enabled: boolean) => void;
+  setLastInputMode: (mode: "text" | "voice") => void;
 }
 
 const IronStoreContext = createContext<IronStoreApi | null>(null);
@@ -217,6 +253,8 @@ export function IronStoreProvider({ children }: { children: ReactNode }) {
       flowSucceeded: (toast) => d({ type: "FLOW_SUCCEEDED", toast }),
       dismissUndoToast: () => d({ type: "DISMISS_UNDO_TOAST" }),
       setError: (message) => d({ type: "SET_ERROR", message }),
+      setNarrationEnabled: (enabled) => d({ type: "SET_NARRATION_ENABLED", enabled }),
+      setLastInputMode: (mode) => d({ type: "SET_LAST_INPUT_MODE", mode }),
     };
   }, [state]);
 

@@ -27,7 +27,33 @@ import { Loader2, X, ChevronLeft, ChevronRight, CheckCircle2, AlertOctagon } fro
 import { useIronStore, computeIronFlowTotalCents } from "./store";
 import { ironExecuteFlowStep, ironSearchEntities } from "./api";
 import { VoiceFillButton } from "./voice/VoiceFillButton";
+import { ironSpeak, cancelIronSpeech } from "./voice/tts";
 import type { IronLineItem, IronSlotDefinition } from "./types";
+
+/**
+ * Substitute ${slot_id} placeholders in voice prompt templates with the
+ * matching slot value (or sensible derivations like line_count, total_display).
+ * Used by the voice review prompt before passing it to TTS.
+ */
+function substituteVoicePromptVars(
+  template: string,
+  slotValues: Record<string, unknown>,
+  totalCents: number,
+): string {
+  const lineItems = Array.isArray(slotValues.line_items) ? (slotValues.line_items as unknown[]) : [];
+  const builtins: Record<string, string> = {
+    line_count: String(lineItems.length),
+    line_plural: lineItems.length === 1 ? "" : "s",
+    total_display: totalCents > 0 ? `$${(totalCents / 100).toFixed(2)}` : "",
+  };
+  return template.replace(/\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_, key: string) => {
+    if (key in builtins) return builtins[key];
+    const v = slotValues[key];
+    if (v == null) return "";
+    if (typeof v === "string" || typeof v === "number") return String(v);
+    return "";
+  });
+}
 
 function evaluateShowIf(
   showIf: IronSlotDefinition["show_if"],
@@ -335,6 +361,29 @@ function ReviewStep() {
   const totalCents = computeIronFlowTotalCents(af.slot_values);
   const threshold = af.flow.high_value_threshold_cents ?? 0;
   const needsHighValue = threshold > 0 && totalCents >= threshold;
+
+  // v1.2: narrate the review prompt on mount when narration is enabled OR
+  // when the user reached this flow via voice. Cancels any in-flight speech
+  // first (the user shouldn't hear "Routing to iron.pull_part" overlapping
+  // with the review prompt).
+  useEffect(() => {
+    const shouldNarrate = store.state.narrationEnabled || store.state.lastInputMode === "voice";
+    if (!shouldNarrate) return;
+    if (!meta.voice_review_prompt) return;
+    cancelIronSpeech();
+    store.setAvatar("speaking");
+    const text = substituteVoicePromptVars(meta.voice_review_prompt, af.slot_values, totalCents);
+    void ironSpeak(text, {
+      onEnd: () => store.setAvatar("flow_active"),
+      onError: () => store.setAvatar("flow_active"),
+    });
+    return () => {
+      cancelIronSpeech();
+    };
+    // Intentionally only on first render of ReviewStep — re-narrating on
+    // every slot edit would be obnoxious.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function execute() {
     if (submitting) return;

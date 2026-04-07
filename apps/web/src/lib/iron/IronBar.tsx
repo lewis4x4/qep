@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Command } from "cmdk";
-import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff } from "lucide-react";
+import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +24,10 @@ import { ironOrchestrate } from "./api";
 import { useIronStore } from "./store";
 import { useIronVoiceRecorder } from "./voice/useIronVoiceRecorder";
 import { ironTranscribe } from "./voice/api";
+import { ironSpeak, cancelIronSpeech } from "./voice/tts";
 
 export function IronBar() {
-  const { state, openBar, closeBar, startFlow, setAvatar, setError } = useIronStore();
+  const { state, openBar, closeBar, startFlow, setAvatar, setError, setNarrationEnabled, setLastInputMode } = useIronStore();
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
@@ -36,6 +37,22 @@ export function IronBar() {
   const [voicePending, setVoicePending] = useState(false);
   // Track whether spacebar PTT is currently engaged so we don't double-fire
   const pttActiveRef = useRef(false);
+
+  // v1.2 narration helper: speak text iff narration is enabled OR last input
+  // was voice. Always cancel any in-flight speech first (barge-in semantics).
+  const narrate = useCallback(
+    (text: string, force?: boolean) => {
+      if (!text) return;
+      if (!force && !state.narrationEnabled) return;
+      cancelIronSpeech();
+      setAvatar("speaking");
+      void ironSpeak(text, {
+        onEnd: () => setAvatar("idle"),
+        onError: () => setAvatar("idle"),
+      });
+    },
+    [state.narrationEnabled, setAvatar],
+  );
 
   // Cmd+I / Ctrl+I shortcut
   useEffect(() => {
@@ -74,10 +91,25 @@ export function IronBar() {
   const submit = useCallback(async (explicitText?: string, mode: "text" | "voice" = "text") => {
     const text = (explicitText ?? input).trim();
     if (!text || pending) return;
+    // v1.2: cancel any in-flight narration before kicking off a new turn
+    cancelIronSpeech();
+    setLastInputMode(mode);
     setPending(true);
     setResponse(null);
     setError(null);
     setAvatar("thinking");
+    // Local helper: set the response text and decide whether to narrate it.
+    // Voice-input turns auto-narrate; text-input turns only narrate when the
+    // user has explicitly toggled narration on.
+    const finishWithMessage = (message: string, alert?: boolean) => {
+      setResponse(message);
+      const shouldNarrate = mode === "voice" || state.narrationEnabled;
+      if (shouldNarrate) {
+        narrate(message, true);
+      } else {
+        setAvatar(alert ? "alert" : "idle");
+      }
+    };
     try {
       const res = await ironOrchestrate({
         text,
@@ -86,14 +118,12 @@ export function IronBar() {
         route: location.pathname,
       });
       if (!res.ok) {
-        setResponse(res.message ?? `Iron declined: ${res.category ?? "unknown"}`);
-        setAvatar("alert");
+        finishWithMessage(res.message ?? `Iron declined: ${res.category ?? "unknown"}`, true);
         return;
       }
       const cls = res.classification;
       if (!cls) {
-        setResponse("Iron returned no classification.");
-        setAvatar("alert");
+        finishWithMessage("Iron returned no classification.", true);
         return;
       }
 
@@ -107,31 +137,31 @@ export function IronBar() {
       }
 
       if (cls.category === "CLARIFY") {
-        setResponse(cls.clarification_needed ?? "Could you rephrase?");
-        setAvatar("idle");
+        finishWithMessage(cls.clarification_needed ?? "Could you rephrase?");
         return;
       }
 
       if (cls.category === "READ_ANSWER") {
-        setResponse(`I can answer that — try asking it on the dashboard. (${cls.answer_query ?? ""})`);
-        setAvatar("idle");
+        finishWithMessage(
+          `I can answer that — try asking it on the dashboard. (${cls.answer_query ?? ""})`,
+        );
         return;
       }
 
       if (cls.category === "AGENTIC_TASK") {
-        setResponse(`Logged for follow-up: ${cls.agentic_brief ?? "(no brief)"}`);
-        setAvatar("idle");
+        finishWithMessage(`Logged for follow-up: ${cls.agentic_brief ?? "(no brief)"}`);
         return;
       }
 
       if (cls.category === "HUMAN_ESCALATION") {
-        setResponse(`Flagged for a manager: ${cls.escalation_reason ?? "human help requested"}`);
-        setAvatar("alert");
+        finishWithMessage(
+          `Flagged for a manager: ${cls.escalation_reason ?? "human help requested"}`,
+          true,
+        );
         return;
       }
 
-      setResponse(`Iron returned: ${cls.category}`);
-      setAvatar("idle");
+      finishWithMessage(`Iron returned: ${cls.category}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Iron call failed";
       setResponse(message);
@@ -140,11 +170,13 @@ export function IronBar() {
     } finally {
       setPending(false);
     }
-  }, [input, pending, state.conversationId, location.pathname, setAvatar, setError, startFlow]);
+  }, [input, pending, state.conversationId, state.narrationEnabled, location.pathname, setAvatar, setError, setLastInputMode, narrate, startFlow]);
 
   // ── Voice flow: record → transcribe → submit ─────────────────────────
   const startVoice = useCallback(async () => {
     if (recorder.state === "recording" || pending || voicePending) return;
+    // v1.2 barge-in: starting to speak cancels any in-flight Iron narration
+    cancelIronSpeech();
     setResponse(null);
     setAvatar("listening");
     await recorder.start();
@@ -222,10 +254,13 @@ export function IronBar() {
     };
   }, [state.barOpen, input, startVoice, stopAndTranscribe]);
 
-  // If the bar closes mid-recording, cancel cleanly
+  // If the bar closes mid-recording, cancel cleanly. Also cancel any
+  // in-flight TTS narration so Iron doesn't keep speaking after the user
+  // closed the panel.
   useEffect(() => {
-    if (!state.barOpen && recorder.state === "recording") {
-      recorder.cancel();
+    if (!state.barOpen) {
+      if (recorder.state === "recording") recorder.cancel();
+      cancelIronSpeech();
     }
   }, [state.barOpen, recorder]);
 
@@ -262,6 +297,27 @@ export function IronBar() {
               }
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
+            <button
+              type="button"
+              onClick={() => {
+                const next = !state.narrationEnabled;
+                setNarrationEnabled(next);
+                if (!next) cancelIronSpeech();
+              }}
+              className={`rounded-md p-1.5 transition-colors ${
+                state.narrationEnabled
+                  ? "bg-qep-orange/10 text-qep-orange"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+              }`}
+              aria-label={state.narrationEnabled ? "Mute Iron narration" : "Let Iron speak"}
+              title={state.narrationEnabled ? "Iron will speak responses (click to mute)" : "Iron is silent (click to enable narration)"}
+            >
+              {state.narrationEnabled ? (
+                <Volume2 className="h-3.5 w-3.5" />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5" />
+              )}
+            </button>
             <button
               type="button"
               onClick={handleMicClick}
