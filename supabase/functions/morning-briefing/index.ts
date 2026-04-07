@@ -232,14 +232,32 @@ Deno.serve(async (req) => {
   const adminClient = createAdminClient();
   const authHeader = req.headers.get("Authorization") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const internalSecretHeader = req.headers.get("x-internal-service-secret") ?? "";
+  // Two env var names exist in this project: INTERNAL_SERVICE_SECRET (used by
+  // flow-runner / analytics-* crons) and DGE_INTERNAL_SERVICE_SECRET (used by
+  // dge-auth.ts). Accept either so the cron works regardless of which is set.
+  const internalServiceSecret =
+    Deno.env.get("INTERNAL_SERVICE_SECRET") ??
+    Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
+    "";
+
+  // Three privileged auth paths:
+  //   1. Bearer <SUPABASE_SERVICE_ROLE_KEY>            — legacy service-role
+  //   2. x-internal-service-secret: <INTERNAL_SECRET>  — modern pg_cron pattern
+  //   3. Bearer <user JWT>                             — per-user, returns own brief
   const isServiceRole =
-    serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`;
+    (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`) ||
+    (internalServiceSecret.length > 0 && internalSecretHeader === internalServiceSecret);
+
+  // Parse body once so both batch and per-user paths can read flags like
+  // { regenerate: true } or { user_ids: [...] }.
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const regenerate = body.regenerate === true;
 
   let targetUserIds: string[] = [];
 
   if (isServiceRole) {
-    // Cron mode: generate for all active users
-    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    // Cron / batch mode: generate for all active users (or a supplied subset)
     if (Array.isArray(body.user_ids)) {
       targetUserIds = body.user_ids as string[];
     } else {
@@ -265,17 +283,26 @@ Deno.serve(async (req) => {
 
   for (const userId of targetUserIds) {
     try {
-      // Check if already generated today
-      const { data: existing } = await adminClient
-        .from("morning_briefings")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("briefing_date", today)
-        .maybeSingle();
+      // Check if already generated today (skip the guard when caller asked for a refresh)
+      if (!regenerate) {
+        const { data: existing } = await adminClient
+          .from("morning_briefings")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("briefing_date", today)
+          .maybeSingle();
 
-      if (existing) {
-        results.push({ userId, status: "already_exists" });
-        continue;
+        if (existing) {
+          results.push({ userId, status: "already_exists" });
+          continue;
+        }
+      } else {
+        // Wipe today's row so the upsert below writes fresh content.
+        await adminClient
+          .from("morning_briefings")
+          .delete()
+          .eq("user_id", userId)
+          .eq("briefing_date", today);
       }
 
       const data = await gatherUserData(adminClient, userId);
