@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Inbox, AlertOctagon, AlertTriangle, Info, Check, X, RotateCcw, ChevronRight,
 } from "lucide-react";
-import { FilterBar, type FilterDef } from "@/components/primitives";
+import { AskIronAdvisorButton, FilterBar, type FilterDef } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 
 interface ExceptionRow {
@@ -104,14 +104,17 @@ export function ExceptionInboxPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      <div>
-        <div className="flex items-center gap-2">
-          <Inbox className="h-5 w-5 text-qep-orange" aria-hidden />
-          <h1 className="text-xl font-bold text-foreground">Exception Inbox</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-qep-orange" aria-hidden />
+            <h1 className="text-xl font-bold text-foreground">Exception Inbox</h1>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cross-functional human work queue. Anything that needs a person to look at it lands here.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Cross-functional human work queue. Anything that needs a person to look at it lands here.
-        </p>
+        <AskIronAdvisorButton contextType="exception_inbox" variant="inline" />
       </div>
 
       {/* Severity tiles */}

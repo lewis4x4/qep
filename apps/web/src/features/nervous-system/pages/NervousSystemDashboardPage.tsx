@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Activity, Zap, Users, TrendingUp, Package } from "lucide-react";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { HealthScoreDrawer } from "../components/HealthScoreDrawer";
 import {
   fetchHealthDistribution,
@@ -61,14 +62,17 @@ export function NervousSystemDashboardPage() {
             Every department sees signals from every other department. Health scores, alerts, and revenue attribution — all from live data.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => refreshMutation.mutate()}
-          disabled={refreshMutation.isPending}
-        >
-          <Zap className={`mr-1 h-4 w-4 ${refreshMutation.isPending ? "animate-pulse" : ""}`} />
-          {refreshMutation.isPending ? "Refreshing…" : "Refresh scores"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <AskIronAdvisorButton contextType="nervous_system" variant="inline" />
+          <Button
+            size="sm"
+            onClick={() => refreshMutation.mutate()}
+            disabled={refreshMutation.isPending}
+          >
+            <Zap className={`mr-1 h-4 w-4 ${refreshMutation.isPending ? "animate-pulse" : ""}`} />
+            {refreshMutation.isPending ? "Refreshing…" : "Refresh scores"}
+          </Button>
+        </div>
       </div>
 
       {refreshMutation.isSuccess && refreshMutation.data && (

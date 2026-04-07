@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { AlertTriangle, CheckCircle, Clock, GitBranch, Loader2, ShieldAlert, TrendingDown, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import {
   listSuppressionQueue,
   resolveSuppressionQueueItem,
@@ -71,9 +72,12 @@ export function SopComplianceDashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-2 sm:px-6 lg:px-8 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">SOP Compliance Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Completion rates, skip analysis, bottleneck identification per SOP template.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">SOP Compliance Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Completion rates, skip analysis, bottleneck identification per SOP template.</p>
+        </div>
+        <AskIronAdvisorButton contextType="sop_compliance" variant="inline" />
       </div>
 
       <Card className="p-4 space-y-3">

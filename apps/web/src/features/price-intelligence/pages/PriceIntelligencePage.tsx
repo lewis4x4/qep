@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   TrendingUp, AlertTriangle, FileText, Mail, ExternalLink, DollarSign, Layers, Users,
 } from "lucide-react";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import {
   fetchImpactReport,
   draftRequote,
@@ -54,14 +55,17 @@ export function PriceIntelligencePage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-qep-orange" aria-hidden />
-          <h1 className="text-xl font-bold text-foreground">Price File Intelligence</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-qep-orange" aria-hidden />
+            <h1 className="text-xl font-bold text-foreground">Price File Intelligence</h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upload manufacturer price files. See which open quotes are affected. Draft requotes with one click.
+          </p>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Upload manufacturer price files. See which open quotes are affected. Draft requotes with one click.
-        </p>
+        <AskIronAdvisorButton contextType="price_intelligence" variant="inline" />
       </div>
 
       {/* Impact summary tiles */}

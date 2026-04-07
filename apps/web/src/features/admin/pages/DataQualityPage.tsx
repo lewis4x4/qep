@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   ShieldAlert, AlertTriangle, AlertCircle, Info, Check, X, RefreshCw,
 } from "lucide-react";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 
 interface DataIssue {
@@ -98,14 +99,17 @@ export function DataQualityPage() {
             Nightly audit punch list. Resolve to fix the underlying record, ignore to suppress.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => runAuditMutation.mutate()}
-          disabled={runAuditMutation.isPending}
-        >
-          <RefreshCw className={`mr-1 h-3 w-3 ${runAuditMutation.isPending ? "animate-spin" : ""}`} />
-          {runAuditMutation.isPending ? "Running…" : "Run audit now"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <AskIronAdvisorButton contextType="data_quality" variant="inline" />
+          <Button
+            size="sm"
+            onClick={() => runAuditMutation.mutate()}
+            disabled={runAuditMutation.isPending}
+          >
+            <RefreshCw className={`mr-1 h-3 w-3 ${runAuditMutation.isPending ? "animate-spin" : ""}`} />
+            {runAuditMutation.isPending ? "Running…" : "Run audit now"}
+          </Button>
+        </div>
       </div>
 
       {isLoading && (

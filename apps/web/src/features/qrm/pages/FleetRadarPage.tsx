@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Radar, AlertTriangle, DollarSign, TrendingUp, Clock, Wrench, Loader2,
 } from "lucide-react";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchFleetRadar, type FleetRadarLensItem, type FleetRadarResponse } from "../lib/account-360-api";
 import { supabase } from "@/lib/supabase";
 
@@ -122,20 +123,23 @@ export function FleetRadarPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       {/* Header */}
-      <div>
-        <Button asChild variant="ghost" size="sm" className="h-7 text-[11px] mb-2">
-          <Link to={`/qrm/companies/${companyId}`}>
-            <ArrowLeft className="mr-1 h-3 w-3" aria-hidden />
-            Back to account
-          </Link>
-        </Button>
-        <div className="flex items-center gap-2">
-          <Radar className="h-5 w-5 text-qep-orange" aria-hidden />
-          <h1 className="text-xl font-bold text-foreground">Fleet Opportunity Radar</h1>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <Button asChild variant="ghost" size="sm" className="h-7 text-[11px] mb-2">
+            <Link to={`/qrm/companies/${companyId}`}>
+              <ArrowLeft className="mr-1 h-3 w-3" aria-hidden />
+              Back to account
+            </Link>
+          </Button>
+          <div className="flex items-center gap-2">
+            <Radar className="h-5 w-5 text-qep-orange" aria-hidden />
+            <h1 className="text-xl font-bold text-foreground">Fleet Opportunity Radar</h1>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Five lenses across this customer's fleet. Each row offers a one-click commercial action.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Five lenses across this customer's fleet. Each row offers a one-click commercial action.
-        </p>
+        <AskIronAdvisorButton contextType="fleet_radar" contextId={companyId} variant="inline" />
       </div>
 
       {/* Lens chips */}
