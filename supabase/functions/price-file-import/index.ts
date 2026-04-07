@@ -11,6 +11,7 @@
  * Auth: admin/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import XLSX from "npm:xlsx@0.18.5";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 function parseCsvRows(csvText: string): Record<string, string>[] {
@@ -28,6 +29,30 @@ function parseCsvRows(csvText: string): Record<string, string>[] {
   }
 
   return rows;
+}
+
+function parseSpreadsheetRows(buffer: ArrayBuffer): Record<string, string>[] {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[sheetName];
+  if (!worksheet) return [];
+
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+    defval: "",
+    raw: false,
+  }).map((row) => {
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of Object.entries(row)) {
+      const header = key.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      normalized[header] = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+    }
+    return normalized;
+  });
+}
+
+function isSpreadsheetFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith(".xlsx") || name.endsWith(".xls");
 }
 
 Deno.serve(async (req) => {
@@ -73,27 +98,35 @@ Deno.serve(async (req) => {
       return safeJsonError("Price file import requires admin or owner role", 403, origin);
     }
 
-    // Parse multipart form data with CSV file
+    // Parse multipart form data with CSV/XLSX/XLS file
     const contentType = req.headers.get("content-type") || "";
-    let csvText = "";
+    let rows: Record<string, string>[] = [];
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
-      if (!file) return safeJsonError("CSV file required", 400, origin);
-      csvText = await file.text();
+      if (!file) return safeJsonError("Price file required", 400, origin);
+
+      if (isSpreadsheetFile(file)) {
+        rows = parseSpreadsheetRows(await file.arrayBuffer());
+      } else {
+        const csvText = await file.text();
+        if (!csvText.trim()) {
+          return safeJsonError("Empty price file", 400, origin);
+        }
+        rows = parseCsvRows(csvText);
+      }
     } else {
       // Accept raw CSV text body
-      csvText = await req.text();
+      const csvText = await req.text();
+      if (!csvText.trim()) {
+        return safeJsonError("Empty price file", 400, origin);
+      }
+      rows = parseCsvRows(csvText);
     }
 
-    if (!csvText.trim()) {
-      return safeJsonError("Empty CSV file", 400, origin);
-    }
-
-    const rows = parseCsvRows(csvText);
     if (rows.length === 0) {
-      return safeJsonError("No data rows found in CSV", 400, origin);
+      return safeJsonError("No data rows found in price file", 400, origin);
     }
 
     const results = {

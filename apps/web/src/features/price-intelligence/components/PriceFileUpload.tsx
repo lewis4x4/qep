@@ -29,8 +29,11 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
   });
 
   function handleFilePick(file: File) {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      alert("Only CSV files are supported in this upload. Excel/PDF support coming soon.");
+    const lower = file.name.toLowerCase();
+    const isCsv = lower.endsWith(".csv");
+    const isSpreadsheet = lower.endsWith(".xlsx") || lower.endsWith(".xls");
+    if (!isCsv && !isSpreadsheet) {
+      alert("Upload CSV, XLSX, or XLS. PDF/OCR is a separate release lane and is not enabled here.");
       return;
     }
     setSelectedFile(file);
@@ -50,7 +53,7 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
         <h3 className="text-sm font-bold text-foreground">Upload Price File</h3>
       </div>
       <p className="text-[11px] text-muted-foreground mb-3">
-        Upload a manufacturer CSV. Catalog prices update, history is captured, and affected quotes are flagged for requote.
+        Upload a manufacturer CSV or Excel workbook. Catalog prices update, history is captured, and affected quotes are flagged for requote. PDF/OCR stays in a separate release lane.
       </p>
 
       {/* Dropzone */}
@@ -68,7 +71,7 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
           <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
         ) : (
           <>
-            <p className="text-sm text-foreground">Drop a CSV here or click to browse</p>
+            <p className="text-sm text-foreground">Drop a CSV or Excel file here or click to browse</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
               Columns expected: make, model, year, stock_number, list_price, dealer_cost, msrp, category, condition
             </p>
@@ -77,7 +80,7 @@ export function PriceFileUpload({ onUploadSuccess }: PriceFileUploadProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.xlsx,.xls"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
