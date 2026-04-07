@@ -19,6 +19,7 @@ import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
 import { CfoCommandCenterView } from "../views/CfoCommandCenterView";
 import { CooCommandCenterView } from "../views/CooCommandCenterView";
 import { MetricDrillDrawer } from "../components/MetricDrillDrawer";
+import { CommandCenterExportMenu } from "../components/CommandCenterExportMenu";
 import type { ExecRoleTab } from "../lib/types";
 
 const TABS = [
@@ -51,6 +52,7 @@ export function CommandCenterPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <CommandCenterExportMenu role={tab} />
           <Button size="sm" variant="outline" onClick={handleRefresh}>
             <RefreshCcw className="mr-1 h-3 w-3" /> Refresh
           </Button>
