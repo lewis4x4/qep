@@ -13,6 +13,7 @@ import { IncentiveStack } from "../components/IncentiveStack";
 import { saveQuotePackage } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
+import { AskIronAdvisorButton } from "@/components/primitives";
 
 type EntryMode = "voice" | "ai_chat" | "manual";
 type Step = "entry" | "equipment" | "financing" | "review";
@@ -73,11 +74,14 @@ export function QuoteBuilderV2Page() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
-        <p className="text-sm text-muted-foreground">
-          Build quotes with voice, AI chat, or manual entry. Zero-blocking — works with or without IntelliDealer.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
+          <p className="text-sm text-muted-foreground">
+            Build quotes with voice, AI chat, or manual entry. Zero-blocking — works with or without IntelliDealer.
+          </p>
+        </div>
+        <AskIronAdvisorButton contextType="quote" contextId={dealId || undefined} variant="inline" />
       </div>
 
       {/* Step indicators */}

@@ -57,7 +57,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  const [account360Tab, setAccount360Tab] = useState<"fleet" | "quotes" | "service" | "parts" | "ar">("fleet");
+  const [account360Tab, setAccount360Tab] = useState<"fleet" | "quotes" | "service" | "parts" | "ar" | "lifecycle">("fleet");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
 
   const account360Query = useQuery({
@@ -353,11 +353,12 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
             <div>
               <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
                 {[
-                  { key: "fleet",   label: `Fleet (${account360Query.data.fleet.length})` },
-                  { key: "quotes",  label: `Open Quotes (${account360Query.data.open_quotes.length})` },
-                  { key: "service", label: `Service (${account360Query.data.service.length})` },
-                  { key: "parts",   label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
-                  { key: "ar",      label: `Invoices / AR (${account360Query.data.invoices.length})` },
+                  { key: "fleet",     label: `Fleet (${account360Query.data.fleet.length})` },
+                  { key: "quotes",    label: `Open Quotes (${account360Query.data.open_quotes.length})` },
+                  { key: "service",   label: `Service (${account360Query.data.service.length})` },
+                  { key: "parts",     label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
+                  { key: "ar",        label: `Invoices / AR (${account360Query.data.invoices.length})` },
+                  { key: "lifecycle", label: "Lifecycle" },
                 ].map((t) => {
                   const isActive = t.key === account360Tab;
                   return (
@@ -384,6 +385,23 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                 {account360Tab === "service" && <AccountServiceTab service={account360Query.data.service} />}
                 {account360Tab === "parts"   && <AccountPartsTab parts={account360Query.data.parts} />}
                 {account360Tab === "ar"      && <AccountARTab invoices={account360Query.data.invoices} arBlock={account360Query.data.ar_block} />}
+                {account360Tab === "lifecycle" && (
+                  <Card className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">Customer lifecycle</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Multi-year customer arc — first contact → first quote → first purchase → first service, plus any NPS / churn / won-back milestones.
+                        </p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
+                        <Link to={`/qrm/companies/${companyId}/lifecycle`}>
+                          Open timeline →
+                        </Link>
+                      </Button>
+                    </div>
+                  </Card>
+                )}
               </div>
             </div>
           )}

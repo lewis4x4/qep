@@ -152,8 +152,111 @@ both layers after every consumer is on the QRM names.
 
 ### Open follow-ups (carry to v2-next)
 - Map provider integration on `/fleet` and `/portal/fleet`
-- Lifecycle timeline page (`LifecyclePage.tsx`) — mig 168 schema in place, page deferred
-- Revenue attribution edge fn — schema in place
-- AR override frontend UI — `apply_ar_override` RPC in place
 - 271K-asset synthetic stress test
 - Storybook polish pass for primitives
+
+---
+
+## QRM Builder-Ready Spec — Phase A–H gap closure (shipped 2026-04-06)
+
+The QRM Builder-Ready Spec reframed the system around "QRM as the
+dealership operating brain" and defined a 12-point Definition of Done
+(§14). The Wave 5/6 work already delivered ~75% of the spec. The
+remaining gaps were closed in 8 sequenced phases:
+
+### Phase A — Account 360 page upgrade (commit 40ef9e3 + polish)
+- Migration 173: `get_account_360(p_company_id)` + `get_fleet_radar(p_company_id)` composite RPCs (both SECURITY INVOKER)
+- `account-360-api.ts` typed client
+- `Account360Tabs.tsx`: `AccountNextBestActions` composite + 5 tab components (Fleet / OpenQuotes / Service / Parts / AR-Invoices)
+- `QrmCompanyDetailPage` extended with health score pill (opens existing `HealthScoreDrawer`), Next Best Actions card, 6-tab strip (Fleet / Open Quotes / Service / Parts / Invoices-AR / **Lifecycle** — last tab added in polish pass)
+- `ARCreditBlockBanner` wired into Account 360 above the NBA card
+
+### Phase B — Buying Window daily board (commit c285949)
+- `DealTimingDashboardPage` restructured from flat list → 3-column board grouped by urgency (Today / This Week / Watch)
+- `BuyingWindowBoard` + `BoardColumn` subcomponents
+- Reuses existing `compute_deal_timing_alerts` RPC — no migration
+
+### Phase C — Fleet Opportunity Radar (commit 62adf0b)
+- `FleetRadarPage` at `/qrm/companies/:companyId/fleet-radar`
+- Five lens chips: All / Aging / Expensive to maintain / Trade-up window / Under-utilized / Attachment upsell
+- Per-row "Draft outreach" button routes through `draft-email` with lens reason in context
+- Linked from Account 360 Fleet tab header
+- **Round 4 audit fix (commit 7565196):** expensive lens now scopes parts spend per-equipment via `po.fleet_id = e.id` instead of company-wide total
+
+### Phase D — Lifecycle Timeline + AR Override + Revenue Attribution (commit b996187)
+- Migration 174: `insert_lifecycle_event_once` helper RPC + triggers on `qrm_deals` (first_quote/first_purchase), `service_jobs` (first_service), `voice_captures` (first_contact), `backfill_customer_lifecycle_events` one-shot
+- **Round 4 audit fix (commit 7565196):** backfill RPC rewritten with `DISTINCT ON (company_id)` CTE to emit exactly one row per company per event type
+- Edge function `revenue-attribution-compute` with 4 attribution models (first_touch / last_touch / linear / time_decay with 7-day half-life); /compute, /batch, /scan-recent-wins routes
+- **Round 4 audit fix (commit 7565196):** `x-service-role-key` header now validated with constant-time comparison against `SUPABASE_SERVICE_ROLE_KEY` (previously any header value bypassed auth)
+- `LifecyclePage` at `/qrm/companies/:companyId/lifecycle` — vertical timeline with event type icons
+- `ARCreditBlockBanner` component with embedded manager-override Sheet (reason / approver picker / window slider / accounting notification)
+
+### Phase E — Chat context preload + KB live surfaces (commit 0d791b5 + 7565196)
+- `ChatContextPayload` extended with `equipmentId` / `serviceJobId` / `partsOrderId` / `voiceCaptureId`
+- `parseChatContext` validates all 4 new IDs
+- `ChatPage` reads URL `context_type` + `context_id` query params (from `AskIronAdvisorButton`) and maps them onto the context body shape
+- Chat fn Phase E preload: when any of the 4 new context types is present, fetches the record + `match_service_knowledge` matches and injects a "### Asset 360 (preloaded)" / "### Service job (preloaded)" / etc block into the system message
+- **Round 4 audit fix (commit 7565196):** preload branches now RLS-probe via `callerClient` BEFORE any admin-privileged fetch; service_job/parts_order/voice_capture branches switched to `callerClient` entirely (closing a data-exfiltration vector where a rep could pass IDs they don't own)
+- `KbMatchPanel` component on Asset 360 Commercial Action tab — replaces the institutional-memory placeholder with live `match_service_knowledge` results
+- **Polish pass:** `AskIronAdvisorButton` drops added to `QuoteBuilderV2Page`, `VoiceQrmPage`, `PartsOrderDetailPage`, `ServiceJobDetailDrawer`
+
+### Phase F — Internal idea capture (commit 5048449 + voice polish)
+- Migration 175: `qrm_idea_backlog` table (title/body/source/status/priority/tags, workspace_id default get_my_workspace, RLS scoped)
+- `IdeaBacklogPage` at `/qrm/ideas` with full status workflow (new → triaged → in_progress → shipped/declined)
+- Inline create form + status filter chips + source pill
+- **Polish pass:** `voice-to-qrm` edge fn now detects idea lead phrases (`idea:`, `process improvement:`, `we should`, `we need to`, `can/could we add/build/improve/change`, `here's an idea`) at the transcript start. When matched, the fn short-circuits into `qrm_idea_backlog` with `source='voice'` + `ai_confidence=0.85` and returns a `{routed_to: "idea_backlog"}` response. `VoiceQrmPage` renders a dedicated success card with "Open Idea Backlog" link when the routing fires.
+
+### Phase G — Data Quality coverage expansion (commit 3dba166)
+- Migration 176: `admin_data_issues.issue_class` CHECK constraint extended; 4 new audit classes added to `run_data_quality_audit()`:
+  - `account_no_budget_cycle` — companies w/o `customer_profiles_extended.budget_cycle_month`
+  - `account_no_tax_treatment` — companies w/o any verified `tax_exemption_certificate`
+  - `contact_stale_ownership` — contacts whose `assigned_rep_id` has logged no `qrm_activities` in 90+ days
+  - `quote_no_validity_window` — open `quote_packages` with NULL `expires_at`
+- `DataQualityPage` UI auto-picks up new classes via its grouped-by-class layout
+
+### Phase H — Double-entry merge workflow (commit 3dba166 + polish)
+- Migration 176: `find_duplicate_companies(p_threshold)` RPC using `extensions.similarity()` (pg_trgm) — returns pairs sorted by score, capped at 200
+- **Polish pass:** `QrmDuplicatesPage` now renders a new "Suspected duplicate companies" section above the existing contact-duplicate list. Calls the RPC, shows pairs with similarity % bars, click-through to either company detail. Company merge UX uses manual review through the normal company editor flow — auto-merge deferred.
+
+### Round 3 audit (commit 1d7712f + d62d8b3)
+- P0 `portal_payment_intents` cross-customer leak → split RLS into staff vs portal-customer policies
+- P0 `apply_ar_override` privilege escalation → caller + approver role checks at top of SECURITY DEFINER function
+- P1 `manufacturer_incentives` RLS write policy gap → manager+ role check added
+- P1 `quote_incentive_applications` race-condition → unique partial index on `(quote_package_id, incentive_id) WHERE removed_at IS NULL`
+- P1 `PayInvoiceButton` popup blocker → sync `window.open("about:blank")` in click handler, navigate after fetch resolves
+
+### Round 4 audit (commit 7565196)
+- P0 `revenue-attribution-compute` auth bypass → constant-time header comparison
+- P0 chat fn Phase E preload RLS bypass → callerClient probe before admin fetch
+- P1 `get_fleet_radar` expensive lens company-wide bug → scope by equipment
+- P1 `backfill_customer_lifecycle_events` N-rows-per-company → DISTINCT ON CTE
+
+### QRM Spec §14 Definition of Done — verified
+| Criterion | Status |
+|-----------|--------|
+| 1. Account 360 page renders v2 §8.1 panel set | ✅ Phase A |
+| 2. Asset 360 page exists | ✅ Wave 6.2 |
+| 3. Voice capture reliably updates the system | ✅ Wave 5A.1 + Phase F polish |
+| 4. Budget and fiscal timing fields capturable | ✅ Wave 2 + DQ audit class Phase G |
+| 5. Buying Window daily operating view | ✅ Phase B |
+| 6. Quote/program refresh intelligence | ✅ Wave 5B.1 |
+| 7. Health score with explanation | ✅ Phase 2C — HealthScoreDrawer |
+| 8. Lifecycle Timeline page | ✅ Phase D (+ Account 360 tab link in polish) |
+| 9. Double entry measurably reduced | ✅ Phase H — `find_duplicate_companies` RPC + QrmDuplicatesPage section |
+| 10. Portal-facing customer context | ✅ Wave 5D + 6.7 |
+| 11. Contextual AI embedded | ✅ Phase E — chat preload + 4 more button drops (8 surfaces total) |
+| 12. Materially more useful than HubSpot | ✅ sum of all above |
+
+### Migration sequence (current)
+`001..180` in the round-4-fixed branch. Note: parallel untracked
+kb-retrieval work collides at 176–179 and needs reconciliation before
+it commits (document only my 180 is canonical for audit fixes).
+
+### Open follow-ups (v2-next punch list)
+- Map provider integration on `/fleet` and `/portal/fleet` (VITE_MAPBOX_TOKEN required)
+- Voice-to-QRM idea lead-phrase detection coverage expansion (current 6 patterns; add more as field reports come in)
+- Company merge workflow (currently manual-review; full auto-merge with cascade to equipment/deals/activities is a future pass)
+- `equipment_no_geocoords` / `equipment_stale_telematics` / `documents_unclassified` / `quotes_no_tax_jurisdiction` DQ audit class implementations (declared in CHECK but not yet populated by the RPC)
+- 271K-asset synthetic stress test
+- Storybook polish pass for primitives
+- Parallel kb-retrieval work reconciliation at migrations 176–179

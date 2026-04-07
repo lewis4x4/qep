@@ -4,6 +4,7 @@ import { ServiceQuoteBuilder } from "./ServiceQuoteBuilder";
 import { CompletionFeedbackForm } from "./CompletionFeedbackForm";
 import { VoiceFieldNotes } from "./VoiceFieldNotes";
 import { PartsRequirementEditor } from "./PartsRequirementEditor";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useMemo } from "react";
 import {
@@ -209,11 +210,14 @@ export function ServiceJobDetailDrawer({ jobId, onClose }: Props) {
   return (
     <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-background border-l shadow-xl z-50 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0 gap-2">
         <h2 className="text-lg font-semibold">Service Job Detail</h2>
-        <button onClick={onClose} className="p-1 rounded hover:bg-muted transition">
-          <X className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <AskIronAdvisorButton contextType="service_job" contextId={jobId} variant="inline" />
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">

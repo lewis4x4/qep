@@ -4,14 +4,15 @@ import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Mic, Sparkles, RotateCcw, Loader2 } from "lucide-react";
-import { submitVoiceToQrm, type VoiceQrmResponse } from "../lib/voice-qrm-api";
+import { submitVoiceToQrm, isIdeaBacklogResponse, type VoiceQrmResult } from "../lib/voice-qrm-api";
 import { VoiceRecorder } from "../components/VoiceRecorder";
 import { VoiceQrmSummaryCard } from "../components/VoiceQrmSummaryCard";
+import { AskIronAdvisorButton } from "@/components/primitives";
 
 export function VoiceQrmPage() {
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get("deal_id") ?? undefined;
-  const [result, setResult] = useState<VoiceQrmResponse | null>(null);
+  const [result, setResult] = useState<VoiceQrmResult | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: (args: { audioBlob: Blob; fileName: string }) =>
@@ -32,9 +33,12 @@ export function VoiceQrmPage() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-qep-orange" aria-hidden />
-          <h1 className="text-xl font-bold text-foreground">Voice-to-QRM</h1>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-qep-orange" aria-hidden />
+            <h1 className="text-xl font-bold text-foreground">Voice-to-QRM</h1>
+          </div>
+          <AskIronAdvisorButton contextType="voice_capture" variant="inline" />
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Talk naturally. The system extracts contacts, companies, deals, equipment, budget timelines, and future tasks — and routes everything to the right department.
@@ -89,7 +93,33 @@ export function VoiceQrmPage() {
         </Card>
       )}
 
-      {result && (
+      {result && isIdeaBacklogResponse(result) && (
+        <>
+          <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="h-5 w-5 text-emerald-400 shrink-0" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-emerald-400">Routed to Idea Backlog</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Lead phrase detected. Captured as an idea instead of a customer activity.
+                </p>
+                <p className="mt-2 text-sm font-medium text-foreground">{result.title}</p>
+                <p className="mt-1 text-[11px] italic text-muted-foreground">"{result.transcript}"</p>
+              </div>
+            </div>
+          </Card>
+          <div className="flex justify-center gap-2">
+            <Button size="sm" variant="outline" onClick={startOver}>
+              <RotateCcw className="mr-1 h-3 w-3" /> Capture another
+            </Button>
+            <Button asChild size="sm">
+              <a href="/qrm/ideas">Open Idea Backlog →</a>
+            </Button>
+          </div>
+        </>
+      )}
+
+      {result && !isIdeaBacklogResponse(result) && (
         <>
           <VoiceQrmSummaryCard result={result} />
           <div className="flex justify-center">

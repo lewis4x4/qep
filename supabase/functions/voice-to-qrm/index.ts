@@ -325,6 +325,70 @@ Deno.serve(async (req) => {
       return safeJsonError("No speech detected in the recording.", 422, origin);
     }
 
+    // ── 3.5. Idea / process-improvement short-circuit ─────────────────────
+    // If the transcript starts with an idea lead phrase, route to the
+    // qrm_idea_backlog table instead of the full extraction pipeline.
+    // Owners think in conversation; capture should match. Spec §10.4.
+    const IDEA_LEAD_PATTERNS = [
+      /^\s*idea\s*[:\-]/i,
+      /^\s*process\s+improvement\s*[:\-]/i,
+      /^\s*we\s+should\b/i,
+      /^\s*we\s+need\s+to\b/i,
+      /^\s*(?:can|could)\s+we\s+(?:add|build|improve|change)\b/i,
+      /^\s*(?:here['']?s|here\s+is)\s+an?\s+idea\b/i,
+    ];
+
+    const matchedPattern = IDEA_LEAD_PATTERNS.find((re) => re.test(transcript));
+    if (matchedPattern) {
+      // Derive title from first sentence, body from remainder.
+      const firstSentenceMatch = transcript.match(/^[^.!?\n]+/);
+      const title = (firstSentenceMatch?.[0] ?? transcript.substring(0, 120))
+        .replace(/^\s*(idea|process improvement)\s*[:\-]\s*/i, "")
+        .replace(/^\s*we\s+should\s+/i, "")
+        .replace(/^\s*we\s+need\s+to\s+/i, "")
+        .trim()
+        .substring(0, 200) || "Captured idea";
+      const body = transcript.length > title.length ? transcript : null;
+
+      // Resolve caller workspace (voice-to-qrm already did auth above)
+      let workspace = "default";
+      try {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("workspace_id")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (profile?.workspace_id) workspace = String(profile.workspace_id);
+      } catch { /* fall back to default */ }
+
+      const { data: ideaRow, error: ideaErr } = await supabaseAdmin
+        .from("qrm_idea_backlog")
+        .insert({
+          workspace_id: workspace,
+          title,
+          body,
+          source: "voice",
+          status: "new",
+          captured_by: user.id,
+          ai_confidence: 0.85,
+        })
+        .select("id")
+        .single();
+
+      if (ideaErr) {
+        console.error("[voice-to-qrm] idea backlog insert failed:", ideaErr);
+        // Fall through to normal extraction — don't lose the transcript
+      } else {
+        return safeJsonOk({
+          routed_to: "idea_backlog",
+          idea_id: ideaRow?.id,
+          title,
+          transcript,
+          matched_pattern: String(matchedPattern),
+        }, origin);
+      }
+    }
+
     // ── 4. Extract structured data via enhanced GPT prompt ────────────────
     const extractionStart = Date.now();
 

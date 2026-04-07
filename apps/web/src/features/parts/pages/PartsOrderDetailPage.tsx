@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PartsSubNav } from "../components/PartsSubNav";
+import { AskIronAdvisorButton } from "@/components/primitives";
 import { OrderStatusBadge } from "../components/OrderStatusBadge";
 import { PartCrossRefPanel } from "../components/PartCrossRefPanel";
 import { OrderTimelineCard } from "../components/OrderTimelineCard";
@@ -172,9 +173,12 @@ export function PartsOrderDetailPage() {
 
       {row && (
         <>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Parts order</h1>
-            <p className="text-xs font-mono text-muted-foreground mt-1">{String(row.id)}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Parts order</h1>
+              <p className="text-xs font-mono text-muted-foreground mt-1">{String(row.id)}</p>
+            </div>
+            <AskIronAdvisorButton contextType="parts_order" contextId={String(row.id)} variant="inline" />
           </div>
 
           {shipNotifyError && (

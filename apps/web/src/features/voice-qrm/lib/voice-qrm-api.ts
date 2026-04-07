@@ -69,13 +69,29 @@ export interface VoiceQrmResponse {
   errors?: string[];
 }
 
+/** Short-circuit response returned when voice-to-qrm detects an idea
+ *  lead phrase in the transcript and routes it to qrm_idea_backlog. */
+export interface VoiceIdeaBacklogResponse {
+  routed_to: "idea_backlog";
+  idea_id: string | null;
+  title: string;
+  transcript: string;
+  matched_pattern: string;
+}
+
+export type VoiceQrmResult = VoiceQrmResponse | VoiceIdeaBacklogResponse;
+
+export function isIdeaBacklogResponse(r: VoiceQrmResult): r is VoiceIdeaBacklogResponse {
+  return (r as VoiceIdeaBacklogResponse).routed_to === "idea_backlog";
+}
+
 export interface SubmitVoiceOptions {
   audioBlob: Blob;
   fileName?: string;
   dealId?: string;
 }
 
-export async function submitVoiceToQrm(opts: SubmitVoiceOptions): Promise<VoiceQrmResponse> {
+export async function submitVoiceToQrm(opts: SubmitVoiceOptions): Promise<VoiceQrmResult> {
   const session = (await supabase.auth.getSession()).data.session;
   if (!session) {
     throw new Error("Not signed in");

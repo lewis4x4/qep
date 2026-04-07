@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, XCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -128,8 +129,11 @@ export function QrmDuplicatesPage({ userRole }: QrmDuplicatesPageProps) {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Duplicate Review"
-        subtitle="Review suggested contact duplicates and run governed merges with audit history."
+        subtitle="Review suggested contact + company duplicates and run governed merges with audit history."
       />
+
+      {/* Duplicate companies (fuzzy match via find_duplicate_companies RPC — Phase H) */}
+      <DuplicateCompaniesSection />
 
       {!canResolve && (
         <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -244,3 +248,78 @@ export function QrmDuplicatesPage({ userRole }: QrmDuplicatesPageProps) {
     </div>
   );
 }
+
+/* ── Duplicate Companies section (Phase H) ─────────────────────────── */
+
+interface CompanyDupRow {
+  group_key: string;
+  company_a_id: string;
+  company_a_name: string;
+  company_b_id: string;
+  company_b_name: string;
+  similarity_score: number;
+}
+
+function DuplicateCompaniesSection() {
+  const { data: dupes = [], isLoading, isError } = useQuery({
+    queryKey: ["duplicate-companies"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: CompanyDupRow[] | null; error: unknown }>;
+      }).rpc("find_duplicate_companies", { p_threshold: 0.6 });
+      if (error) throw new Error(String((error as { message?: string }).message ?? "Failed to scan"));
+      return data ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <GitMerge className="h-4 w-4 text-qep-orange" aria-hidden />
+        <h3 className="text-sm font-bold text-foreground">Suspected duplicate companies</h3>
+        <span className="text-[10px] text-muted-foreground">fuzzy match · pg_trgm similarity ≥ 0.60</span>
+      </div>
+
+      {isLoading && <div className="h-20 animate-pulse rounded bg-muted/20" />}
+
+      {isError && (
+        <p className="text-xs text-red-400">
+          Couldn't run the duplicate scan. Confirm pg_trgm is enabled and find_duplicate_companies RPC is deployed.
+        </p>
+      )}
+
+      {!isLoading && !isError && dupes.length === 0 && (
+        <p className="text-xs text-muted-foreground">No suspected company duplicates.</p>
+      )}
+
+      {!isLoading && !isError && dupes.length > 0 && (
+        <div className="space-y-1.5">
+          {dupes.slice(0, 25).map((d, i) => (
+            <div key={`${d.company_a_id}-${d.company_b_id}-${i}`} className="grid grid-cols-5 items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
+              <a
+                href={`/qrm/companies/${d.company_a_id}`}
+                className="col-span-2 truncate text-foreground hover:text-qep-orange"
+              >
+                {d.company_a_name}
+              </a>
+              <span className="text-center tabular-nums text-muted-foreground">
+                {(d.similarity_score * 100).toFixed(0)}%
+              </span>
+              <a
+                href={`/qrm/companies/${d.company_b_id}`}
+                className="col-span-2 truncate text-foreground hover:text-qep-orange"
+              >
+                {d.company_b_name}
+              </a>
+            </div>
+          ))}
+          {dupes.length > 25 && (
+            <p className="text-[10px] text-muted-foreground">+{dupes.length - 25} more pairs — scan capped at 200.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
