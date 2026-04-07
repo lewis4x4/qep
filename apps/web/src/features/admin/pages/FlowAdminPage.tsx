@@ -14,6 +14,7 @@ import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
 import { FlowApprovalsPanel } from "../components/flow/FlowApprovalsPanel";
+import { SloSparkline } from "@/lib/iron/SloSparkline";
 
 interface WorkflowDef {
   id: string;
@@ -314,6 +315,43 @@ export function FlowAdminPage() {
     refetchInterval: 5 * 60_000,
   });
 
+  // ── Wave 7 v1.10: Iron SLO history (last 30 snapshots for sparklines) ─
+  const { data: ironSloHistory = [] } = useQuery({
+    queryKey: ["iron-slo-history"],
+    queryFn: async (): Promise<IronSloSnapshot[]> => {
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              order: (col: string, opts: { ascending: boolean }) => {
+                limit: (n: number) => Promise<{ data: Array<{ snapshot: IronSloSnapshot }> | null; error: unknown }>;
+              };
+            };
+          };
+        };
+      }).from("iron_slo_history")
+        .select("snapshot")
+        .eq("workspace_id", "default")
+        .order("computed_at", { ascending: false })
+        .limit(30);
+      if (error) return [];
+      // Snapshots come back newest-first; reverse so the sparkline reads
+      // left=oldest → right=newest, which is the convention humans expect.
+      return (data ?? []).map((r) => r.snapshot).reverse();
+    },
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
+  // Derive per-metric series in one pass
+  const sloSeries = useMemo(() => ({
+    classify: ironSloHistory.map((s) => s.classify_p95_ms),
+    execute: ironSloHistory.map((s) => s.execute_p95_ms),
+    undo: ironSloHistory.map((s) => s.undo_success_rate),
+    deadLetter: ironSloHistory.map((s) => s.dead_letter_rate),
+    cost: ironSloHistory.map((s) => s.cost_escalation_pct),
+  }), [ironSloHistory]);
+
   // Rollup tile counts
   const last24h = recentRuns.filter((r) => Date.now() - new Date(r.started_at).getTime() < 24 * 3600 * 1000);
   const succeeded = last24h.filter((r) => r.status === "succeeded").length;
@@ -439,12 +477,18 @@ export function FlowAdminPage() {
               value={ironSlos.classify_p95_ms != null ? `${ironSlos.classify_p95_ms} ms` : "—"}
               target={`< ${ironSlos.classify_target_ms} ms`}
               pass={ironSlos.classify_pass}
+              series={sloSeries.classify}
+              seriesLowerIsBetter
+              seriesTarget={ironSlos.classify_target_ms}
             />
             <SloPill
               label="Execute p95"
               value={ironSlos.execute_p95_ms != null ? `${ironSlos.execute_p95_ms} ms` : "—"}
               target={`< ${ironSlos.execute_target_ms} ms`}
               pass={ironSlos.execute_pass}
+              series={sloSeries.execute}
+              seriesLowerIsBetter
+              seriesTarget={ironSlos.execute_target_ms}
             />
             <SloPill
               label="Undo success"
@@ -456,6 +500,9 @@ export function FlowAdminPage() {
               target={`> ${(ironSlos.undo_target_rate * 100).toFixed(1)}%`}
               pass={ironSlos.undo_pass}
               footnote={`${ironSlos.undo_attempts} attempts (30d)`}
+              series={sloSeries.undo}
+              seriesLowerIsBetter={false}
+              seriesTarget={ironSlos.undo_target_rate}
             />
             <SloPill
               label="Dead letter rate"
@@ -467,6 +514,9 @@ export function FlowAdminPage() {
               target={`< ${(ironSlos.dead_letter_target_rate * 100).toFixed(1)}%`}
               pass={ironSlos.dead_letter_pass}
               footnote={`${ironSlos.iron_runs_total} runs (7d)`}
+              series={sloSeries.deadLetter}
+              seriesLowerIsBetter
+              seriesTarget={ironSlos.dead_letter_target_rate}
             />
             <SloPill
               label="Cost escalations"
@@ -478,8 +528,16 @@ export function FlowAdminPage() {
               target={`< ${(ironSlos.cost_target_pct * 100).toFixed(0)}%`}
               pass={ironSlos.cost_pass}
               footnote={`${ironSlos.active_users_24h} active 24h`}
+              series={sloSeries.cost}
+              seriesLowerIsBetter
+              seriesTarget={ironSlos.cost_target_pct}
             />
           </div>
+          {ironSloHistory.length > 0 && (
+            <p className="mt-2 text-[9px] text-muted-foreground/70">
+              Trend window: last {ironSloHistory.length} snapshot{ironSloHistory.length === 1 ? "" : "s"} · target line dashed
+            </p>
+          )}
         </Card>
       )}
 
@@ -694,7 +752,7 @@ export function FlowAdminPage() {
   );
 }
 
-/* ─── Wave 7 v1.6: Iron SLO pill ──────────────────────────────────────── */
+/* ─── Wave 7 v1.6: Iron SLO pill (with v1.10 sparkline) ───────────────── */
 
 interface SloPillProps {
   label: string;
@@ -702,9 +760,24 @@ interface SloPillProps {
   target: string;
   pass: boolean;
   footnote?: string;
+  // v1.10: trend sparkline series. Optional so the pill still renders on
+  // fresh deployments where iron_slo_history hasn't been populated yet.
+  series?: Array<number | null>;
+  seriesLowerIsBetter?: boolean;
+  seriesTarget?: number;
 }
 
-function SloPill({ label, value, target, pass, footnote }: SloPillProps) {
+function SloPill({
+  label,
+  value,
+  target,
+  pass,
+  footnote,
+  series,
+  seriesLowerIsBetter,
+  seriesTarget,
+}: SloPillProps) {
+  const hasSeries = series && series.length > 0 && seriesTarget != null;
   return (
     <div
       className={`rounded border p-2 ${
@@ -725,6 +798,15 @@ function SloPill({ label, value, target, pass, footnote }: SloPillProps) {
         {value}
       </p>
       <p className="mt-0.5 text-[9px] text-muted-foreground">target {target}</p>
+      {hasSeries && (
+        <div className="mt-1.5">
+          <SloSparkline
+            values={series!}
+            lowerIsBetter={seriesLowerIsBetter ?? true}
+            target={seriesTarget!}
+          />
+        </div>
+      )}
       {footnote && <p className="mt-0.5 text-[9px] text-muted-foreground/70">{footnote}</p>}
     </div>
   );
