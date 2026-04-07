@@ -29,6 +29,10 @@ import { partsReceivedForOpenJob } from "../_shared/flow-workflows/parts-receive
 import { arAgedPastThreshold } from "../_shared/flow-workflows/ar-aged-past-threshold.ts";
 import { serviceDelayStrategicAccount } from "../_shared/flow-workflows/service-delay-strategic-account.ts";
 import { arOverrideRequest } from "../_shared/flow-workflows/ar-override-request.ts";
+import { priceFileImported } from "../_shared/flow-workflows/price-file-imported.ts";
+import { equipmentHoursCrossedInterval } from "../_shared/flow-workflows/equipment-hours-crossed-interval.ts";
+import { rentalNearingEnd } from "../_shared/flow-workflows/rental-nearing-end.ts";
+import { competitorSignalFromVoice } from "../_shared/flow-workflows/competitor-signal-from-voice.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
 const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
@@ -38,6 +42,10 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   arAgedPastThreshold,
   serviceDelayStrategicAccount,
   arOverrideRequest,
+  priceFileImported,
+  equipmentHoursCrossedInterval,
+  rentalNearingEnd,
+  competitorSignalFromVoice,
 ];
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";

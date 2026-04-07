@@ -44,6 +44,8 @@ interface ChatContextPayload {
   flareReportId?: string;
   // QEP Moonshot Command Center — KPI metric drill-to-chat
   metricKey?: string;
+  // QEP Flow Engine — workflow run drill-to-chat
+  flowRunId?: string;
 }
 
 interface EvidenceItem {
@@ -413,11 +415,12 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
     metricKey: typeof context.metricKey === "string" && /^[a-z][a-z0-9_]{1,80}$/.test(context.metricKey)
       ? context.metricKey
       : undefined,
+    flowRunId: cleanUuid(context.flowRunId) ?? undefined,
   };
 
   if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId
       && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId
-      && !parsed.flareReportId && !parsed.metricKey) {
+      && !parsed.flareReportId && !parsed.metricKey && !parsed.flowRunId) {
     return null;
   }
   return parsed;
@@ -2336,7 +2339,7 @@ Deno.serve(async (req) => {
     // callerClient BEFORE any admin-privileged fetch. Without this guard,
     // a rep could pass an equipment_id / service_job_id they don't own and
     // exfiltrate private records via the preload block. (Round-4 audit fix.)
-    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId || context.metricKey)) {
+    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId || context.metricKey || context.flowRunId)) {
       const preloadParts: string[] = [];
 
       if (context.equipmentId) {
@@ -2483,6 +2486,61 @@ Deno.serve(async (req) => {
           }
         } catch (err) {
           console.warn(`[chat:${traceId}] metric preload failed:`, err);
+        }
+      }
+
+      // QEP Flow Engine — workflow run drill-to-chat preload
+      // RLS-gated via callerClient (admin/manager/owner read on
+      // flow_workflow_runs). Loads run row + step trace + resolved context
+      // + originating event payload + dead-letter detail when present.
+      if (context.flowRunId) {
+        try {
+          const { data: run } = await callerClient
+            .from("flow_workflow_runs")
+            .select("id, workflow_slug, status, started_at, finished_at, duration_ms, error_text, resolved_context, metadata, dead_letter_id, event_id, attempt")
+            .eq("id", context.flowRunId)
+            .maybeSingle();
+          if (run) {
+            const { data: steps } = await adminClient
+              .from("flow_workflow_run_steps")
+              .select("step_index, step_type, action_key, status, result, error_text, started_at, finished_at")
+              .eq("run_id", context.flowRunId)
+              .order("step_index", { ascending: true });
+
+            let originatingEvent: Record<string, unknown> | null = null;
+            const eventId = (run as { event_id?: string }).event_id;
+            if (eventId) {
+              const { data: ev } = await adminClient
+                .from("analytics_events")
+                .select("event_id, flow_event_type, source_module, entity_type, entity_id, occurred_at, properties")
+                .eq("event_id", eventId)
+                .maybeSingle();
+              originatingEvent = ev ?? null;
+            }
+
+            let deadLetter: Record<string, unknown> | null = null;
+            const dlId = (run as { dead_letter_id?: string }).dead_letter_id;
+            if (dlId) {
+              const { data: dl } = await adminClient
+                .from("exception_queue")
+                .select("id, source, severity, title, detail, payload, created_at, status")
+                .eq("id", dlId)
+                .maybeSingle();
+              deadLetter = dl ?? null;
+            }
+
+            const block = {
+              run,
+              steps: steps ?? [],
+              originating_event: originatingEvent,
+              dead_letter: deadLetter,
+            };
+            preloadParts.push(`### Flow run context (preloaded by Flow Admin drill)\n${JSON.stringify(block, null, 0)}`);
+          } else {
+            console.warn(`[chat:${traceId}] flow run preload denied by RLS for ${context.flowRunId}`);
+          }
+        } catch (err) {
+          console.warn(`[chat:${traceId}] flow run preload failed:`, err);
         }
       }
 

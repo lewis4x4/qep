@@ -189,6 +189,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         else if (ctxType === "voice_capture") fromAskAdvisor.voiceCaptureId = ctxId;
         else if (ctxType === "flare") fromAskAdvisor.flareReportId = ctxId;
         else if (ctxType === "metric") fromAskAdvisor.metricKey = ctxId;
+        else if (ctxType === "flow_run") fromAskAdvisor.flowRunId = ctxId;
       }
       return {
         customerProfileId: searchParams.get("customer_profile_id") || undefined,
@@ -201,6 +202,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         voiceCaptureId: fromAskAdvisor.voiceCaptureId,
         flareReportId: fromAskAdvisor.flareReportId,
         metricKey: fromAskAdvisor.metricKey,
+        flowRunId: fromAskAdvisor.flowRunId,
       };
     },
     [searchParams]
@@ -208,9 +210,10 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const hasChatContext = Boolean(
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
     || chatContext.equipmentId || chatContext.serviceJobId || chatContext.partsOrderId || chatContext.voiceCaptureId
-    || chatContext.flareReportId || chatContext.metricKey
+    || chatContext.flareReportId || chatContext.metricKey || chatContext.flowRunId
   );
   const contextLabel = useMemo(() => {
+    if (chatContext.flowRunId) return "Flow run context active: the workflow definition, full step trace, resolved context, originating event, and any dead-letter detail are preloaded.";
     if (chatContext.metricKey) return `Command Center metric context active (${chatContext.metricKey}): the latest snapshot, snapshot history, and any open alerts on this KPI are preloaded.`;
     if (chatContext.flareReportId) return "Flare report context active: answers can use the captured bug context, click trail, and console errors.";
     if (chatContext.equipmentId) return "Asset context active: answers can use this equipment's full history + matching service KB.";

@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Workflow, RefreshCcw, Loader2, AlertOctagon, CheckCircle2, PlayCircle } from "lucide-react";
+import { Workflow, Loader2, AlertOctagon, CheckCircle2, PlayCircle, Sparkles } from "lucide-react";
 import { ForwardForecastBar, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { FlowRunHistoryDrawer, type FlowRunRow } from "../components/flow/FlowRunHistoryDrawer";
@@ -42,6 +42,9 @@ const STATUS_TONE: Record<string, "blue" | "purple" | "orange" | "green" | "red"
 export function FlowAdminPage() {
   const queryClient = useQueryClient();
   const [selectedRun, setSelectedRun] = useState<FlowRunRow | null>(null);
+  const [synthBrief, setSynthBrief] = useState("");
+  const [synthOpen, setSynthOpen] = useState(false);
+  const [synthResult, setSynthResult] = useState<{ definition_id: string | null; missing: string[] } | null>(null);
 
   const { data: workflows = [], isLoading: workflowsLoading } = useQuery({
     queryKey: ["flow-admin-workflows"],
@@ -103,6 +106,22 @@ export function FlowAdminPage() {
     },
   });
 
+  const synthesize = useMutation({
+    mutationFn: async (brief: string) => {
+      const { data, error } = await (supabase as unknown as {
+        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: { ok: boolean; definition_id: string | null; missing: string[]; error?: string } | null; error: { message?: string } | null }> };
+      }).functions.invoke("flow-synthesize", { body: { brief } });
+      if (error) throw new Error(error.message ?? "synth failed");
+      if (!data?.ok) throw new Error(data?.error ?? "synth failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSynthResult({ definition_id: data.definition_id, missing: data.missing ?? [] });
+      setSynthBrief("");
+      queryClient.invalidateQueries({ queryKey: ["flow-admin-workflows"] });
+    },
+  });
+
   const toggleEnabled = useMutation({
     mutationFn: async (input: { id: string; enabled: boolean }) => {
       const { error } = await (supabase as unknown as {
@@ -130,11 +149,54 @@ export function FlowAdminPage() {
             Internal automation fabric · {workflows.length} workflows registered
           </p>
         </div>
-        <Button size="sm" variant="outline" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
-          {runNow.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PlayCircle className="mr-1 h-3 w-3" />}
-          Run now
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setSynthOpen((p) => !p)}>
+            <Sparkles className="mr-1 h-3 w-3" /> Synthesize
+          </Button>
+          <Button size="sm" variant="outline" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
+            {runNow.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PlayCircle className="mr-1 h-3 w-3" />}
+            Run now
+          </Button>
+        </div>
       </div>
+
+      {synthOpen && (
+        <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
+          <p className="mb-2 text-[10px] uppercase tracking-wider text-qep-orange">Synthesize a workflow from English</p>
+          <textarea
+            value={synthBrief}
+            onChange={(e) => setSynthBrief(e.target.value)}
+            placeholder="When a strategic account has a service delay AND there's an open opportunity, alert the rep with the deal value and a suggested message."
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs"
+            rows={4}
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              size="sm"
+              disabled={synthesize.isPending || synthBrief.length < 10}
+              onClick={() => synthesize.mutate(synthBrief)}
+            >
+              {synthesize.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
+              Generate draft
+            </Button>
+            {synthesize.error && (
+              <span className="text-[10px] text-red-400">{(synthesize.error as Error).message}</span>
+            )}
+          </div>
+          {synthResult && (
+            <div className="mt-2 rounded bg-emerald-500/5 p-2 text-[11px]">
+              <p className="text-emerald-400">
+                ✓ Draft created (id: {synthResult.definition_id?.slice(0, 8)}…). Disabled by default — review and enable below.
+              </p>
+              {synthResult.missing.length > 0 && (
+                <p className="mt-1 text-amber-400">
+                  Missing primitives: {synthResult.missing.join(", ")} — extend the registry before enabling.
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       <ForwardForecastBar
         counters={[
