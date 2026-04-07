@@ -6,6 +6,7 @@ import {
 } from "../_shared/dge-auth.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
+import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   CHAT_TOOLS,
   executeToolCalls,
@@ -41,6 +42,8 @@ interface ChatContextPayload {
   voiceCaptureId?: string;
   // Wave 6.11 Flare context type
   flareReportId?: string;
+  // QEP Moonshot Command Center — KPI metric drill-to-chat
+  metricKey?: string;
 }
 
 interface EvidenceItem {
@@ -406,11 +409,15 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
     partsOrderId: cleanUuid(context.partsOrderId) ?? undefined,
     voiceCaptureId: cleanUuid(context.voiceCaptureId) ?? undefined,
     flareReportId: cleanUuid(context.flareReportId) ?? undefined,
+    // metric_key is not a uuid — it's a slug like "revenue_mtd". Validate format.
+    metricKey: typeof context.metricKey === "string" && /^[a-z][a-z0-9_]{1,80}$/.test(context.metricKey)
+      ? context.metricKey
+      : undefined,
   };
 
   if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId
       && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId
-      && !parsed.flareReportId) {
+      && !parsed.flareReportId && !parsed.metricKey) {
     return null;
   }
   return parsed;
@@ -2329,7 +2336,7 @@ Deno.serve(async (req) => {
     // callerClient BEFORE any admin-privileged fetch. Without this guard,
     // a rep could pass an equipment_id / service_job_id they don't own and
     // exfiltrate private records via the preload block. (Round-4 audit fix.)
-    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId)) {
+    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId || context.metricKey)) {
       const preloadParts: string[] = [];
 
       if (context.equipmentId) {
@@ -2431,6 +2438,51 @@ Deno.serve(async (req) => {
           }
         } catch (err) {
           console.warn(`[chat:${traceId}] flare preload failed:`, err);
+        }
+      }
+
+      // QEP Moonshot Command Center — KPI metric drill-to-chat preload
+      // RLS-gated via callerClient: a metric definition is only visible
+      // to owners (per analytics_metric_definitions RLS), so a successful
+      // probe == authorized.
+      if (context.metricKey) {
+        try {
+          const { data: def } = await callerClient
+            .from("analytics_metric_definitions")
+            .select("metric_key, label, description, formula_text, display_category, owner_role, source_tables, refresh_cadence, threshold_config, synthetic_weights")
+            .eq("metric_key", context.metricKey)
+            .maybeSingle();
+          if (def) {
+            // Latest snapshot via admin (RLS already passed)
+            const { data: snapshots } = await adminClient
+              .from("analytics_kpi_snapshots")
+              .select("metric_value, comparison_value, target_value, period_start, period_end, calculated_at, refresh_state, metadata")
+              .eq("metric_key", context.metricKey)
+              .in("refresh_state", ["fresh", "partial", "recalculated"])
+              .order("calculated_at", { ascending: false })
+              .limit(5);
+
+            // Open alerts targeting this metric
+            const { data: alerts } = await adminClient
+              .from("analytics_alerts")
+              .select("id, severity, title, description, status, business_impact_value, created_at")
+              .eq("metric_key", context.metricKey)
+              .in("status", ["new", "acknowledged", "in_progress"])
+              .order("created_at", { ascending: false })
+              .limit(5);
+
+            const block = {
+              metric: def,
+              latest_snapshot: snapshots?.[0] ?? null,
+              snapshot_history: snapshots ?? [],
+              open_alerts: alerts ?? [],
+            };
+            preloadParts.push(`### KPI context (preloaded by Command Center drill)\n${JSON.stringify(block, null, 0)}`);
+          } else {
+            console.warn(`[chat:${traceId}] metric preload denied by RLS for ${context.metricKey}`);
+          }
+        } catch (err) {
+          console.warn(`[chat:${traceId}] metric preload failed:`, err);
         }
       }
 
@@ -2712,6 +2764,7 @@ ${toolInstructions}`;
       },
     });
   } catch (error) {
+    captureEdgeException(error, { fn: "chat", req });
     console.error(`[chat:${traceId}] fatal error`, error);
     return jsonError(
       traceId,

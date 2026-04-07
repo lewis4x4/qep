@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
 import { CfoCommandCenterView } from "../views/CfoCommandCenterView";
 import { CooCommandCenterView } from "../views/CooCommandCenterView";
+import { MetricDrillDrawer } from "../components/MetricDrillDrawer";
 import type { ExecRoleTab } from "../lib/types";
 
 const TABS = [
@@ -29,11 +30,10 @@ const TABS = [
 export function CommandCenterPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<ExecRoleTab>("ceo");
+  const [drillMetric, setDrillMetric] = useState<string | null>(null);
 
   const handleDrill = useCallback((metricKey: string) => {
-    // Slice 5: opens MetricDrillDrawer. For now, log + no-op.
-    // eslint-disable-next-line no-console
-    console.info("[exec] drill request:", metricKey);
+    setDrillMetric(metricKey);
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -68,6 +68,9 @@ export function CommandCenterPage() {
       {tab === "ceo" && <CeoCommandCenterView onDrill={handleDrill} />}
       {tab === "cfo" && <CfoCommandCenterView onDrill={handleDrill} />}
       {tab === "coo" && <CooCommandCenterView onDrill={handleDrill} />}
+
+      {/* Universal drill drawer (Slice 5) */}
+      <MetricDrillDrawer metricKey={drillMetric} onClose={() => setDrillMetric(null)} />
     </div>
   );
 }

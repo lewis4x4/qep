@@ -8,9 +8,9 @@
  */
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Sparkles } from "lucide-react";
 import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
 import { AlertsInboxPanel } from "../components/AlertsInboxPanel";
+import { AiExecutiveSummaryStrip } from "../components/AiExecutiveSummaryStrip";
 import { useMetricDefinitions, useLatestSnapshots, useFallbackKpis } from "../lib/useExecData";
 
 interface Props {
@@ -32,19 +32,7 @@ export function CeoCommandCenterView({ onDrill }: Props) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
-        {/* AI executive summary strip — placeholder for Slice 5 */}
-        <Card className="border-qep-orange/20 bg-gradient-to-r from-qep-orange/5 to-transparent p-4">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 h-4 w-4 text-qep-orange" />
-            <div className="flex-1">
-              <p className="text-[10px] uppercase tracking-wider text-qep-orange">Executive briefing</p>
-              <p className="mt-1 text-xs text-muted-foreground italic">
-                AI-generated executive summary lands in Slice 5 (drill-to-chat already wired via the
-                "Ask Iron Advisor" button on each KPI card — try it).
-              </p>
-            </div>
-          </div>
-        </Card>
+        <AiExecutiveSummaryStrip role="ceo" />
 
         {/* KPI grid */}
         {defsLoading ? (

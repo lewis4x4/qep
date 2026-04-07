@@ -7,9 +7,9 @@
  */
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Truck } from "lucide-react";
 import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
 import { AlertsInboxPanel } from "../components/AlertsInboxPanel";
+import { AiExecutiveSummaryStrip } from "../components/AiExecutiveSummaryStrip";
 import {
   TodaysExecutionBoard,
   InventoryReadinessRail,
@@ -35,18 +35,7 @@ export function CooCommandCenterView({ onDrill }: Props) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
-        <Card className="border-orange-500/20 bg-gradient-to-r from-orange-500/5 to-transparent p-4">
-          <div className="flex items-start gap-3">
-            <Truck className="mt-0.5 h-4 w-4 text-orange-400" />
-            <div className="flex-1">
-              <p className="text-[10px] uppercase tracking-wider text-orange-400">Operations</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                On-time delivery, blocked moves, units not ready, intake stalled, rental returns aging,
-                and the repeat-failure index. Drill any tile to see the source rows.
-              </p>
-            </div>
-          </div>
-        </Card>
+        <AiExecutiveSummaryStrip role="coo" />
 
         {isLoading ? (
           <Card className="p-6 text-center text-xs text-muted-foreground">Loading COO metrics…</Card>

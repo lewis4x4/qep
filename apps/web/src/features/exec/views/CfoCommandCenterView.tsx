@@ -9,9 +9,10 @@
  */
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
-import { Wallet, AlertOctagon, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
 import { AlertsInboxPanel } from "../components/AlertsInboxPanel";
+import { AiExecutiveSummaryStrip } from "../components/AiExecutiveSummaryStrip";
 import { PolicyEnforcementWall } from "../components/cfo/PolicyEnforcementWall";
 import { MarginWaterfallExplorer } from "../components/cfo/MarginWaterfallExplorer";
 import { useMetricDefinitions, useLatestSnapshots } from "../lib/useExecData";
@@ -34,19 +35,7 @@ export function CfoCommandCenterView({ onDrill }: Props) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
-        {/* CFO header strip */}
-        <Card className="border-emerald-500/20 bg-gradient-to-r from-emerald-500/5 to-transparent p-4">
-          <div className="flex items-start gap-3">
-            <Wallet className="mt-0.5 h-4 w-4 text-emerald-400" />
-            <div className="flex-1">
-              <p className="text-[10px] uppercase tracking-wider text-emerald-400">Finance discipline</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Cash position, deposit verification SLA, payment compliance, refund exposure,
-                and the margin waterfall from gross to loaded.
-              </p>
-            </div>
-          </div>
-        </Card>
+        <AiExecutiveSummaryStrip role="cfo" />
 
         {isLoading ? (
           <Card className="p-6 text-center text-xs text-muted-foreground">Loading CFO metrics…</Card>
