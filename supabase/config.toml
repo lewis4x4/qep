@@ -205,3 +205,16 @@ verify_jwt = false
 # Network optimizer + analytics cron (service_role auth).
 [functions.parts-network-optimizer]
 verify_jwt = false
+
+# Wave 6.11 Flare submit endpoint. Validates the JWT internally via
+# supabase.auth.getUser() so the gateway-level verify must be disabled
+# (otherwise the gateway 401s before the function's CORS handler runs and
+# the browser sees "Load failed" with no actionable error).
+[functions.flare-submit]
+verify_jwt = false
+
+# Wave 6.11 Flare close-the-loop notifier. Same internal-auth pattern as
+# flare-submit; gateway verify disabled so the function-level CORS preflight
+# handler can return properly.
+[functions.flare-notify-fixed]
+verify_jwt = false
