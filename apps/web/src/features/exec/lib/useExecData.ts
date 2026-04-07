@@ -77,55 +77,42 @@ export function useExecAlerts(role: "ceo" | "cfo" | "coo") {
 }
 
 /**
- * Slice 1 fallback values: read live source views directly so the CEO
- * dashboard works before the snapshot runner exists.
+ * Slice 1 fallback values via the `analytics_quick_kpi` RPC (mig 193).
  *
- * Returns a map of metric_key -> { value, label, source }. The KPI tile
- * renderer prefers the snapshot if present and only falls back to this map
- * if snapshot is null.
+ * Server-side aggregation replaces the prior whole-table fetches that
+ * pulled every crm_deals_weighted row to the browser. Each metric is one
+ * stable RPC call that returns a numeric scalar. RLS on the underlying
+ * tables enforces workspace + owner-only access; the RPC short-circuits
+ * to null for non-owners.
  */
+const FALLBACK_KEYS = [
+  "weighted_pipeline",
+  "enterprise_risk_count",
+  "revenue_mtd",
+  "gross_margin_dollars_mtd",
+  "gross_margin_pct_mtd",
+] as const;
+
 export function useFallbackKpis(role: "ceo" | "cfo" | "coo") {
   return useQuery({
     enabled: role === "ceo",
     queryKey: ["exec", "fallback-kpis", role],
     queryFn: async (): Promise<Record<string, { value: number; label: string; source: string }>> => {
+      const results = await Promise.all(
+        FALLBACK_KEYS.map(async (key) => {
+          try {
+            const { data } = await supa.rpc<number>("analytics_quick_kpi", { p_metric_key: key });
+            const numeric = typeof data === "number" ? data : Number(data ?? 0);
+            return [key, { value: numeric, label: "Live (server agg)", source: "analytics_quick_kpi" }] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
       const out: Record<string, { value: number; label: string; source: string }> = {};
-
-      // 1. weighted_pipeline ← crm_deals_weighted
-      try {
-        const res = await (supa.from("crm_deals_weighted").select("weighted_amount") as unknown as Promise<{ data: { weighted_amount: number }[] | null; error: unknown }>);
-        const total = (res.data ?? []).reduce((acc, row) => acc + Number(row.weighted_amount ?? 0), 0);
-        out.weighted_pipeline = { value: total, label: "Live from crm_deals_weighted", source: "crm_deals_weighted" };
-      } catch { /* skip */ }
-
-      // 2. enterprise_risk_count ← exec_exception_summary (sum of open critical/error)
-      try {
-        const res = await (supa.from("exec_exception_summary").select("severity, open_count") as unknown as Promise<{ data: { severity: string; open_count: number }[] | null; error: unknown }>);
-        const critical = (res.data ?? []).filter((r) => r.severity === "critical" || r.severity === "error").reduce((a, r) => a + Number(r.open_count ?? 0), 0);
-        out.enterprise_risk_count = { value: critical, label: "Open critical exceptions", source: "exec_exception_summary" };
-      } catch { /* skip */ }
-
-      // 3. revenue_mtd ← crm_deals where closed_at >= start_of_month + stage.is_closed_won
-      //    We approximate via a join through crm_deal_stages.
-      try {
-        const startOfMonth = new Date();
-        startOfMonth.setUTCDate(1); startOfMonth.setUTCHours(0, 0, 0, 0);
-        const res = await (supabase as unknown as { from: (t: string) => { select: (c: string) => { gte: (col: string, val: string) => Promise<{ data: { amount: number; margin_amount: number | null; stage: { is_closed_won: boolean } | null }[] | null; error: unknown }> } } })
-          .from("crm_deals")
-          .select("amount, margin_amount, stage:crm_deal_stages(is_closed_won)")
-          .gte("closed_at", startOfMonth.toISOString());
-        const rows = (res.data ?? []).filter((r) => r.stage?.is_closed_won);
-        const revenue = rows.reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
-        const margin = rows.reduce((acc, r) => acc + Number(r.margin_amount ?? 0), 0);
-        out.revenue_mtd = { value: revenue, label: "Closed-won MTD", source: "crm_deals" };
-        out.gross_margin_dollars_mtd = { value: margin, label: "Margin $ MTD", source: "crm_deals.margin_amount" };
-        out.gross_margin_pct_mtd = {
-          value: revenue > 0 ? (margin / revenue) * 100 : 0,
-          label: "Margin / revenue MTD",
-          source: "derived",
-        };
-      } catch { /* skip */ }
-
+      for (const r of results) {
+        if (r) out[r[0]] = r[1];
+      }
       return out;
     },
     staleTime: 60_000,

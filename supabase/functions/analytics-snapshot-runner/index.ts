@@ -23,6 +23,7 @@
  *     fresh values; the supersedes_id chain preserves history.
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -357,32 +358,21 @@ Deno.serve(async (req: Request) => {
         }
         try {
           const { value, metadata, quality } = await computer(admin, workspace, def);
-          const insert: SnapshotInsert = {
-            workspace_id: workspace,
-            metric_key: def.metric_key,
-            metric_value: value,
-            comparison_value: null,
-            target_value: null,
-            confidence_score: null,
-            data_quality_score: quality,
-            period_start: periodStart,
-            period_end: periodEnd,
-            refresh_state: quality < 1.0 ? "partial" : "fresh",
-            metadata,
-          };
-
-          // Mark prior open snapshot as recalculated to free the unique index
-          await admin
-            .from("analytics_kpi_snapshots")
-            .update({ refresh_state: "recalculated" })
-            .eq("workspace_id", workspace)
-            .eq("metric_key", def.metric_key)
-            .eq("period_start", periodStart)
-            .eq("period_end", periodEnd)
-            .in("refresh_state", ["fresh", "partial"]);
-
-          const { error: insErr } = await admin.from("analytics_kpi_snapshots").insert(insert);
-          if (insErr) throw new Error(insErr.message);
+          // P1-1 fix (mig 193): atomic update+insert via write_kpi_snapshot RPC.
+          // Eliminates the race between marking prior recalculated and the
+          // unique-partial-index protected insert when two cron invocations
+          // overlap.
+          const { error: rpcErr } = await admin.rpc("write_kpi_snapshot", {
+            p_workspace_id: workspace,
+            p_metric_key: def.metric_key,
+            p_metric_value: value,
+            p_data_quality_score: quality,
+            p_period_start: periodStart,
+            p_period_end: periodEnd,
+            p_refresh_state: quality < 1.0 ? "partial" : "fresh",
+            p_metadata: metadata,
+          });
+          if (rpcErr) throw new Error(rpcErr.message);
 
           results.push({ workspace, metric: def.metric_key, ok: true });
         } catch (err) {
@@ -419,6 +409,7 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "analytics-snapshot-runner", req });
     console.error("[snapshot-runner] fatal:", err);
     return new Response(JSON.stringify({ ok: false, error: (err as Error).message, results }), {
       status: 500,

@@ -102,7 +102,9 @@ export function InventoryReadinessRail() {
       const supa = supabase as unknown as {
         from: (t: string) => { select: (c: string) => { limit: (n: number) => Promise<{ data: ReadinessRow[] | null; error: unknown }> } };
       };
-      const res = await supa.from("mv_exec_inventory_readiness").select("*").limit(1);
+      // P0-1 fix (mig 193): use security_invoker wrapper view that filters
+      // by workspace + role. Direct MV access is revoked from authenticated.
+      const res = await supa.from("exec_inventory_readiness_v").select("*").limit(1);
       if (res.error) return null;
       return res.data?.[0] ?? null;
     },

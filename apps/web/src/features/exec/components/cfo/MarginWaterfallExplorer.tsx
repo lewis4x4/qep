@@ -30,7 +30,7 @@ export function MarginWaterfallExplorer() {
             order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: WaterfallRow[] | null; error: unknown }> };
           };
         };
-      }).from("mv_exec_margin_waterfall")
+      }).from("exec_margin_waterfall_v")
         .select("month, revenue, gross_margin_dollars, net_contribution_dollars, load_dollars, loaded_margin_pct")
         .order("month", { ascending: false })
         .limit(6);

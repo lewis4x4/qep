@@ -23,6 +23,7 @@ import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "../lib/ty
 
 interface Props {
   metricKey: string | null;
+  workspaceId: string;
   onClose: () => void;
 }
 
@@ -33,7 +34,7 @@ interface SnapshotHistoryRow {
   refresh_state: string;
 }
 
-export function MetricDrillDrawer({ metricKey, onClose }: Props) {
+export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
   const open = metricKey != null;
 
   const { data: definition } = useQuery({
@@ -55,19 +56,21 @@ export function MetricDrillDrawer({ metricKey, onClose }: Props) {
 
   const { data: snapshots = [] } = useQuery({
     enabled: open,
-    queryKey: ["exec", "drill", "history", metricKey],
+    queryKey: ["exec", "drill", "history", metricKey, workspaceId],
     queryFn: async (): Promise<SnapshotHistoryRow[]> => {
       if (!metricKey) return [];
-      const supa = supabase as unknown as {
+      // P1-2 fix: explicit workspace filter so we never pull cross-workspace
+      // rows. RLS still backstops it.
+      const res = await (supabase as unknown as {
         from: (t: string) => {
           select: (c: string) => {
-            eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: SnapshotHistoryRow[] | null; error: unknown }> } };
+            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: SnapshotHistoryRow[] | null; error: unknown }> } } };
           };
         };
-      };
-      const res = await supa.from("analytics_kpi_snapshots")
+      }).from("analytics_kpi_snapshots")
         .select("metric_value, period_end, calculated_at, refresh_state")
         .eq("metric_key", metricKey)
+        .eq("workspace_id", workspaceId)
         .order("calculated_at", { ascending: false })
         .limit(20);
       return res.data ?? [];
@@ -76,19 +79,19 @@ export function MetricDrillDrawer({ metricKey, onClose }: Props) {
 
   const { data: alerts = [] } = useQuery({
     enabled: open,
-    queryKey: ["exec", "drill", "alerts", metricKey],
+    queryKey: ["exec", "drill", "alerts", metricKey, workspaceId],
     queryFn: async (): Promise<AnalyticsAlertRow[]> => {
       if (!metricKey) return [];
-      const supa = supabase as unknown as {
+      const res = await (supabase as unknown as {
         from: (t: string) => {
           select: (c: string) => {
-            eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: AnalyticsAlertRow[] | null; error: unknown }> } };
+            eq: (c: string, v: string) => { eq: (c: string, v: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => Promise<{ data: AnalyticsAlertRow[] | null; error: unknown }> } } };
           };
         };
-      };
-      const res = await supa.from("analytics_alerts")
+      }).from("analytics_alerts")
         .select("*")
         .eq("metric_key", metricKey)
+        .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false })
         .limit(10);
       return res.data ?? [];

@@ -12,6 +12,7 @@
  * Designed to run on cron immediately after analytics-snapshot-runner.
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { captureEdgeException } from "../_shared/sentry.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -171,64 +172,32 @@ Deno.serve(async (req: Request) => {
 
       try {
         // Switch to caller context for the workspace? No — service role bypasses
-        // RLS but enqueue_analytics_alert is security_definer and uses
-        // get_my_workspace() which won't resolve under service role. So we
-        // insert directly via the admin client and dual-write below if needed.
+        // P1-4 fix (mig 193): single source of truth via enqueue_analytics_alert
+        // RPC. The RPC takes p_workspace_id explicitly so service-role callers
+        // (us) work correctly. It handles dedupe + dual-write to exception_queue
+        // + insert atomically.
         const title = `${def.label} ${verdict.severity === "critical" ? "CRITICAL" : "WARNING"}`;
         const description = `${verdict.reason}. Calculated ${snapshot.calculated_at}.`;
         const severity = verdict.severity;
 
-        // Manual dedupe check
-        const { data: existing } = await admin
-          .from("analytics_alerts")
-          .select("id, source_record_ids")
-          .eq("workspace_id", snapshot.workspace_id)
-          .eq("dedupe_key", dedupeKey)
-          .in("status", ["new", "acknowledged", "in_progress"])
-          .maybeSingle();
+        const { data: alertId, error: rpcErr } = await admin.rpc("enqueue_analytics_alert", {
+          p_workspace_id: snapshot.workspace_id,
+          p_alert_type: "threshold_breach",
+          p_metric_key: snapshot.metric_key,
+          p_severity: severity,
+          p_title: title,
+          p_description: description,
+          p_role_target: def.owner_role,
+          p_dedupe_key: dedupeKey,
+          p_metadata: {
+            snapshot_calculated_at: snapshot.calculated_at,
+            snapshot_metadata: snapshot.metadata,
+            threshold_config: def.threshold_config,
+          },
+        });
+        if (rpcErr) throw new Error(rpcErr.message);
 
-        if (existing) {
-          // Bump updated_at
-          await admin.from("analytics_alerts").update({ updated_at: new Date().toISOString() }).eq("id", existing.id);
-          fired.push({ metric_key: snapshot.metric_key, severity, alert_id: existing.id });
-          continue;
-        }
-
-        // Dual-write to exception_queue for blockers
-        let exceptionQueueId: string | null = null;
-        if (severity === "critical" || severity === "error") {
-          const { data: exq } = await admin.from("exception_queue").insert({
-            source: "analytics_alert",
-            severity,
-            title,
-            detail: description,
-            payload: {
-              metric_key: snapshot.metric_key,
-              role_target: def.owner_role,
-              metric_value: snapshot.metric_value,
-              dedupe_key: dedupeKey,
-            },
-            workspace_id: snapshot.workspace_id,
-          }).select("id").maybeSingle();
-          exceptionQueueId = exq?.id ?? null;
-        }
-
-        const { data: alert, error: insErr } = await admin.from("analytics_alerts").insert({
-          workspace_id: snapshot.workspace_id,
-          alert_type: "threshold_breach",
-          metric_key: snapshot.metric_key,
-          severity,
-          title,
-          description,
-          role_target: def.owner_role,
-          dedupe_key: dedupeKey,
-          exception_queue_id: exceptionQueueId,
-          source_record_ids: [],
-          metadata: { snapshot_calculated_at: snapshot.calculated_at, snapshot_metadata: snapshot.metadata, threshold_config: def.threshold_config },
-        }).select("id").maybeSingle();
-        if (insErr) throw new Error(insErr.message);
-
-        fired.push({ metric_key: snapshot.metric_key, severity, alert_id: alert?.id });
+        fired.push({ metric_key: snapshot.metric_key, severity, alert_id: alertId as string | undefined });
       } catch (err) {
         console.warn(`[alert-evaluator] failed for ${snapshot.metric_key}:`, (err as Error).message);
       }
@@ -282,6 +251,7 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   } catch (err) {
+    captureEdgeException(err, { fn: "analytics-alert-evaluator", req });
     return new Response(JSON.stringify({ ok: false, error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders(origin), "Content-Type": "application/json" },

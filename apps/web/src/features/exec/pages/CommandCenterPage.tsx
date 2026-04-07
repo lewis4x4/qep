@@ -14,7 +14,8 @@ import { useState, useCallback } from "react";
 import { Crown, Wallet, Truck, RefreshCcw } from "lucide-react";
 import { DashboardPivotToggle } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
 import { CfoCommandCenterView } from "../views/CfoCommandCenterView";
 import { CooCommandCenterView } from "../views/CooCommandCenterView";
@@ -31,6 +32,25 @@ const TABS = [
 export function CommandCenterPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<ExecRoleTab>("ceo");
+
+  // Resolve the calling user's workspace once. Threaded into the drill drawer
+  // so its snapshot history + alerts queries can explicitly filter by
+  // workspace_id (P1-2 fix). Cached indefinitely — workspace doesn't change.
+  const { data: workspaceId = "default" } = useQuery({
+    queryKey: ["exec", "my-workspace"],
+    queryFn: async (): Promise<string> => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      if (!uid) return "default";
+      const res = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => { eq: (c: string, v: string) => { maybeSingle: () => Promise<{ data: { workspace_id: string | null } | null; error: unknown }> } };
+        };
+      }).from("profiles").select("workspace_id").eq("id", uid).maybeSingle();
+      return res.data?.workspace_id ?? "default";
+    },
+    staleTime: Infinity,
+  });
   const [drillMetric, setDrillMetric] = useState<string | null>(null);
 
   const handleDrill = useCallback((metricKey: string) => {
@@ -72,7 +92,7 @@ export function CommandCenterPage() {
       {tab === "coo" && <CooCommandCenterView onDrill={handleDrill} />}
 
       {/* Universal drill drawer (Slice 5) */}
-      <MetricDrillDrawer metricKey={drillMetric} onClose={() => setDrillMetric(null)} />
+      <MetricDrillDrawer metricKey={drillMetric} workspaceId={workspaceId} onClose={() => setDrillMetric(null)} />
     </div>
   );
 }
