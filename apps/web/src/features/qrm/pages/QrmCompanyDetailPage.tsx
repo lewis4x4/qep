@@ -14,6 +14,16 @@ import { QrmCompanySubtreeEquipmentSection } from "../components/QrmCompanySubtr
 import { QrmCustomFieldsCard } from "../components/QrmCustomFieldsCard";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { fetchAccount360 } from "../lib/account-360-api";
+import {
+  AccountNextBestActions,
+  AccountFleetTab,
+  AccountQuotesTab,
+  AccountServiceTab,
+  AccountPartsTab,
+  AccountARTab,
+} from "../components/Account360Tabs";
+import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -46,6 +56,15 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+  const [account360Tab, setAccount360Tab] = useState<"fleet" | "quotes" | "service" | "parts" | "ar">("fleet");
+  const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
+
+  const account360Query = useQuery({
+    queryKey: ["account-360", companyId],
+    queryFn: () => fetchAccount360(companyId!),
+    enabled: !!companyId,
+    staleTime: 30_000,
+  });
 
   const companyQuery = useQuery({
     queryKey: ["crm", "company", companyId],
@@ -292,8 +311,77 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
         <>
           <div className="flex items-start justify-between gap-3">
             <QrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
-            <AskIronAdvisorButton contextType="company" contextId={companyId} variant="inline" />
+            <div className="flex items-center gap-2">
+              {account360Query.data?.health?.current_score != null && (
+                <button
+                  type="button"
+                  onClick={() => setHealthDrawerOpen(true)}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                    Number(account360Query.data.health.current_score) >= 75
+                      ? "border-emerald-500/40 text-emerald-400"
+                      : Number(account360Query.data.health.current_score) >= 50
+                        ? "border-amber-500/40 text-amber-400"
+                        : "border-red-500/40 text-red-400"
+                  }`}
+                  title="Health score — click for explainer"
+                >
+                  Health {Math.round(Number(account360Query.data.health.current_score))}
+                </button>
+              )}
+              <AskIronAdvisorButton contextType="company" contextId={companyId} variant="inline" />
+            </div>
           </div>
+
+          {/* Recommended Next Best Actions composite */}
+          {account360Query.data && (
+            <AccountNextBestActions data={account360Query.data} />
+          )}
+
+          {/* Account 360 tabs */}
+          {account360Query.data && (
+            <div>
+              <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
+                {[
+                  { key: "fleet",   label: `Fleet (${account360Query.data.fleet.length})` },
+                  { key: "quotes",  label: `Open Quotes (${account360Query.data.open_quotes.length})` },
+                  { key: "service", label: `Service (${account360Query.data.service.length})` },
+                  { key: "parts",   label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
+                  { key: "ar",      label: `Invoices / AR (${account360Query.data.invoices.length})` },
+                ].map((t) => {
+                  const isActive = t.key === account360Tab;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setAccount360Tab(t.key as typeof account360Tab)}
+                      className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                        isActive
+                          ? "border-qep-orange text-qep-orange"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3">
+                {account360Tab === "fleet"   && <AccountFleetTab fleet={account360Query.data.fleet} companyId={companyId!} />}
+                {account360Tab === "quotes"  && <AccountQuotesTab quotes={account360Query.data.open_quotes} />}
+                {account360Tab === "service" && <AccountServiceTab service={account360Query.data.service} />}
+                {account360Tab === "parts"   && <AccountPartsTab parts={account360Query.data.parts} />}
+                {account360Tab === "ar"      && <AccountARTab invoices={account360Query.data.invoices} arBlock={account360Query.data.ar_block} />}
+              </div>
+            </div>
+          )}
+
+          <HealthScoreDrawer
+            customerProfileId={(account360Query.data?.profile?.id as string | undefined) ?? null}
+            open={healthDrawerOpen}
+            onOpenChange={setHealthDrawerOpen}
+          />
 
           <Card className="border-border bg-card p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
