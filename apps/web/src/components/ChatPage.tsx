@@ -187,6 +187,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         else if (ctxType === "service_job") fromAskAdvisor.serviceJobId = ctxId;
         else if (ctxType === "parts_order") fromAskAdvisor.partsOrderId = ctxId;
         else if (ctxType === "voice_capture") fromAskAdvisor.voiceCaptureId = ctxId;
+        else if (ctxType === "flare") fromAskAdvisor.flareReportId = ctxId;
       }
       return {
         customerProfileId: searchParams.get("customer_profile_id") || undefined,
@@ -197,6 +198,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         serviceJobId: fromAskAdvisor.serviceJobId,
         partsOrderId: fromAskAdvisor.partsOrderId,
         voiceCaptureId: fromAskAdvisor.voiceCaptureId,
+        flareReportId: fromAskAdvisor.flareReportId,
       };
     },
     [searchParams]
@@ -204,8 +206,10 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const hasChatContext = Boolean(
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
     || chatContext.equipmentId || chatContext.serviceJobId || chatContext.partsOrderId || chatContext.voiceCaptureId
+    || chatContext.flareReportId
   );
   const contextLabel = useMemo(() => {
+    if (chatContext.flareReportId) return "Flare report context active: answers can use the captured bug context, click trail, and console errors.";
     if (chatContext.equipmentId) return "Asset context active: answers can use this equipment's full history + matching service KB.";
     if (chatContext.serviceJobId) return "Service job context active.";
     if (chatContext.partsOrderId) return "Parts order context active.";

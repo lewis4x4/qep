@@ -11,6 +11,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { NotFoundPage } from "./components/NotFoundPage";
 import { NoProfileShell } from "./components/NoProfileShell";
 import { Toaster } from "@/components/ui/toaster";
+import { FlareProvider } from "@/lib/flare/FlareProvider";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
@@ -159,6 +160,9 @@ const IdeaBacklogPage = lazy(() =>
 );
 const PrimitivesPlaygroundPage = lazy(() =>
   import("./features/dev/pages/PrimitivesPlaygroundPage").then((m) => ({ default: m.PrimitivesPlaygroundPage }))
+);
+const FlareAdminPage = lazy(() =>
+  import("./features/admin/pages/FlareAdminPage").then((m) => ({ default: m.FlareAdminPage }))
 );
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
@@ -569,6 +573,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppErrorBoundary>
+          <FlareProvider>
           <OfflineBanner />
           <SessionExpiredModal
             open={showSessionExpiredModal}
@@ -1367,6 +1372,26 @@ function App() {
                 }
               />
               <Route
+                path="/admin/flare"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <FlareAdminPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/flare/:reportId"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <FlareAdminPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/qrm/equipment/:equipmentId"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
@@ -1437,6 +1462,7 @@ function App() {
               <Route path="*" element={<NotFoundPage />} />
             </AnimatedRoutes>
           </AppLayout>
+          </FlareProvider>
         </AppErrorBoundary>
         <Toaster />
       </BrowserRouter>

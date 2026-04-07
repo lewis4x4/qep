@@ -39,6 +39,8 @@ interface ChatContextPayload {
   serviceJobId?: string;
   partsOrderId?: string;
   voiceCaptureId?: string;
+  // Wave 6.11 Flare context type
+  flareReportId?: string;
 }
 
 interface EvidenceItem {
@@ -403,10 +405,12 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
     serviceJobId: cleanUuid(context.serviceJobId) ?? undefined,
     partsOrderId: cleanUuid(context.partsOrderId) ?? undefined,
     voiceCaptureId: cleanUuid(context.voiceCaptureId) ?? undefined,
+    flareReportId: cleanUuid(context.flareReportId) ?? undefined,
   };
 
   if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId
-      && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId) {
+      && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId
+      && !parsed.flareReportId) {
     return null;
   }
   return parsed;
@@ -2325,7 +2329,7 @@ Deno.serve(async (req) => {
     // callerClient BEFORE any admin-privileged fetch. Without this guard,
     // a rep could pass an equipment_id / service_job_id they don't own and
     // exfiltrate private records via the preload block. (Round-4 audit fix.)
-    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId)) {
+    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId || context.flareReportId)) {
       const preloadParts: string[] = [];
 
       if (context.equipmentId) {
@@ -2395,6 +2399,26 @@ Deno.serve(async (req) => {
             .maybeSingle();
           if (vc) preloadParts.push(`### Voice capture (preloaded)\n${JSON.stringify(vc, null, 0)}`);
         } catch { /* swallow */ }
+      }
+
+      // Wave 6.11 Flare context preload — RLS-gated via callerClient.
+      // The flare_reports row is workspace-scoped via flare_workspace_read,
+      // so callerClient returning a row means the caller has access.
+      if (context.flareReportId) {
+        try {
+          const { data: flare } = await callerClient
+            .from("flare_reports")
+            .select("id, severity, status, user_description, route, url, page_title, console_errors, click_trail, route_trail, hypothesis_pattern, ai_severity_recommendation, ai_severity_reasoning, reproducer_steps, browser, os, viewport, created_at, reporter_email, reporter_role")
+            .eq("id", context.flareReportId)
+            .maybeSingle();
+          if (flare) {
+            preloadParts.push(`### Flare report (preloaded by AskIronAdvisor)\n${JSON.stringify(flare, null, 0)}`);
+          } else {
+            console.warn(`[chat:${traceId}] flare preload denied by RLS for ${context.flareReportId}`);
+          }
+        } catch (err) {
+          console.warn(`[chat:${traceId}] flare preload failed:`, err);
+        }
       }
 
       if (preloadParts.length > 0) {
