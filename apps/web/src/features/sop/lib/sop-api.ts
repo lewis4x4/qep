@@ -202,6 +202,9 @@ export async function startSopExecution(input: {
   });
 }
 
+export type SopCompletionState =
+  | "completed" | "skipped" | "deferred" | "satisfied_elsewhere" | "not_applicable";
+
 export async function completeStep(
   executionId: string,
   input: {
@@ -210,12 +213,37 @@ export async function completeStep(
     notes?: string;
     evidence_urls?: string[];
     duration_minutes?: number;
+    /** Phase 2E: false-positive protection state. Default 'completed'. */
+    completion_state?: SopCompletionState;
+    /** Phase 2E: AI confidence in step→evidence mapping (0-1). */
+    confidence_score?: number;
   },
 ): Promise<{ completion: SopStepCompletion }> {
   return request<{ completion: SopStepCompletion }>(
     `${SOP_ENGINE_URL}/executions/${executionId}/complete-step`,
     { method: "POST", body: JSON.stringify(input) },
   );
+}
+
+/**
+ * Mark a step as Not Applicable. Direct supabase write since the
+ * sop-engine edge function doesn't yet route NA through complete-step.
+ * RLS scopes by execution workspace.
+ */
+export async function markStepNotApplicable(
+  executionId: string,
+  stepId: string,
+  reason: string,
+): Promise<void> {
+  const { error } = await (supabase as unknown as {
+    from: (t: string) => { insert: (v: Record<string, unknown>) => Promise<{ error: unknown }> };
+  }).from("sop_step_completions").insert({
+    sop_execution_id: executionId,
+    sop_step_id: stepId,
+    completion_state: "not_applicable",
+    notes: reason,
+  });
+  if (error) throw new Error(String((error as { message?: string }).message ?? "NA mark failed"));
 }
 
 export async function skipStep(

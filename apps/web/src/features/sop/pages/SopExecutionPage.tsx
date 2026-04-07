@@ -11,6 +11,7 @@ import {
   completeStep,
   skipStep,
   closeExecution,
+  markStepNotApplicable,
   type SopStep,
   type SopStepCompletion,
 } from "../lib/sop-api";
@@ -65,6 +66,17 @@ export function SopExecutionPage() {
     mutationFn: (status: "completed" | "abandoned") =>
       closeExecution(executionId!, { status }),
     onSuccess: () => invalidate(),
+  });
+
+  // Phase 2E: Not Applicable path — does NOT count against compliance.
+  const naMutation = useMutation({
+    mutationFn: (input: { stepId: string; reason: string }) =>
+      markStepNotApplicable(executionId!, input.stepId, input.reason),
+    onSuccess: () => {
+      setActiveStepId(null);
+      setSkipReason("");
+      invalidate();
+    },
   });
 
   const completionByStep = useMemo(() => {
@@ -215,17 +227,22 @@ export function SopExecutionPage() {
               onSkipReasonChange={setSkipReason}
               onComplete={() => completeMutation.mutate(step.id)}
               onSkip={() => skipMutation.mutate(step.id)}
+              onMarkNotApplicable={() => naMutation.mutate({
+                stepId: step.id,
+                reason: skipReason || "Not applicable for this execution",
+              })}
               isCompleting={completeMutation.isPending && completeMutation.variables === step.id}
               isSkipping={skipMutation.isPending && skipMutation.variables === step.id}
+              isMarkingNa={naMutation.isPending && naMutation.variables?.stepId === step.id}
             />
           );
         })}
       </div>
 
-      {(completeMutation.isError || skipMutation.isError || closeMutation.isError) && (
+      {(completeMutation.isError || skipMutation.isError || closeMutation.isError || naMutation.isError) && (
         <Card className="border-red-500/20 p-3">
           <p className="text-xs text-red-400">
-            {((completeMutation.error || skipMutation.error || closeMutation.error) as Error)?.message ?? "Action failed"}
+            {((completeMutation.error || skipMutation.error || closeMutation.error || naMutation.error) as Error)?.message ?? "Action failed"}
           </p>
         </Card>
       )}
@@ -239,7 +256,7 @@ function ExecutionStepCard({
   step, index, completion, isSkipped, isActive, isDone, canAct,
   notes, decision, skipReason,
   onToggle, onNotesChange, onDecisionChange, onSkipReasonChange,
-  onComplete, onSkip, isCompleting, isSkipping,
+  onComplete, onSkip, onMarkNotApplicable, isCompleting, isSkipping, isMarkingNa,
 }: {
   step: SopStep;
   index: number;
@@ -257,8 +274,10 @@ function ExecutionStepCard({
   onSkipReasonChange: (v: string) => void;
   onComplete: () => void;
   onSkip: () => void;
+  onMarkNotApplicable: () => void;
   isCompleting: boolean;
   isSkipping: boolean;
+  isMarkingNa: boolean;
 }) {
   return (
     <Card className={`p-3 ${isDone ? "opacity-70" : ""} ${isActive ? "border-qep-orange" : ""}`}>
@@ -360,12 +379,22 @@ function ExecutionStepCard({
               className="mt-1 w-full rounded-md border border-border bg-card px-2 py-1.5 text-sm"
             />
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onMarkNotApplicable}
+              disabled={isMarkingNa || isSkipping || isCompleting}
+              title="This step doesn't apply here. Excluded from compliance counts."
+            >
+              {isMarkingNa ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              Not applicable
+            </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={onSkip}
-              disabled={isSkipping || isCompleting}
+              disabled={isSkipping || isCompleting || isMarkingNa}
             >
               {isSkipping ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <SkipForward className="mr-1 h-3 w-3" />}
               Skip
@@ -373,7 +402,7 @@ function ExecutionStepCard({
             <Button
               size="sm"
               onClick={onComplete}
-              disabled={isCompleting || isSkipping}
+              disabled={isCompleting || isSkipping || isMarkingNa}
             >
               {isCompleting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
               Complete step
