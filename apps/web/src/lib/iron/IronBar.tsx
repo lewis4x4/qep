@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Command } from "cmdk";
-import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff, Volume2, VolumeX, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,9 +25,22 @@ import { useIronStore } from "./store";
 import { useIronVoiceRecorder } from "./voice/useIronVoiceRecorder";
 import { ironTranscribe } from "./voice/api";
 import { ironSpeak, cancelIronSpeech } from "./voice/tts";
+import { isLikelySameSpeaker } from "./voice/voiceFingerprint";
 
 export function IronBar() {
-  const { state, openBar, closeBar, startFlow, setAvatar, setError, setNarrationEnabled, setLastInputMode } = useIronStore();
+  const {
+    state,
+    openBar,
+    closeBar,
+    startFlow,
+    setAvatar,
+    setError,
+    setNarrationEnabled,
+    setLastInputMode,
+    setCanonicalFingerprint,
+    setMultiVoiceWarning,
+    resetCanonicalFingerprint,
+  } = useIronStore();
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
@@ -193,6 +206,21 @@ export function IronBar() {
         setAvatar("idle");
         return;
       }
+
+      // v1.4: speaker fingerprint comparison. The recorder always returns a
+      // fingerprint; we only act on it if it has enough voice frames to be
+      // judgeable (sampleCount >= 4 inside isLikelySameSpeaker).
+      if (result.fingerprint.sampleCount >= 4) {
+        if (!state.canonicalFingerprint) {
+          // First voice utterance of the session — stamp the canonical
+          setCanonicalFingerprint(result.fingerprint);
+        } else if (!isLikelySameSpeaker(state.canonicalFingerprint, result.fingerprint)) {
+          // Different voice detected. Non-blocking — Iron still processes
+          // the transcript, but the operator gets a heads-up.
+          setMultiVoiceWarning(true);
+        }
+      }
+
       const transcribed = await ironTranscribe(result.blob, result.fileName);
       if (!transcribed.ok || !transcribed.transcript) {
         setResponse(transcribed.message ?? "No speech detected.");
@@ -210,7 +238,7 @@ export function IronBar() {
     } finally {
       setVoicePending(false);
     }
-  }, [recorder, setAvatar, submit]);
+  }, [recorder, setAvatar, submit, state.canonicalFingerprint, setCanonicalFingerprint, setMultiVoiceWarning]);
 
   const handleMicClick = useCallback(() => {
     if (recorder.state === "recording") {
@@ -277,6 +305,30 @@ export function IronBar() {
         </DialogHeader>
 
         <Command className="bg-transparent">
+          {state.multiVoiceWarning && (
+            <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px]">
+              <Bot className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-amber-300">Heads up — I'm hearing a second voice.</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Iron will keep going, but if someone else just took over, double-check the next confirmation step.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  // Operator switch: dismiss warning AND reset canonical so the
+                  // next utterance becomes the new speaker baseline. The next
+                  // recorder.stop() will re-stamp via SET_CANONICAL_FINGERPRINT.
+                  resetCanonicalFingerprint();
+                }}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/30"
+                aria-label="Dismiss multi-voice warning"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 px-3 pt-2 pb-1">
             <Bot className="h-4 w-4 text-muted-foreground" />
             <input

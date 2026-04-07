@@ -20,6 +20,7 @@ import type {
   IronAvatarState,
   IronFlowDefinitionLite,
 } from "./types";
+import type { SpeakerFingerprint } from "./voice/voiceFingerprint";
 
 export interface IronUndoToast {
   run_id: string;
@@ -52,6 +53,10 @@ interface IronState {
   narrationEnabled: boolean;
   /** v1.2: most recent input mode — drives auto-narration heuristic. */
   lastInputMode: "text" | "voice";
+  /** v1.4: canonical speaker fingerprint for the current session. Captured on the first voice utterance, compared against subsequent utterances for multi-voice detection. Cleared when the bar closes. */
+  canonicalFingerprint: SpeakerFingerprint | null;
+  /** v1.4: true when a recently-captured fingerprint did not match the canonical. Cleared when the user dismisses the banner. */
+  multiVoiceWarning: boolean;
 }
 
 const NARRATION_LS_KEY = "iron:narration_enabled";
@@ -84,6 +89,8 @@ const initialState: IronState = {
   errorBanner: null,
   narrationEnabled: loadNarrationPref(),
   lastInputMode: "text",
+  canonicalFingerprint: null,
+  multiVoiceWarning: false,
 };
 
 type Action =
@@ -102,14 +109,25 @@ type Action =
   | { type: "DISMISS_UNDO_TOAST" }
   | { type: "SET_ERROR"; message: string | null }
   | { type: "SET_NARRATION_ENABLED"; enabled: boolean }
-  | { type: "SET_LAST_INPUT_MODE"; mode: "text" | "voice" };
+  | { type: "SET_LAST_INPUT_MODE"; mode: "text" | "voice" }
+  | { type: "SET_CANONICAL_FINGERPRINT"; fingerprint: SpeakerFingerprint }
+  | { type: "RESET_CANONICAL_FINGERPRINT" }
+  | { type: "SET_MULTI_VOICE_WARNING"; warning: boolean };
 
 function reducer(state: IronState, action: Action): IronState {
   switch (action.type) {
     case "OPEN_BAR":
       return { ...state, barOpen: true };
     case "CLOSE_BAR":
-      return { ...state, barOpen: false };
+      // v1.4: closing the bar ends the speaker session — reset the canonical
+      // fingerprint and clear any standing multi-voice warning so the next
+      // session starts clean.
+      return {
+        ...state,
+        barOpen: false,
+        canonicalFingerprint: null,
+        multiVoiceWarning: false,
+      };
     case "SET_AVATAR":
       return { ...state, avatarState: action.state };
     case "SET_CONVERSATION":
@@ -195,6 +213,12 @@ function reducer(state: IronState, action: Action): IronState {
       return { ...state, narrationEnabled: action.enabled };
     case "SET_LAST_INPUT_MODE":
       return { ...state, lastInputMode: action.mode };
+    case "SET_CANONICAL_FINGERPRINT":
+      return { ...state, canonicalFingerprint: action.fingerprint };
+    case "RESET_CANONICAL_FINGERPRINT":
+      return { ...state, canonicalFingerprint: null, multiVoiceWarning: false };
+    case "SET_MULTI_VOICE_WARNING":
+      return { ...state, multiVoiceWarning: action.warning };
     default:
       return state;
   }
@@ -218,6 +242,9 @@ interface IronStoreApi {
   setError: (message: string | null) => void;
   setNarrationEnabled: (enabled: boolean) => void;
   setLastInputMode: (mode: "text" | "voice") => void;
+  setCanonicalFingerprint: (fingerprint: SpeakerFingerprint) => void;
+  resetCanonicalFingerprint: () => void;
+  setMultiVoiceWarning: (warning: boolean) => void;
 }
 
 const IronStoreContext = createContext<IronStoreApi | null>(null);
@@ -255,6 +282,9 @@ export function IronStoreProvider({ children }: { children: ReactNode }) {
       setError: (message) => d({ type: "SET_ERROR", message }),
       setNarrationEnabled: (enabled) => d({ type: "SET_NARRATION_ENABLED", enabled }),
       setLastInputMode: (mode) => d({ type: "SET_LAST_INPUT_MODE", mode }),
+      setCanonicalFingerprint: (fingerprint) => d({ type: "SET_CANONICAL_FINGERPRINT", fingerprint }),
+      resetCanonicalFingerprint: () => d({ type: "RESET_CANONICAL_FINGERPRINT" }),
+      setMultiVoiceWarning: (warning) => d({ type: "SET_MULTI_VOICE_WARNING", warning }),
     };
   }, [state]);
 
