@@ -20,6 +20,16 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
+import { captureEdgeException } from "../_shared/sentry.ts";
+
+interface ProfileRoleRow {
+  role: string | null;
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -37,6 +47,14 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const callerRole = ((profile as ProfileRoleRow | null)?.role ?? "").trim();
+    const isManagerPlus = callerRole === "manager" || callerRole === "owner" || callerRole === "admin";
 
     const url = new URL(req.url);
     const pathParts = url.pathname.replace(/^\/functions\/v1\/sop-engine\/?/, "").split("/").filter(Boolean);
@@ -254,8 +272,157 @@ Deno.serve(async (req) => {
       return safeJsonOk({ compliance: data }, origin);
     }
 
+    // ── Suppression queue review ───────────────────────────────────────
+    if (resource === "suppression-queue") {
+      if (!isManagerPlus) {
+        return safeJsonError("Suppression review requires manager, admin, or owner role", 403, origin);
+      }
+
+      if (req.method === "GET" && !resourceId) {
+        const statusFilter = url.searchParams.get("status") ?? "pending";
+        let query = supabase
+          .from("sop_suppression_queue")
+          .select(`
+            id,
+            workspace_id,
+            sop_execution_id,
+            sop_step_id,
+            proposed_state,
+            proposed_evidence,
+            confidence_score,
+            reason,
+            status,
+            resolved_by,
+            resolved_at,
+            created_at,
+            updated_at,
+            sop_executions!inner(id, sop_template_id, context_entity_type, context_entity_id, status),
+            sop_steps!inner(id, sort_order, title, sop_template_id),
+            sop_templates!inner(id, title, department)
+          `)
+          .order("created_at", { ascending: false });
+
+        if (statusFilter) {
+          query = query.eq("status", statusFilter);
+        }
+
+        const { data, error } = await query;
+        if (error) return safeJsonError("Failed to load suppression queue", 500, origin);
+        return safeJsonOk({ items: data ?? [] }, origin);
+      }
+
+      if (req.method === "POST" && resourceId && action === "resolve") {
+        const body = await req.json().catch(() => ({}));
+        const resolution = typeof body.status === "string" ? body.status.trim() : "";
+        if (resolution !== "approved" && resolution !== "rejected") {
+          return safeJsonError("status must be approved or rejected", 400, origin);
+        }
+
+        const { data: queueItem, error: queueError } = await supabase
+          .from("sop_suppression_queue")
+          .select("*")
+          .eq("id", resourceId)
+          .maybeSingle();
+        if (queueError || !queueItem) {
+          return safeJsonError("Suppression item not found", 404, origin);
+        }
+        if (queueItem.status !== "pending") {
+          return safeJsonError("Suppression item has already been resolved", 409, origin);
+        }
+
+        if (resolution === "approved") {
+          const evidence = typeof queueItem.proposed_evidence === "object" && queueItem.proposed_evidence !== null
+            ? queueItem.proposed_evidence as Record<string, unknown>
+            : {};
+          const evidenceUrls = stringArrayFromUnknown(evidence.evidence_urls);
+          const notes = typeof queueItem.reason === "string" && queueItem.reason.trim().length > 0
+            ? queueItem.reason.trim()
+            : typeof evidence.notes === "string" && evidence.notes.trim().length > 0
+            ? evidence.notes.trim()
+            : null;
+          const decisionTaken = typeof evidence.decision_taken === "string" && evidence.decision_taken.trim().length > 0
+            ? evidence.decision_taken.trim()
+            : null;
+          const proposedState = String(queueItem.proposed_state);
+
+          if (proposedState === "skipped") {
+            const { data: existingSkip } = await supabase
+              .from("sop_step_skips")
+              .select("id")
+              .eq("sop_execution_id", queueItem.sop_execution_id)
+              .eq("sop_step_id", queueItem.sop_step_id)
+              .maybeSingle();
+
+            if (!existingSkip) {
+              const { error: skipError } = await supabase
+                .from("sop_step_skips")
+                .insert({
+                  sop_execution_id: queueItem.sop_execution_id,
+                  sop_step_id: queueItem.sop_step_id,
+                  skipped_by: user.id,
+                  skip_reason: notes,
+                });
+              if (skipError) return safeJsonError("Failed to approve skip", 500, origin);
+            }
+          } else {
+            const { data: existingCompletion } = await supabase
+              .from("sop_step_completions")
+              .select("id")
+              .eq("sop_execution_id", queueItem.sop_execution_id)
+              .eq("sop_step_id", queueItem.sop_step_id)
+              .maybeSingle();
+
+            if (existingCompletion?.id) {
+              const { error: updateError } = await supabase
+                .from("sop_step_completions")
+                .update({
+                  completed_by: user.id,
+                  completed_at: new Date().toISOString(),
+                  completion_state: proposedState,
+                  confidence_score: queueItem.confidence_score,
+                  notes,
+                  decision_taken: decisionTaken,
+                  evidence_urls: evidenceUrls,
+                })
+                .eq("id", existingCompletion.id);
+              if (updateError) return safeJsonError("Failed to update approved completion", 500, origin);
+            } else {
+              const { error: completionError } = await supabase
+                .from("sop_step_completions")
+                .insert({
+                  sop_execution_id: queueItem.sop_execution_id,
+                  sop_step_id: queueItem.sop_step_id,
+                  completed_by: user.id,
+                  completion_state: proposedState,
+                  confidence_score: queueItem.confidence_score,
+                  notes,
+                  decision_taken: decisionTaken,
+                  evidence_urls: evidenceUrls,
+                });
+              if (completionError) return safeJsonError("Failed to approve suppression item", 500, origin);
+            }
+          }
+        }
+
+        const { data: updatedQueue, error: updateQueueError } = await supabase
+          .from("sop_suppression_queue")
+          .update({
+            status: resolution,
+            resolved_by: user.id,
+            resolved_at: new Date().toISOString(),
+          })
+          .eq("id", resourceId)
+          .select()
+          .single();
+        if (updateQueueError) return safeJsonError("Failed to resolve suppression item", 500, origin);
+
+        return safeJsonOk({ item: updatedQueue }, origin);
+      }
+    }
+
     return safeJsonError("Not found", 404, origin);
   } catch (err) {
+    captureEdgeException(err, { fn: "sop-engine", req });
     console.error("sop-engine error:", err);
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }

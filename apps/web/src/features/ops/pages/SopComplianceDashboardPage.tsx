@@ -1,7 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
-import { AlertTriangle, CheckCircle, Clock, TrendingDown } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, GitBranch, Loader2, ShieldAlert, TrendingDown, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  listSuppressionQueue,
+  resolveSuppressionQueueItem,
+  type SopSuppressionQueueItem,
+} from "../../sop/lib/sop-api";
 
 interface StepAnalysis {
   step_id: string;
@@ -27,6 +33,7 @@ interface ComplianceRow {
 }
 
 export function SopComplianceDashboardPage() {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["ops", "sop-compliance"],
     queryFn: async () => {
@@ -44,12 +51,129 @@ export function SopComplianceDashboardPage() {
     staleTime: 60_000,
   });
 
+  const suppressionQuery = useQuery({
+    queryKey: ["ops", "sop-suppression-queue"],
+    queryFn: async () => {
+      const result = await listSuppressionQueue("pending");
+      return result.items;
+    },
+    staleTime: 30_000,
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: (input: { id: string; status: "approved" | "rejected" }) =>
+      resolveSuppressionQueueItem(input.id, input.status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ops", "sop-suppression-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["ops", "sop-compliance"] });
+    },
+  });
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-2 sm:px-6 lg:px-8 space-y-4">
       <div>
         <h1 className="text-xl font-bold text-foreground">SOP Compliance Dashboard</h1>
         <p className="text-sm text-muted-foreground">Completion rates, skip analysis, bottleneck identification per SOP template.</p>
       </div>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-qep-orange" />
+              <h2 className="text-sm font-bold text-foreground">Suppression review queue</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Low-confidence SOP mappings waiting on manager review before they count against compliance.
+            </p>
+          </div>
+          <span className="rounded-full bg-qep-orange/10 px-2 py-1 text-[10px] font-semibold text-qep-orange">
+            {suppressionQuery.data?.length ?? 0} pending
+          </span>
+        </div>
+
+        {suppressionQuery.isLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded bg-muted/20" />)}
+          </div>
+        ) : suppressionQuery.data && suppressionQuery.data.length > 0 ? (
+          <div className="space-y-2">
+            {suppressionQuery.data.map((item) => {
+              const evidence = item.proposed_evidence ?? {};
+              const evidenceUrls = Array.isArray(evidence.evidence_urls)
+                ? evidence.evidence_urls.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+                : [];
+              const resolving = resolveMutation.isPending && resolveMutation.variables?.id === item.id;
+
+              return (
+                <Card key={item.id} className="border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
+                          {item.sop_templates?.department ?? "sop"}
+                        </span>
+                        <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
+                          {(item.confidence_score * 100).toFixed(0)}% confidence
+                        </span>
+                        <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-400">
+                          {item.proposed_state.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-foreground">
+                        {item.sop_templates?.title ?? "SOP template"} · Step {item.sop_steps?.sort_order ?? "?"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.sop_steps?.title ?? "Unknown step"}
+                      </p>
+                      {item.reason && (
+                        <p className="mt-2 text-xs text-foreground">{item.reason}</p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+                        {item.sop_executions?.context_entity_type && (
+                          <span className="flex items-center gap-1">
+                            <GitBranch className="h-3 w-3" />
+                            {item.sop_executions.context_entity_type.replace(/_/g, " ")}
+                          </span>
+                        )}
+                        <span>{new Date(item.created_at).toLocaleString()}</span>
+                        {evidenceUrls.length > 0 && <span>{evidenceUrls.length} evidence link{evidenceUrls.length === 1 ? "" : "s"}</span>}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={resolving}
+                        onClick={() => resolveMutation.mutate({ id: item.id, status: "rejected" })}
+                      >
+                        {resolving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <XCircle className="mr-1 h-3 w-3" />}
+                        Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={resolving}
+                        onClick={() => resolveMutation.mutate({ id: item.id, status: "approved" })}
+                      >
+                        {resolving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}
+                        Approve
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No low-confidence mappings are waiting on review.</p>
+        )}
+
+        {resolveMutation.isError && (
+          <p className="text-xs text-red-400">
+            {(resolveMutation.error as Error).message}
+          </p>
+        )}
+      </Card>
 
       {isLoading && (
         <div className="space-y-3">

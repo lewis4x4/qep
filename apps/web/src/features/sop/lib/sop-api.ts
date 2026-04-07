@@ -85,6 +85,40 @@ export interface SopSuggestion {
   nudge: string;
 }
 
+export interface SopSuppressionQueueItem {
+  id: string;
+  workspace_id: string;
+  sop_execution_id: string;
+  sop_step_id: string;
+  proposed_state: SopCompletionState;
+  proposed_evidence: Record<string, unknown> | null;
+  confidence_score: number;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  sop_executions?: {
+    id: string;
+    sop_template_id: string;
+    context_entity_type: string | null;
+    context_entity_id: string | null;
+    status: SopExecutionStatus;
+  };
+  sop_steps?: {
+    id: string;
+    sort_order: number;
+    title: string;
+    sop_template_id: string;
+  };
+  sop_templates?: {
+    id: string;
+    title: string;
+    department: SopDepartment;
+  };
+}
+
 /* ── Auth helper ─────────────────────────────────────────────────── */
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -263,6 +297,27 @@ export async function closeExecution(
   return request<{ execution: SopExecution }>(
     `${SOP_ENGINE_URL}/executions/${executionId}/close`,
     { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export async function listSuppressionQueue(
+  status: "pending" | "approved" | "rejected" = "pending",
+): Promise<{ items: SopSuppressionQueueItem[] }> {
+  return request<{ items: SopSuppressionQueueItem[] }>(
+    `${SOP_ENGINE_URL}/suppression-queue?status=${status}`,
+  );
+}
+
+export async function resolveSuppressionQueueItem(
+  itemId: string,
+  status: "approved" | "rejected",
+): Promise<{ item: SopSuppressionQueueItem }> {
+  return request<{ item: SopSuppressionQueueItem }>(
+    `${SOP_ENGINE_URL}/suppression-queue/${itemId}/resolve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    },
   );
 }
 
