@@ -173,18 +173,43 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   }, []);
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const chatContext = useMemo(
-    () => ({
-      customerProfileId: searchParams.get("customer_profile_id") || undefined,
-      contactId: searchParams.get("contact_id") || undefined,
-      companyId: searchParams.get("company_id") || undefined,
-      dealId: searchParams.get("deal_id") || undefined,
-    }),
+    () => {
+      // AskIronAdvisorButton uses context_type / context_id query params.
+      // Map them onto the existing context shape so the chat fn picks them up.
+      const ctxType = searchParams.get("context_type");
+      const ctxId = searchParams.get("context_id");
+      const fromAskAdvisor: Record<string, string> = {};
+      if (ctxId) {
+        if (ctxType === "company") fromAskAdvisor.companyId = ctxId;
+        else if (ctxType === "contact") fromAskAdvisor.contactId = ctxId;
+        else if (ctxType === "deal") fromAskAdvisor.dealId = ctxId;
+        else if (ctxType === "equipment") fromAskAdvisor.equipmentId = ctxId;
+        else if (ctxType === "service_job") fromAskAdvisor.serviceJobId = ctxId;
+        else if (ctxType === "parts_order") fromAskAdvisor.partsOrderId = ctxId;
+        else if (ctxType === "voice_capture") fromAskAdvisor.voiceCaptureId = ctxId;
+      }
+      return {
+        customerProfileId: searchParams.get("customer_profile_id") || undefined,
+        contactId: searchParams.get("contact_id") || fromAskAdvisor.contactId || undefined,
+        companyId: searchParams.get("company_id") || fromAskAdvisor.companyId || undefined,
+        dealId: searchParams.get("deal_id") || fromAskAdvisor.dealId || undefined,
+        equipmentId: fromAskAdvisor.equipmentId,
+        serviceJobId: fromAskAdvisor.serviceJobId,
+        partsOrderId: fromAskAdvisor.partsOrderId,
+        voiceCaptureId: fromAskAdvisor.voiceCaptureId,
+      };
+    },
     [searchParams]
   );
   const hasChatContext = Boolean(
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
+    || chatContext.equipmentId || chatContext.serviceJobId || chatContext.partsOrderId || chatContext.voiceCaptureId
   );
   const contextLabel = useMemo(() => {
+    if (chatContext.equipmentId) return "Asset context active: answers can use this equipment's full history + matching service KB.";
+    if (chatContext.serviceJobId) return "Service job context active.";
+    if (chatContext.partsOrderId) return "Parts order context active.";
+    if (chatContext.voiceCaptureId) return "Voice capture context active.";
     if (chatContext.dealId) return "Customer context active: answers can use this deal's QRM and sales history.";
     if (chatContext.contactId) return "Customer context active: answers can use this contact's QRM and sales history.";
     if (chatContext.companyId) return "Customer context active: answers can use this company's QRM and sales history.";

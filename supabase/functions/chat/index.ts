@@ -34,6 +34,11 @@ interface ChatContextPayload {
   contactId?: string;
   companyId?: string;
   dealId?: string;
+  // Phase E: AskIronAdvisorButton context types
+  equipmentId?: string;
+  serviceJobId?: string;
+  partsOrderId?: string;
+  voiceCaptureId?: string;
 }
 
 interface EvidenceItem {
@@ -372,9 +377,14 @@ function parseChatContext(raw: unknown): ChatContextPayload | null {
     contactId: cleanUuid(context.contactId) ?? undefined,
     companyId: cleanUuid(context.companyId) ?? undefined,
     dealId: cleanUuid(context.dealId) ?? undefined,
+    equipmentId: cleanUuid(context.equipmentId) ?? undefined,
+    serviceJobId: cleanUuid(context.serviceJobId) ?? undefined,
+    partsOrderId: cleanUuid(context.partsOrderId) ?? undefined,
+    voiceCaptureId: cleanUuid(context.voiceCaptureId) ?? undefined,
   };
 
-  if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId) {
+  if (!parsed.customerProfileId && !parsed.contactId && !parsed.companyId && !parsed.dealId
+      && !parsed.equipmentId && !parsed.serviceJobId && !parsed.partsOrderId && !parsed.voiceCaptureId) {
     return null;
   }
   return parsed;
@@ -2158,7 +2168,64 @@ Deno.serve(async (req) => {
     }
 
     const evidence = [...crmEvidence, ...documentEvidence];
-    const contextBlock = evidence.length > 0 ? formatEvidenceBlock(evidence) : null;
+    let contextBlock = evidence.length > 0 ? formatEvidenceBlock(evidence) : null;
+
+    // Phase E: AskIronAdvisor record-context preload.
+    // If the caller passed equipmentId / serviceJobId / partsOrderId, fetch
+    // the matching record + KB matches and append to the system context block.
+    if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId)) {
+      const preloadParts: string[] = [];
+
+      if (context.equipmentId) {
+        try {
+          const { data: asset } = await adminClient.rpc("get_asset_360", { p_equipment_id: context.equipmentId });
+          if (asset) {
+            preloadParts.push(`### Asset 360 (preloaded by AskIronAdvisor)\n${JSON.stringify(asset, null, 0)}`);
+          }
+          // Also pull matching KB entries by make/model
+          const equip = (asset as { equipment?: { make?: string; model?: string } } | null)?.equipment;
+          if (equip?.make || equip?.model) {
+            const { data: kb } = await adminClient.rpc("match_service_knowledge", {
+              p_make: equip?.make ?? null,
+              p_model: equip?.model ?? null,
+              p_fault_code: null,
+              p_limit: 5,
+            });
+            if (Array.isArray(kb) && kb.length > 0) {
+              preloadParts.push(`### Service Knowledge Base matches (verified solutions)\n${JSON.stringify(kb, null, 0)}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`[chat:${traceId}] equipment preload failed:`, err);
+        }
+      }
+
+      if (context.serviceJobId) {
+        try {
+          const { data: sj } = await adminClient.from("service_jobs").select("*").eq("id", context.serviceJobId).maybeSingle();
+          if (sj) preloadParts.push(`### Service job (preloaded)\n${JSON.stringify(sj, null, 0)}`);
+        } catch { /* swallow */ }
+      }
+
+      if (context.partsOrderId) {
+        try {
+          const { data: po } = await adminClient.from("parts_orders").select("*").eq("id", context.partsOrderId).maybeSingle();
+          if (po) preloadParts.push(`### Parts order (preloaded)\n${JSON.stringify(po, null, 0)}`);
+        } catch { /* swallow */ }
+      }
+
+      if (context.voiceCaptureId) {
+        try {
+          const { data: vc } = await adminClient.from("voice_captures").select("*").eq("id", context.voiceCaptureId).maybeSingle();
+          if (vc) preloadParts.push(`### Voice capture (preloaded)\n${JSON.stringify(vc, null, 0)}`);
+        } catch { /* swallow */ }
+      }
+
+      if (preloadParts.length > 0) {
+        const preloadBlock = preloadParts.join("\n\n");
+        contextBlock = contextBlock ? `${contextBlock}\n\n${preloadBlock}` : preloadBlock;
+      }
+    }
 
     console.info(
       `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm_context=${contextCrmEvidence.length} crm_broad=${broadCrmEvidence.length} crm_merged=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,

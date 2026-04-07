@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Asset360Response } from "../lib/asset-360-api";
+import { KbMatchPanel } from "./KbMatchPanel";
 
 interface CommercialActionTabProps {
   data: Asset360Response;
@@ -208,17 +209,8 @@ export function CommercialActionTab({ data }: CommercialActionTabProps) {
         />
       </div>
 
-      {/* Institutional memory placeholder (v2 §1 note 14) */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Mail className="h-4 w-4 text-muted-foreground" aria-hidden />
-          <h3 className="text-sm font-bold text-foreground">What solved this last time</h3>
-          <span className="ml-auto text-[10px] text-muted-foreground">institutional memory</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Cross-asset solution memory ships in Phase 4 (service knowledge base). For now, this surface is a placeholder so the layout matches the v2 spec.
-        </p>
-      </Card>
+      {/* Institutional memory — Phase E live KB match panel */}
+      <KbMatchPanel make={equipment.make} model={equipment.model} />
     </div>
   );
 }
