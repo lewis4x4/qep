@@ -116,8 +116,17 @@ async function isAuthorizedCaller(req: Request, admin: SupabaseClient): Promise<
 
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return false;
+  const token = auth.slice(7);
+
+  // pg_cron path: the migration 200 cron schedule passes the service role
+  // key directly as the Bearer token, matching the canonical pattern used
+  // by service-tat-monitor and friends. Accept it without a user lookup.
+  if (SERVICE_ROLE_KEY && token === SERVICE_ROLE_KEY) return true;
+
+  // Manual owner-triggered path: validate the token as a user JWT and
+  // check the profile role.
   try {
-    const { data: userRes } = await admin.auth.getUser(auth.slice(7));
+    const { data: userRes } = await admin.auth.getUser(token);
     const userId = userRes?.user?.id;
     if (!userId) return false;
     const { data: profile } = await admin.from("profiles").select("role").eq("id", userId).maybeSingle();
