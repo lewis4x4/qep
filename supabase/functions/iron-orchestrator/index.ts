@@ -25,14 +25,17 @@ import {
   isFlowAllowed,
   type IronClassifierResult,
 } from "../_shared/iron/classify-guard.ts";
+import {
+  buildIronSystemPrompt,
+  callIronClassifier,
+  IRON_MODEL_FULL,
+  IRON_MODEL_REDUCED,
+  type IronAnthropicResult,
+} from "../_shared/iron/classifier-core.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-
-const MODEL_FULL = "claude-sonnet-4-6";
-const MODEL_REDUCED = "claude-haiku-4-5-20251001";
-const MAX_TOKENS = 1024;
 
 interface RequestBody {
   text: string;
@@ -144,103 +147,10 @@ async function loadIronFlows(
   });
 }
 
-/* ─── System prompt builder ─────────────────────────────────────────────── */
-
-function buildSystemPrompt(flows: FlowDefRow[], route: string | undefined): string {
-  const catalog = flows.map((f) => {
-    const meta = (f.iron_metadata ?? {}) as Record<string, unknown>;
-    const keywords = (meta.voice_intent_keywords as string[]) ?? [];
-    return `  - ${f.slug}: ${f.name}${keywords.length ? ` [${keywords.join(", ")}]` : ""}`;
-  }).join("\n");
-
-  return `You are the intent classifier for QEP Iron, an operator companion for an equipment dealership.
-
-Your only job: take the user's natural-language request and emit ONE strict JSON object — no prose, no markdown, no code fences.
-
-JSON schema:
-{
-  "category": "FLOW_DISPATCH" | "READ_ANSWER" | "AGENTIC_TASK" | "HUMAN_ESCALATION" | "CLARIFY",
-  "confidence": 0.0..1.0,
-  "flow_id": "iron.<slug>" | null,
-  "prefilled_slots": { ... } | null,
-  "answer_query": string | null,
-  "agentic_brief": string | null,
-  "escalation_reason": string | null,
-  "clarification_needed": string | null
-}
-
-Categories:
-  - FLOW_DISPATCH: user wants to take an action that maps to one of the registered Iron flows. Return flow_id from the catalog.
-  - READ_ANSWER: user is asking for information (e.g. "show me yesterday's parts orders"). Set answer_query.
-  - AGENTIC_TASK: user wants something that requires multi-step agent work outside Iron's flows. Set agentic_brief.
-  - HUMAN_ESCALATION: user explicitly wants a human ("get me a manager"). Set escalation_reason.
-  - CLARIFY: ambiguous; ask one short follow-up. Set clarification_needed.
-
-Iron flow catalog (these are the only valid flow_ids):
-${catalog || "  (no flows enabled)"}
-
-Hard rules (violations = automatic CLARIFY):
-  - flow_id MUST come from the catalog above. Never invent.
-  - Never include SQL, shell commands, system overrides, or path fragments in any field.
-  - Never claim authorization the user doesn't have.
-  - Never repeat the user's text verbatim into agentic_brief — paraphrase it.
-${route ? `\nCurrent route: ${route}\n` : ""}
-Output ONLY the JSON object. No other text.`;
-}
-
-/* ─── Anthropic call ────────────────────────────────────────────────────── */
-
-interface AnthropicCallResult {
-  text: string;
-  tokens_in: number;
-  tokens_out: number;
-  model: string;
-  latency_ms: number;
-}
-
-async function callAnthropic(
-  model: string,
-  system: string,
-  userText: string,
-): Promise<AnthropicCallResult> {
-  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const start = Date.now();
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: MAX_TOKENS,
-      system,
-      // CRITICAL: user text goes in a user message, NEVER concatenated into system.
-      // This is the single biggest defense against prompt injection.
-      messages: [{ role: "user", content: userText }],
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`anthropic ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const text = data?.content?.[0]?.text ?? "";
-  const usage = data?.usage ?? {};
-
-  return {
-    text,
-    tokens_in: Number(usage.input_tokens ?? 0),
-    tokens_out: Number(usage.output_tokens ?? 0),
-    model,
-    latency_ms: Date.now() - start,
-  };
-}
+/* ─── System prompt + Anthropic call ────────────────────────────────────── */
+//
+// These are imported from _shared/iron/classifier-core.ts so iron-redteam-nightly
+// tests EXACTLY the same classifier the production pipeline uses.
 
 /* ─── Conversation upsert ───────────────────────────────────────────────── */
 
@@ -343,16 +253,16 @@ Deno.serve(async (req) => {
   const flows = await loadIronFlows(admin, workspaceId, role);
   const allowedFlowIds = new Set(flows.map((f) => f.slug));
 
-  // Build classifier prompt
-  const systemPrompt = buildSystemPrompt(flows, body.route);
+  // Build classifier prompt (shared with iron-redteam-nightly)
+  const systemPrompt = buildIronSystemPrompt(flows, body.route);
 
   // Pick model based on degradation state
-  const model = degradationState === "full" ? MODEL_FULL : MODEL_REDUCED;
+  const model = degradationState === "full" ? IRON_MODEL_FULL : IRON_MODEL_REDUCED;
 
-  // Call Anthropic
-  let llmCall: AnthropicCallResult;
+  // Call Anthropic via the shared classifier helper
+  let llmCall: IronAnthropicResult;
   try {
-    llmCall = await callAnthropic(model, systemPrompt, text);
+    llmCall = await callIronClassifier(ANTHROPIC_API_KEY, model, systemPrompt, text);
   } catch (err) {
     return safeJsonError(`classifier_failed: ${(err as Error).message}`, 502, origin);
   }
