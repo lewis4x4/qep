@@ -42,7 +42,7 @@ interface ChatContextPayload {
 }
 
 interface EvidenceItem {
-  sourceType: "document" | "crm";
+  sourceType: "document" | "crm" | "service_note" | "service_kb";
   sourceId: string;
   sourceTitle: string;
   excerpt: string;
@@ -193,6 +193,28 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function cleanUuid(value: unknown): string | null {
   const s = cleanString(value);
   return s && UUID_RE.test(s) ? s : null;
+}
+
+function parseWorkspaceIdFromAuthHeader(authHeader: string | null): string {
+  if (!authHeader?.startsWith("Bearer ")) return "default";
+
+  try {
+    const token = authHeader.slice("Bearer ".length);
+    const parts = token.split(".");
+    if (parts.length < 2) return "default";
+    const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(payloadJson) as {
+      workspace_id?: string;
+      app_metadata?: { workspace_id?: string };
+      user_metadata?: { workspace_id?: string };
+    };
+    return payload.workspace_id ??
+      payload.app_metadata?.workspace_id ??
+      payload.user_metadata?.workspace_id ??
+      "default";
+  } catch {
+    return "default";
+  }
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -394,6 +416,7 @@ function formatEvidenceBlock(evidence: EvidenceItem[]): string {
   const grouped = {
     document: evidence.filter((item) => item.sourceType === "document"),
     crm: evidence.filter((item) => item.sourceType === "crm"),
+    service: evidence.filter((item) => item.sourceType === "service_note" || item.sourceType === "service_kb"),
   };
 
   const sections: string[] = [];
@@ -405,6 +428,11 @@ function formatEvidenceBlock(evidence: EvidenceItem[]): string {
   if (grouped.crm.length > 0) {
     sections.push(
       `QRM evidence:\n${grouped.crm.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
+    );
+  }
+  if (grouped.service.length > 0) {
+    sections.push(
+      `Service knowledge evidence:\n${grouped.service.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
     );
   }
   return sections.join("\n\n====\n\n");
@@ -422,7 +450,7 @@ function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
       id: item.sourceId,
       title: item.sourceTitle,
       confidence: Math.max(1, Math.round(item.confidence * 100)),
-      kind: item.sourceType,
+      kind: item.sourceType === "crm" ? "crm" : "document",
       excerpt: excerptSnippet,
     };
     if (!existing || next.confidence > existing.confidence) {
@@ -561,6 +589,7 @@ async function retrieveDocumentEvidence(
   input: {
     traceId: string;
     role: UserRole;
+    workspaceId: string;
     message: string;
     embedding: number[] | null;
   },
@@ -574,7 +603,13 @@ async function retrieveDocumentEvidence(
     access_class: string | null;
   }>) =>
     rows.map((item) => ({
-      sourceType: (item.source_type === "document" ? "document" : "crm") as "document" | "crm",
+      sourceType: (
+        item.source_type === "document"
+          ? "document"
+          : item.source_type === "service_note"
+          ? "service_note"
+          : "crm"
+      ) as EvidenceItem["sourceType"],
       sourceId: item.source_id,
       sourceTitle: item.source_title,
       excerpt: truncateText(item.excerpt ?? "", 500),
@@ -658,6 +693,7 @@ async function retrieveDocumentEvidence(
       user_role: input.role,
       match_count: 8,
       semantic_match_threshold: 0.45,
+      p_workspace_id: input.workspaceId,
     });
 
     if (error) {
@@ -830,6 +866,104 @@ async function retrieveDocumentEvidence(
       accessClass: doc.audience,
     };
   });
+}
+
+type ServiceKnowledgeMatchRow = {
+  id: string;
+  make: string | null;
+  model: string | null;
+  fault_code: string | null;
+  symptom: string;
+  solution: string;
+  parts_used: unknown[] | null;
+  verified: boolean;
+  use_count: number;
+};
+
+function extractFaultCode(message: string): string | null {
+  const match = message.match(/\b[A-Z]{1,4}[- ]?\d{2,5}\b/);
+  return match?.[0]?.replace(/\s+/g, "-") ?? null;
+}
+
+async function retrieveServiceKnowledgeEvidence(
+  adminClient: ReturnType<typeof createAdminClient>,
+  input: {
+    traceId: string;
+    context: ChatContextPayload | null;
+    crmEvidence: EvidenceItem[];
+    message: string;
+  },
+): Promise<EvidenceItem[]> {
+  const faultCode = extractFaultCode(input.message);
+  let make: string | null = null;
+  let model: string | null = null;
+
+  const hydrateEquipment = async (equipmentId: string | null) => {
+    if (!equipmentId) return;
+    const { data } = await adminClient
+      .from("crm_equipment")
+      .select("make, model")
+      .eq("id", equipmentId)
+      .maybeSingle();
+    make = cleanString(data?.make) ?? make;
+    model = cleanString(data?.model) ?? model;
+  };
+
+  if (input.context?.equipmentId) {
+    await hydrateEquipment(input.context.equipmentId);
+  }
+
+  if ((!make || !model) && input.context?.serviceJobId) {
+    const { data: job } = await adminClient
+      .from("service_jobs")
+      .select("machine_id")
+      .eq("id", input.context.serviceJobId)
+      .maybeSingle();
+    await hydrateEquipment(cleanUuid(job?.machine_id));
+  }
+
+  if (!make && !model) {
+    const equipmentEvidence = input.crmEvidence.find((item) => item.sourceId.startsWith("crm-equipment:"));
+    if (equipmentEvidence) {
+      await hydrateEquipment(equipmentEvidence.sourceId.replace("crm-equipment:", ""));
+    }
+  }
+
+  if (!faultCode && !make && !model) {
+    return [];
+  }
+
+  const { data, error } = await adminClient.rpc("match_service_knowledge", {
+    p_make: make,
+    p_model: model,
+    p_fault_code: faultCode,
+    p_limit: 5,
+  });
+
+  if (error) {
+    console.warn(`[chat:${input.traceId}] service knowledge lookup failed`, error);
+    return [];
+  }
+
+  return ((data ?? []) as ServiceKnowledgeMatchRow[]).map((row) => ({
+    sourceType: "service_kb",
+    sourceId: row.id,
+    sourceTitle: `Service KB: ${row.symptom.slice(0, 80)}`,
+    excerpt: truncateText(
+      [
+        row.make || row.model ? `Equipment: ${[row.make, row.model].filter(Boolean).join(" ")}` : null,
+        row.fault_code ? `Fault code: ${row.fault_code}` : null,
+        `Symptom: ${row.symptom}`,
+        `Solution: ${row.solution}`,
+        Array.isArray(row.parts_used) && row.parts_used.length > 0 ? `Parts used: ${JSON.stringify(row.parts_used)}` : null,
+        row.verified ? "Verified fix" : "Unverified field knowledge",
+        row.use_count > 0 ? `Use count: ${row.use_count}` : null,
+      ].filter(Boolean).join("\n"),
+      700,
+    ),
+    confidence: row.verified ? 0.92 : 0.82,
+    accessClass: "service_kb",
+  }));
 }
 
 async function buildCustomerContextEvidence(
@@ -2090,6 +2224,8 @@ Deno.serve(async (req) => {
     }
 
     const context = parseChatContext(rawContext);
+    const workspaceId = parseWorkspaceIdFromAuthHeader(caller.authHeader);
+    const retrievalStartedAt = Date.now();
     const embedResult = await embedQuery(rawMessage, traceId);
     const failClosedOnEmbedding = Deno.env.get("CHAT_FAIL_CLOSED_ON_EMBEDDING") === "true";
     if (!embedResult.ok && failClosedOnEmbedding) {
@@ -2114,6 +2250,7 @@ Deno.serve(async (req) => {
       documentEvidence = await retrieveDocumentEvidence(adminClient, {
         traceId,
         role: caller.role,
+        workspaceId,
         message: rawMessage,
         embedding: queryEmbedding,
       });
@@ -2167,33 +2304,57 @@ Deno.serve(async (req) => {
       }
     }
 
-    const evidence = [...crmEvidence, ...documentEvidence];
+    let serviceKnowledgeEvidence: EvidenceItem[] = [];
+    try {
+      serviceKnowledgeEvidence = await retrieveServiceKnowledgeEvidence(adminClient, {
+        traceId,
+        context,
+        crmEvidence,
+        message: rawMessage,
+      });
+    } catch (serviceKbErr) {
+      console.warn(`[chat:${traceId}] service knowledge retrieval failed (non-fatal)`, serviceKbErr);
+    }
+
+    const evidence = [...crmEvidence, ...serviceKnowledgeEvidence, ...documentEvidence];
     let contextBlock = evidence.length > 0 ? formatEvidenceBlock(evidence) : null;
 
     // Phase E: AskIronAdvisor record-context preload.
-    // If the caller passed equipmentId / serviceJobId / partsOrderId, fetch
-    // the matching record + KB matches and append to the system context block.
+    //
+    // SECURITY: every preload branch MUST verify caller RLS access via
+    // callerClient BEFORE any admin-privileged fetch. Without this guard,
+    // a rep could pass an equipment_id / service_job_id they don't own and
+    // exfiltrate private records via the preload block. (Round-4 audit fix.)
     if (context && (context.equipmentId || context.serviceJobId || context.partsOrderId || context.voiceCaptureId)) {
       const preloadParts: string[] = [];
 
       if (context.equipmentId) {
         try {
-          const { data: asset } = await adminClient.rpc("get_asset_360", { p_equipment_id: context.equipmentId });
-          if (asset) {
-            preloadParts.push(`### Asset 360 (preloaded by AskIronAdvisor)\n${JSON.stringify(asset, null, 0)}`);
-          }
-          // Also pull matching KB entries by make/model
-          const equip = (asset as { equipment?: { make?: string; model?: string } } | null)?.equipment;
-          if (equip?.make || equip?.model) {
-            const { data: kb } = await adminClient.rpc("match_service_knowledge", {
-              p_make: equip?.make ?? null,
-              p_model: equip?.model ?? null,
-              p_fault_code: null,
-              p_limit: 5,
-            });
-            if (Array.isArray(kb) && kb.length > 0) {
-              preloadParts.push(`### Service Knowledge Base matches (verified solutions)\n${JSON.stringify(kb, null, 0)}`);
+          // RLS probe: can the caller read this equipment row?
+          const { data: rlsProbe } = await callerClient
+            .from("qrm_equipment")
+            .select("id")
+            .eq("id", context.equipmentId)
+            .maybeSingle();
+          if (rlsProbe) {
+            const { data: asset } = await adminClient.rpc("get_asset_360", { p_equipment_id: context.equipmentId });
+            if (asset) {
+              preloadParts.push(`### Asset 360 (preloaded by AskIronAdvisor)\n${JSON.stringify(asset, null, 0)}`);
             }
+            const equip = (asset as { equipment?: { make?: string; model?: string } } | null)?.equipment;
+            if (equip?.make || equip?.model) {
+              const { data: kb } = await adminClient.rpc("match_service_knowledge", {
+                p_make: equip?.make ?? null,
+                p_model: equip?.model ?? null,
+                p_fault_code: null,
+                p_limit: 5,
+              });
+              if (Array.isArray(kb) && kb.length > 0) {
+                preloadParts.push(`### Service Knowledge Base matches (verified solutions)\n${JSON.stringify(kb, null, 0)}`);
+              }
+            }
+          } else {
+            console.warn(`[chat:${traceId}] equipment preload denied by RLS for ${context.equipmentId}`);
           }
         } catch (err) {
           console.warn(`[chat:${traceId}] equipment preload failed:`, err);
@@ -2202,21 +2363,36 @@ Deno.serve(async (req) => {
 
       if (context.serviceJobId) {
         try {
-          const { data: sj } = await adminClient.from("service_jobs").select("*").eq("id", context.serviceJobId).maybeSingle();
+          // Use callerClient directly — no admin escalation needed since the
+          // row is the one we want to return in the preload anyway. RLS
+          // either allows it or returns null.
+          const { data: sj } = await callerClient
+            .from("service_jobs")
+            .select("*")
+            .eq("id", context.serviceJobId)
+            .maybeSingle();
           if (sj) preloadParts.push(`### Service job (preloaded)\n${JSON.stringify(sj, null, 0)}`);
         } catch { /* swallow */ }
       }
 
       if (context.partsOrderId) {
         try {
-          const { data: po } = await adminClient.from("parts_orders").select("*").eq("id", context.partsOrderId).maybeSingle();
+          const { data: po } = await callerClient
+            .from("parts_orders")
+            .select("*")
+            .eq("id", context.partsOrderId)
+            .maybeSingle();
           if (po) preloadParts.push(`### Parts order (preloaded)\n${JSON.stringify(po, null, 0)}`);
         } catch { /* swallow */ }
       }
 
       if (context.voiceCaptureId) {
         try {
-          const { data: vc } = await adminClient.from("voice_captures").select("*").eq("id", context.voiceCaptureId).maybeSingle();
+          const { data: vc } = await callerClient
+            .from("voice_captures")
+            .select("*")
+            .eq("id", context.voiceCaptureId)
+            .maybeSingle();
           if (vc) preloadParts.push(`### Voice capture (preloaded)\n${JSON.stringify(vc, null, 0)}`);
         } catch { /* swallow */ }
       }
@@ -2228,7 +2404,7 @@ Deno.serve(async (req) => {
     }
 
     console.info(
-      `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm_context=${contextCrmEvidence.length} crm_broad=${broadCrmEvidence.length} crm_merged=${crmEvidence.length} has_context_block=${Boolean(contextBlock)}`,
+      `[chat:${traceId}] retrieval_summary embedding_ok=${embeddingOk} documents=${documentEvidence.length} crm_context=${contextCrmEvidence.length} crm_broad=${broadCrmEvidence.length} crm_merged=${crmEvidence.length} service_kb=${serviceKnowledgeEvidence.length} has_context_block=${Boolean(contextBlock)}`,
     );
 
     const toolInstructions = `
@@ -2263,6 +2439,7 @@ Rules:
 - Cite the source title naturally in the answer when it materially supports the claim.
 - Use QRM evidence (contacts, deals, equipment, voice notes, activities) for customer-specific and operational facts.
 - Use document evidence for policy, process, and product reference facts.
+- Use service knowledge evidence for recurring field fixes, fault-code history, and technician institutional memory.
 - Market valuations provide current fair market values — cite the source and date.
 - Auction results are historical comps — present as comparable sales data.
 - Competitor listings show what rival dealers are offering — present as competitive intelligence.
@@ -2271,6 +2448,7 @@ Rules:
 - Manufacturer incentives are active OEM programs — highlight when relevant to equipment being discussed.
 - Financing rates are current lending terms — present specific rates and terms when asked about financing.
 - Voice notes contain field observations recorded by sales reps — treat them as firsthand accounts.
+- Service knowledge base matches are learned repair patterns — prefer verified fixes when available and label unverified notes clearly.
 - If QRM and document evidence conflict, say which source you relied on.
 - If the answer is not in your evidence or tools, say "I don't have that information in the accessible QEP knowledge base."`
       : `You are the QEP USA internal knowledge assistant. No pre-loaded evidence was retrieved for this request, but you have tools to query live QRM data. Use your tools to find the information the user is looking for. If you cannot find the answer with your tools either, say "I don't have that information in the accessible QEP knowledge base."
@@ -2363,6 +2541,7 @@ ${toolInstructions}`;
     console.info(`[chat:${traceId}] tool_rounds_used=${toolRoundsUsed} streaming=${openaiStream !== null} finalText=${finalText !== null}`);
 
     const sources = buildSourcePayload(evidence);
+    const retrievalLatencyMs = Date.now() - retrievalStartedAt;
     const encoder = new TextEncoder();
     const streamMeta = {
       trace_id: traceId,
@@ -2371,19 +2550,38 @@ ${toolInstructions}`;
         embedding_degraded: !embeddingOk,
         document_evidence_count: documentEvidence.length,
         crm_evidence_count: crmEvidence.length,
+        service_evidence_count: serviceKnowledgeEvidence.length,
         tool_rounds_used: toolRoundsUsed,
         empty_evidence: evidence.length === 0,
+        latency_ms: retrievalLatencyMs,
       },
     };
+
+    try {
+      await adminClient.from("retrieval_events").insert({
+        workspace_id: workspaceId,
+        trace_id: traceId,
+        user_id: caller.userId,
+        query_text: rawMessage.slice(0, 4000),
+        evidence_count: evidence.length,
+        top_source_type: evidence[0]?.sourceType ?? null,
+        top_confidence: evidence[0]?.confidence ?? null,
+        latency_ms: retrievalLatencyMs,
+        embedding_ok: embeddingOk,
+        tool_rounds_used: toolRoundsUsed,
+      });
+    } catch (retrievalLogErr) {
+      console.warn(`[chat:${traceId}] retrieval event log failed`, retrievalLogErr);
+    }
 
     // Detect knowledge gaps — questions with no supporting evidence
     if (evidence.length === 0 && rawMessage.length > 10) {
       try {
-        await adminClient.from("knowledge_gaps").insert({
-          workspace_id: "default",
-          user_id: caller.userId,
-          question: rawMessage.slice(0, 500),
-          trace_id: traceId,
+        await adminClient.rpc("log_knowledge_gap", {
+          p_workspace_id: workspaceId,
+          p_user_id: caller.userId,
+          p_question: rawMessage.slice(0, 500),
+          p_trace_id: traceId,
         });
       } catch (gapErr) {
         console.error(`[chat:${traceId}] knowledge gap log failed`, gapErr);

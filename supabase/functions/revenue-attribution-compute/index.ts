@@ -37,12 +37,23 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization")?.trim();
-    const serviceKey = req.headers.get("x-service-role-key");
-    if (!authHeader && !serviceKey) return safeJsonError("Unauthorized", 401, origin);
+    const providedServiceKey = req.headers.get("x-service-role-key")?.trim();
+    const expectedServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Auth path 1: authed user via Bearer token (validated below)
+    // Auth path 2: cron via x-service-role-key — MUST match the real key
+    const serviceKeyValid = providedServiceKey !== undefined
+      && providedServiceKey !== ""
+      && providedServiceKey.length === expectedServiceKey.length
+      && timingSafeEqual(providedServiceKey, expectedServiceKey);
+
+    if (!authHeader && !serviceKeyValid) {
+      return safeJsonError("Unauthorized", 401, origin);
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      expectedServiceKey,
     );
 
     // If user-authed, verify the user exists; cron path uses service key directly.
@@ -237,3 +248,14 @@ Deno.serve(async (req) => {
     return safeJsonError("Internal server error", 500, req.headers.get("origin"));
   }
 });
+
+/** Constant-time string comparison to prevent timing attacks on the
+ *  x-service-role-key header. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
