@@ -148,6 +148,9 @@ const ExecCommandCenterPage = lazy(() =>
 const IncentiveCatalogPage = lazy(() =>
   import("./features/admin/pages/IncentiveCatalogPage").then((m) => ({ default: m.IncentiveCatalogPage }))
 );
+const FleetRadarPage = lazy(() =>
+  import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
+);
 const QuoteBuilderGate = lazy(() =>
   import("./components/QuoteBuilderGate").then((m) => ({ default: m.QuoteBuilderGate }))
 );
@@ -1309,6 +1312,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QrmCompanyDetailPage userId={profile.id} userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/companies/:companyId/fleet-radar"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <FleetRadarPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
