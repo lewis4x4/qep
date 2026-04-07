@@ -32,7 +32,7 @@ export function PayInvoiceButton({
   invoiceId, companyId, amountCents, customerEmail, description, className = "",
 }: PayInvoiceButtonProps) {
   const checkoutMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (popup: Window | null) => {
       const session = (await supabase.auth.getSession()).data.session;
       const res = await fetch(`${PORTAL_STRIPE_URL}/create-checkout`, {
         method: "POST",
@@ -51,25 +51,46 @@ export function PayInvoiceButton({
         }),
       });
       if (!res.ok) {
+        // Close the popup we pre-opened so the user isn't left with a blank tab
+        try { popup?.close(); } catch { /* noop */ }
         const err = await res.json().catch(() => ({ error: "Checkout failed" }));
         throw new Error((err as { error?: string }).error ?? "Checkout failed");
       }
-      return res.json() as Promise<CheckoutResponse>;
-    },
-    onSuccess: (data) => {
-      // Open Stripe URL or mailto fallback in new tab
+      const data = (await res.json()) as CheckoutResponse;
+      // Navigate the pre-opened popup (preserves the user-gesture chain so
+      // popup blockers do not bite). If the popup was blocked at click time,
+      // fall back to current-tab navigation.
       const target = data.url ?? data.fallback;
-      if (target) window.open(target, "_blank");
+      if (target) {
+        if (popup && !popup.closed) {
+          popup.location.href = target;
+        } else {
+          // Fallback: use current tab if popup got blocked anyway
+          window.location.href = target;
+        }
+      } else {
+        try { popup?.close(); } catch { /* noop */ }
+      }
+      return data;
     },
   });
 
   const dollars = (amountCents / 100).toFixed(2);
 
+  function handleClick() {
+    if (checkoutMutation.isPending || amountCents <= 0) return;
+    // Open the popup SYNCHRONOUSLY inside the click handler so the
+    // browser's user-gesture context is preserved. We point it at
+    // about:blank for now and rewrite the URL once the fetch resolves.
+    const popup = window.open("about:blank", "_blank");
+    checkoutMutation.mutate(popup);
+  }
+
   return (
     <div className={className}>
       <Button
         size="sm"
-        onClick={() => checkoutMutation.mutate()}
+        onClick={handleClick}
         disabled={checkoutMutation.isPending || amountCents <= 0}
       >
         {checkoutMutation.isPending ? (
