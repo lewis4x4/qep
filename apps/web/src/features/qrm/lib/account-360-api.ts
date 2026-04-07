@@ -16,6 +16,9 @@ export interface Account360Profile {
   health_score?: number | null;
   health_score_components?: Record<string, unknown> | null;
   health_score_updated_at?: string | null;
+  last_interaction_at?: string | null;
+  lifetime_value?: number | null;
+  total_deals?: number | null;
 }
 
 export interface Account360FleetItem {

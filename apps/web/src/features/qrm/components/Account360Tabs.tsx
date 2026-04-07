@@ -1,17 +1,25 @@
 import { Link } from "react-router-dom";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Wrench, Package, FileText, Receipt, AlertCircle, TrendingUp, Calendar, ArrowRight,
+  Wrench, Package, FileText, Receipt, AlertCircle, TrendingUp, Calendar, ArrowRight, Mail, Shield, Loader2,
 } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
+import { supabase } from "@/lib/supabase";
 import type {
   Account360Response,
   Account360FleetItem,
   Account360OpenQuote,
   Account360ServiceJob,
   Account360Invoice,
+  FleetRadarLensItem,
 } from "../lib/account-360-api";
+import { fetchFleetRadar } from "../lib/account-360-api";
+import { fetchCompanyEquipment } from "../lib/qrm-router-api";
+import type { QrmEquipment } from "../lib/types";
+
+const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft-email`;
 
 /* ── Recommended Next Best Actions composite ─────────────────────── */
 
@@ -356,6 +364,250 @@ export function AccountARTab({ invoices, arBlock }: { invoices: Account360Invoic
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatShortDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function monthLabel(month: number | null | undefined): string | null {
+  if (!month || month < 1 || month > 12) return null;
+  return new Date(2026, month - 1, 1).toLocaleString("en-US", { month: "long" });
+}
+
+async function createCommercialDraft(input: {
+  scenario: "trade_up" | "custom";
+  companyId: string;
+  equipmentId?: string;
+  context: Record<string, unknown>;
+  tone?: "urgent" | "consultative" | "friendly";
+}) {
+  const session = (await supabase.auth.getSession()).data.session;
+  const res = await fetch(`${DRAFT_EMAIL_URL}/draft`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session?.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      scenario: input.scenario,
+      company_id: input.companyId,
+      equipment_id: input.equipmentId,
+      context: input.context,
+      tone: input.tone ?? "consultative",
+      persist: true,
+    }),
+  });
+  if (!res.ok) throw new Error("Draft failed");
+  return res.json();
+}
+
+export function AccountCommercialTab({
+  data,
+  companyId,
+}: {
+  data: Account360Response;
+  companyId: string;
+}) {
+  const fleetRadarQuery = useQuery({
+    queryKey: ["fleet-radar", companyId, "commercial-tab"],
+    queryFn: () => fetchFleetRadar(companyId),
+    staleTime: 60_000,
+  });
+
+  const equipmentQuery = useQuery({
+    queryKey: ["qrm", "company-equipment", companyId, "commercial-tab"],
+    queryFn: () => fetchCompanyEquipment(companyId),
+    staleTime: 60_000,
+  });
+
+  const draftMutation = useMutation({
+    mutationFn: (input: Parameters<typeof createCommercialDraft>[0]) => createCommercialDraft(input),
+  });
+
+  const tradeUpTarget: FleetRadarLensItem | null =
+    fleetRadarQuery.data?.trade_up?.[0]
+    ?? fleetRadarQuery.data?.aging?.[0]
+    ?? null;
+
+  const openServiceJobs = data.service.filter((sj) => !["closed", "invoiced", "cancelled"].includes(sj.current_stage));
+  const serviceRisk = openServiceJobs.length > 0
+    ? `${openServiceJobs.length} open service job${openServiceJobs.length === 1 ? "" : "s"}`
+    : "No active service risk";
+
+  const companyEquipment = (equipmentQuery.data ?? []) as QrmEquipment[];
+  const warrantyTarget = companyEquipment.find((item) => {
+    if (!item.warrantyExpiresOn) return false;
+    const expiry = new Date(item.warrantyExpiresOn);
+    if (Number.isNaN(expiry.getTime())) return false;
+    return expiry.getTime() <= Date.now() + 90 * 86_400_000;
+  }) ?? null;
+
+  const recentPartOrder = data.parts.recent[0] ?? null;
+  const lastRepTouch = formatShortDate(data.profile?.last_interaction_at);
+  const budgetCycle = monthLabel(data.profile?.budget_cycle_month);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Budget cycle</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{budgetCycle ?? "Not captured"}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Last rep touch</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{lastRepTouch ?? "No recent touch logged"}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Open quotes</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{data.open_quotes.length}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Service / downtime risk</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{serviceRisk}</p>
+        </Card>
+      </div>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Trade-up score reason</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {tradeUpTarget
+              ? `${tradeUpTarget.name} · ${tradeUpTarget.reason}`
+              : "No high-priority trade-up signal yet"}
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={draftMutation.isPending || !tradeUpTarget}
+            onClick={() =>
+              tradeUpTarget && draftMutation.mutate({
+                scenario: "trade_up",
+                companyId,
+                equipmentId: tradeUpTarget.id,
+                context: {
+                  equipment_name: tradeUpTarget.name,
+                  make: tradeUpTarget.make,
+                  model: tradeUpTarget.model,
+                  year: tradeUpTarget.year,
+                  engine_hours: tradeUpTarget.engine_hours,
+                  reason: tradeUpTarget.reason,
+                  trade_up_score: tradeUpTarget.trade_up_score,
+                  budget_cycle_month: data.profile?.budget_cycle_month ?? null,
+                },
+                tone: "consultative",
+              })}
+          >
+            {draftMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />}
+            Draft trade-up
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={draftMutation.isPending || openServiceJobs.length === 0}
+            onClick={() =>
+              openServiceJobs[0] && draftMutation.mutate({
+                scenario: "custom",
+                companyId,
+                context: {
+                  category: "service_follow_up",
+                  service_job_summary: openServiceJobs[0].customer_problem_summary,
+                  current_stage: openServiceJobs[0].current_stage,
+                  scheduled_end_at: openServiceJobs[0].scheduled_end_at,
+                  service_job_count: openServiceJobs.length,
+                },
+                tone: "consultative",
+              })}
+          >
+            {draftMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />}
+            Draft service follow-up
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={draftMutation.isPending || !recentPartOrder}
+            onClick={() =>
+              recentPartOrder && draftMutation.mutate({
+                scenario: "custom",
+                companyId,
+                context: {
+                  category: "parts_reorder",
+                  last_parts_order_id: recentPartOrder.id,
+                  last_parts_order_total: recentPartOrder.total,
+                  lifetime_parts_spend: data.parts.lifetime_total,
+                  parts_order_count: data.parts.order_count,
+                },
+                tone: "friendly",
+              })}
+          >
+            {draftMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />}
+            Draft parts reorder
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={draftMutation.isPending || !warrantyTarget}
+            onClick={() =>
+              warrantyTarget && draftMutation.mutate({
+                scenario: "custom",
+                companyId,
+                equipmentId: warrantyTarget.id,
+                context: {
+                  category: "warranty_follow_up",
+                  equipment_name: warrantyTarget.name,
+                  make: warrantyTarget.make,
+                  model: warrantyTarget.model,
+                  warranty_expires_on: warrantyTarget.warrantyExpiresOn,
+                  next_service_due_at: warrantyTarget.nextServiceDueAt,
+                },
+                tone: "friendly",
+              })}
+          >
+            {draftMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Shield className="mr-1 h-3 w-3" />}
+            Draft warranty follow-up
+          </Button>
+        </div>
+        {draftMutation.isSuccess && (
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-emerald-400">
+            Draft created. Review it in <Link to="/email-drafts" className="underline">Email Drafts</Link>.
+          </div>
+        )}
+        {draftMutation.isError && (
+          <div className="rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-400">
+            {(draftMutation.error as Error).message}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Commercial context</p>
+        <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+          <div>
+            <span className="text-foreground font-medium">Lifetime value:</span> {formatCurrency(data.profile?.lifetime_value ?? null)}
+          </div>
+          <div>
+            <span className="text-foreground font-medium">Total deals:</span> {data.profile?.total_deals ?? "—"}
+          </div>
+          <div>
+            <span className="text-foreground font-medium">Top quote:</span> {data.open_quotes[0] ? `${data.open_quotes[0].deal_name ?? "Untitled"} · ${formatCurrency(data.open_quotes[0].net_total)}` : "No open quote"}
+          </div>
+          <div>
+            <span className="text-foreground font-medium">Parts trend:</span> {data.parts.order_count > 0 ? `${data.parts.order_count} orders / ${formatCurrency(data.parts.lifetime_total)}` : "No parts activity"}
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

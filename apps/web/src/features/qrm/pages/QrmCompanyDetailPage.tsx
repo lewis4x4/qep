@@ -17,6 +17,7 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   AccountNextBestActions,
+  AccountCommercialTab,
   AccountFleetTab,
   AccountQuotesTab,
   AccountServiceTab,
@@ -57,7 +58,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   const [parentSearch, setParentSearch] = useState("");
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  const [account360Tab, setAccount360Tab] = useState<"fleet" | "quotes" | "service" | "parts" | "ar" | "lifecycle">("fleet");
+  const [account360Tab, setAccount360Tab] = useState<"commercial" | "fleet" | "quotes" | "service" | "parts" | "ar" | "lifecycle">("commercial");
   const [healthDrawerOpen, setHealthDrawerOpen] = useState(false);
 
   const account360Query = useQuery({
@@ -353,6 +354,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
             <div>
               <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
                 {[
+                  { key: "commercial", label: "Commercial" },
                   { key: "fleet",     label: `Fleet (${account360Query.data.fleet.length})` },
                   { key: "quotes",    label: `Open Quotes (${account360Query.data.open_quotes.length})` },
                   { key: "service",   label: `Service (${account360Query.data.service.length})` },
@@ -380,6 +382,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                 })}
               </div>
               <div className="mt-3">
+                {account360Tab === "commercial" && <AccountCommercialTab data={account360Query.data} companyId={companyId!} />}
                 {account360Tab === "fleet"   && <AccountFleetTab fleet={account360Query.data.fleet} companyId={companyId!} />}
                 {account360Tab === "quotes"  && <AccountQuotesTab quotes={account360Query.data.open_quotes} />}
                 {account360Tab === "service" && <AccountServiceTab service={account360Query.data.service} />}
