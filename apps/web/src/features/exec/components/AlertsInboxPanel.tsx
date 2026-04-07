@@ -4,6 +4,7 @@
  * write a row in `analytics_action_log`.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertOctagon, Check, X, Loader2 } from "lucide-react";
@@ -11,6 +12,7 @@ import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import type { AnalyticsAlertRow, ExecRoleTab, AlertSeverity } from "../lib/types";
 import { useExecAlerts } from "../lib/useExecData";
+import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
 
 const SEVERITY_TONE: Record<AlertSeverity, "red" | "orange" | "yellow" | "blue"> = {
   critical: "red",
@@ -102,6 +104,9 @@ function AlertRow({
   disabled: boolean;
   onTransition: (next: "acknowledged" | "resolved" | "dismissed") => void;
 }) {
+  const recordLink = resolveExecAlertRecordLink(alert);
+  const playbookLink = resolveExecAlertPlaybookLink(alert);
+
   return (
     <div className="rounded-md border border-border/60 bg-muted/10 p-2.5">
       <div className="mb-1 flex items-start justify-between gap-2">
@@ -120,6 +125,16 @@ function AlertRow({
         </p>
       )}
       <div className="flex items-center gap-1.5 pt-1">
+        {recordLink && (
+          <Button asChild size="sm" variant="ghost">
+            <Link to={recordLink.href}>{recordLink.label}</Link>
+          </Button>
+        )}
+        {playbookLink && (
+          <Button asChild size="sm" variant="outline">
+            <Link to={playbookLink.href}>{playbookLink.label}</Link>
+          </Button>
+        )}
         {alert.status === "new" && (
           <Button size="sm" variant="outline" disabled={disabled} onClick={() => onTransition("acknowledged")}>
             <Check className="mr-1 h-2.5 w-2.5" /> Ack
