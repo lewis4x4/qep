@@ -2408,11 +2408,24 @@ Deno.serve(async (req) => {
         try {
           const { data: flare } = await callerClient
             .from("flare_reports")
-            .select("id, severity, status, user_description, route, url, page_title, console_errors, click_trail, route_trail, hypothesis_pattern, ai_severity_recommendation, ai_severity_reasoning, reproducer_steps, browser, os, viewport, created_at, reporter_email, reporter_role")
+            .select("id, severity, status, user_description, route, url, page_title, console_errors, click_trail, route_trail, hypothesis_pattern, ai_severity_recommendation, ai_severity_reasoning, reproducer_steps, browser, os, viewport, created_at, reporter_email, reporter_role, screenshot_path")
             .eq("id", context.flareReportId)
             .maybeSingle();
           if (flare) {
-            preloadParts.push(`### Flare report (preloaded by AskIronAdvisor)\n${JSON.stringify(flare, null, 0)}`);
+            // Generate signed screenshot URL (1h expiry) via admin client so the
+            // model can reference it in its reasoning. RLS already passed above.
+            let signedScreenshotUrl: string | null = null;
+            const screenshotPath = (flare as { screenshot_path?: string | null }).screenshot_path ?? null;
+            if (screenshotPath) {
+              try {
+                const { data: signed } = await adminClient.storage
+                  .from("flare-artifacts")
+                  .createSignedUrl(screenshotPath, 60 * 60);
+                signedScreenshotUrl = signed?.signedUrl ?? null;
+              } catch { /* ignore */ }
+            }
+            const flareWithUrl = { ...flare, signed_screenshot_url: signedScreenshotUrl };
+            preloadParts.push(`### Flare report (preloaded by AskIronAdvisor)\n${JSON.stringify(flareWithUrl, null, 0)}`);
           } else {
             console.warn(`[chat:${traceId}] flare preload denied by RLS for ${context.flareReportId}`);
           }

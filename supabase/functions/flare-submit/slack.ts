@@ -16,6 +16,8 @@ interface DispatchInput {
   reporterRole: string;
   similarCount: number;
   signedScreenshotUrl: string | null;
+  linearIssueUrl?: string | null;
+  paperclipIssueUrl?: string | null;
 }
 
 interface DispatchResult {
@@ -78,17 +80,29 @@ export async function dispatchToSlack(input: DispatchInput): Promise<DispatchRes
     });
   }
 
-  blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: { type: "plain_text", text: "Open in QEP" },
-        url: `${appUrl}/admin/flare/${input.reportId}`,
-        style: input.severity === "blocker" ? "danger" : "primary",
-      },
-    ],
-  });
+  const actionElements: unknown[] = [
+    {
+      type: "button",
+      text: { type: "plain_text", text: "Open in QEP" },
+      url: `${appUrl}/admin/flare/${input.reportId}`,
+      style: input.severity === "blocker" ? "danger" : "primary",
+    },
+  ];
+  if (input.linearIssueUrl) {
+    actionElements.push({
+      type: "button",
+      text: { type: "plain_text", text: "Open in Linear" },
+      url: input.linearIssueUrl,
+    });
+  }
+  if (input.paperclipIssueUrl) {
+    actionElements.push({
+      type: "button",
+      text: { type: "plain_text", text: "Open in Paperclip" },
+      url: input.paperclipIssueUrl,
+    });
+  }
+  blocks.push({ type: "actions", elements: actionElements });
 
   const res = await fetch(webhookUrl, {
     method: "POST",

@@ -207,7 +207,8 @@ export function FlareDrawer({ open, mode, context, screenshot, domSnapshot, onCl
                   <img
                     src={annotatedScreenshot ?? screenshot}
                     alt="Captured screenshot"
-                    className="max-h-48 w-full object-contain"
+                    className="w-full object-contain"
+                    style={{ maxHeight: "240px" }}
                   />
                 </div>
               </div>

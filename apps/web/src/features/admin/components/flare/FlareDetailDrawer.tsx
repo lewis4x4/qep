@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
@@ -17,7 +17,9 @@ export interface FlareReportRow {
   workspace_id: string;
   reporter_email: string | null;
   reporter_role: string | null;
-  severity: "blocker" | "bug" | "annoyance" | "idea";
+  severity: "blocker" | "bug" | "annoyance" | "idea" | "aha_moment";
+  screenshot_path: string | null;
+  dom_snapshot_path: string | null;
   status: "new" | "triaged" | "in_progress" | "fixed" | "wontfix" | "duplicate";
   user_description: string;
   url: string;
@@ -49,11 +51,12 @@ interface FlareDetailDrawerProps {
   onClose: () => void;
 }
 
-const SEVERITY_TONE: Record<FlareReportRow["severity"], "red" | "orange" | "yellow" | "blue"> = {
+const SEVERITY_TONE: Record<FlareReportRow["severity"], "red" | "orange" | "yellow" | "blue" | "green"> = {
   blocker: "red",
   bug: "orange",
   annoyance: "yellow",
   idea: "blue",
+  aha_moment: "green",
 };
 
 const STATUS_TONE: Record<FlareReportRow["status"], "blue" | "purple" | "orange" | "green" | "neutral" | "red"> = {
@@ -68,6 +71,41 @@ const STATUS_TONE: Record<FlareReportRow["status"], "blue" | "purple" | "orange"
 export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
   const queryClient = useQueryClient();
   const [deploySha, setDeploySha] = useState("");
+  const [domHtml, setDomHtml] = useState<string | null>(null);
+
+  // Fetch signed URLs for screenshot + DOM snapshot artifacts (1 hour expiry).
+  const artifactsQuery = useQuery({
+    enabled: !!report?.id && !!(report.screenshot_path || report.dom_snapshot_path),
+    queryKey: ["flare-artifacts", report?.id],
+    queryFn: async () => {
+      if (!report) return { screenshotUrl: null as string | null, domUrl: null as string | null };
+      const bucket = (supabase as unknown as { storage: { from: (b: string) => { createSignedUrl: (p: string, exp: number) => Promise<{ data: { signedUrl: string } | null }> } } }).storage.from("flare-artifacts");
+      const [shot, dom] = await Promise.all([
+        report.screenshot_path ? bucket.createSignedUrl(report.screenshot_path, 3600) : Promise.resolve({ data: null }),
+        report.dom_snapshot_path ? bucket.createSignedUrl(report.dom_snapshot_path, 3600) : Promise.resolve({ data: null }),
+      ]);
+      return { screenshotUrl: shot.data?.signedUrl ?? null, domUrl: dom.data?.signedUrl ?? null };
+    },
+  });
+
+  // Lazy-decompress the DOM snapshot when the user expands the iframe section.
+  useEffect(() => {
+    setDomHtml(null);
+  }, [report?.id]);
+  async function loadDomSnapshot() {
+    if (!artifactsQuery.data?.domUrl || domHtml) return;
+    try {
+      const res = await fetch(artifactsQuery.data.domUrl);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      const pako = await import("pako");
+      const html = pako.ungzip(buf, { to: "string" });
+      setDomHtml(html);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[flare] failed to decompress DOM snapshot", err);
+      setDomHtml("<!-- failed to load DOM snapshot -->");
+    }
+  }
 
   const updateMutation = useMutation({
     mutationFn: async (input: { status: FlareReportRow["status"]; fix_deploy_sha?: string }) => {
@@ -130,6 +168,39 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
               </a>
             )}
           </div>
+
+          {/* Screenshot + DOM snapshot artifacts (spec §11) */}
+          {(report.screenshot_path || report.dom_snapshot_path) && (
+            <Card className="p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Captured artifacts</p>
+              {artifactsQuery.isPending && <p className="text-[10px] text-muted-foreground">Loading signed URLs…</p>}
+              {artifactsQuery.data?.screenshotUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={artifactsQuery.data.screenshotUrl}
+                  alt="Flare screenshot"
+                  className="w-full rounded-md border border-border"
+                  style={{ maxHeight: "60vh", objectFit: "contain" }}
+                />
+              )}
+              {artifactsQuery.data?.domUrl && (
+                <div className="mt-2">
+                  {!domHtml ? (
+                    <Button size="sm" variant="outline" onClick={loadDomSnapshot}>
+                      Load DOM snapshot (sandboxed)
+                    </Button>
+                  ) : (
+                    <iframe
+                      title="Flare DOM snapshot"
+                      sandbox="allow-same-origin"
+                      srcDoc={domHtml}
+                      className="mt-1 h-[50vh] w-full rounded-md border border-border bg-white"
+                    />
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Description */}
           <Card className="p-3">

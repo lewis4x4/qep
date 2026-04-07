@@ -370,14 +370,22 @@ ${consoleErrText || "(none)"}`,
       similarCount = Number(dedupe ?? 0);
     } catch { /* ignore */ }
 
-    // ── Signed screenshot URL for dispatch helpers ───────────────
+    // ── Signed screenshot URLs for dispatch helpers ───────────────
+    // Spec §8: Slack/Linear/Paperclip use 7-day expiry; email uses 1-hour.
     let signedScreenshotUrl: string | null = null;
+    let signedScreenshotUrlEmail: string | null = null;
     if (screenshotPath) {
       try {
         const { data: signed } = await supabaseAdmin.storage
           .from(BUCKET_NAME)
           .createSignedUrl(screenshotPath, 60 * 60 * 24 * 7); // 7 days
         signedScreenshotUrl = signed?.signedUrl ?? null;
+      } catch { /* ignore */ }
+      try {
+        const { data: signedEmail } = await supabaseAdmin.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(screenshotPath, 60 * 60); // 1 hour for email per spec §3 Lane 5
+        signedScreenshotUrlEmail = signedEmail?.signedUrl ?? null;
       } catch { /* ignore */ }
     }
 
@@ -387,7 +395,9 @@ ${consoleErrText || "(none)"}`,
       ?? "a user";
 
     // ── Lanes 2-5: fan-out dispatch (fail-open) ──────────────────
-    const dispatches = await Promise.allSettled([
+    // Phase 1: Linear + Paperclip in parallel (need their URLs for Slack/email buttons).
+    // Phase 2: Slack + Email in parallel, with Linear/Paperclip URLs threaded through.
+    const ticketDispatches = await Promise.allSettled([
       dispatchToLinear({
         reportId,
         severity: body.severity,
@@ -410,6 +420,14 @@ ${consoleErrText || "(none)"}`,
         signedScreenshotUrl,
         reporterDisplayName,
       }),
+    ]);
+
+    const linearResult = ticketDispatches[0];
+    const paperclipResult = ticketDispatches[1];
+    const linearOk = linearResult.status === "fulfilled" ? linearResult.value : null;
+    const paperclipOk = paperclipResult.status === "fulfilled" ? paperclipResult.value : null;
+
+    const notifyDispatches = await Promise.allSettled([
       dispatchToSlack({
         reportId,
         severity: body.severity,
@@ -420,6 +438,8 @@ ${consoleErrText || "(none)"}`,
         reporterRole: (profile?.role as string | undefined) ?? "unknown",
         similarCount,
         signedScreenshotUrl,
+        linearIssueUrl: linearOk?.issue_url ?? null,
+        paperclipIssueUrl: paperclipOk?.issue_url ?? null,
       }),
       body.severity === "blocker"
         ? dispatchBlockerEmail({
@@ -429,18 +449,12 @@ ${consoleErrText || "(none)"}`,
             url: body.context.url,
             reporterDisplayName,
             reporterRole: (profile?.role as string | undefined) ?? "unknown",
-            signedScreenshotUrl,
+            signedScreenshotUrl: signedScreenshotUrlEmail,
           })
         : Promise.resolve(null),
     ]);
-
-    const linearResult = dispatches[0];
-    const paperclipResult = dispatches[1];
-    const slackResult = dispatches[2];
-    const emailResult = dispatches[3];
-
-    const linearOk = linearResult.status === "fulfilled" ? linearResult.value : null;
-    const paperclipOk = paperclipResult.status === "fulfilled" ? paperclipResult.value : null;
+    const slackResult = notifyDispatches[0];
+    const emailResult = notifyDispatches[1];
     const slackOk = slackResult.status === "fulfilled" ? slackResult.value : null;
 
     if (linearResult.status === "rejected")
