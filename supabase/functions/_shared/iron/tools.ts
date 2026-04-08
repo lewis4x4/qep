@@ -148,21 +148,29 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "list_service_jobs",
     description:
-      "List service jobs filtered by stage, branch, priority, or recency. Returns job id, customer problem summary, current stage, scheduled date, branch, and priority. USE THIS WHEN: the user asks about open service work, scheduled jobs, urgent jobs, or jobs at a specific branch.",
+      "List service jobs filtered by customer, stage, branch, priority, or recency. Returns job id, customer problem summary, current stage, scheduled date, branch, priority, and customer_id. USE THIS WHEN: the user asks about open service work, scheduled jobs, urgent jobs, or jobs for a specific customer. If the user mentions a customer by name in a follow-up question (e.g. 'what service jobs do they have?' after looking up a company), first get the customer_id from the prior lookup_company result and pass it here as customer_id.",
     input_schema: {
       type: "object",
       properties: {
+        customer_id: {
+          type: "string",
+          description: "UUID of the customer company (from a prior lookup_company call). Use this to filter jobs to a specific customer.",
+        },
         current_stage: {
           type: "string",
           description:
-            "e.g. 'intake', 'diagnosis', 'awaiting_parts', 'in_progress', 'completed', 'invoiced'",
+            "e.g. 'request_received', 'triaging', 'diagnosis_selected', 'parts_pending', 'in_progress', 'quote_sent', 'completed'",
         },
         branch_id: { type: "string" },
         priority: {
           type: "string",
-          description: "e.g. 'urgent', 'high', 'normal', 'low'",
+          description: "'normal', 'urgent', or 'critical' (these are the only valid values)",
         },
-        days_back: { type: "number", description: "Last N days (default 30)" },
+        open_only: {
+          type: "boolean",
+          description: "When true, excludes completed/invoiced jobs. Default false.",
+        },
+        days_back: { type: "number", description: "Last N days (default 90)" },
         limit: { type: "number", description: "Max results (default 25)" },
       },
     },
@@ -259,10 +267,12 @@ export async function executeIronTool(
         );
       case "list_service_jobs":
         return await toolListServiceJobs(
+          input.customer_id as string | undefined,
           input.current_stage as string | undefined,
           input.branch_id as string | undefined,
           input.priority as string | undefined,
-          (input.days_back as number | undefined) ?? 30,
+          (input.open_only as boolean | undefined) ?? false,
+          (input.days_back as number | undefined) ?? 90,
           (input.limit as number | undefined) ?? 25,
           ctx,
         );
@@ -562,9 +572,11 @@ async function toolSearchEquipment(
 }
 
 async function toolListServiceJobs(
+  customerId: string | undefined,
   currentStage: string | undefined,
   branchId: string | undefined,
   priority: string | undefined,
+  openOnly: boolean,
   daysBack: number,
   limit: number,
   ctx: ToolContext,
@@ -579,13 +591,37 @@ async function toolListServiceJobs(
     .is("deleted_at", null)
     .gte("created_at", since)
     .order("created_at", { ascending: false });
+  if (customerId) q = q.eq("customer_id", customerId);
   if (currentStage) q = q.eq("current_stage", currentStage);
   if (branchId) q = q.eq("branch_id", branchId);
   if (priority) q = q.eq("priority", priority);
+  if (openOnly) {
+    q = q.not("current_stage", "in", '("completed","invoiced","closed")');
+  }
 
   const { data, error } = await q.limit(Math.min(limit, 50));
   if (error) return { error: error.message };
-  return { count: data?.length ?? 0, jobs: data ?? [] };
+
+  // Hydrate customer names so the model can write human-readable answers
+  const customerIds = Array.from(
+    new Set((data ?? []).map((j) => j.customer_id).filter(Boolean) as string[]),
+  );
+  let customerNameById = new Map<string, string>();
+  if (customerIds.length > 0) {
+    const { data: companies } = await ctx.admin
+      .from("qrm_companies")
+      .select("id, name")
+      .in("id", customerIds);
+    for (const c of companies ?? []) customerNameById.set(c.id, c.name);
+  }
+
+  return {
+    count: data?.length ?? 0,
+    jobs: (data ?? []).map((j) => ({
+      ...j,
+      customer_name: j.customer_id ? customerNameById.get(j.customer_id) ?? null : null,
+    })),
+  };
 }
 
 async function toolSemanticKbSearch(query: string, ctx: ToolContext) {

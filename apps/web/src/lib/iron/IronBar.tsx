@@ -552,13 +552,17 @@ export function IronBar() {
                   void send();
                 }
               }}
-              disabled={classifying || voicePending}
+              disabled={classifying || voicePending || knowledgeStatus === "streaming"}
               placeholder={
                 recorder.state === "recording"
                   ? "Listening… release space or tap stop"
+                  : knowledgeStatus === "streaming"
+                  ? "Iron is answering — hang on…"
+                  : classifying
+                  ? "Iron is thinking…"
                   : "Ask anything, or pull a part, log a service call…"
               }
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
             />
             <button
               type="button"
@@ -584,7 +588,7 @@ export function IronBar() {
             <button
               type="button"
               onClick={handleMicClick}
-              disabled={classifying || voicePending}
+              disabled={classifying || voicePending || knowledgeStatus === "streaming"}
               className={`rounded-md p-1.5 transition-colors disabled:opacity-30 ${
                 recorder.state === "recording"
                   ? "bg-red-500/15 text-red-400 animate-pulse"

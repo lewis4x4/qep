@@ -318,6 +318,31 @@ Hard rules:
 
 /* ─── Anthropic call (non-streaming) ────────────────────────────────────── */
 
+/**
+ * Apply `cache_control: { type: "ephemeral" }` to the tail of the tools
+ * block so Anthropic caches the tool definitions + persona across turns.
+ * Cached reads are discounted by ~90%, so turns 2+ in a conversation pay
+ * almost nothing for the ~5KB of tool schema context. Single biggest
+ * latency/cost win available for a stable-tools agent loop.
+ *
+ * Anthropic spec: up to 4 cache_control breakpoints per request. We use
+ * two — one on the system prompt and one on the last tool definition —
+ * which covers persona + tool registry. Messages remain uncached because
+ * they change every turn.
+ */
+const CACHED_TOOL_DEFINITIONS = (() => {
+  // Clone and attach cache_control to the final tool. When Anthropic sees
+  // the breakpoint it caches the entire tools array up to and including
+  // that tool.
+  const copy = IRON_TOOL_DEFINITIONS.map((t) => ({ ...t }));
+  if (copy.length > 0) {
+    (copy[copy.length - 1] as Record<string, unknown>).cache_control = {
+      type: "ephemeral",
+    };
+  }
+  return copy;
+})();
+
 async function callAnthropicWithTools(
   model: string,
   systemPrompt: string,
@@ -330,13 +355,22 @@ async function callAnthropicWithTools(
     headers: {
       "x-api-key": ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "prompt-caching-2024-07-31",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model,
       max_tokens: ANTHROPIC_MAX_TOKENS,
-      system: systemPrompt,
-      tools: IRON_TOOL_DEFINITIONS,
+      // System prompt as an array with a cache breakpoint — this keeps
+      // the persona text cached between turns.
+      system: [
+        {
+          type: "text",
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: CACHED_TOOL_DEFINITIONS,
       messages,
     }),
     signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
