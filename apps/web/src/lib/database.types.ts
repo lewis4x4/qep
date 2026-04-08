@@ -4883,6 +4883,161 @@ export type Database = {
           },
         ]
       }
+      flow_event_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          schema: Json | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          schema?: Json | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          schema?: Json | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      flow_events: {
+        Row: {
+          commercial_relevance: string | null
+          company_id: string | null
+          correlation_id: string | null
+          created_at: string
+          customer_id: string | null
+          deal_id: string | null
+          draft_message: string | null
+          equipment_id: string | null
+          escalation_rule: string | null
+          event_id: string
+          event_type: string
+          id: string
+          idempotency_key: string | null
+          parent_event_id: string | null
+          payload: Json
+          published_at: string
+          recommended_deadline: string | null
+          required_action: string | null
+          severity: string | null
+          source_module: string
+          source_record_id: string | null
+          status: string
+          suggested_owner: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          commercial_relevance?: string | null
+          company_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          deal_id?: string | null
+          draft_message?: string | null
+          equipment_id?: string | null
+          escalation_rule?: string | null
+          event_id?: string
+          event_type: string
+          id?: string
+          idempotency_key?: string | null
+          parent_event_id?: string | null
+          payload?: Json
+          published_at?: string
+          recommended_deadline?: string | null
+          required_action?: string | null
+          severity?: string | null
+          source_module: string
+          source_record_id?: string | null
+          status?: string
+          suggested_owner?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          commercial_relevance?: string | null
+          company_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          deal_id?: string | null
+          draft_message?: string | null
+          equipment_id?: string | null
+          escalation_rule?: string | null
+          event_id?: string
+          event_type?: string
+          id?: string
+          idempotency_key?: string | null
+          parent_event_id?: string | null
+          payload?: Json
+          published_at?: string
+          recommended_deadline?: string | null
+          required_action?: string | null
+          severity?: string | null
+          source_module?: string
+          source_record_id?: string | null
+          status?: string
+          suggested_owner?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_events_suggested_owner_fkey"
+            columns: ["suggested_owner"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flow_subscriptions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          event_type_pattern: string
+          handler_module: string
+          handler_name: string
+          id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          event_type_pattern: string
+          handler_module: string
+          handler_name: string
+          id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          event_type_pattern?: string
+          handler_module?: string
+          handler_name?: string
+          id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       flow_workflow_definitions: {
         Row: {
           action_chain: Json
