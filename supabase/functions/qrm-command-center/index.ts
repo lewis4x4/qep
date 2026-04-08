@@ -281,8 +281,29 @@ Deno.serve(async (req) => {
       (profile as { iron_role: string | null }).iron_role,
     );
 
+    // Scope resolution order:
+    //   1. POST JSON body `{ scope }` — standard supabase.functions.invoke pattern.
+    //   2. URL query string `?scope=` — legacy/debug access via direct fetch.
+    //   3. Default `mine`.
+    // We accept both because the Supabase JS client's `functions.invoke`
+    // canonically sends a POST with a JSON body. Query-string passthrough
+    // on the function name parameter is undocumented and fragile.
+    let scopeFromBody: string | null = null;
+    if (req.method === "POST") {
+      try {
+        const bodyText = await req.text();
+        if (bodyText.length > 0) {
+          const parsed = JSON.parse(bodyText) as { scope?: unknown };
+          if (typeof parsed.scope === "string") {
+            scopeFromBody = parsed.scope;
+          }
+        }
+      } catch {
+        // Malformed body → fall through to URL query string.
+      }
+    }
     const url = new URL(req.url);
-    const rawScope = url.searchParams.get("scope") ?? "mine";
+    const rawScope = scopeFromBody ?? url.searchParams.get("scope") ?? "mine";
     if (!isValidScope(rawScope)) {
       return safeJsonError(`Invalid scope: ${rawScope}`, 400, origin);
     }

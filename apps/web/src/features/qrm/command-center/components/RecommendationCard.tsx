@@ -19,6 +19,45 @@ import type { LaneKey, RecommendationCardPayload } from "../api/commandCenter.ty
 const SNOOZE_KEY_PREFIX = "qrm.cc.snooze.";
 const SNOOZE_HOURS = 8;
 
+// Module-level guard so the prune sweep runs at most once per page load,
+// regardless of how many RecommendationCard instances mount.
+let snoozeStorePruned = false;
+
+/**
+ * Remove expired snooze entries from localStorage.
+ *
+ * Without this sweep, every dismissed-via-snooze card leaves a permanent
+ * key in localStorage even after the snooze expires. Over time the store
+ * grows unboundedly. Runs once per page load on first card mount.
+ */
+function pruneExpiredSnoozes(): void {
+  if (snoozeStorePruned) return;
+  if (typeof window === "undefined") return;
+  snoozeStorePruned = true;
+  try {
+    const now = Date.now();
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(SNOOZE_KEY_PREFIX)) continue;
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        keysToRemove.push(key);
+        continue;
+      }
+      const until = Number.parseInt(raw, 10);
+      if (!Number.isFinite(until) || until <= now) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // best effort — never break the UI over storage hygiene
+  }
+}
+
 function isSnoozed(recommendationKey: string): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -82,7 +121,12 @@ export function RecommendationCard({
   variant = "compact",
   showLaneBadge = true,
 }: RecommendationCardProps) {
-  const [hidden, setHidden] = useState<boolean>(() => isSnoozed(card.recommendationKey));
+  const [hidden, setHidden] = useState<boolean>(() => {
+    // One-shot prune of expired snooze entries on first card mount per page
+    // load. Guarded at the module level so only the first card pays the cost.
+    pruneExpiredSnoozes();
+    return isSnoozed(card.recommendationKey);
+  });
 
   if (hidden) return null;
 
