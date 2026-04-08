@@ -16,9 +16,16 @@ import type {
   IronUndoResponse,
 } from "./types";
 
+interface InvokeError {
+  message?: string;
+  name?: string;
+  /** FunctionsHttpError carries the failed Response in `context`. */
+  context?: Response;
+}
+
 interface InvokeResult<T> {
   data: T | null;
-  error: { message?: string } | null;
+  error: InvokeError | null;
 }
 
 type SupabaseWithFunctions = {
@@ -27,6 +34,40 @@ type SupabaseWithFunctions = {
   };
 };
 
+/**
+ * Extract the real error message from a Supabase functions invoke error.
+ *
+ * The default `error.message` is "Edge Function returned a non-2xx status code"
+ * — useless for diagnosis. The actual function response body lives in
+ * `error.context` (a Response object). Read it, parse JSON if possible,
+ * and surface whichever field carries meaning.
+ */
+async function explainInvokeError(error: InvokeError, fallback: string): Promise<string> {
+  const ctx = error.context;
+  if (ctx && typeof ctx.text === "function") {
+    try {
+      const text = await ctx.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text) as { error?: string; message?: string };
+          const real = parsed?.error ?? parsed?.message;
+          if (real && typeof real === "string") {
+            return `${real} (HTTP ${ctx.status})`;
+          }
+        } catch {
+          // Not JSON — return the first 200 chars of the body
+          return `${text.slice(0, 200)} (HTTP ${ctx.status})`;
+        }
+        return `HTTP ${ctx.status}`;
+      }
+      return `HTTP ${ctx.status}`;
+    } catch {
+      // Body already consumed or not readable
+    }
+  }
+  return error.message ?? fallback;
+}
+
 async function invokeIron<T>(
   name: string,
   body: unknown,
@@ -34,7 +75,10 @@ async function invokeIron<T>(
 ): Promise<T> {
   const fns = (supabase as unknown as SupabaseWithFunctions).functions;
   const { data, error } = await fns.invoke<T>(name, { body });
-  if (error) throw new Error(error.message ?? fallbackError);
+  if (error) {
+    const real = await explainInvokeError(error, fallbackError);
+    throw new Error(`${name}: ${real}`);
+  }
   return (data ?? ({} as T));
 }
 

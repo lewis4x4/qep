@@ -80,3 +80,46 @@ describe("iron api - this.region binding", () => {
     expect(caught).toBeInstanceOf(TypeError);
   });
 });
+
+describe("iron api - explainInvokeError extracts real error body", () => {
+  // A second fake that always returns an error with a Response in `context`,
+  // mimicking @supabase/functions-js's FunctionsHttpError. The wrapper must
+  // unwrap it instead of falling back to the SDK's generic message.
+  class FakeFailingClient {
+    region = "us-east-1";
+    async invoke<T>(
+      _name: string,
+      _opts: { body: unknown },
+    ): Promise<{ data: T | null; error: { message: string; context: Response } }> {
+      const ctx = new Response(
+        JSON.stringify({ error: "Unauthorized: invalid JWT signature" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+      return {
+        data: null,
+        error: {
+          message: "Edge Function returned a non-2xx status code",
+          context: ctx,
+        },
+      };
+    }
+  }
+
+  test("ironOrchestrate surfaces the real function error message + status", async () => {
+    const failing = new FakeFailingClient();
+    mock.module("@/lib/supabase", () => ({
+      supabase: { functions: failing },
+    }));
+    const { ironOrchestrate: orch } = await import("./api?failing");
+    let caught: Error | null = null;
+    try {
+      await orch({ text: "anything" });
+    } catch (err) {
+      caught = err as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toContain("Unauthorized: invalid JWT signature");
+    expect(caught?.message).toContain("401");
+    expect(caught?.message).toContain("iron-orchestrator");
+  });
+});
