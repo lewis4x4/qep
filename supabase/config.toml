@@ -218,3 +218,26 @@ verify_jwt = false
 # handler can return properly.
 [functions.flare-notify-fixed]
 verify_jwt = false
+
+# Wave 7 Iron Companion functions. ALL use requireServiceUser() internally
+# (Bearer + supabase.auth.getUser(token)), so gateway verify_jwt MUST be off
+# — otherwise the gateway 401s clients with stale/expiring tokens before the
+# function ever runs, and the operator sees a useless "Invalid JWT" with no
+# context. Same pattern as flare-submit + integration-availability.
+[functions.iron-orchestrator]
+verify_jwt = false
+
+[functions.iron-knowledge]
+verify_jwt = false
+
+[functions.iron-execute-flow-step]
+verify_jwt = false
+
+[functions.iron-undo-flow-run]
+verify_jwt = false
+
+[functions.iron-transcribe]
+verify_jwt = false
+
+[functions.iron-tts]
+verify_jwt = false
