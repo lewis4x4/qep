@@ -385,8 +385,12 @@ Deno.serve(async (req) => {
       dealIds.length > 0
         ? callerClient
           .from("voice_captures")
-          .select("deal_id, sentiment, manager_attention, created_at, extracted_data")
-          .in("deal_id", dealIds)
+          // NOTE: the real column is `linked_deal_id` (migration 056), not `deal_id`.
+          // Querying `deal_id` returns 400 and is silently absorbed by the
+          // `?? []` fallback below. `competitor_mentions` is a top-level
+          // `text[]` column on voice_captures, not nested inside extracted_data.
+          .select("linked_deal_id, sentiment, manager_attention, created_at, competitor_mentions")
+          .in("linked_deal_id", dealIds)
           .gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
           .order("created_at", { ascending: false })
           .limit(500)
@@ -412,6 +416,27 @@ Deno.serve(async (req) => {
         : Promise.resolve({ data: [], error: null }),
     ]);
     const signalsLatency = Date.now() - signalsStart;
+
+    // Explicit error logging for each signal query. We still degrade gracefully
+    // (empty array fallback), but failures are now visible in sentry and logs
+    // instead of being silently absorbed by `?? []`. The Day 2 verification found
+    // that silent absorption masked a P0 bug (voice_captures.deal_id column rename)
+    // for the entire lifetime of Slice 1's first deployment.
+    const logSignalError = (label: string, res: { error?: { message?: string } | null }): void => {
+      if (!res.error) return;
+      const message = res.error.message ?? "unknown signal query error";
+      console.error(`[${FN_NAME}] signal query '${label}' failed:`, message);
+      captureEdgeException(new Error(`${label}: ${message}`), {
+        fn: FN_NAME,
+        req,
+        extra: { signalLabel: label, scope, userId, ironRole },
+      });
+    };
+    logSignalError("anomaly_alerts", anomaliesRes);
+    logSignalError("voice_captures", voiceRes);
+    logSignalError("deposits", depositsRes);
+    logSignalError("crm_contacts", contactsRes);
+    logSignalError("crm_companies", companiesRes);
 
     const signalsByDealId = new Map<string, DealSignalBundle>();
     for (const id of dealIds) {
@@ -450,14 +475,14 @@ Deno.serve(async (req) => {
     }
 
     type VoiceRow = {
-      deal_id: string;
+      linked_deal_id: string;
       sentiment: string | null;
       created_at: string;
-      extracted_data: Record<string, unknown> | null;
+      competitor_mentions: string[] | null;
     };
     const voiceRows = (voiceRes.data ?? []) as VoiceRow[];
     for (const row of voiceRows) {
-      const bundle = signalsByDealId.get(row.deal_id);
+      const bundle = signalsByDealId.get(row.linked_deal_id);
       if (!bundle) continue;
       // Most recent (rows are ordered desc) wins for sentiment.
       if (bundle.recentVoiceSentiment === null && row.sentiment) {
@@ -465,11 +490,7 @@ Deno.serve(async (req) => {
           bundle.recentVoiceSentiment = row.sentiment;
         }
       }
-      const competitorRaw = (row.extracted_data ?? {}) as Record<string, unknown>;
-      if (
-        Array.isArray(competitorRaw["competitor_mentions"]) &&
-        (competitorRaw["competitor_mentions"] as unknown[]).length > 0
-      ) {
+      if (Array.isArray(row.competitor_mentions) && row.competitor_mentions.length > 0) {
         bundle.competitorMentioned = true;
       }
     }
