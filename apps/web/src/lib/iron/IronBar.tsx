@@ -462,11 +462,9 @@ export function IronBar() {
 
   const handleTemplateClick = useCallback(
     (tpl: IronTemplate) => {
-      if (tpl.knowledge_only && tpl.phrase === "") {
-        // Pure "ask anything" — just focus the input
-        inputRef.current?.focus();
-        return;
-      }
+      // Always pre-fill, always focus, always park the cursor at the end so
+      // the user can keep typing immediately. Templates with an empty phrase
+      // would just clear the input — no template currently ships empty.
       setInput(tpl.phrase);
       setTimeout(() => {
         inputRef.current?.focus();

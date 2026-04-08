@@ -125,7 +125,7 @@ export const IRON_TEMPLATES: IronTemplate[] = [
     label: "Ask Iron anything",
     description: "Get an answer from QEP data, manuals, and the web",
     icon: MessageCircle,
-    phrase: "",
+    phrase: "tell me about ",
     roles: ["rep", "admin", "manager", "owner"],
     knowledge_only: true,
   },
