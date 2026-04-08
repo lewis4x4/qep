@@ -47,6 +47,8 @@ import type {
   PipelineStageInput,
   RankableDeal,
 } from "../_shared/qrm-command-center/ranking.ts";
+import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
+import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import type {
   CommandCenterResponse,
   CommandCenterScope,
@@ -369,38 +371,25 @@ Deno.serve(async (req) => {
     const contactIds = Array.from(new Set(deals.map((d) => d.primaryContactId).filter(Boolean))) as string[];
     const companyIds = Array.from(new Set(deals.map((d) => d.companyId).filter(Boolean))) as string[];
 
-    // ── Fetch signal sources in parallel ──
+    // ── Fetch signals via the unified deal_signals view (P0.2) ──
+    //
+    // Phase 0 P0.2 (migration 207) replaces the 3 parallel signal queries
+    // (anomaly_alerts / voice_captures / deposits) Slice 1 used to do with
+    // a single read against the `deal_signals` view. The view ships with
+    // `security_invoker = true` so it inherits per-source RLS — no new
+    // policies, no new attack surface.
+    //
+    // Display lookups (crm_contacts, crm_companies) are NOT signals and
+    // remain as separate parallel queries.
     const signalsStart = Date.now();
-    const [anomaliesRes, voiceRes, depositsRes, contactsRes, companiesRes] = await Promise.all([
+    const [signalsRes, contactsRes, companiesRes] = await Promise.all([
       dealIds.length > 0
         ? callerClient
-          .from("anomaly_alerts")
-          .select("entity_id, alert_type, severity, created_at")
-          .eq("entity_type", "deal")
-          .in("entity_id", dealIds)
-          .eq("acknowledged", false)
-          .order("created_at", { ascending: false })
-          .limit(500)
-        : Promise.resolve({ data: [], error: null }),
-      dealIds.length > 0
-        ? callerClient
-          .from("voice_captures")
-          // NOTE: the real column is `linked_deal_id` (migration 056), not `deal_id`.
-          // Querying `deal_id` returns 400 and is silently absorbed by the
-          // `?? []` fallback below. `competitor_mentions` is a top-level
-          // `text[]` column on voice_captures, not nested inside extracted_data.
-          .select("linked_deal_id, sentiment, manager_attention, created_at, competitor_mentions")
-          .in("linked_deal_id", dealIds)
-          .gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
-          .order("created_at", { ascending: false })
-          .limit(500)
-        : Promise.resolve({ data: [], error: null }),
-      dealIds.length > 0
-        ? callerClient
-          .from("deposits")
-          .select("deal_id, status")
+          .from("deal_signals")
+          .select("deal_id, signal_source, signal_subtype, severity, payload, observed_at, source_record_id")
           .in("deal_id", dealIds)
-          .in("status", ["pending", "requested", "received"])
+          .order("observed_at", { ascending: false })
+          .limit(2000)
         : Promise.resolve({ data: [], error: null }),
       contactIds.length > 0
         ? callerClient
@@ -417,11 +406,11 @@ Deno.serve(async (req) => {
     ]);
     const signalsLatency = Date.now() - signalsStart;
 
-    // Explicit error logging for each signal query. We still degrade gracefully
-    // (empty array fallback), but failures are now visible in sentry and logs
-    // instead of being silently absorbed by `?? []`. The Day 2 verification found
-    // that silent absorption masked a P0 bug (voice_captures.deal_id column rename)
-    // for the entire lifetime of Slice 1's first deployment.
+    // Explicit error logging for each query. We still degrade gracefully
+    // (empty-array fallback), but failures are visible in sentry + logs.
+    // Day 2 verification found that silent absorption masked a P0 bug
+    // (voice_captures.deal_id column rename) for the lifetime of Slice 1's
+    // first deployment.
     const logSignalError = (label: string, res: { error?: { message?: string } | null }): void => {
       if (!res.error) return;
       const message = res.error.message ?? "unknown signal query error";
@@ -432,75 +421,15 @@ Deno.serve(async (req) => {
         extra: { signalLabel: label, scope, userId, ironRole },
       });
     };
-    logSignalError("anomaly_alerts", anomaliesRes);
-    logSignalError("voice_captures", voiceRes);
-    logSignalError("deposits", depositsRes);
+    logSignalError("deal_signals", signalsRes);
     logSignalError("crm_contacts", contactsRes);
     logSignalError("crm_companies", companiesRes);
 
-    const signalsByDealId = new Map<string, DealSignalBundle>();
-    for (const id of dealIds) {
-      signalsByDealId.set(id, {
-        anomalyTypes: [],
-        anomalySeverity: null,
-        recentVoiceSentiment: null,
-        competitorMentioned: false,
-        hasPendingDeposit: false,
-        healthScore: null,
-      });
-    }
-
-    type AnomalyRow = {
-      entity_id: string;
-      alert_type: string;
-      severity: "low" | "medium" | "high" | "critical";
-    };
-    const anomalyRows = (anomaliesRes.data ?? []) as AnomalyRow[];
-    const severityRank: Record<AnomalyRow["severity"], number> = {
-      low: 1,
-      medium: 2,
-      high: 3,
-      critical: 4,
-    };
-    for (const row of anomalyRows) {
-      const bundle = signalsByDealId.get(row.entity_id);
-      if (!bundle) continue;
-      bundle.anomalyTypes.push(row.alert_type);
-      if (
-        bundle.anomalySeverity === null ||
-        severityRank[row.severity] > severityRank[bundle.anomalySeverity]
-      ) {
-        bundle.anomalySeverity = row.severity;
-      }
-    }
-
-    type VoiceRow = {
-      linked_deal_id: string;
-      sentiment: string | null;
-      created_at: string;
-      competitor_mentions: string[] | null;
-    };
-    const voiceRows = (voiceRes.data ?? []) as VoiceRow[];
-    for (const row of voiceRows) {
-      const bundle = signalsByDealId.get(row.linked_deal_id);
-      if (!bundle) continue;
-      // Most recent (rows are ordered desc) wins for sentiment.
-      if (bundle.recentVoiceSentiment === null && row.sentiment) {
-        if (row.sentiment === "positive" || row.sentiment === "neutral" || row.sentiment === "negative") {
-          bundle.recentVoiceSentiment = row.sentiment;
-        }
-      }
-      if (Array.isArray(row.competitor_mentions) && row.competitor_mentions.length > 0) {
-        bundle.competitorMentioned = true;
-      }
-    }
-
-    type DepositRow = { deal_id: string };
-    const depositRows = (depositsRes.data ?? []) as DepositRow[];
-    for (const row of depositRows) {
-      const bundle = signalsByDealId.get(row.deal_id);
-      if (bundle) bundle.hasPendingDeposit = true;
-    }
+    // Reduce view rows into the per-deal bundle map the ranker consumes.
+    // Pure function — no DB, no IO. Tested in
+    // _shared/qrm-command-center/signal-bridge.test.ts (13 cases).
+    const signalRows = (signalsRes.data ?? []) as DealSignalRow[];
+    const signalsByDealId = reduceSignalsToBundles(signalRows, dealIds);
 
     const lookups: ContactCompanyLookup = {
       companies: new Map(
@@ -531,14 +460,20 @@ Deno.serve(async (req) => {
     const pressure = buildPipelinePressure(stageInputs, deals, nowTime);
     const commandStrip = buildCommandStrip(deals, signalsByDealId, nowTime);
 
+    // Count voice signal rows for the AI Chief of Staff freshness chip.
+    // After P0.2, voice rows arrive via the unified deal_signals view; we
+    // derive the count by filtering to signal_source='voice' instead of
+    // tracking a separate query result.
+    const voiceRowCount = signalRows.filter((row) => row.signal_source === "voice").length;
+
     const generatedAt = observedAt;
     const freshness: Record<SectionKey, SectionFreshness> = {
       commandStrip: { generatedAt, source: "live", latencyMs: dealsLatency },
       aiChiefOfStaff: {
         generatedAt,
-        source: voiceRows.length === 0 ? "degraded" : "live",
+        source: voiceRowCount === 0 ? "degraded" : "live",
         latencyMs: signalsLatency,
-        reason: voiceRows.length === 0 ? "No recent voice captures in scope" : undefined,
+        reason: voiceRowCount === 0 ? "No recent voice captures in scope" : undefined,
       },
       actionLanes: { generatedAt, source: "live", latencyMs: signalsLatency },
       pipelinePressure: { generatedAt, source: "live", latencyMs: stagesLatency },
