@@ -11,13 +11,24 @@
  *   3. Per touchpoint: generate AI content (OpenAI)
  *   4. Batch UPDATE touchpoints via batch_apply_follow_up_touchpoint_ai RPC
  *   5. Bulk INSERT crm_in_app_notifications (one request)
+ *   6. ── Day 7 dual-write ── per touchpoint, also publish a
+ *      `follow_up.touchpoint_due` event to the flow bus. Best-effort.
  *
- * DB round-trips per run: 4 reads + 1 RPC + at most 1 insert (≤ 6, excluding auth).
+ * DB round-trips per run: 4 reads + 1 RPC + 1 bulk insert + N bus publishes
+ * (where N = touchpoints with assigned reps; typically ≤ 50 per run).
  *
  * Auth: service_role (cron invocation)
+ *
+ * ── Phase 0 P0.4 Day 7 — DUAL-WRITE TO FLOW BUS ────────────────────────────
+ *
+ * The bus publish is best-effort: a failure logs to sentry but never breaks
+ * the primary follow-up flow. The direct-insert path
+ * (crm_in_app_notifications + batch_apply_follow_up_touchpoint_ai RPC) is
+ * retired at the end of Phase 2 Slice 2.2 per main roadmap §15 Q3.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -286,6 +297,55 @@ Deno.serve(async (req) => {
         return safeJsonError("Failed to create notifications", 500, null);
       }
       results.notifications_created = notificationRows.length;
+
+      // ── Day 7 dual-write to flow bus ──
+      // For each notification row, publish a follow_up.touchpoint_due event.
+      // The notification row already carries the workspace_id, deal_id, user_id,
+      // and touchpoint metadata we need. Idempotency key is the touchpoint id
+      // so re-runs of the engine for the same touchpoint dedupe cleanly.
+      // Each publish is best-effort: failure logs but never fails the run.
+      let busPublished = 0;
+      let busFailed = 0;
+      for (const notif of notificationRows) {
+        try {
+          await publishFlowEvent(supabaseAdmin, {
+            workspaceId: notif.workspace_id,
+            eventType: "follow_up.touchpoint_due",
+            sourceModule: "follow-up-engine",
+            dealId: notif.deal_id,
+            suggestedOwner: notif.user_id,
+            severity: "medium",
+            commercialRelevance: "high",
+            requiredAction: notif.title,
+            draftMessage: notif.body ?? undefined,
+            payload: {
+              touchpoint_id: (notif.metadata as Record<string, unknown>).touchpoint_id,
+              touchpoint_type: (notif.metadata as Record<string, unknown>).touchpoint_type,
+              value_type: (notif.metadata as Record<string, unknown>).value_type,
+              cadence_type: (notif.metadata as Record<string, unknown>).cadence_type,
+            },
+            idempotencyKey: `follow_up.touchpoint_due:${(notif.metadata as Record<string, unknown>).touchpoint_id}`,
+          });
+          busPublished++;
+        } catch (busErr) {
+          busFailed++;
+          console.error(
+            "[follow-up-engine] flow bus publish failed:",
+            busErr instanceof Error ? busErr.message : busErr,
+          );
+          captureEdgeException(busErr, {
+            fn: "follow-up-engine",
+            req,
+            extra: {
+              phase: "bus_publish",
+              touchpoint_id: (notif.metadata as Record<string, unknown>).touchpoint_id,
+            },
+          });
+        }
+      }
+      console.log(
+        `[follow-up-engine] bus published=${busPublished} failed=${busFailed} of ${notificationRows.length}`,
+      );
     }
 
     return safeJsonOk({ ok: true, results }, null);

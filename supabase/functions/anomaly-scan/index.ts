@@ -9,8 +9,25 @@
  * 5. Pricing anomalies — deals significantly above/below average for category
  *
  * Callable via service role (cron) or by admin/manager/owner (on-demand).
+ *
+ * ── Phase 0 P0.4 Day 7 — DUAL-WRITE TO FLOW BUS ────────────────────────────
+ *
+ * In addition to inserting into anomaly_alerts (the existing direct-insert
+ * path), this function ALSO publishes an `anomaly.detected` event to the
+ * flow bus (supabase/functions/_shared/flow-bus/publish.ts) for each new
+ * anomaly. The bus publish is best-effort: a failure logs to sentry but
+ * never breaks the primary anomaly_alerts flow.
+ *
+ * Idempotency: the bus key is `${alert_type}:${entity_id}:${today}`, which
+ * matches the existing per-day dedup logic above (lines 521-534). Re-runs
+ * of this function on the same day for the same entity dedupe cleanly at
+ * both the anomaly_alerts level AND the bus level.
+ *
+ * Cutover: the direct-insert path (anomaly_alerts) is retired at the end of
+ * Phase 2 Slice 2.2 per main roadmap §15 Q3.
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
+import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
@@ -537,8 +554,68 @@ Deno.serve(async (req) => {
       await adminClient.from("anomaly_alerts").insert(newAlerts);
     }
 
+    // ── Day 7 dual-write to flow bus ──
+    // For each NEW anomaly (those that survived the dedup loop above), publish
+    // an `anomaly.detected` event. Idempotency key matches the dedup logic
+    // (`${alert_type}:${entity_id}:${today}`) so re-runs of this function on
+    // the same day for the same entity dedupe cleanly at both levels.
+    // Best-effort: each publish failure logs but never breaks the scan.
+    const VALID_BUS_SEVERITY = new Set(["low", "medium", "high", "critical"]);
+    let busPublished = 0;
+    let busFailed = 0;
+    for (const alert of newAlerts) {
+      // Map severity to bus enum (anomaly_alerts already uses the same set
+      // but defensive in case a future anomaly emits an off-list severity)
+      const severity = VALID_BUS_SEVERITY.has(alert.severity)
+        ? (alert.severity as "low" | "medium" | "high" | "critical")
+        : undefined;
+
+      // Only populate deal_id when the anomaly is actually about a deal
+      const dealId = alert.entity_type === "deal" && alert.entity_id
+        ? alert.entity_id
+        : undefined;
+
+      try {
+        await publishFlowEvent(adminClient, {
+          workspaceId: alert.workspace_id,
+          eventType: "anomaly.detected",
+          sourceModule: "anomaly-scan",
+          dealId,
+          suggestedOwner: alert.assigned_to ?? undefined,
+          severity,
+          commercialRelevance: severity === "critical" || severity === "high" ? "high" : "medium",
+          requiredAction: alert.title,
+          draftMessage: alert.description,
+          payload: {
+            alert_type: alert.alert_type,
+            entity_type: alert.entity_type,
+            entity_id: alert.entity_id,
+            data: alert.data,
+          },
+          idempotencyKey: `anomaly.detected:${alert.alert_type}:${alert.entity_id ?? "global"}:${today}`,
+        });
+        busPublished++;
+      } catch (busErr) {
+        busFailed++;
+        console.error(
+          "[anomaly-scan] flow bus publish failed:",
+          busErr instanceof Error ? busErr.message : busErr,
+        );
+        captureEdgeException(busErr, {
+          fn: "anomaly-scan",
+          req,
+          extra: {
+            phase: "bus_publish",
+            alert_type: alert.alert_type,
+            entity_id: alert.entity_id,
+          },
+        });
+      }
+    }
+
     console.log(
       `[anomaly-scan] detected=${allAlerts.length} new=${newAlerts.length} scored=${dealsScored} ` +
+      `bus_published=${busPublished} bus_failed=${busFailed} ` +
       `(stalling=${stallingDeals.length} overdue=${overdueFollowUps.length} ` +
       `gaps=${activityGaps.length} pipeline=${pipelineRisks.length} ` +
       `embedding_stale=${staleEmbeddings.length} orphan_chunks=${orphanChunks.length})`,
