@@ -166,6 +166,37 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
         return;
       }
 
+      // COST_LIMIT + other structured JSON responses come back as
+      // Content-Type: application/json instead of text/event-stream.
+      // Detect and render the message field as a normal assistant turn
+      // so the user sees *why* the call failed instead of a blank bubble.
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream")) {
+        try {
+          const payload = (await res.json()) as {
+            ok?: boolean;
+            category?: string;
+            message?: string;
+            tokens_today?: number;
+          };
+          const friendly = payload.message ??
+            (payload.category === "COST_LIMIT"
+              ? "Iron usage cap reached for today. Resets at midnight UTC."
+              : "Iron returned an unexpected response.");
+          // Stream the friendly message as a single "text" chunk so the
+          // IronBar rendering path is identical to a normal answer.
+          setText(friendly);
+          setStatus("done");
+          releasePresence();
+          return;
+        } catch {
+          setError("Iron returned a non-streaming response we couldn't parse.");
+          setStatus("error");
+          releasePresence();
+          return;
+        }
+      }
+
       setStatus("streaming");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

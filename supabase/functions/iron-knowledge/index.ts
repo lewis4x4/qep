@@ -238,6 +238,13 @@ interface DegradationState {
   tokens_today: number;
 }
 
+// Wave 7.3 cost-ladder rebalance: match the orchestrator's DEFAULT_CAPS.
+// Keep these two numbers in sync with iron-orchestrator/index.ts. Deferred
+// cleanup: unify both functions to read from workspace_settings.iron_*
+// columns via a shared helper instead of hardcoding.
+const SOFT_CAP_TOKENS = 50_000;
+const HARD_CAP_TOKENS = 150_000;
+
 async function loadDegradationState(
   admin: SupabaseClient,
   userId: string,
@@ -252,8 +259,8 @@ async function loadDegradationState(
 
   const tokens = (data?.tokens_in ?? 0) + (data?.tokens_out ?? 0);
   let state: DegradationState["state"] = "full";
-  if (tokens >= 20_000) state = "cached";
-  else if (tokens >= 10_000) state = "reduced";
+  if (tokens >= HARD_CAP_TOKENS) state = "cached";
+  else if (tokens >= SOFT_CAP_TOKENS) state = "reduced";
   return { state, tokens_today: tokens };
 }
 

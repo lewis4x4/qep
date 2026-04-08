@@ -65,9 +65,18 @@ interface WorkspaceCaps {
   escalation_slack_channel: string;
 }
 
+// Wave 7.3 cost-ladder rebalance:
+//   Soft cap 50K → drops Sonnet → Haiku once the user has used ~15-20 full
+//   Sonnet turns with tools in a day. Cached tool definitions mean each
+//   turn costs ~2-3K tokens on average, so this is roughly a full work
+//   session on Sonnet before degradation.
+//   Hard cap 150K → lockout at ~$2-3/user/day of Sonnet cost. Enough
+//   headroom for a heavy power user, still a meaningful safety rail.
+// Per-workspace overrides live in workspace_settings.iron_user_daily_*
+// and are loaded by loadCaps() below — populate those to customize.
 const DEFAULT_CAPS: WorkspaceCaps = {
-  user_daily_soft_cap_tokens: 10_000,
-  user_daily_hard_cap_tokens: 20_000,
+  user_daily_soft_cap_tokens: 50_000,
+  user_daily_hard_cap_tokens: 150_000,
   high_value_threshold_cents: 2_500_000,
   escalation_slack_channel: "#qep-iron-health",
 };
