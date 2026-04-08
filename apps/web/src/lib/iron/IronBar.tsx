@@ -96,6 +96,14 @@ export function IronBar() {
 
   const templates = useMemo(() => filterAndRankTemplates(userRole, []), [userRole]);
 
+  // Pull stable fields off the knowledge stream so callbacks below don't
+  // see a fresh `knowledge` object identity every render. The hook's
+  // `start`/`cancel` are useCallbacks with stable deps, and the status
+  // string IS expected to flip the deps when streaming begins/ends.
+  const knowledgeStart = knowledge.start;
+  const knowledgeCancel = knowledge.cancel;
+  const knowledgeStatus = knowledge.status;
+
   // ── Cmd+I shortcut ────────────────────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -184,7 +192,7 @@ export function IronBar() {
   const send = useCallback(
     async (explicitText?: string, options: SendOptions = {}) => {
       const text = (explicitText ?? input).trim();
-      if (!text || classifying || knowledge.status === "streaming") return;
+      if (!text || classifying || knowledgeStatus === "streaming") return;
       const mode = options.mode ?? "text";
 
       cancelIronSpeech();
@@ -212,7 +220,7 @@ export function IronBar() {
           createdAt: Date.now(),
         };
         chatAppend(placeholder);
-        await knowledge.start({
+        await knowledgeStart({
           message: text,
           conversationId: state.conversationId ?? undefined,
           route: location.pathname,
@@ -309,7 +317,7 @@ export function IronBar() {
         };
         chatAppend(placeholder);
         if (res.conversation_id) setConversationId(res.conversation_id);
-        await knowledge.start({
+        await knowledgeStart({
           message: text,
           conversationId: res.conversation_id ?? state.conversationId ?? undefined,
           route: location.pathname,
@@ -332,7 +340,8 @@ export function IronBar() {
     [
       input,
       classifying,
-      knowledge,
+      knowledgeStatus,
+      knowledgeStart,
       state.conversationId,
       location.pathname,
       chatAppend,
@@ -439,14 +448,15 @@ export function IronBar() {
     };
   }, [state.barOpen, input, startVoice, stopAndTranscribe]);
 
-  // Cancel mid-stream voice + TTS on bar close
+  // Cancel mid-stream voice + TTS on bar close. Pull stable refs out of
+  // recorder + knowledge so the effect doesn't re-fire on every keystroke.
   useEffect(() => {
     if (!state.barOpen) {
       if (recorder.state === "recording") recorder.cancel();
       cancelIronSpeech();
-      knowledge.cancel();
+      knowledgeCancel();
     }
-  }, [state.barOpen, recorder, knowledge]);
+  }, [state.barOpen, recorder, knowledgeCancel]);
 
   // Sentence-buffered narration: on done, speak the full assistant text.
   useEffect(() => {
