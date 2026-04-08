@@ -1,7 +1,13 @@
 /**
- * Wave 7 Iron Companion — client-side API wrappers around the three Iron edge
- * functions. All calls go through `supabase.functions.invoke` so the user JWT
+ * Wave 7 Iron Companion — client-side API wrappers around the Iron edge
+ * functions. Calls go through `supabase.functions.invoke` so the user JWT
  * is attached automatically.
+ *
+ * IMPORTANT: never destructure `invoke` off `supabase.functions` — the
+ * @supabase/functions-js FunctionsClient.invoke method dereferences
+ * `this.region` internally, so calling it as a free function throws
+ * "undefined is not an object (evaluating 'this.region')" in Safari.
+ * Always invoke through the live receiver.
  */
 import { supabase } from "@/lib/supabase";
 import type {
@@ -15,11 +21,22 @@ interface InvokeResult<T> {
   error: { message?: string } | null;
 }
 
-const invokeFn = (supabase as unknown as {
+type SupabaseWithFunctions = {
   functions: {
-    invoke: (name: string, opts: { body: unknown }) => Promise<InvokeResult<unknown>>;
+    invoke: <T>(name: string, opts: { body: unknown }) => Promise<InvokeResult<T>>;
   };
-}).functions.invoke;
+};
+
+async function invokeIron<T>(
+  name: string,
+  body: unknown,
+  fallbackError: string,
+): Promise<T> {
+  const fns = (supabase as unknown as SupabaseWithFunctions).functions;
+  const { data, error } = await fns.invoke<T>(name, { body });
+  if (error) throw new Error(error.message ?? fallbackError);
+  return (data ?? ({} as T));
+}
 
 export async function ironOrchestrate(input: {
   text: string;
@@ -28,9 +45,12 @@ export async function ironOrchestrate(input: {
   route?: string;
   visible_entities?: Record<string, unknown>;
 }): Promise<IronOrchestratorResponse> {
-  const { data, error } = await invokeFn("iron-orchestrator", { body: input });
-  if (error) throw new Error(error.message ?? "iron-orchestrator failed");
-  return (data ?? { ok: false }) as IronOrchestratorResponse;
+  const data = await invokeIron<IronOrchestratorResponse>(
+    "iron-orchestrator",
+    input,
+    "iron-orchestrator failed",
+  );
+  return data.ok === undefined ? ({ ok: false } as IronOrchestratorResponse) : data;
 }
 
 export async function ironExecuteFlowStep(input: {
@@ -41,15 +61,21 @@ export async function ironExecuteFlowStep(input: {
   high_value_confirmation_cents?: number;
   client_slot_updated_at?: Record<string, string>;
 }): Promise<IronExecuteResponse> {
-  const { data, error } = await invokeFn("iron-execute-flow-step", { body: input });
-  if (error) throw new Error(error.message ?? "iron-execute-flow-step failed");
-  return (data ?? { ok: false }) as IronExecuteResponse;
+  const data = await invokeIron<IronExecuteResponse>(
+    "iron-execute-flow-step",
+    input,
+    "iron-execute-flow-step failed",
+  );
+  return data.ok === undefined ? ({ ok: false } as IronExecuteResponse) : data;
 }
 
 export async function ironUndoFlowRun(input: { run_id: string }): Promise<IronUndoResponse> {
-  const { data, error } = await invokeFn("iron-undo-flow-run", { body: input });
-  if (error) throw new Error(error.message ?? "iron-undo-flow-run failed");
-  return (data ?? { ok: false }) as IronUndoResponse;
+  const data = await invokeIron<IronUndoResponse>(
+    "iron-undo-flow-run",
+    input,
+    "iron-undo-flow-run failed",
+  );
+  return data.ok === undefined ? ({ ok: false } as IronUndoResponse) : data;
 }
 
 /* ─── Wave 7 v1.8: cross-system memory affinity ───────────────────────── */

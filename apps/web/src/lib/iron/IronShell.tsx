@@ -1,28 +1,43 @@
 /**
  * Wave 7 Iron Companion — top-level shell.
  *
- * Mounts the IronStoreProvider, the corner avatar, the command palette,
- * the active flow modal, and the undo toast in the right z-index order:
+ * Mounts (once, in App.tsx, inside the auth-gated tree):
+ *   • IronStoreProvider
+ *   • IronCorner — draggable, corner-snapping wrapper around IronAvatar
+ *   • IronBar    — Cmd+I command palette + streaming chat
+ *   • FlowEngineUI — slot-fill walkthrough when a flow is active
+ *   • IronUndoToast — 60s undo window after successful execute
  *
+ * Z-index discipline:
  *   FlareDrawer  9999  (always wins — bug reports cannot be blocked)
- *   IronAvatar   9998
+ *   IronCorner   9998
  *   IronBar      9997
  *   FlowEngineUI 9996
  *
- * Mount this once inside the auth-gated tree (App.tsx). It self-manages
- * keyboard shortcut + visibility.
+ * The avatar reads its visual state from the global IronPresence bus, which
+ * lets ANY part of the app push state (long mutations, captured errors,
+ * workspace switches, etc.) — not just Iron's own classify/think/speak loop.
  */
 import { IronStoreProvider, useIronStore } from "./store";
-import { IronAvatar } from "./IronAvatar";
+import { IronCorner } from "./IronCorner";
 import { IronBar } from "./IronBar";
 import { FlowEngineUI } from "./FlowEngineUI";
 import { IronUndoToast } from "./IronUndoToast";
+import { useIronPresenceState } from "./presence";
+import { IronGlobalSubscribers } from "./IronGlobalSubscribers";
 
 function IronShellInner() {
-  const { state, openBar } = useIronStore();
+  const { state, openBar, toggleCollapsed } = useIronStore();
+  const presenceState = useIronPresenceState();
   return (
     <>
-      <IronAvatar state={state.avatarState} onClick={openBar} />
+      <IronGlobalSubscribers />
+      <IronCorner
+        state={presenceState}
+        onClick={openBar}
+        collapsed={state.collapsed}
+        onToggleCollapsed={toggleCollapsed}
+      />
       <IronBar />
       {state.activeFlow && <FlowEngineUI />}
       <IronUndoToast />

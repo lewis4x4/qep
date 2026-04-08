@@ -1,105 +1,189 @@
 /**
- * Wave 7 Iron Companion — floating corner avatar.
+ * Wave 7 Iron Companion — PNG-driven avatar.
  *
- * v1: pure CSS animation, no framer-motion dependency. Renders a fixed
- * bottom-right circular button with a Lucide icon. Click opens the IronBar.
- * State changes (idle / thinking / speaking / listening / alert / flow_active /
- * success) drive ring color + pulse animation only.
+ * Renders one of five custom Iron portrait PNGs based on state, with a
+ * stateful glow ring, framer-motion crossfade, idle breathe, alert bob,
+ * listening pulse, and success flash. Respects `prefers-reduced-motion`.
  *
- * Wave 7.1+: drop in the 5 PNG renders from the iron-avatar/ folder + framer-motion.
+ * The avatar is purely visual — `IronCorner` wraps it for drag/snap
+ * positioning and `IronShell` mounts the whole stack into the auth-gated
+ * tree of the app.
+ *
+ * Z-index discipline:
+ *   FlareDrawer  9999  (Flare always wins — bug reports cannot be blocked)
+ *   IronAvatar   9998
+ *   IronBar      9997
+ *   FlowEngine   9996
  */
-import { useEffect, useRef } from "react";
-import { Bot, Mic, Sparkles, Loader2, AlertOctagon, CheckCircle2, Zap } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useMemo } from "react";
+
+import ironIdle from "@/assets/iron/iron-idle.png";
+import ironThinking from "@/assets/iron/iron-thinking.png";
+import ironSpeaking from "@/assets/iron/iron-speaking.png";
+import ironListening from "@/assets/iron/iron-listening.png";
+import ironAlert from "@/assets/iron/iron-alert.png";
+
 import type { IronAvatarState } from "./types";
 
 export interface IronAvatarProps {
   state: IronAvatarState;
-  onClick: () => void;
+  size?: number;
   collapsed?: boolean;
+  onClick?: () => void;
   ariaLabel?: string;
+  className?: string;
 }
 
-const ICON_BY_STATE: Record<IronAvatarState, typeof Bot> = {
-  idle: Bot,
-  thinking: Loader2,
-  speaking: Sparkles,
-  listening: Mic,
-  alert: AlertOctagon,
-  flow_active: Zap,
-  success: CheckCircle2,
+const STATE_TO_SRC: Record<IronAvatarState, string> = {
+  idle: ironIdle,
+  thinking: ironThinking,
+  speaking: ironSpeaking,
+  listening: ironListening,
+  alert: ironAlert,
+  flow_active: ironThinking, // reuse thinking pose during flow execution
+  success: ironSpeaking, // positive-affect pose; ring color carries the win
 };
 
-const RING_BY_STATE: Record<IronAvatarState, string> = {
-  idle: "ring-qep-orange/30",
-  thinking: "ring-qep-orange/80 animate-pulse",
-  speaking: "ring-qep-orange/80 animate-pulse",
-  listening: "ring-blue-400/80 animate-pulse",
-  alert: "ring-red-500/80 animate-pulse",
-  flow_active: "ring-qep-orange",
-  success: "ring-emerald-400/80",
+const STATE_TO_LABEL: Record<IronAvatarState, string> = {
+  idle: "Iron — ready",
+  thinking: "Iron — thinking",
+  speaking: "Iron — speaking",
+  listening: "Iron — listening",
+  alert: "Iron — has a suggestion for you",
+  flow_active: "Iron — flow in progress",
+  success: "Iron — done",
 };
 
-const LABEL_BY_STATE: Record<IronAvatarState, string> = {
-  idle: "Iron — open command palette",
-  thinking: "Iron is thinking",
-  speaking: "Iron is responding",
-  listening: "Iron is listening",
-  alert: "Iron has an alert",
-  flow_active: "Iron flow in progress",
-  success: "Iron flow succeeded",
+const BREATHE_ANIMATION = {
+  scale: [1, 1.015, 1],
+  transition: { duration: 4, repeat: Infinity, ease: "easeInOut" as const },
 };
 
-export function IronAvatar({ state, onClick, collapsed, ariaLabel }: IronAvatarProps) {
-  const Icon = ICON_BY_STATE[state];
-  const ring = RING_BY_STATE[state];
-  const label = ariaLabel ?? LABEL_BY_STATE[state];
-  const buttonRef = useRef<HTMLButtonElement>(null);
+const ALERT_BOB = {
+  y: [0, -3, 0],
+  transition: { duration: 1.2, repeat: Infinity, ease: "easeInOut" as const },
+};
 
-  // Subtle "breathe" animation when idle (CSS-driven via the data attribute)
-  useEffect(() => {
-    if (!buttonRef.current) return;
-    buttonRef.current.dataset.ironState = state;
-  }, [state]);
-
-  if (collapsed) {
-    return (
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={onClick}
-        aria-label={label}
-        className={`fixed bottom-4 right-4 z-[9998] flex h-6 w-6 items-center justify-center rounded-full bg-background ring-2 ${ring} hover:scale-110 transition-transform`}
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <Icon className="h-3 w-3 text-foreground" />
-      </button>
-    );
+function ringShadow(state: IronAvatarState): string {
+  switch (state) {
+    case "alert":
+      return "0 0 24px 4px rgba(239, 68, 68, 0.45)";
+    case "listening":
+      return "0 0 24px 4px rgba(59, 130, 246, 0.4)";
+    case "speaking":
+      return "0 0 28px 6px rgba(255, 138, 61, 0.5)";
+    case "thinking":
+    case "flow_active":
+      return "0 0 20px 3px rgba(255, 138, 61, 0.3)";
+    case "success":
+      return "0 0 26px 5px rgba(16, 185, 129, 0.55)";
+    default:
+      return "0 0 16px 2px rgba(0, 0, 0, 0.25)";
   }
+}
+
+export function IronAvatar({
+  state,
+  size = 72,
+  collapsed = false,
+  onClick,
+  ariaLabel,
+  className = "",
+}: IronAvatarProps) {
+  const reduceMotion = useReducedMotion();
+  const src = STATE_TO_SRC[state];
+  const label = ariaLabel ?? STATE_TO_LABEL[state];
+  const effectiveSize = collapsed ? 24 : size;
+
+  const idleAnimation = useMemo(() => {
+    if (reduceMotion) return undefined;
+    if (state === "idle") return BREATHE_ANIMATION;
+    if (state === "alert") return ALERT_BOB;
+    return undefined;
+  }, [state, reduceMotion]);
 
   return (
-    <button
-      ref={buttonRef}
+    <motion.button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`fixed bottom-6 right-6 z-[9998] flex h-14 w-14 items-center justify-center rounded-full bg-background shadow-lg ring-2 ${ring} hover:scale-105 transition-transform iron-avatar-breathe`}
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className={`relative inline-flex items-center justify-center rounded-full select-none ${className}`}
+      style={{ width: effectiveSize, height: effectiveSize }}
+      animate={idleAnimation}
+      whileHover={reduceMotion ? undefined : { scale: 1.05 }}
+      whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+      transition={{ type: "spring", stiffness: 400, damping: 28 }}
     >
-      <Icon
-        className={`h-6 w-6 text-qep-orange ${state === "thinking" ? "animate-spin" : ""}`}
+      {/* Soft glow ring driven off state */}
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-full pointer-events-none"
+        style={{
+          boxShadow: ringShadow(state),
+          transition: "box-shadow 300ms ease",
+        }}
       />
-      <style>{`
-        .iron-avatar-breathe[data-iron-state="idle"] {
-          animation: ironBreathe 4s ease-in-out infinite;
-        }
-        @keyframes ironBreathe {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.04); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .iron-avatar-breathe[data-iron-state="idle"] { animation: none; }
-        }
-      `}</style>
-    </button>
+
+      {/* Avatar PNG with crossfade between states */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.img
+          key={state}
+          src={src}
+          alt=""
+          draggable={false}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="relative rounded-full"
+          style={{
+            width: effectiveSize,
+            height: effectiveSize,
+            objectFit: "cover",
+          }}
+        />
+      </AnimatePresence>
+
+      {/* Alert dot — visible at full size when in alert state */}
+      {state === "alert" && !collapsed && (
+        <motion.div
+          aria-hidden
+          className="absolute rounded-full bg-red-500 ring-2 ring-white"
+          style={{
+            top: "14%",
+            right: "18%",
+            width: Math.max(8, effectiveSize * 0.14),
+            height: Math.max(8, effectiveSize * 0.14),
+            boxShadow: "0 0 8px 2px rgba(239, 68, 68, 0.9)",
+          }}
+          initial={{ scale: 0 }}
+          animate={reduceMotion ? { scale: 1 } : { scale: [0.9, 1.15, 0.9] }}
+          transition={{ duration: 1.4, repeat: Infinity }}
+        />
+      )}
+
+      {/* Listening pulse — radial expand */}
+      {state === "listening" && !collapsed && !reduceMotion && (
+        <motion.div
+          aria-hidden
+          className="absolute inset-0 rounded-full pointer-events-none border-2 border-blue-400"
+          initial={{ scale: 0.9, opacity: 0.6 }}
+          animate={{ scale: 1.25, opacity: 0 }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+
+      {/* Success flash — single check-mark style ring expand */}
+      {state === "success" && !collapsed && !reduceMotion && (
+        <motion.div
+          aria-hidden
+          className="absolute inset-0 rounded-full pointer-events-none border-2 border-emerald-400"
+          initial={{ scale: 0.9, opacity: 0.7 }}
+          animate={{ scale: 1.4, opacity: 0 }}
+          transition={{ duration: 1.0, repeat: Infinity, ease: "easeOut" }}
+        />
+      )}
+    </motion.button>
   );
 }

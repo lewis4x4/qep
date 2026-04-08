@@ -20,16 +20,21 @@ export async function ironTranscribe(blob: Blob, fileName: string): Promise<Iron
   const form = new FormData();
   form.append("audio", new File([blob], fileName, { type: blob.type || "audio/webm" }));
 
-  const invoke = (supabase as unknown as {
+  // IMPORTANT: never destructure `invoke` off `supabase.functions` — the
+  // FunctionsClient.invoke method dereferences `this.region` internally,
+  // so calling it as a free function throws "undefined is not an object
+  // (evaluating 'this.region')" in Safari. Always invoke through the
+  // live receiver.
+  const fns = (supabase as unknown as {
     functions: {
       invoke: (
         name: string,
         opts: { body: FormData },
       ) => Promise<{ data: IronTranscribeResponse | null; error: { message?: string } | null }>;
     };
-  }).functions.invoke;
+  }).functions;
 
-  const { data, error } = await invoke("iron-transcribe", { body: form });
+  const { data, error } = await fns.invoke("iron-transcribe", { body: form });
   if (error) throw new Error(error.message ?? "iron-transcribe failed");
   return data ?? { ok: false, transcript: "", confidence: 0 };
 }

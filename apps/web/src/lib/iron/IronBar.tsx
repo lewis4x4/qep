@@ -1,18 +1,43 @@
 /**
- * Wave 7 Iron Companion — IronBar (command palette + chat input).
+ * Wave 7.1 Iron Companion — IronBar (streaming chat + command palette).
  *
- * Built on cmdk + Radix Dialog (already in the repo). Pressing Cmd+I (or
- * Ctrl+I on Windows/Linux) opens the bar. Typing or speaking sends the
- * intent to iron-orchestrator. On FLOW_DISPATCH the bar closes and
- * FlowEngineUI mounts to walk slot fills.
+ * This is the main "ask Iron anything" surface. Cmd+I opens it. Inside:
+ *   • A scrollable message thread (multi-turn, streamed token-by-token)
+ *   • A free-text input + voice push-to-talk
+ *   • A quick-action template grid (role-filtered, affinity-ranked)
+ *   • Citation chips on every assistant message
+ *   • Auto-narration via OpenAI TTS (sentence-buffered, barge-in safe)
  *
- * Cmd+K is intentionally NOT used because the existing QrmGlobalSearchCommand
- * already binds it. Cmd+I = "Iron".
+ * The send pipeline routes through the orchestrator FIRST so the
+ * classifier can dispatch to a flow when the user's intent is clearly an
+ * action. For READ_ANSWER (and as the default for ambiguous intents) it
+ * streams from `iron-knowledge` — fused internal RAG + web search +
+ * conversation history.
+ *
+ * The avatar reads its visual state from the global presence bus, which
+ * the streaming hook + voice recorder + TTS all push into. The bar itself
+ * stays passive — it never calls `setAvatar` directly.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation } from "react-router-dom";
-import { Command } from "cmdk";
-import { Loader2, Send, Sparkles, Bot, AlertCircle, Mic, MicOff, Volume2, VolumeX, X } from "lucide-react";
+import {
+  Bot,
+  Loader2,
+  Mic,
+  MicOff,
+  Plus,
+  Send,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,11 +46,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ironOrchestrate } from "./api";
-import { useIronStore } from "./store";
+import { useIronStore, type IronChatMessage } from "./store";
 import { useIronVoiceRecorder } from "./voice/useIronVoiceRecorder";
 import { ironTranscribe } from "./voice/api";
 import { ironSpeak, cancelIronSpeech } from "./voice/tts";
 import { isLikelySameSpeaker } from "./voice/voiceFingerprint";
+import { useIronKnowledgeStream, type IronKnowledgeSource } from "./useIronKnowledgeStream";
+import {
+  filterAndRankTemplates,
+  type IronTemplate,
+} from "./templates";
+import { pushPresence } from "./presence";
+
+interface SendOptions {
+  /** "voice" auto-narrates the response. */
+  mode?: "text" | "voice";
+  /** When true, skip the classifier and go straight to iron-knowledge. */
+  knowledgeOnly?: boolean;
+}
 
 export function IronBar() {
   const {
@@ -33,47 +71,37 @@ export function IronBar() {
     openBar,
     closeBar,
     startFlow,
-    setAvatar,
     setError,
     setNarrationEnabled,
     setLastInputMode,
     setCanonicalFingerprint,
     setMultiVoiceWarning,
     resetCanonicalFingerprint,
+    chatAppend,
+    chatPatchLast,
+    chatReset,
+    setConversationId,
   } = useIronStore();
+
   const [input, setInput] = useState("");
-  const [pending, setPending] = useState(false);
-  const [response, setResponse] = useState<string | null>(null);
+  const [classifying, setClassifying] = useState(false);
+  const [voicePending, setVoicePending] = useState(false);
+  const [userRole, setUserRole] = useState<string>("rep");
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const recorder = useIronVoiceRecorder();
-  const [voicePending, setVoicePending] = useState(false);
-  // Track whether spacebar PTT is currently engaged so we don't double-fire
+  const knowledge = useIronKnowledgeStream();
   const pttActiveRef = useRef(false);
 
-  // v1.2 narration helper: speak text iff narration is enabled OR last input
-  // was voice. Always cancel any in-flight speech first (barge-in semantics).
-  const narrate = useCallback(
-    (text: string, force?: boolean) => {
-      if (!text) return;
-      if (!force && !state.narrationEnabled) return;
-      cancelIronSpeech();
-      setAvatar("speaking");
-      void ironSpeak(text, {
-        onEnd: () => setAvatar("idle"),
-        onError: () => setAvatar("idle"),
-      });
-    },
-    [state.narrationEnabled, setAvatar],
-  );
+  const templates = useMemo(() => filterAndRankTemplates(userRole, []), [userRole]);
 
-  // Cmd+I / Ctrl+I shortcut
+  // ── Cmd+I shortcut ────────────────────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const cmd = isMac ? e.metaKey : e.ctrlKey;
-      if (!cmd) return;
-      if (e.key.toLowerCase() === "i") {
+      if (cmd && e.key.toLowerCase() === "i") {
         e.preventDefault();
         if (state.barOpen) {
           closeBar();
@@ -88,157 +116,288 @@ export function IronBar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [state.barOpen, openBar, closeBar]);
 
-  // Auto-focus input when bar opens
+  // Auto-focus when bar opens; clear input on close (keep history!)
   useEffect(() => {
     if (state.barOpen) {
       const t = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(t);
     } else {
-      // Reset on close
       setInput("");
-      setResponse(null);
-      setPending(false);
+      setClassifying(false);
     }
   }, [state.barOpen]);
 
-  const submit = useCallback(async (explicitText?: string, mode: "text" | "voice" = "text") => {
-    const text = (explicitText ?? input).trim();
-    if (!text || pending) return;
-    // v1.2: cancel any in-flight narration before kicking off a new turn
-    cancelIronSpeech();
-    setLastInputMode(mode);
-    setPending(true);
-    setResponse(null);
-    setError(null);
-    setAvatar("thinking");
-    // Local helper: set the response text and decide whether to narrate it.
-    // Voice-input turns auto-narrate; text-input turns only narrate when the
-    // user has explicitly toggled narration on.
-    const finishWithMessage = (message: string, alert?: boolean) => {
-      setResponse(message);
-      const shouldNarrate = mode === "voice" || state.narrationEnabled;
-      if (shouldNarrate) {
-        narrate(message, true);
-      } else {
-        setAvatar(alert ? "alert" : "idle");
-      }
-    };
-    try {
-      const res = await ironOrchestrate({
-        text,
-        conversation_id: state.conversationId ?? undefined,
-        input_mode: mode,
-        route: location.pathname,
-      });
-      if (!res.ok) {
-        finishWithMessage(res.message ?? `Iron declined: ${res.category ?? "unknown"}`, true);
-        return;
-      }
-      const cls = res.classification;
-      if (!cls) {
-        finishWithMessage("Iron returned no classification.", true);
-        return;
-      }
+  // Scroll to bottom on new messages or stream tokens
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [state.chatMessages, knowledge.text, knowledge.status]);
 
-      if (cls.category === "FLOW_DISPATCH" && res.flow_definition && res.conversation_id) {
-        startFlow({
-          flow: res.flow_definition,
-          conversationId: res.conversation_id,
-          prefilled: cls.prefilled_slots ?? {},
+  // Live-update the streaming assistant message in the store as tokens arrive
+  useEffect(() => {
+    if (knowledge.status === "streaming" || knowledge.status === "done") {
+      chatPatchLast({
+        content: knowledge.text,
+        pending: knowledge.status !== "done",
+        citations: knowledge.sources.map(citationFromSource),
+      });
+    }
+    if (knowledge.status === "done" && knowledge.meta?.conversation_id) {
+      setConversationId(knowledge.meta.conversation_id);
+    }
+    if (knowledge.status === "error" && knowledge.error) {
+      chatPatchLast({
+        content: `Iron hit an error: ${knowledge.error}`,
+        pending: false,
+      });
+    }
+  }, [knowledge.status, knowledge.text, knowledge.sources, knowledge.meta, knowledge.error, chatPatchLast, setConversationId]);
+
+  // Lookup user role once when bar first opens
+  useEffect(() => {
+    if (!state.barOpen) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        const { data } = await supabase.auth.getUser();
+        const userId = data.user?.id;
+        if (!userId) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", userId)
+          .maybeSingle();
+        if (!cancelled && profile && typeof profile.role === "string") {
+          setUserRole(profile.role);
+        }
+      } catch {
+        /* role lookup is best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.barOpen]);
+
+  // ── Send pipeline ─────────────────────────────────────────────────────
+  const send = useCallback(
+    async (explicitText?: string, options: SendOptions = {}) => {
+      const text = (explicitText ?? input).trim();
+      if (!text || classifying || knowledge.status === "streaming") return;
+      const mode = options.mode ?? "text";
+
+      cancelIronSpeech();
+      setLastInputMode(mode);
+      setError(null);
+      setInput("");
+
+      // Append the user message + a placeholder assistant message that the
+      // streaming hook will fill in.
+      const userMsg: IronChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: text,
+        createdAt: Date.now(),
+      };
+      chatAppend(userMsg);
+
+      // Knowledge-only path: skip the classifier and stream directly.
+      if (options.knowledgeOnly) {
+        const placeholder: IronChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "",
+          pending: true,
+          createdAt: Date.now(),
+        };
+        chatAppend(placeholder);
+        await knowledge.start({
+          message: text,
+          conversationId: state.conversationId ?? undefined,
+          route: location.pathname,
         });
         return;
       }
 
-      if (cls.category === "CLARIFY") {
-        finishWithMessage(cls.clarification_needed ?? "Could you rephrase?");
-        return;
+      // Otherwise, classify first.
+      setClassifying(true);
+      const classifyRelease = pushPresence("iron-classify", "thinking");
+      try {
+        const res = await ironOrchestrate({
+          text,
+          conversation_id: state.conversationId ?? undefined,
+          input_mode: mode,
+          route: location.pathname,
+        });
+
+        if (!res.ok) {
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: res.message ?? `Iron declined: ${res.category ?? "unknown"}`,
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        const cls = res.classification;
+        if (!cls) {
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "Iron returned no classification.",
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        if (cls.category === "FLOW_DISPATCH" && res.flow_definition && res.conversation_id) {
+          // Hand off to the slot-fill UI.
+          startFlow({
+            flow: res.flow_definition,
+            conversationId: res.conversation_id,
+            prefilled: cls.prefilled_slots ?? {},
+          });
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Starting ${res.flow_definition.name}…`,
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        if (cls.category === "CLARIFY") {
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: cls.clarification_needed ?? "Could you rephrase that?",
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        if (cls.category === "HUMAN_ESCALATION") {
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Flagging a manager: ${cls.escalation_reason ?? "human help requested"}`,
+            createdAt: Date.now(),
+          });
+          pushPresence("iron-escalation", "alert", { ttlMs: 4000 });
+          return;
+        }
+
+        if (cls.category === "AGENTIC_TASK") {
+          chatAppend({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Logged for follow-up: ${cls.agentic_brief ?? "(no brief)"}`,
+            createdAt: Date.now(),
+          });
+          return;
+        }
+
+        // READ_ANSWER (or any other unhandled category) — stream from iron-knowledge.
+        const placeholder: IronChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "",
+          pending: true,
+          createdAt: Date.now(),
+        };
+        chatAppend(placeholder);
+        if (res.conversation_id) setConversationId(res.conversation_id);
+        await knowledge.start({
+          message: text,
+          conversationId: res.conversation_id ?? state.conversationId ?? undefined,
+          route: location.pathname,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Iron call failed";
+        chatAppend({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: msg,
+          createdAt: Date.now(),
+        });
+        setError(msg);
+        pushPresence("iron-error", "alert", { ttlMs: 3000 });
+      } finally {
+        classifyRelease();
+        setClassifying(false);
       }
+    },
+    [
+      input,
+      classifying,
+      knowledge,
+      state.conversationId,
+      location.pathname,
+      chatAppend,
+      setError,
+      setLastInputMode,
+      startFlow,
+      setConversationId,
+    ],
+  );
 
-      if (cls.category === "READ_ANSWER") {
-        finishWithMessage(
-          `I can answer that — try asking it on the dashboard. (${cls.answer_query ?? ""})`,
-        );
-        return;
-      }
-
-      if (cls.category === "AGENTIC_TASK") {
-        finishWithMessage(`Logged for follow-up: ${cls.agentic_brief ?? "(no brief)"}`);
-        return;
-      }
-
-      if (cls.category === "HUMAN_ESCALATION") {
-        finishWithMessage(
-          `Flagged for a manager: ${cls.escalation_reason ?? "human help requested"}`,
-          true,
-        );
-        return;
-      }
-
-      finishWithMessage(`Iron returned: ${cls.category}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Iron call failed";
-      setResponse(message);
-      setError(message);
-      setAvatar("alert");
-    } finally {
-      setPending(false);
-    }
-  }, [input, pending, state.conversationId, state.narrationEnabled, location.pathname, setAvatar, setError, setLastInputMode, narrate, startFlow]);
-
-  // ── Voice flow: record → transcribe → submit ─────────────────────────
+  // ── Voice flow ────────────────────────────────────────────────────────
   const startVoice = useCallback(async () => {
-    if (recorder.state === "recording" || pending || voicePending) return;
-    // v1.2 barge-in: starting to speak cancels any in-flight Iron narration
+    if (recorder.state === "recording" || classifying || voicePending) return;
     cancelIronSpeech();
-    setResponse(null);
-    setAvatar("listening");
+    pushPresence("iron-mic", "listening", { ttlMs: 30_000 });
     await recorder.start();
-  }, [recorder, pending, voicePending, setAvatar]);
+  }, [recorder, classifying, voicePending]);
 
   const stopAndTranscribe = useCallback(async () => {
     if (recorder.state !== "recording") return;
     setVoicePending(true);
-    setAvatar("thinking");
     try {
       const result = await recorder.stop();
       if (!result) {
-        setResponse("Didn't catch that — try again?");
-        setAvatar("idle");
+        chatAppend({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Didn't catch that — try again?",
+          createdAt: Date.now(),
+        });
         return;
       }
 
-      // v1.4: speaker fingerprint comparison. The recorder always returns a
-      // fingerprint; we only act on it if it has enough voice frames to be
-      // judgeable (sampleCount >= 4 inside isLikelySameSpeaker).
+      // Multi-voice detection
       if (result.fingerprint.sampleCount >= 4) {
         if (!state.canonicalFingerprint) {
-          // First voice utterance of the session — stamp the canonical
           setCanonicalFingerprint(result.fingerprint);
         } else if (!isLikelySameSpeaker(state.canonicalFingerprint, result.fingerprint)) {
-          // Different voice detected. Non-blocking — Iron still processes
-          // the transcript, but the operator gets a heads-up.
           setMultiVoiceWarning(true);
         }
       }
 
       const transcribed = await ironTranscribe(result.blob, result.fileName);
       if (!transcribed.ok || !transcribed.transcript) {
-        setResponse(transcribed.message ?? "No speech detected.");
-        setAvatar("idle");
+        chatAppend({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: transcribed.message ?? "No speech detected.",
+          createdAt: Date.now(),
+        });
         return;
       }
-      setInput(transcribed.transcript);
-      // Hand off to the orchestrator with input_mode='voice'. The avatar will
-      // flip to 'thinking' inside submit().
-      await submit(transcribed.transcript, "voice");
+      await send(transcribed.transcript, { mode: "voice" });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Voice transcription failed";
-      setResponse(message);
-      setAvatar("alert");
+      const msg = err instanceof Error ? err.message : "Voice transcription failed";
+      chatAppend({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: msg,
+        createdAt: Date.now(),
+      });
     } finally {
       setVoicePending(false);
     }
-  }, [recorder, setAvatar, submit, state.canonicalFingerprint, setCanonicalFingerprint, setMultiVoiceWarning]);
+  }, [recorder, send, state.canonicalFingerprint, setCanonicalFingerprint, setMultiVoiceWarning, chatAppend]);
 
   const handleMicClick = useCallback(() => {
     if (recorder.state === "recording") {
@@ -248,14 +407,12 @@ export function IronBar() {
     }
   }, [recorder.state, stopAndTranscribe, startVoice]);
 
-  // Push-to-hold spacebar (only when bar is open + input field is empty so
-  // we don't fight with the user's typing).
+  // Push-to-hold spacebar
   useEffect(() => {
     if (!state.barOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== "Space" || e.repeat) return;
       if (input.length > 0) return;
-      // Don't fire when an interactive element other than our input is focused
       const active = document.activeElement;
       const isOurInput = active === inputRef.current;
       const isOtherInput =
@@ -282,54 +439,115 @@ export function IronBar() {
     };
   }, [state.barOpen, input, startVoice, stopAndTranscribe]);
 
-  // If the bar closes mid-recording, cancel cleanly. Also cancel any
-  // in-flight TTS narration so Iron doesn't keep speaking after the user
-  // closed the panel.
+  // Cancel mid-stream voice + TTS on bar close
   useEffect(() => {
     if (!state.barOpen) {
       if (recorder.state === "recording") recorder.cancel();
       cancelIronSpeech();
+      knowledge.cancel();
     }
-  }, [state.barOpen, recorder]);
+  }, [state.barOpen, recorder, knowledge]);
 
+  // Sentence-buffered narration: on done, speak the full assistant text.
+  useEffect(() => {
+    if (knowledge.status !== "done") return;
+    if (!knowledge.text) return;
+    const shouldNarrate = state.lastInputMode === "voice" || state.narrationEnabled;
+    if (!shouldNarrate) return;
+    cancelIronSpeech();
+    void ironSpeak(knowledge.text, {
+      onStart: () => pushPresence("iron-tts", "speaking", { ttlMs: 60_000 }),
+    });
+  }, [knowledge.status, knowledge.text, state.lastInputMode, state.narrationEnabled]);
+
+  const handleTemplateClick = useCallback(
+    (tpl: IronTemplate) => {
+      if (tpl.knowledge_only && tpl.phrase === "") {
+        // Pure "ask anything" — just focus the input
+        inputRef.current?.focus();
+        return;
+      }
+      setInput(tpl.phrase);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        const len = tpl.phrase.length;
+        inputRef.current?.setSelectionRange(len, len);
+      }, 10);
+    },
+    [],
+  );
+
+  const startNewConversation = useCallback(() => {
+    knowledge.cancel();
+    cancelIronSpeech();
+    chatReset();
+  }, [knowledge, chatReset]);
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <Dialog open={state.barOpen} onOpenChange={(open) => (open ? openBar() : closeBar())}>
-      <DialogContent className="max-w-2xl gap-3 p-0">
-        <DialogHeader className="border-b border-border p-3">
-          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-qep-orange" /> Iron
-          </DialogTitle>
-          <DialogDescription className="text-[11px] text-muted-foreground">
-            Type, speak, or hold space — Cmd+I toggles. Voice runs through Whisper.
-          </DialogDescription>
+      <DialogContent className="max-w-2xl gap-0 p-0">
+        <DialogHeader className="flex flex-row items-center justify-between border-b border-border p-3">
+          <div>
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="h-4 w-4 text-qep-orange" /> Iron
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground">
+              Type, speak, or hold space — Cmd+I toggles. Iron answers from QEP data, manuals, and the web.
+            </DialogDescription>
+          </div>
+          <button
+            type="button"
+            onClick={startNewConversation}
+            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+            aria-label="Start a new Iron conversation"
+            title="Start a new conversation"
+          >
+            <Plus className="h-3 w-3" />
+            New chat
+          </button>
         </DialogHeader>
 
-        <Command className="bg-transparent">
-          {state.multiVoiceWarning && (
-            <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px]">
-              <Bot className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-amber-300">Heads up — I'm hearing a second voice.</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Iron will keep going, but if someone else just took over, double-check the next confirmation step.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  // Operator switch: dismiss warning AND reset canonical so the
-                  // next utterance becomes the new speaker baseline. The next
-                  // recorder.stop() will re-stamp via SET_CANONICAL_FINGERPRINT.
-                  resetCanonicalFingerprint();
-                }}
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/30"
-                aria-label="Dismiss multi-voice warning"
-              >
-                <X className="h-3 w-3" />
-              </button>
+        {/* Multi-voice warning banner */}
+        {state.multiVoiceWarning && (
+          <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[11px]">
+            <Bot className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-amber-300">Heads up — I'm hearing a second voice.</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                Iron will keep going, but if someone else just took over, double-check the next confirmation step.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => resetCanonicalFingerprint()}
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/30"
+              aria-label="Dismiss multi-voice warning"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Message thread */}
+        <div
+          ref={scrollRef}
+          className="max-h-[60vh] min-h-[160px] overflow-y-auto px-3 py-3"
+        >
+          {state.chatMessages.length === 0 ? (
+            <EmptyState templates={templates} onTemplateClick={handleTemplateClick} />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {state.chatMessages.map((msg) => (
+                <ChatBubble key={msg.id} message={msg} />
+              ))}
             </div>
           )}
-          <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+        </div>
+
+        {/* Input row */}
+        <div className="border-t border-border">
+          <div className="flex items-center gap-2 px-3 py-2">
             <Bot className="h-4 w-4 text-muted-foreground" />
             <input
               ref={inputRef}
@@ -338,14 +556,14 @@ export function IronBar() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void submit();
+                  void send();
                 }
               }}
-              disabled={pending || voicePending}
+              disabled={classifying || voicePending}
               placeholder={
                 recorder.state === "recording"
                   ? "Listening… release space or tap stop"
-                  : "Type, speak, or hold space — pull a part, log service…"
+                  : "Ask anything, or pull a part, log a service call…"
               }
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
@@ -373,7 +591,7 @@ export function IronBar() {
             <button
               type="button"
               onClick={handleMicClick}
-              disabled={pending || voicePending}
+              disabled={classifying || voicePending}
               className={`rounded-md p-1.5 transition-colors disabled:opacity-30 ${
                 recorder.state === "recording"
                   ? "bg-red-500/15 text-red-400 animate-pulse"
@@ -389,18 +607,22 @@ export function IronBar() {
             </button>
             <button
               type="button"
-              onClick={() => void submit()}
-              disabled={pending || voicePending || input.trim().length === 0}
+              onClick={() => void send()}
+              disabled={classifying || voicePending || input.trim().length === 0 || knowledge.status === "streaming"}
               className="rounded-md bg-qep-orange/10 p-1.5 text-qep-orange hover:bg-qep-orange/20 disabled:opacity-30"
               aria-label="Send to Iron"
             >
-              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {classifying || knowledge.status === "streaming" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
             </button>
           </div>
 
-          {/* Voice level meter — only shown while recording */}
+          {/* Voice level meter */}
           {recorder.state === "recording" && (
-            <div className="mx-3 my-1 h-1 overflow-hidden rounded-full bg-muted/30">
+            <div className="mx-3 mb-1 h-1 overflow-hidden rounded-full bg-muted/30">
               <div
                 className="h-full bg-red-400 transition-[width] duration-75"
                 style={{ width: `${Math.round(recorder.level * 100)}%` }}
@@ -408,32 +630,123 @@ export function IronBar() {
             </div>
           )}
           {recorder.errorMessage && (
-            <div className="mx-3 my-1 flex items-center gap-1.5 text-[10px] text-red-400">
+            <div className="mx-3 mb-1 flex items-center gap-1.5 text-[10px] text-red-400">
               <MicOff className="h-3 w-3" /> {recorder.errorMessage}
             </div>
           )}
-
-          {response && (
-            <div className="mx-3 my-2 rounded border border-border/60 bg-muted/20 p-2 text-[12px] text-foreground">
-              {response.includes("declined") || response.includes("failed") ? (
-                <span className="flex items-start gap-1.5 text-amber-400">
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                  {response}
-                </span>
-              ) : (
-                response
-              )}
-            </div>
-          )}
-
-          <div className="border-t border-border px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            Try:&nbsp;
-            <span className="text-foreground">"pull part 4521 for Anderson"</span>&nbsp;·&nbsp;
-            <span className="text-foreground">"log a service call"</span>&nbsp;·&nbsp;
-            <span className="text-foreground">"draft a follow-up to John"</span>
-          </div>
-        </Command>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+function citationFromSource(source: IronKnowledgeSource): NonNullable<IronChatMessage["citations"]>[number] {
+  return {
+    id: source.id,
+    title: source.title,
+    kind: source.kind,
+    marker: source.marker,
+    url: source.url,
+    excerpt: source.excerpt,
+  };
+}
+
+function ChatBubble({ message }: { message: IronChatMessage }) {
+  const isUser = message.role === "user";
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[85%] rounded-lg px-3 py-2 text-[13px] leading-relaxed ${
+          isUser
+            ? "bg-qep-orange/15 text-foreground"
+            : "border border-border/60 bg-muted/20 text-foreground"
+        }`}
+      >
+        {message.content || (message.pending ? <PendingIndicator /> : null)}
+        {message.pending && message.content && <PendingIndicator inline />}
+        {message.citations && message.citations.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {message.citations.map((cite) => (
+              <CitationChip key={cite.id} citation={cite} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PendingIndicator({ inline = false }: { inline?: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-muted-foreground ${inline ? "ml-1" : ""}`}>
+      <Loader2 className="h-3 w-3 animate-spin" />
+      {!inline && <span className="text-[11px]">thinking…</span>}
+    </span>
+  );
+}
+
+function CitationChip({
+  citation,
+}: {
+  citation: NonNullable<IronChatMessage["citations"]>[number];
+}) {
+  const Tag = citation.url ? "a" : "span";
+  const colorMap: Record<string, string> = {
+    document: "border-blue-500/30 bg-blue-500/5 text-blue-300",
+    crm: "border-emerald-500/30 bg-emerald-500/5 text-emerald-300",
+    service_kb: "border-purple-500/30 bg-purple-500/5 text-purple-300",
+    web: "border-amber-500/30 bg-amber-500/5 text-amber-300",
+  };
+  return (
+    <Tag
+      {...(citation.url
+        ? { href: citation.url, target: "_blank", rel: "noopener noreferrer" }
+        : {})}
+      title={citation.excerpt ?? citation.title}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${
+        colorMap[citation.kind] ?? "border-border/40 bg-muted/20 text-muted-foreground"
+      }`}
+    >
+      {citation.marker && <span className="font-mono opacity-70">{citation.marker}</span>}
+      <span className="max-w-[160px] truncate">{citation.title}</span>
+    </Tag>
+  );
+}
+
+function EmptyState({
+  templates,
+  onTemplateClick,
+}: {
+  templates: IronTemplate[];
+  onTemplateClick: (tpl: IronTemplate) => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-2">
+      <p className="text-center text-[11px] uppercase tracking-wider text-muted-foreground/70">
+        Try one of these — or just ask anything
+      </p>
+      <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3">
+        {templates.slice(0, 12).map((tpl) => {
+          const Icon = tpl.icon;
+          return (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => onTemplateClick(tpl)}
+              className="group flex flex-col items-start gap-1 rounded-lg border border-border/50 bg-muted/10 p-2 text-left transition-colors hover:border-qep-orange/40 hover:bg-qep-orange/5"
+            >
+              <Icon className="h-3.5 w-3.5 text-qep-orange/80 group-hover:text-qep-orange" />
+              <span className="text-[12px] font-medium leading-tight text-foreground">
+                {tpl.label}
+              </span>
+              <span className="text-[10px] leading-tight text-muted-foreground/80">
+                {tpl.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+

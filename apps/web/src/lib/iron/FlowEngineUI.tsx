@@ -28,6 +28,7 @@ import { useIronStore, computeIronFlowTotalCents } from "./store";
 import { ironExecuteFlowStep, ironSearchEntities, ironBumpMemory } from "./api";
 import { VoiceFillButton } from "./voice/VoiceFillButton";
 import { ironSpeak, cancelIronSpeech } from "./voice/tts";
+import { pushPresence } from "./presence";
 import type { IronLineItem, IronSlotDefinition } from "./types";
 
 /**
@@ -70,6 +71,14 @@ function evaluateShowIf(
 export function FlowEngineUI() {
   const store = useIronStore();
   const { activeFlow } = store.state;
+
+  // Push 'flow_active' presence for the lifetime of the flow so the avatar
+  // glows amber while the operator is filling slots, regardless of which
+  // step they're on.
+  useEffect(() => {
+    if (!activeFlow) return;
+    return pushPresence("flow-active", "flow_active");
+  }, [activeFlow]);
 
   if (!activeFlow) return null;
 
@@ -393,13 +402,14 @@ function ReviewStep() {
     if (!shouldNarrate) return;
     if (!meta.voice_review_prompt) return;
     cancelIronSpeech();
-    store.setAvatar("speaking");
+    const release = pushPresence("flow-review-tts", "speaking");
     const text = substituteVoicePromptVars(meta.voice_review_prompt, af.slot_values, totalCents);
     void ironSpeak(text, {
-      onEnd: () => store.setAvatar("flow_active"),
-      onError: () => store.setAvatar("flow_active"),
+      onEnd: release,
+      onError: release,
     });
     return () => {
+      release();
       cancelIronSpeech();
     };
     // Intentionally only on first render of ReviewStep — re-narrating on

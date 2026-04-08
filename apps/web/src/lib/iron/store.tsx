@@ -57,9 +57,36 @@ interface IronState {
   canonicalFingerprint: SpeakerFingerprint | null;
   /** v1.4: true when a recently-captured fingerprint did not match the canonical. Cleared when the user dismisses the banner. */
   multiVoiceWarning: boolean;
+  /** v7.1: avatar corner-chip collapsed flag, persisted to localStorage. */
+  collapsed: boolean;
+  /** v7.1: streaming chat message thread for the active conversation. */
+  chatMessages: IronChatMessage[];
+}
+
+/**
+ * v7.1: a single message in the IronBar streaming chat thread. Lives in
+ * client memory only — durable copy is in iron_messages on the server.
+ */
+export interface IronChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  /** True while the assistant message is still streaming in. */
+  pending?: boolean;
+  /** Citation chips returned with the assistant message. */
+  citations?: Array<{
+    id: string;
+    title: string;
+    kind: "document" | "crm" | "service_kb" | "web";
+    marker?: string;
+    url?: string;
+    excerpt?: string;
+  }>;
+  createdAt: number;
 }
 
 const NARRATION_LS_KEY = "iron:narration_enabled";
+const COLLAPSED_LS_KEY = "iron:avatar_collapsed";
 
 function loadNarrationPref(): boolean {
   if (typeof window === "undefined") return false;
@@ -80,6 +107,24 @@ function saveNarrationPref(enabled: boolean): void {
   }
 }
 
+function loadCollapsedPref(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(COLLAPSED_LS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveCollapsedPref(collapsed: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(COLLAPSED_LS_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* noop */
+  }
+}
+
 const initialState: IronState = {
   barOpen: false,
   conversationId: null,
@@ -91,6 +136,8 @@ const initialState: IronState = {
   lastInputMode: "text",
   canonicalFingerprint: null,
   multiVoiceWarning: false,
+  collapsed: loadCollapsedPref(),
+  chatMessages: [],
 };
 
 type Action =
@@ -112,7 +159,12 @@ type Action =
   | { type: "SET_LAST_INPUT_MODE"; mode: "text" | "voice" }
   | { type: "SET_CANONICAL_FINGERPRINT"; fingerprint: SpeakerFingerprint }
   | { type: "RESET_CANONICAL_FINGERPRINT" }
-  | { type: "SET_MULTI_VOICE_WARNING"; warning: boolean };
+  | { type: "SET_MULTI_VOICE_WARNING"; warning: boolean }
+  | { type: "TOGGLE_COLLAPSED" }
+  | { type: "SET_COLLAPSED"; collapsed: boolean }
+  | { type: "CHAT_APPEND"; message: IronChatMessage }
+  | { type: "CHAT_PATCH_LAST"; patch: Partial<IronChatMessage> }
+  | { type: "CHAT_RESET" };
 
 function reducer(state: IronState, action: Action): IronState {
   switch (action.type) {
@@ -219,6 +271,25 @@ function reducer(state: IronState, action: Action): IronState {
       return { ...state, canonicalFingerprint: null, multiVoiceWarning: false };
     case "SET_MULTI_VOICE_WARNING":
       return { ...state, multiVoiceWarning: action.warning };
+    case "TOGGLE_COLLAPSED": {
+      const next = !state.collapsed;
+      saveCollapsedPref(next);
+      return { ...state, collapsed: next };
+    }
+    case "SET_COLLAPSED":
+      saveCollapsedPref(action.collapsed);
+      return { ...state, collapsed: action.collapsed };
+    case "CHAT_APPEND":
+      return { ...state, chatMessages: [...state.chatMessages, action.message] };
+    case "CHAT_PATCH_LAST": {
+      if (state.chatMessages.length === 0) return state;
+      const next = state.chatMessages.slice();
+      const lastIdx = next.length - 1;
+      next[lastIdx] = { ...next[lastIdx], ...action.patch };
+      return { ...state, chatMessages: next };
+    }
+    case "CHAT_RESET":
+      return { ...state, chatMessages: [], conversationId: null };
     default:
       return state;
   }
@@ -245,20 +316,30 @@ interface IronStoreApi {
   setCanonicalFingerprint: (fingerprint: SpeakerFingerprint) => void;
   resetCanonicalFingerprint: () => void;
   setMultiVoiceWarning: (warning: boolean) => void;
+  toggleCollapsed: () => void;
+  setCollapsed: (collapsed: boolean) => void;
+  chatAppend: (message: IronChatMessage) => void;
+  chatPatchLast: (patch: Partial<IronChatMessage>) => void;
+  chatReset: () => void;
 }
 
 const IronStoreContext = createContext<IronStoreApi | null>(null);
 
 export function IronStoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  // Stable callbacks via refs so consumers don't re-render unnecessarily
+  // Latest dispatch lives in a ref so the callback bag below can be built
+  // exactly once. If we rebuilt the bag on every state change, every
+  // dispatched action would invalidate every consumer's useEffect deps,
+  // which is exactly the infinite-render-loop trap that bit IronBar's
+  // streaming chat patcher.
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
 
-  const api = useMemo<IronStoreApi>(() => {
+  // Built once, frozen reference for the lifetime of the provider.
+  const callbacksRef = useRef<Omit<IronStoreApi, "state"> | null>(null);
+  if (callbacksRef.current === null) {
     const d = (action: Action) => dispatchRef.current(action);
-    return {
-      state,
+    callbacksRef.current = {
       openBar: () => d({ type: "OPEN_BAR" }),
       closeBar: () => d({ type: "CLOSE_BAR" }),
       setAvatar: (s) => d({ type: "SET_AVATAR", state: s }),
@@ -285,8 +366,22 @@ export function IronStoreProvider({ children }: { children: ReactNode }) {
       setCanonicalFingerprint: (fingerprint) => d({ type: "SET_CANONICAL_FINGERPRINT", fingerprint }),
       resetCanonicalFingerprint: () => d({ type: "RESET_CANONICAL_FINGERPRINT" }),
       setMultiVoiceWarning: (warning) => d({ type: "SET_MULTI_VOICE_WARNING", warning }),
+      toggleCollapsed: () => d({ type: "TOGGLE_COLLAPSED" }),
+      setCollapsed: (collapsed) => d({ type: "SET_COLLAPSED", collapsed }),
+      chatAppend: (message) => d({ type: "CHAT_APPEND", message }),
+      chatPatchLast: (patch) => d({ type: "CHAT_PATCH_LAST", patch }),
+      chatReset: () => d({ type: "CHAT_RESET" }),
     };
-  }, [state]);
+  }
+
+  // The api object identity changes when state changes (so consumers see
+  // fresh state), but every callback inside is a stable reference taken
+  // from callbacksRef. Effects that depend on the callbacks no longer
+  // re-fire on every state mutation.
+  const api = useMemo<IronStoreApi>(() => ({
+    state,
+    ...callbacksRef.current!,
+  }), [state]);
 
   return <IronStoreContext.Provider value={api}>{children}</IronStoreContext.Provider>;
 }
