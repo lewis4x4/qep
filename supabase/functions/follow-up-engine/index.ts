@@ -298,17 +298,16 @@ Deno.serve(async (req) => {
       }
       results.notifications_created = notificationRows.length;
 
-      // ── Day 7 dual-write to flow bus ──
-      // For each notification row, publish a follow_up.touchpoint_due event.
-      // The notification row already carries the workspace_id, deal_id, user_id,
-      // and touchpoint metadata we need. Idempotency key is the touchpoint id
-      // so re-runs of the engine for the same touchpoint dedupe cleanly.
-      // Each publish is best-effort: failure logs but never fails the run.
-      let busPublished = 0;
-      let busFailed = 0;
-      for (const notif of notificationRows) {
-        try {
-          await publishFlowEvent(supabaseAdmin, {
+      // ── Day 7 dual-write to flow bus (PARALLEL) ──
+      // P1 fix (post-Day-7 audit): Promise.allSettled instead of sequential
+      // await — each publish is independent and the bus dedupe via the
+      // partial unique index handles concurrent same-key races. The cron
+      // can process ~50 touchpoints per run; sequential would add 1-2s of
+      // round-trip latency that this parallelization eliminates.
+      const publishResults = await Promise.allSettled(
+        notificationRows.map((notif) => {
+          const meta = notif.metadata as Record<string, unknown>;
+          return publishFlowEvent(supabaseAdmin, {
             workspaceId: notif.workspace_id,
             eventType: "follow_up.touchpoint_due",
             sourceModule: "follow-up-engine",
@@ -319,26 +318,35 @@ Deno.serve(async (req) => {
             requiredAction: notif.title,
             draftMessage: notif.body ?? undefined,
             payload: {
-              touchpoint_id: (notif.metadata as Record<string, unknown>).touchpoint_id,
-              touchpoint_type: (notif.metadata as Record<string, unknown>).touchpoint_type,
-              value_type: (notif.metadata as Record<string, unknown>).value_type,
-              cadence_type: (notif.metadata as Record<string, unknown>).cadence_type,
+              touchpoint_id: meta.touchpoint_id,
+              touchpoint_type: meta.touchpoint_type,
+              value_type: meta.value_type,
+              cadence_type: meta.cadence_type,
             },
-            idempotencyKey: `follow_up.touchpoint_due:${(notif.metadata as Record<string, unknown>).touchpoint_id}`,
+            idempotencyKey: `follow_up.touchpoint_due:${meta.touchpoint_id}`,
           });
+        }),
+      );
+
+      let busPublished = 0;
+      let busFailed = 0;
+      for (let i = 0; i < publishResults.length; i += 1) {
+        const result = publishResults[i];
+        if (result.status === "fulfilled") {
           busPublished++;
-        } catch (busErr) {
+        } else {
           busFailed++;
+          const meta = notificationRows[i].metadata as Record<string, unknown>;
           console.error(
             "[follow-up-engine] flow bus publish failed:",
-            busErr instanceof Error ? busErr.message : busErr,
+            result.reason instanceof Error ? result.reason.message : result.reason,
           );
-          captureEdgeException(busErr, {
+          captureEdgeException(result.reason, {
             fn: "follow-up-engine",
             req,
             extra: {
               phase: "bus_publish",
-              touchpoint_id: (notif.metadata as Record<string, unknown>).touchpoint_id,
+              touchpoint_id: meta.touchpoint_id,
             },
           });
         }

@@ -554,62 +554,96 @@ Deno.serve(async (req) => {
       await adminClient.from("anomaly_alerts").insert(newAlerts);
     }
 
-    // ── Day 7 dual-write to flow bus ──
-    // For each NEW anomaly (those that survived the dedup loop above), publish
-    // an `anomaly.detected` event. Idempotency key matches the dedup logic
-    // (`${alert_type}:${entity_id}:${today}`) so re-runs of this function on
-    // the same day for the same entity dedupe cleanly at both levels.
-    // Best-effort: each publish failure logs but never breaks the scan.
+    // ── Day 7 dual-write to flow bus (PARALLEL + CHUNKED) ──
+    //
+    // Publishes are run via Promise.allSettled in chunks of BUS_PUBLISH_CHUNK_SIZE
+    // so a high-anomaly run (hundreds of alerts) doesn't pay 1-2s/alert of
+    // sequential round-trip latency or exhaust the connection pool. Each
+    // chunk waits for all its publishes to settle before the next chunk
+    // starts. Bus dedupe via the partial unique index (workspace_id,
+    // idempotency_key) handles concurrent same-key races.
+    //
+    // P1 fix (post-Day-7 audit): the idempotency key now correctly
+    // disambiguates null-entity alerts. The original key
+    // `anomaly.detected:${alert_type}:${entity_id ?? "global"}:${today}`
+    // collapsed all null-entity alerts of the same type+day into a single
+    // bus event — e.g. activity_gap alerts (which are per-rep with null
+    // entity_id) all got deduped to one event per day. The fix: when
+    // entity_id is null, switch to a `user:${assigned_to}` key so each
+    // distinct rep produces a distinct bus event.
     const VALID_BUS_SEVERITY = new Set(["low", "medium", "high", "critical"]);
-    let busPublished = 0;
-    let busFailed = 0;
-    for (const alert of newAlerts) {
-      // Map severity to bus enum (anomaly_alerts already uses the same set
-      // but defensive in case a future anomaly emits an off-list severity)
+    const BUS_PUBLISH_CHUNK_SIZE = 50;
+
+    // Pre-build inputs once so we don't recompute per chunk.
+    const publishInputs = newAlerts.map((alert) => {
       const severity = VALID_BUS_SEVERITY.has(alert.severity)
         ? (alert.severity as "low" | "medium" | "high" | "critical")
         : undefined;
-
-      // Only populate deal_id when the anomaly is actually about a deal
       const dealId = alert.entity_type === "deal" && alert.entity_id
         ? alert.entity_id
         : undefined;
+      // Idempotency key disambiguation:
+      //   - entity-scoped: entity_id present → key per (alert_type, entity_id, day)
+      //   - rep-scoped: entity_id null but assigned_to present → key per (alert_type, user, day)
+      //   - system-scoped: both null → key per (alert_type, day) — collapsing is intended here
+      const idempotencyKey = alert.entity_id
+        ? `anomaly.detected:${alert.alert_type}:${alert.entity_id}:${today}`
+        : alert.assigned_to
+          ? `anomaly.detected:${alert.alert_type}:user:${alert.assigned_to}:${today}`
+          : `anomaly.detected:${alert.alert_type}:system:${today}`;
+      return { alert, severity, dealId, idempotencyKey };
+    });
 
-      try {
-        await publishFlowEvent(adminClient, {
-          workspaceId: alert.workspace_id,
-          eventType: "anomaly.detected",
-          sourceModule: "anomaly-scan",
-          dealId,
-          suggestedOwner: alert.assigned_to ?? undefined,
-          severity,
-          commercialRelevance: severity === "critical" || severity === "high" ? "high" : "medium",
-          requiredAction: alert.title,
-          draftMessage: alert.description,
-          payload: {
-            alert_type: alert.alert_type,
-            entity_type: alert.entity_type,
-            entity_id: alert.entity_id,
-            data: alert.data,
-          },
-          idempotencyKey: `anomaly.detected:${alert.alert_type}:${alert.entity_id ?? "global"}:${today}`,
-        });
-        busPublished++;
-      } catch (busErr) {
-        busFailed++;
-        console.error(
-          "[anomaly-scan] flow bus publish failed:",
-          busErr instanceof Error ? busErr.message : busErr,
-        );
-        captureEdgeException(busErr, {
-          fn: "anomaly-scan",
-          req,
-          extra: {
-            phase: "bus_publish",
-            alert_type: alert.alert_type,
-            entity_id: alert.entity_id,
-          },
-        });
+    let busPublished = 0;
+    let busFailed = 0;
+
+    for (let chunkStart = 0; chunkStart < publishInputs.length; chunkStart += BUS_PUBLISH_CHUNK_SIZE) {
+      const chunk = publishInputs.slice(chunkStart, chunkStart + BUS_PUBLISH_CHUNK_SIZE);
+      const results = await Promise.allSettled(
+        chunk.map((input) =>
+          publishFlowEvent(adminClient, {
+            workspaceId: input.alert.workspace_id,
+            eventType: "anomaly.detected",
+            sourceModule: "anomaly-scan",
+            dealId: input.dealId,
+            suggestedOwner: input.alert.assigned_to ?? undefined,
+            severity: input.severity,
+            commercialRelevance: input.severity === "critical" || input.severity === "high" ? "high" : "medium",
+            requiredAction: input.alert.title,
+            draftMessage: input.alert.description,
+            payload: {
+              alert_type: input.alert.alert_type,
+              entity_type: input.alert.entity_type,
+              entity_id: input.alert.entity_id,
+              data: input.alert.data,
+            },
+            idempotencyKey: input.idempotencyKey,
+          })
+        ),
+      );
+
+      for (let i = 0; i < results.length; i += 1) {
+        const result = results[i];
+        if (result.status === "fulfilled") {
+          busPublished++;
+        } else {
+          busFailed++;
+          const input = chunk[i];
+          console.error(
+            "[anomaly-scan] flow bus publish failed:",
+            result.reason instanceof Error ? result.reason.message : result.reason,
+          );
+          captureEdgeException(result.reason, {
+            fn: "anomaly-scan",
+            req,
+            extra: {
+              phase: "bus_publish",
+              alert_type: input.alert.alert_type,
+              entity_id: input.alert.entity_id,
+              idempotency_key: input.idempotencyKey,
+            },
+          });
+        }
       }
     }
 
