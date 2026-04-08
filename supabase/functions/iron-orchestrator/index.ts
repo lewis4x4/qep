@@ -272,18 +272,24 @@ Deno.serve(async (req) => {
   const guard = parseAndGuardClassifierOutput(llmCall.text);
   let classification: IronClassifierResult;
   if (!guard.ok) {
-    // Reject with a CLARIFY response — never let bad output through
+    // Validation failed. Instead of asking the user to rephrase (annoying
+    // and unhelpful), default to READ_ANSWER so the question gets routed
+    // to the iron-knowledge agent which has tool access. The agent will
+    // figure out what to do with the original user text. This turns
+    // classifier failures into "best-effort" answers instead of dead ends.
     classification = {
-      category: "CLARIFY",
-      confidence: 0,
+      category: "READ_ANSWER",
+      confidence: 0.4,
       flow_id: null,
       prefilled_slots: null,
-      answer_query: null,
+      answer_query: text.slice(0, 500),
       agentic_brief: null,
       escalation_reason: null,
-      clarification_needed: "I didn't catch that — could you rephrase?",
+      clarification_needed: null,
     };
-    console.warn(`[iron-orchestrator] classifier guard rejected: ${guard.reason}`);
+    console.warn(
+      `[iron-orchestrator] classifier guard rejected (${guard.reason}); falling through to READ_ANSWER`,
+    );
   } else {
     classification = guard.result;
     // Defense in depth: re-check the flow allowlist even though the prompt

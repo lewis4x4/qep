@@ -64,6 +64,19 @@ export type GuardResult =
   | { ok: false; reason: string; raw?: string };
 
 /**
+ * Strip markdown code fences from raw LLM output. Claude (especially newer
+ * versions) sometimes wraps JSON in ```json ... ``` despite the prompt
+ * explicitly forbidding markdown. Strip them before parsing so we don't
+ * blow up on otherwise-valid JSON.
+ */
+function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```$/);
+  if (fenceMatch) return fenceMatch[1].trim();
+  return trimmed;
+}
+
+/**
  * Parse + validate raw classifier text. Returns a typed result or rejection
  * reason. Caller must additionally verify the flow_id against the loaded
  * flow_workflow_definitions allowlist (this module is DB-free for testability).
@@ -71,7 +84,7 @@ export type GuardResult =
 export function parseAndGuardClassifierOutput(rawText: string): GuardResult {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawText.trim());
+    parsed = JSON.parse(stripCodeFences(rawText));
   } catch {
     return { ok: false, reason: "classifier_output_not_json", raw: rawText.slice(0, 200) };
   }
