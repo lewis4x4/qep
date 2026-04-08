@@ -1,13 +1,29 @@
 /**
  * Wave 7 Iron Companion — client-side API wrappers around the Iron edge
- * functions. Calls go through `supabase.functions.invoke` so the user JWT
- * is attached automatically.
+ * functions.
  *
- * IMPORTANT: never destructure `invoke` off `supabase.functions` — the
- * @supabase/functions-js FunctionsClient.invoke method dereferences
- * `this.region` internally, so calling it as a free function throws
- * "undefined is not an object (evaluating 'this.region')" in Safari.
- * Always invoke through the live receiver.
+ * Two non-obvious things this file exists to defend against:
+ *
+ * 1. **`this.region` binding bug** — never destructure `invoke` off
+ *    `supabase.functions`. The FunctionsClient.invoke method dereferences
+ *    `this.region` internally, so calling it as a free function throws
+ *    "undefined is not an object (evaluating 'this.region')" in Safari.
+ *    Always invoke through the live receiver.
+ *
+ * 2. **`fetchWithAuth` falls back to the anon key** — when no user session
+ *    is hydrated yet, supabase-js's internal fetchWithAuth helper sets
+ *    `Authorization: Bearer <ANON_KEY>` instead of failing loudly. The
+ *    function then receives the anon key as a "user JWT", calls
+ *    `auth.getUser(<anon-key>)`, and Supabase Auth correctly returns
+ *    "Invalid JWT" because the anon key has no `sub` claim. The operator
+ *    sees a meaningless 401.
+ *
+ *    To dodge this, every Iron call here EXPLICITLY resolves the session
+ *    via `supabase.auth.getSession()` first and passes the access token
+ *    in the invoke-level `headers` override. fetchWithAuth's
+ *    `if (!headers.has('Authorization'))` check then leaves it alone.
+ *    If there's no session at all, we fail with a clear "not signed in"
+ *    message instead of letting the anon key reach the function.
  */
 import { supabase } from "@/lib/supabase";
 import type {
@@ -30,7 +46,10 @@ interface InvokeResult<T> {
 
 type SupabaseWithFunctions = {
   functions: {
-    invoke: <T>(name: string, opts: { body: unknown }) => Promise<InvokeResult<T>>;
+    invoke: <T>(
+      name: string,
+      opts: { body: unknown; headers?: Record<string, string> },
+    ) => Promise<InvokeResult<T>>;
   };
 };
 
@@ -68,13 +87,46 @@ async function explainInvokeError(error: InvokeError, fallback: string): Promise
   return error.message ?? fallback;
 }
 
+/**
+ * Resolve the current user's JWT or throw a clear "not signed in" error.
+ * Centralizing this here means every Iron call has the same precondition.
+ */
+async function requireUserAccessToken(): Promise<string> {
+  const sb = supabase as unknown as {
+    auth: {
+      getSession: () => Promise<{
+        data: { session: { access_token?: string | null } | null };
+        error: { message?: string } | null;
+      }>;
+    };
+  };
+  const { data, error } = await sb.auth.getSession();
+  if (error) {
+    throw new Error(`Iron auth: ${error.message ?? "session lookup failed"}`);
+  }
+  const token = data?.session?.access_token;
+  if (!token) {
+    throw new Error(
+      "Iron: not signed in. Please reload the page and sign in again.",
+    );
+  }
+  return token;
+}
+
 async function invokeIron<T>(
   name: string,
   body: unknown,
   fallbackError: string,
 ): Promise<T> {
+  // ALWAYS resolve the user's JWT explicitly. Don't trust supabase-js's
+  // fetchWithAuth fallback — it will silently substitute the anon key
+  // and the function will reject it as "Invalid JWT".
+  const accessToken = await requireUserAccessToken();
   const fns = (supabase as unknown as SupabaseWithFunctions).functions;
-  const { data, error } = await fns.invoke<T>(name, { body });
+  const { data, error } = await fns.invoke<T>(name, {
+    body,
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   if (error) {
     const real = await explainInvokeError(error, fallbackError);
     throw new Error(`${name}: ${real}`);

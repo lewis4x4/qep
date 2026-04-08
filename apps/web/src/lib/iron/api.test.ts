@@ -13,7 +13,11 @@ import { describe, expect, mock, test } from "bun:test";
 // it without `this` bound, the test fails the same way Safari did.
 class FakeFunctionsClient {
   region: string;
-  lastCall: { name: string; body: unknown } | null = null;
+  lastCall: {
+    name: string;
+    body: unknown;
+    headers?: Record<string, string>;
+  } | null = null;
 
   constructor(region: string) {
     this.region = region;
@@ -21,31 +25,47 @@ class FakeFunctionsClient {
 
   async invoke<T>(
     name: string,
-    opts: { body: unknown },
+    opts: { body: unknown; headers?: Record<string, string> },
   ): Promise<{ data: T | null; error: { message?: string } | null }> {
     // This is the line that crashes in Safari when `this` is undefined.
     // Touching it is the whole point of the test.
     void this.region;
-    this.lastCall = { name, body: opts.body };
+    this.lastCall = { name, body: opts.body, headers: opts.headers };
     return { data: ({ ok: true, echo: opts.body } as unknown) as T, error: null };
   }
 }
 
 const fakeClient = new FakeFunctionsClient("us-east-1");
 
+// Every iron call now resolves the session explicitly and passes the JWT
+// in the invoke-level headers override. The test mock has to provide a
+// session or every call would correctly fail with "not signed in".
+const fakeAuth = {
+  getSession: async () => ({
+    data: { session: { access_token: "fake-user-jwt-with-sub-claim" } },
+    error: null,
+  }),
+};
+
 mock.module("@/lib/supabase", () => ({
-  supabase: { functions: fakeClient },
+  supabase: { functions: fakeClient, auth: fakeAuth },
 }));
 
 const { ironOrchestrate, ironExecuteFlowStep, ironUndoFlowRun } = await import("./api");
 
 describe("iron api - this.region binding", () => {
-  test("ironOrchestrate keeps `this` bound to FunctionsClient", async () => {
+  test("ironOrchestrate keeps `this` bound to FunctionsClient + sends JWT header", async () => {
     const res = await ironOrchestrate({ text: "pull part 4521 for Anderson" });
     expect(res).toBeDefined();
     expect(fakeClient.lastCall?.name).toBe("iron-orchestrator");
     expect((fakeClient.lastCall?.body as { text: string }).text).toBe(
       "pull part 4521 for Anderson",
+    );
+    // Critical: the explicit Authorization header overrides supabase-js's
+    // anon-key fallback. If this assertion fails, the function will receive
+    // the anon key and reject every call as "Invalid JWT".
+    expect(fakeClient.lastCall?.headers?.Authorization).toBe(
+      "Bearer fake-user-jwt-with-sub-claim",
     );
   });
 
@@ -108,7 +128,15 @@ describe("iron api - explainInvokeError extracts real error body", () => {
   test("ironOrchestrate surfaces the real function error message + status", async () => {
     const failing = new FakeFailingClient();
     mock.module("@/lib/supabase", () => ({
-      supabase: { functions: failing },
+      supabase: {
+        functions: failing,
+        auth: {
+          getSession: async () => ({
+            data: { session: { access_token: "fake-user-jwt-with-sub-claim" } },
+            error: null,
+          }),
+        },
+      },
     }));
     const { ironOrchestrate: orch } = await import("./api?failing");
     let caught: Error | null = null;
@@ -121,5 +149,28 @@ describe("iron api - explainInvokeError extracts real error body", () => {
     expect(caught?.message).toContain("Unauthorized: invalid JWT signature");
     expect(caught?.message).toContain("401");
     expect(caught?.message).toContain("iron-orchestrator");
+  });
+
+  test("invokeIron throws 'not signed in' when session is missing", async () => {
+    mock.module("@/lib/supabase", () => ({
+      supabase: {
+        functions: new FakeFunctionsClient("us-east-1"),
+        auth: {
+          getSession: async () => ({
+            data: { session: null },
+            error: null,
+          }),
+        },
+      },
+    }));
+    const { ironOrchestrate: orch } = await import("./api?nosession");
+    let caught: Error | null = null;
+    try {
+      await orch({ text: "anything" });
+    } catch (err) {
+      caught = err as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toContain("not signed in");
   });
 });

@@ -101,7 +101,7 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
       const sessionResult = await supabase.auth.getSession();
       const accessToken = sessionResult.data.session?.access_token;
       if (!accessToken) {
-        setError("not authenticated");
+        setError("Iron: not signed in. Please reload the page and sign in again.");
         setStatus("error");
         releasePresence();
         return;
