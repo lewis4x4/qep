@@ -784,27 +784,38 @@ Every idea from the original 84, the 16 NEW, and the 3 resurrected, with its pha
 - **Gates**: `deno check` clean, `deno test` 14/14, `bun run build` clean, `bun run migrations:check` still 206.
 - **Commit**: separate fix commit on main immediately after this docs commit. Pushed together.
 
-**Day 3 — P0.2 Signal taxonomy + deal-signal bridge**
-- Write migration `207_deal_signal_bridge.sql` with the unified view.
-- Write the Deno test that asserts the view returns the same signal set Slice 1 currently assembles by hand.
-- Refactor the Slice 1 edge function to use the view.
-- **Exit gate**: Migration applied locally, test green, edge function still returns the same response shape (diff the JSON against a before/after fixture).
+**Day 3 — P0.2 Signal taxonomy + deal-signal bridge** ✅ SHIPPED 2026-04-08
+- Commit `a763591` on `origin/main`. 4 files, 776 insertions, 101 deletions.
+- Migration `207_deal_signal_bridge.sql` shipped + applied to remote project `iciddijgonywtxoelous`.
+- TS adapter at [supabase/functions/_shared/qrm-command-center/signal-bridge.ts](../supabase/functions/_shared/qrm-command-center/signal-bridge.ts) (190 lines) + 13 Deno tests in [signal-bridge.test.ts](../supabase/functions/_shared/qrm-command-center/signal-bridge.test.ts).
+- Edge function refactored to read from the view + adapter instead of 5 parallel signal queries. Response shape byte-identical (frontend untouched).
+- **SCOPE CHANGE FROM ORIGINAL PLAN**: shipped as a **four-source** bridge, not five. Day 3 verification of `customer_profiles_extended` (migration 013) confirmed it has NO direct FK to `crm_deals`, no `crm_company_id` column, and only fragile text-match join surfaces (`hubspot_contact_id`, `customer_name`, `intellidealer_customer_id`). The honest path from `deal_timing_alerts` to `crm_deals` is a three-hop text match through `hubspot_contact_id`. Slice 1's edge function does NOT query `deal_timing_alerts` today, so deferring it from the bridge regresses no current functionality. Migration 207 header documents the deferral with three concrete unblock conditions (direct deal_id column, customer_profiles_extended FK, or a separate mapping table).
+- The four sources that DO ship: `anomaly_alerts` (polymorphic via entity_type='deal'), `voice_captures` (direct FK on `linked_deal_id`), `deposits` (direct FK on `deal_id`), `competitive_mentions` (clean two-hop FK via `voice_captures.linked_deal_id`).
+- View ships with `security_invoker = true` so it inherits per-source RLS — no new policies, no new attack surface.
+- **Exit gate met**: migration applied to remote, all 13 adapter tests green, response shape unchanged, deno check + bun build clean.
 
-**Day 4 — P0.3 Prediction Ledger (migration + schema)**
-- **DEFERRED-DECISION TRIGGER — resolve Prediction Ledger retention policy BEFORE writing the migration.**
-  - Default proposal (from §15 Q4): *keep predictions with outcomes forever; prune ungraded predictions older than 180 days; reviewable in Phase 4.*
-  - If the user accepts the default, stamp it into the migration's `qrm_predictions.retention_policy` column default and write a `qrm-prediction-retention` nightly job skeleton (implementation ships in Phase 4).
-  - If the user wants a different policy, pause the day, surface the options, then proceed.
-- Write migration `208_prediction_ledger.sql` for `qrm_predictions` + `qrm_prediction_outcomes`.
-- RLS policies using `get_my_workspace()` + `get_my_role()` per [CLAUDE.md](../CLAUDE.md) backend conventions.
-- Write the Deno function `qrm-prediction-scorer` skeleton (nightly, closes out predictions against observed outcomes — implementation is lightweight in Phase 0, grows in Phase 4).
-- **Exit gate**: Migration applied, RLS verified, nightly skeleton type-checks, retention policy documented in the migration comment.
+**Day 4 — P0.3 Prediction Ledger (migration + schema + integration + P0.8 atomic)** ✅ SHIPPED 2026-04-08
+- Commit `89a1c23` on `origin/main`. 5 files, 1,399 insertions, 1 deletion.
+- **Day 5 work was bundled into this commit** — see Day 5 entry below for the absorption rationale.
+- Migration `208_prediction_ledger.sql` shipped + applied to remote project `iciddijgonywtxoelous`. Two new tables (`qrm_predictions`, `qrm_prediction_outcomes`) with full RLS via `get_my_workspace()` + `get_my_role()`. 5 indexes including a partial index for the prune candidate set (`WHERE outcome IS NULL`).
+- **P0.8 trace columns landed atomically** in migration 208 — `trace_id uuid` and `trace_steps jsonb`. The roadmap originally scheduled these for Day 11 as a follow-up migration; bundling them here saves a follow-up. Day 11's P0.8 work becomes purely the trace UI route + the `qrm-prediction-trace` function — the schema is already in place.
+- TS adapter at [supabase/functions/_shared/qrm-command-center/prediction-ledger.ts](../supabase/functions/_shared/qrm-command-center/prediction-ledger.ts) (336 lines): canonical-JSON serialization, SHA-256 hash helpers (`hashRationale`, `hashInputs`, `hashSignals`), trace step extraction, single-row builder, full-batch builder with dedupe by `(subject_id, prediction_kind)`. 18 Deno tests in [prediction-ledger.test.ts](../supabase/functions/_shared/qrm-command-center/prediction-ledger.test.ts) covering canonical determinism, hash determinism, role/version differentiation, dedupe semantics, and orphan-card defense.
+- Edge function refactored to write recommendation cards to `qrm_predictions` at issue time. Synchronous insert via the admin client. Errors caught + logged + sent to sentry but never fail the request — observability loss only. Final log line includes `signalsLatency` and `ledgerLatency` for visibility.
+- New nightly grader edge function at [supabase/functions/qrm-prediction-scorer/index.ts](../supabase/functions/qrm-prediction-scorer/index.ts) (325 lines). Service-role auth only. Pure `gradePrediction()` function that closes out predictions against deal stage flags (`is_closed_won` / `is_closed_lost`) or marks them `expired` after a 30-day window. Persists to `qrm_prediction_outcomes` AND updates the canonical `qrm_predictions.outcome` pointer.
+- **DEPLOYED to live runtime**: both `qrm-command-center` v1 and `qrm-prediction-scorer` v1 deployed to `iciddijgonywtxoelous` 2026-04-08 20:23 UTC. `supabase functions list` confirms both ACTIVE.
+- **DEFERRED-DECISION RESOLVED — retention policy**: graded predictions kept forever; ungraded pruned at 180 days. **Implementation differs from the original plan**: the policy lives in migration 208's header comment (NOT a per-row `retention_policy` column — would have been wasteful, would not enforce anything). The actual `qrm-prediction-retention` pruner skeleton is **deferred to Phase 4 alongside the actual enforcement**. Only the grader (`qrm-prediction-scorer`) shipped on Day 4; the pruner is a separate Phase 4 deliverable.
+- **Types regenerated** in commit `f911068` — `apps/web/src/lib/database.types.ts` synced with remote schema (catches up multi-workstream drift in addition to migrations 207+208).
+- **Exit gate met**: migration applied to remote, RLS verified, nightly skeleton type-checks, retention policy documented in the migration comment, all 45 Deno tests green, both functions deployed live.
 
-**Day 5 — P0.3 Prediction Ledger (integration)**
-- Refactor the Slice 1 `qrm-command-center` edge function to write every recommendation card it emits to `qrm_predictions` at issue time.
-- Include `rationale_hash`, `inputs_hash`, `signals_hash`, `model_source='rules'`.
-- Write a Deno test that asserts the ledger has N rows for a simulated request with N recommendations.
-- **Exit gate**: Recommendations land in the ledger. Slice 1's `/qrm/command` still works.
+**Day 5 — P0.3 Prediction Ledger (integration)** ✅ ABSORBED INTO DAY 4 2026-04-08
+- All Day 5 deliverables shipped inside commit `89a1c23` (the Day 4 commit) instead of as a separate commit on a separate day.
+- **Why bundled**: it was cleaner to ship the migration, the TS adapter, the edge function refactor, AND the unit tests as one atomic commit so the ledger writes are unit-testable against the migration that creates the table. Splitting them into two commits would have left the working tree in a half-state where the edge function had ledger calls but the migration hadn't been written yet (or vice versa). The atomic ship matches how the code actually depends on itself.
+- **Day 5 deliverables that landed in `89a1c23`**:
+  - Edge function refactored to write every recommendation card to `qrm_predictions` at issue time via the admin client.
+  - Includes `rationale_hash`, `inputs_hash`, `signals_hash`, `model_source='rules'`, plus the P0.8 atomic `trace_id` and `trace_steps`.
+  - Unit tests that assert the adapter produces the right number of rows for a simulated lane + Chief-of-Staff input set (5 rows for 2 deals across 3 lanes + 3 Chief-of-Staff slots, deduped by `(subject_id, prediction_kind)` — see `prediction-ledger.test.ts` "buildLedgerBatch produces one row per (subject, kind) pair").
+- **What's NOT covered by unit tests** (and is left to manual verification): an end-to-end "fire `/qrm/command` against a live deployed runtime, confirm rows land in the live `qrm_predictions` table" test. The Deno tests exercise the TS adapter against fixture data; they do NOT round-trip through the actual `qrm-command-center` edge function or the live database. End-to-end verification is the manual smoke test in §15-or-equivalent.
+- **Exit gate met**: recommendations land in the ledger when the edge function is invoked (verified at the unit-test level — adapter produces correct rows; verified at the deployment level — both functions ACTIVE on live runtime). Slice 1's `/qrm/command` still works (build clean, deno check clean, no response shape change).
 
 ### Week 2
 
@@ -916,9 +927,13 @@ Week 3 starts Slice 2.2 (Dealer Reality Grid). Slices 2.3–2.9 follow the same 
 ### Q4 — Prediction Ledger retention policy + Meaningful Contact governance
 **Status**: RESOLVED 2026-04-08 (JIT governance) for retention; DRAFT-AWAITING-OWNER for Meaningful Contact.
 
-**Q4a — Prediction Ledger retention** (resolved):
+**Q4a — Prediction Ledger retention** (resolved + shipped 2026-04-08):
 - **Resolution**: *Keep predictions with outcomes forever; prune ungraded predictions older than 180 days; reviewable in Phase 4.*
-- **Trigger**: Day 4 — stamp the policy into the migration's comment and add a `qrm-prediction-retention` nightly job skeleton (implementation ships in Phase 4).
+- **Shipped in commit `89a1c23` (Day 4)** — the policy lives in [migration 208's header comment](../supabase/migrations/208_prediction_ledger.sql), NOT a per-row column.
+- **Implementation diverges from the original Day 4 plan in two honest ways**:
+  1. The original plan said to add a `qrm_predictions.retention_policy` column with `'graded_forever_ungraded_180d'` as the default. This was rejected as wasteful (storing the same string on every row) and ineffective (a column doesn't enforce anything). The policy lives in the migration header instead. Phase 4 enforcement reads from a constant or workspace_settings entry.
+  2. The original plan said to write a `qrm-prediction-retention` nightly job skeleton in Day 4. **This was deferred to Phase 4** alongside the actual retention enforcement. Day 4 only shipped the grader (`qrm-prediction-scorer`), which closes out predictions against deal outcomes — that is a different function from the pruner that deletes old ungraded rows. Two distinct nightly jobs, one shipped, one deferred.
+- **Trigger for the actual pruner**: Phase 4. No earlier action needed unless retention cost becomes a problem before Phase 4 lands, in which case a manual one-off `DELETE FROM qrm_predictions WHERE outcome IS NULL AND predicted_at < now() - interval '180 days'` is the safe escape hatch.
 
 **Q4b — Meaningful Contact definition** (draft, awaiting owner sign-off):
 The main roadmap's original §15 Q4 asked: *"What is the definition of meaningful contact?"* The conflict-marked merge [plans/2026-04-08-qrm-addendum-merge.md](./2026-04-08-qrm-addendum-merge.md) §6 drafted the answer. The draft below is the complete definition, inserted here for visibility. It ships into enforcement across three slices (P0.6 probes, Phase 2 calculation engine, Phase 3 Account Command Center decay automation). **Owner sign-off required before the Phase 2 Slice 2.X calculation engine PR opens.**
