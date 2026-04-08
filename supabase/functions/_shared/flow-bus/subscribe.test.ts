@@ -10,11 +10,12 @@
  * filtering.
  */
 
-import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
+import { assert, assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
 import {
   listActiveSubscriptionsForEvent,
   matchesPattern,
   registerSubscription,
+  validateEventTypePattern,
 } from "./subscribe.ts";
 import type { FlowSubscriptionRow } from "./types.ts";
 
@@ -104,6 +105,85 @@ Deno.test("matchesPattern: empty event_type returns false", () => {
 
 Deno.test("matchesPattern: empty pattern returns false", () => {
   assertEquals(matchesPattern("deal.stalled", ""), false);
+});
+
+// ─── validateEventTypePattern (P1 fix) ───────────────────────────────────
+
+Deno.test("validateEventTypePattern accepts literal patterns", () => {
+  validateEventTypePattern("follow_up.due");
+  validateEventTypePattern("deal.stalled");
+  validateEventTypePattern("simple");
+});
+
+Deno.test("validateEventTypePattern accepts single-segment wildcards", () => {
+  validateEventTypePattern("deal.*");
+  validateEventTypePattern("*");
+  validateEventTypePattern("a.*.c");
+});
+
+Deno.test("validateEventTypePattern accepts trailing multi-segment glob", () => {
+  validateEventTypePattern("deal.**");
+  validateEventTypePattern("**");
+  validateEventTypePattern("a.b.c.**");
+});
+
+Deno.test("validateEventTypePattern REJECTS mid-segment '**' (P1 fix)", () => {
+  // This is the silent-failure case the P1 fix prevents. Without
+  // validation, a pattern like 'deal.**.escalated' would never match
+  // anything at dispatch time and the user would be confused.
+  assertThrows(
+    () => validateEventTypePattern("deal.**.escalated"),
+    Error,
+    "'**' is only supported as the final segment",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS '**' at the leading position when followed by other segments", () => {
+  assertThrows(
+    () => validateEventTypePattern("**.deal.stalled"),
+    Error,
+    "'**' is only supported as the final segment",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS empty segments", () => {
+  assertThrows(
+    () => validateEventTypePattern("deal..stalled"),
+    Error,
+    "empty segment",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS leading dot", () => {
+  assertThrows(
+    () => validateEventTypePattern(".deal.stalled"),
+    Error,
+    "empty segment",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS trailing dot", () => {
+  assertThrows(
+    () => validateEventTypePattern("deal.stalled."),
+    Error,
+    "empty segment",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS empty pattern", () => {
+  assertThrows(
+    () => validateEventTypePattern(""),
+    Error,
+    "eventTypePattern is required",
+  );
+});
+
+Deno.test("validateEventTypePattern REJECTS whitespace-only pattern", () => {
+  assertThrows(
+    () => validateEventTypePattern("   "),
+    Error,
+    "eventTypePattern is required",
+  );
 });
 
 // ─── registerSubscription (mocked client) ────────────────────────────────
@@ -253,6 +333,39 @@ Deno.test("registerSubscription rejects empty handlerName", async () => {
     Error,
     "handlerName is required",
   );
+});
+
+Deno.test("registerSubscription REJECTS mid-segment '**' before any DB call (P1 fix)", async () => {
+  const { client, calls } = makeMockClient<FlowSubscriptionRow, never>({});
+  await assertRejects(
+    () =>
+      registerSubscription(client, {
+        workspaceId: "default",
+        eventTypePattern: "deal.**.escalated",
+        handlerModule: "follow-up-engine",
+        handlerName: "on_deal_escalated",
+      }),
+    Error,
+    "'**' is only supported as the final segment",
+  );
+  // No DB call should have been made — validation runs before the upsert.
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("registerSubscription REJECTS empty segments before any DB call (P1 fix)", async () => {
+  const { client, calls } = makeMockClient<FlowSubscriptionRow, never>({});
+  await assertRejects(
+    () =>
+      registerSubscription(client, {
+        workspaceId: "default",
+        eventTypePattern: "deal..stalled",
+        handlerModule: "follow-up-engine",
+        handlerName: "on_deal_stalled",
+      }),
+    Error,
+    "empty segment",
+  );
+  assertEquals(calls.length, 0);
 });
 
 // ─── listActiveSubscriptionsForEvent (mocked client) ─────────────────────

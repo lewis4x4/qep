@@ -123,19 +123,42 @@ export function buildEventRow(input: PublishFlowEventInput): FlowEventInsertRow 
 // ─── Postgres unique-violation detection ──────────────────────────────────
 
 /**
- * PostgreSQL SQLSTATE 23505 = unique_violation. PostgREST surfaces this
- * via the error.code field on the response. Other Supabase clients may
- * surface it slightly differently — we check both the canonical code and
- * common message variants.
+ * Constraint name created by migration 209 for the bus idempotency partial
+ * unique index. The publish helper ONLY treats unique violations on this
+ * specific constraint as bus dedup hits — every other unique violation is
+ * surfaced as a real error so future schema changes (e.g. a UNIQUE on
+ * event_id) don't silently corrupt dedupe semantics.
  */
-function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+const BUS_IDEMPOTENCY_CONSTRAINT_NAME = "idx_flow_events_idempotency_uq";
+
+/**
+ * Detect a unique-constraint violation that specifically came from the bus
+ * idempotency partial index. Two checks combined:
+ *
+ *   1. SQLSTATE 23505 (PostgreSQL canonical unique_violation), AND
+ *   2. The error message names the specific constraint
+ *      `idx_flow_events_idempotency_uq`.
+ *
+ * Without the second check, ANY 23505 from a different unique constraint
+ * (existing or future) would be falsely treated as a bus dedup hit. The
+ * fallback (no error.code) requires both the canonical "duplicate key value
+ * violates unique constraint" phrase AND the specific constraint name —
+ * still strict.
+ */
+function isBusIdempotencyViolation(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
-  if (error.code === "23505") return true;
   const msg = (error.message ?? "").toLowerCase();
-  return (
-    msg.includes("duplicate key value violates unique constraint") ||
-    msg.includes("idx_flow_events_idempotency_uq")
-  );
+  const matchesIdempotencyConstraint = msg.includes(BUS_IDEMPOTENCY_CONSTRAINT_NAME);
+
+  // Authoritative path: SQLSTATE present + constraint name confirmed.
+  if (error.code === "23505") {
+    return matchesIdempotencyConstraint;
+  }
+
+  // Fallback path: SQLSTATE missing (some client variants don't surface it),
+  // but the message clearly names the bus constraint AND uses the canonical
+  // PostgreSQL phrasing. Both conditions must hold.
+  return matchesIdempotencyConstraint && msg.includes("duplicate key value violates");
 }
 
 // ─── Selectable subset for the dedupe SELECT path ────────────────────────
@@ -157,6 +180,11 @@ interface DedupeRow {
  * violation, looks up the existing row, and returns its identifiers with
  * `deduped: true`. Race-safe via the unique constraint.
  *
+ * The dedupe path ONLY triggers on violations of the specific bus
+ * idempotency constraint (`idx_flow_events_idempotency_uq`). Violations of
+ * any other unique constraint are surfaced as real errors so future schema
+ * changes don't silently corrupt dedupe semantics.
+ *
  * @param client  An admin/service-role Supabase client. The `flow_events`
  *                RLS policy gates inserts to service-role only.
  * @param input   The publish input (camelCase), validated via
@@ -164,7 +192,9 @@ interface DedupeRow {
  * @returns       PublishFlowEventResult with eventId, rowId, publishedAt,
  *                and deduped flag.
  * @throws        FlowBusValidationError on bad input.
- * @throws        Error on any non-validation DB error (network, RLS, etc.).
+ * @throws        Error on any non-validation DB error (network, RLS, etc.)
+ *                including unique violations on constraints OTHER than the
+ *                bus idempotency partial index.
  */
 export async function publishFlowEvent(
   client: SupabaseClient,
@@ -190,15 +220,16 @@ export async function publishFlowEvent(
     };
   }
 
-  // Dedupe path: unique violation on (workspace_id, idempotency_key).
-  // Fetch the existing row and return its identifiers with deduped=true.
-  if (isUniqueViolation(insertRes.error)) {
+  // Dedupe path: unique violation on the SPECIFIC bus idempotency constraint.
+  // Other unique violations are NOT treated as dedupe — they propagate as
+  // real errors so future schema changes don't corrupt dedupe semantics.
+  if (isBusIdempotencyViolation(insertRes.error)) {
     if (!input.idempotencyKey) {
-      // Defensive: a unique violation without an idempotency_key shouldn't
-      // happen given the partial index, but if it does, surface the error
-      // rather than silently swallow it.
+      // Defensive: a unique violation on the idempotency constraint without
+      // an idempotency_key shouldn't happen given the partial index, but if
+      // it does, surface the error rather than silently swallow it.
       throw new Error(
-        `flow_events insert failed with unique violation but no idempotencyKey supplied: ${insertRes.error?.message}`,
+        `flow_events insert failed with bus idempotency violation but no idempotencyKey supplied: ${insertRes.error?.message}`,
       );
     }
     const lookupRes = await client
@@ -224,7 +255,10 @@ export async function publishFlowEvent(
     };
   }
 
-  // Non-validation, non-dedupe error — propagate.
+  // Non-validation, non-bus-dedupe error — propagate.
+  // This explicitly INCLUDES unique violations on constraints OTHER than
+  // the bus idempotency partial index (e.g. future UNIQUE constraints on
+  // event_id, or violations from other tables in the same transaction).
   throw new Error(
     `flow_events insert failed: ${insertRes.error?.message ?? "unknown error"}`,
   );

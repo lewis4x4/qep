@@ -89,6 +89,52 @@ function matchSegment(eventSegment: string, patternSegment: string): boolean {
   return eventSegment === patternSegment;
 }
 
+// ─── Pattern validation (pure) ────────────────────────────────────────────
+
+/**
+ * Validate an event_type_pattern at registration time. Catches misuse loudly
+ * before the row hits the DB.
+ *
+ * The pattern grammar (per matchesPattern()) supports:
+ *   - Literal: 'follow_up.due'
+ *   - Single-segment wildcard: 'deal.*' (matches one segment)
+ *   - Trailing multi-segment glob: 'deal.**' or '**' alone (matches any
+ *     number of trailing segments, including zero)
+ *
+ * It does NOT support `**` in non-trailing positions. A pattern like
+ * 'deal.**.escalated' would be silently treated as a 3-segment literal
+ * containing the segment '**', which can never match a real event_type.
+ * Subscriptions registered with such patterns would never fire — silent
+ * failure at dispatch time.
+ *
+ * This validator catches the misuse at registration time and throws so
+ * the failure is loud.
+ */
+export function validateEventTypePattern(pattern: string): void {
+  if (!pattern || pattern.trim().length === 0) {
+    throw new Error("eventTypePattern is required");
+  }
+  // Bare '**' is allowed (universal multi-segment match).
+  if (pattern === "**") return;
+  const segments = pattern.split(".");
+  // Reject '**' in any position other than the final segment.
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    if (segments[i] === "**") {
+      throw new Error(
+        `Invalid event_type_pattern '${pattern}': '**' is only supported as the final segment or as the entire pattern. Got '**' at segment index ${i}. Use single-segment wildcard '*' for non-trailing segments.`,
+      );
+    }
+  }
+  // Reject empty segments (e.g. 'deal..stalled' from a typo).
+  for (let i = 0; i < segments.length; i += 1) {
+    if (segments[i] === "") {
+      throw new Error(
+        `Invalid event_type_pattern '${pattern}': empty segment at index ${i}. Patterns may not contain consecutive dots or leading/trailing dots.`,
+      );
+    }
+  }
+}
+
 // ─── registerSubscription (DB-bound) ──────────────────────────────────────
 
 /**
@@ -98,6 +144,9 @@ function matchSegment(eventSegment: string, patternSegment: string): boolean {
  * these subscriptions. The registration is idempotent — re-registering the
  * same (workspace_id, event_type_pattern, handler_module, handler_name)
  * tuple is a no-op (the table's UNIQUE constraint catches it).
+ *
+ * Pattern is validated at registration time via `validateEventTypePattern`
+ * — misuse fails loudly here, not silently at dispatch time.
  *
  * Uses an admin/service-role Supabase client. Same RLS pattern as
  * publish.ts — `flow_subscriptions` insert is service-role only.
@@ -112,6 +161,8 @@ export async function registerSubscription(
   if (!input.eventTypePattern || input.eventTypePattern.trim().length === 0) {
     throw new Error("eventTypePattern is required");
   }
+  // Pattern grammar validation — rejects mid-segment '**' and empty segments.
+  validateEventTypePattern(input.eventTypePattern);
   if (!input.handlerModule || input.handlerModule.trim().length === 0) {
     throw new Error("handlerModule is required");
   }

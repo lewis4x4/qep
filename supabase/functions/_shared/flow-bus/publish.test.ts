@@ -325,7 +325,7 @@ Deno.test("publishFlowEvent fast path: returns insert result with deduped=false"
   assertEquals(result.deduped, false);
 });
 
-Deno.test("publishFlowEvent dedupe path: 23505 unique violation triggers lookup, returns deduped=true", async () => {
+Deno.test("publishFlowEvent dedupe path: 23505 on bus idempotency constraint triggers lookup, returns deduped=true", async () => {
   const { client } = makeMockClient({
     insertResult: {
       data: null,
@@ -352,6 +352,36 @@ Deno.test("publishFlowEvent dedupe path: 23505 unique violation triggers lookup,
   assertEquals(result.eventId, "existing-event");
   assertEquals(result.rowId, "existing-row");
   assertEquals(result.publishedAt, "2026-04-07T12:00:00.000Z");
+  assertEquals(result.deduped, true);
+});
+
+Deno.test("publishFlowEvent dedupe path: bus violation without SQLSTATE code (fallback) still triggers", async () => {
+  // Some Supabase client variants don't surface error.code. The fallback
+  // path requires both the canonical 'duplicate key value violates' phrase
+  // AND the bus constraint name.
+  const { client } = makeMockClient({
+    insertResult: {
+      data: null,
+      error: {
+        // No code field
+        message: "duplicate key value violates unique constraint idx_flow_events_idempotency_uq",
+      },
+    },
+    lookupResult: {
+      data: {
+        id: "existing-row",
+        event_id: "existing-event",
+        published_at: "2026-04-07T12:00:00.000Z",
+      },
+      error: null,
+    },
+  });
+  const result = await publishFlowEvent(client, {
+    workspaceId: "default",
+    eventType: "deal.stalled",
+    sourceModule: "anomaly-scan",
+    idempotencyKey: "deal.stalled:deal-abc",
+  });
   assertEquals(result.deduped, true);
 });
 
@@ -393,11 +423,14 @@ Deno.test("publishFlowEvent propagates non-dedupe DB errors", async () => {
   );
 });
 
-Deno.test("publishFlowEvent throws if unique violation hit but no idempotencyKey was supplied", async () => {
+Deno.test("publishFlowEvent throws if bus idempotency violation hit but no idempotencyKey was supplied", async () => {
   const { client } = makeMockClient({
     insertResult: {
       data: null,
-      error: { code: "23505", message: "duplicate key" },
+      error: {
+        code: "23505",
+        message: "duplicate key value violates unique constraint idx_flow_events_idempotency_uq",
+      },
     },
   });
   await assertRejects(
@@ -409,6 +442,60 @@ Deno.test("publishFlowEvent throws if unique violation hit but no idempotencyKey
         // no idempotencyKey
       }),
     Error,
-    "unique violation but no idempotencyKey supplied",
+    "bus idempotency violation but no idempotencyKey supplied",
+  );
+});
+
+Deno.test("publishFlowEvent does NOT treat 23505 from a different constraint as bus dedupe (P1 fix)", async () => {
+  // This is the bug the P1 fix addresses: a 23505 from any OTHER unique
+  // constraint (e.g. a future UNIQUE on event_id, or a constraint on a
+  // different table that happens to be in the same transaction) must
+  // NOT be silently treated as a bus idempotency dedup. The publish helper
+  // must surface it as a real error.
+  const { client } = makeMockClient({
+    insertResult: {
+      data: null,
+      error: {
+        code: "23505",
+        message: "duplicate key value violates unique constraint flow_event_types_workspace_id_name_key",
+      },
+    },
+  });
+  await assertRejects(
+    () =>
+      publishFlowEvent(client, {
+        workspaceId: "default",
+        eventType: "deal.stalled",
+        sourceModule: "anomaly-scan",
+        idempotencyKey: "deal.stalled:abc",
+      }),
+    Error,
+    "flow_events insert failed",
+  );
+});
+
+Deno.test("publishFlowEvent does NOT treat 23505 with no constraint name in message as bus dedupe (P1 fix)", async () => {
+  // Defensive: if the error message doesn't contain the specific bus
+  // constraint name, the helper must NOT assume it's a bus dedupe even
+  // though the SQLSTATE is 23505.
+  const { client } = makeMockClient({
+    insertResult: {
+      data: null,
+      error: {
+        code: "23505",
+        message: "duplicate key value violates unique constraint",
+      },
+    },
+  });
+  await assertRejects(
+    () =>
+      publishFlowEvent(client, {
+        workspaceId: "default",
+        eventType: "deal.stalled",
+        sourceModule: "anomaly-scan",
+        idempotencyKey: "deal.stalled:abc",
+      }),
+    Error,
+    "flow_events insert failed",
   );
 });
