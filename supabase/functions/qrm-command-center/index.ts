@@ -49,6 +49,11 @@ import type {
 } from "../_shared/qrm-command-center/ranking.ts";
 import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
+import {
+  buildLedgerBatch,
+  QRM_RANKER_VERSION,
+} from "../_shared/qrm-command-center/prediction-ledger.ts";
+import type { ScoredDeal } from "../_shared/qrm-command-center/ranking.ts";
 import type {
   CommandCenterResponse,
   CommandCenterScope,
@@ -450,6 +455,65 @@ Deno.serve(async (req) => {
     const lanes = rankAndAssignLanes(scored, lookups, nowTime, observedAt);
     const chief = rankChiefOfStaff(scored, lanes);
 
+    // ── Write recommendations to the prediction ledger (Phase 0 P0.3) ──
+    //
+    // Every recommendation card the ranker emits gets a row in qrm_predictions
+    // at issue time. Atomically includes P0.8 trace_steps (factor contributions
+    // from the scoring pass). The writes are on the response critical path
+    // for Phase 0 — synchronous batch insert before the JSON response. Slow
+    // ledger = slow page. Phase 4 can switch to fire-and-forget at scale.
+    //
+    // Errors are caught + logged + sent to sentry, but never fail the request
+    // — a ledger write failure is observability loss, not user-facing failure.
+    //
+    // Uses the admin client (callerClient cannot insert into qrm_predictions
+    // because the table's insert policy is service-role-only). This is a
+    // bounded admin escalation: the function only writes to qrm_predictions
+    // here — it never reads from this table via the admin client.
+    const ledgerStart = Date.now();
+    const scoredByDealId = new Map<string, ScoredDeal>(
+      scored.map((s) => [s.deal.id, s]),
+    );
+    try {
+      const ledgerRows = await buildLedgerBatch({
+        workspaceId,
+        scoredByDealId,
+        lanes,
+        chief,
+        weights,
+        ironRole,
+        rankerVersion: QRM_RANKER_VERSION,
+        modelSource: "rules",
+      });
+      if (ledgerRows.length > 0) {
+        const { error: ledgerError } = await adminClient
+          .from("qrm_predictions")
+          .insert(ledgerRows);
+        if (ledgerError) {
+          console.error(`[${FN_NAME}] ledger insert failed:`, ledgerError.message);
+          captureEdgeException(new Error(`ledger insert: ${ledgerError.message}`), {
+            fn: FN_NAME,
+            req,
+            extra: {
+              rowCount: ledgerRows.length,
+              scope,
+              userId,
+              ironRole,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      // Hash computation or batch building errored — never fail the request.
+      console.error(`[${FN_NAME}] ledger batch build failed:`, err);
+      captureEdgeException(err, {
+        fn: FN_NAME,
+        req,
+        extra: { phase: "ledger_batch_build", scope, userId, ironRole },
+      });
+    }
+    const ledgerLatency = Date.now() - ledgerStart;
+
     const stageInputs: PipelineStageInput[] = stages.map((s) => ({
       id: s.id,
       name: s.name,
@@ -489,7 +553,10 @@ Deno.serve(async (req) => {
       pipelinePressure: pressure,
     };
 
-    console.log(`[${FN_NAME}] ${ironRole} ${scope} ${deals.length} deals in ${Date.now() - overallStart}ms`);
+    console.log(
+      `[${FN_NAME}] ${ironRole} ${scope} ${deals.length} deals in ${Date.now() - overallStart}ms ` +
+        `(signals=${signalsLatency}ms ledger=${ledgerLatency}ms)`,
+    );
     return safeJsonOk(response, origin);
   } catch (err) {
     captureEdgeException(err, { fn: FN_NAME, req });
