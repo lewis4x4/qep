@@ -297,6 +297,11 @@ const QrmFollowUpSequencesPage = lazy(() =>
 const QrmHubPage = lazy(() =>
   import("./features/qrm/pages/QrmHubPage").then((m) => ({ default: m.QrmHubPage }))
 );
+const QrmCommandCenterPage = lazy(() =>
+  import("./features/qrm/command-center/components/QrmCommandCenterPage").then((m) => ({
+    default: m.QrmCommandCenterPage,
+  }))
+);
 
 function RouteFallback() {
   return (
@@ -1285,6 +1290,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/command"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <QrmCommandCenterPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

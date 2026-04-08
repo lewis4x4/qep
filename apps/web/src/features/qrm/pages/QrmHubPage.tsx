@@ -757,9 +757,19 @@ export function QrmHubPage({ userRole, userId, ironRoleFromProfile }: QrmHubPage
           title="QRM Intelligence"
           subtitle="AI-powered pipeline analytics, deal scoring, and competitive intelligence"
         />
-        <Badge variant="outline" className="shrink-0 border-qep-orange/30 text-qep-orange">
-          {ironRole.display}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Slice 1 — temporary tester link to the new Command Center.
+              Removed in Slice 2 when /qrm flips to the new page. */}
+          <Button asChild size="sm" variant="outline" className="border-qep-orange/40 text-qep-orange hover:bg-qep-orange/5">
+            <Link to="/qrm/command">
+              <Zap className="mr-1 h-3.5 w-3.5" />
+              Try the new Command Center
+            </Link>
+          </Button>
+          <Badge variant="outline" className="border-qep-orange/30 text-qep-orange">
+            {ironRole.display}
+          </Badge>
+        </div>
       </div>
 
       {/* ── Pipeline Stats ─────────────────────────────────────── */}
