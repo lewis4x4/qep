@@ -113,24 +113,122 @@ async function ensureConversation(
   return data.id as string;
 }
 
+/**
+ * The set of strings we NEVER want as a real iron message — these are
+ * orchestrator placeholder values that leaked into iron_messages before
+ * the Wave 7.3 routing fix. Any iron row whose trimmed content equals one
+ * of these is noise and must be dropped from history before the agent sees it.
+ */
+const ORCHESTRATOR_NOISE_CONTENTS = new Set([
+  "READ_ANSWER",
+  "AGENTIC_TASK",
+  "FLOW_DISPATCH",
+  "HUMAN_ESCALATION",
+  "CLARIFY",
+  "COST_LIMIT",
+]);
+
+type HistoryTurn = { role: "user" | "assistant"; content: string };
+
+/**
+ * Clean up the raw iron_messages history into a form the Anthropic API
+ * will accept without choking. Three passes:
+ *
+ *   1. Drop noise iron rows (orchestrator placeholder categories).
+ *   2. Dedupe consecutive same-role + same-content rows (happens when the
+ *      orchestrator AND iron-knowledge both insert the same user message).
+ *   3. Enforce strict role alternation — if two consecutive rows have the
+ *      same role after dedupe, keep only the latest. Anthropic's Messages
+ *      API rejects non-alternating sequences on the user side.
+ *
+ * Also ensures the final sequence doesn't end with an orphan user row
+ * (we drop the current turn's user row since the caller appends it
+ * explicitly to the agent messages array).
+ */
+function sanitizeHistory(
+  rows: Array<{ role: string; content: string }>,
+  currentUserText: string,
+): HistoryTurn[] {
+  // Pass 1: drop noise rows + normalize role
+  const filtered: HistoryTurn[] = [];
+  for (const row of rows) {
+    if (typeof row.content !== "string") continue;
+    const content = row.content.trim();
+    if (!content) continue;
+    const role: "user" | "assistant" =
+      row.role === "iron" ? "assistant" : "user";
+    if (role === "assistant" && ORCHESTRATOR_NOISE_CONTENTS.has(content)) {
+      continue;
+    }
+    filtered.push({ role, content });
+  }
+
+  // Pass 2: dedupe consecutive same-role + same-content
+  const deduped: HistoryTurn[] = [];
+  for (const turn of filtered) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && prev.role === turn.role && prev.content === turn.content) {
+      continue;
+    }
+    deduped.push(turn);
+  }
+
+  // Pass 3: enforce strict role alternation (keep latest of any run).
+  // Anthropic accepts consecutive tool_use blocks but not two plain user
+  // turns in a row; collapsing here is safer than guessing what the API
+  // will accept.
+  const alternating: HistoryTurn[] = [];
+  for (const turn of deduped) {
+    const prev = alternating[alternating.length - 1];
+    if (prev && prev.role === turn.role) {
+      // Replace the prior same-role turn rather than appending
+      alternating[alternating.length - 1] = turn;
+      continue;
+    }
+    alternating.push(turn);
+  }
+
+  // Drop the current-turn user row if it's still at the tail — the caller
+  // appends the current user message explicitly and we don't want a
+  // duplicate at the end of the messages array.
+  while (alternating.length > 0) {
+    const tail = alternating[alternating.length - 1];
+    if (tail.role === "user" && tail.content.trim() === currentUserText.trim()) {
+      alternating.pop();
+      continue;
+    }
+    break;
+  }
+
+  // Conversation must START with a user turn or be empty.
+  while (alternating.length > 0 && alternating[0].role !== "user") {
+    alternating.shift();
+  }
+
+  return alternating;
+}
+
 async function loadConversationHistory(
   admin: SupabaseClient,
   conversationId: string,
   limit: number,
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  currentUserText: string,
+): Promise<HistoryTurn[]> {
+  // Overfetch so the sanitizer has enough rows to dedupe from — the final
+  // result is capped at `limit` turns after cleaning.
   const { data } = await admin
     .from("iron_messages")
     .select("role, content, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
-    .limit(limit);
+    .limit(limit * 3);
   if (!data) return [];
-  return data
-    .filter((row) => typeof row.content === "string" && row.content.trim().length > 0)
-    .map((row) => ({
-      role: row.role === "iron" ? ("assistant" as const) : ("user" as const),
-      content: String(row.content),
-    }));
+  const sanitized = sanitizeHistory(
+    data as Array<{ role: string; content: string }>,
+    currentUserText,
+  );
+  // Keep the most recent `limit` turns
+  return sanitized.slice(-limit);
 }
 
 /* ─── Cost ladder ───────────────────────────────────────────────────────── */
@@ -427,19 +525,44 @@ Deno.serve(async (req) => {
     body.route,
   );
 
-  // Persist user message FIRST so it shows up even if the agent loop fails
-  await admin.from("iron_messages").insert({
-    conversation_id: conversationId,
-    workspace_id: workspaceId,
-    user_id: userId,
-    role: "user",
-    content: redactString(message),
-    classifier_output: null,
-  });
+  // Load prior history (sanitized — drops orchestrator noise rows and
+  // dedupes consecutive same-role messages). The sanitizer also strips
+  // any trailing user row matching `message` so we don't double-count
+  // when the orchestrator already persisted it this turn.
+  const historyForAgent = await loadConversationHistory(
+    admin,
+    conversationId,
+    MAX_HISTORY_MESSAGES,
+    message,
+  );
 
-  // Load prior history (excluding the just-inserted user message)
-  const priorHistory = await loadConversationHistory(admin, conversationId, MAX_HISTORY_MESSAGES + 1);
-  const historyForAgent = priorHistory.slice(0, -1).slice(-MAX_HISTORY_MESSAGES);
+  // Persist the current user message ONLY if the orchestrator didn't
+  // already do it. We detect that by checking whether the database has
+  // a user row for this conversation newer than ~5 seconds ago with
+  // matching content — if yes, the orchestrator handed off here and
+  // already wrote it; if no, we're being called directly (e.g., via the
+  // knowledge-only template path) and need to persist ourselves.
+  const recentCutoff = new Date(Date.now() - 5_000).toISOString();
+  const { data: recentUserRows } = await admin
+    .from("iron_messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("role", "user")
+    .eq("content", redactString(message))
+    .gte("created_at", recentCutoff)
+    .limit(1);
+  const orchestratorAlreadyPersisted = (recentUserRows ?? []).length > 0;
+
+  if (!orchestratorAlreadyPersisted) {
+    await admin.from("iron_messages").insert({
+      conversation_id: conversationId,
+      workspace_id: workspaceId,
+      user_id: userId,
+      role: "user",
+      content: redactString(message),
+      classifier_output: null,
+    });
+  }
 
   const systemPrompt = buildSystemPrompt(body.route);
   const toolCtx: ToolContext = {

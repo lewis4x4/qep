@@ -260,8 +260,14 @@ export function IronBar() {
           return;
         }
 
+        // ONLY explicit FLOW_DISPATCH hands off to the slot-fill UI. Every
+        // other classification — CLARIFY, READ_ANSWER, AGENTIC_TASK,
+        // HUMAN_ESCALATION, or no classification at all — falls through to
+        // iron-knowledge. The agent has conversation history + real tools;
+        // let IT decide how to respond. The orchestrator's job is ONLY to
+        // detect explicit action triggers; it was never meant to be the
+        // final responder for knowledge questions or ambiguous follow-ups.
         if (cls.category === "FLOW_DISPATCH" && res.flow_definition && res.conversation_id) {
-          // Hand off to the slot-fill UI.
           startFlow({
             flow: res.flow_definition,
             conversationId: res.conversation_id,
@@ -276,38 +282,17 @@ export function IronBar() {
           return;
         }
 
-        if (cls.category === "CLARIFY") {
-          chatAppend({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: cls.clarification_needed ?? "Could you rephrase that?",
-            createdAt: Date.now(),
-          });
-          return;
-        }
-
+        // HUMAN_ESCALATION is a side-signal, not a terminal state. Flag
+        // the presence bus so the operator sees the alert glow, but still
+        // stream an answer from the agent — which may itself tell them
+        // how to reach a manager with more context than the classifier had.
         if (cls.category === "HUMAN_ESCALATION") {
-          chatAppend({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `Flagging a manager: ${cls.escalation_reason ?? "human help requested"}`,
-            createdAt: Date.now(),
-          });
           pushPresence("iron-escalation", "alert", { ttlMs: 4000 });
-          return;
         }
 
-        if (cls.category === "AGENTIC_TASK") {
-          chatAppend({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: `Logged for follow-up: ${cls.agentic_brief ?? "(no brief)"}`,
-            createdAt: Date.now(),
-          });
-          return;
-        }
-
-        // READ_ANSWER (or any other unhandled category) — stream from iron-knowledge.
+        // Everything else (READ_ANSWER, CLARIFY, AGENTIC_TASK, unknown) →
+        // stream from iron-knowledge. The agent has conversation history
+        // and tools, so it will resolve pronouns and follow-ups naturally.
         const placeholder: IronChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",

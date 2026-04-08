@@ -309,7 +309,8 @@ Deno.serve(async (req) => {
     admin, userId, workspaceId, body.conversation_id, inputMode, body.route,
   );
 
-  // User message (post-redaction)
+  // User message (post-redaction) — always persist so iron-knowledge
+  // and the IronBar chat thread both see the turn.
   await admin.from("iron_messages").insert({
     conversation_id: conversationId,
     workspace_id: workspaceId,
@@ -319,25 +320,27 @@ Deno.serve(async (req) => {
     classifier_output: null,
   });
 
-  // Iron response message
-  await admin.from("iron_messages").insert({
-    conversation_id: conversationId,
-    workspace_id: workspaceId,
-    user_id: userId,
-    role: "iron",
-    content: redactString(
-      classification.category === "FLOW_DISPATCH"
-        ? `Routing to ${classification.flow_id}`
-        : classification.category === "CLARIFY"
-        ? (classification.clarification_needed ?? "Could you clarify?")
-        : classification.category,
-    ),
-    classifier_output: classification as unknown as Record<string, unknown>,
-    tokens_in: llmCall.tokens_in,
-    tokens_out: llmCall.tokens_out,
-    model: llmCall.model,
-    latency_ms: llmCall.latency_ms,
-  });
+  // Iron response message — ONLY persist when the orchestrator IS the
+  // final responder (FLOW_DISPATCH hand-off message). For READ_ANSWER,
+  // CLARIFY, AGENTIC_TASK, and HUMAN_ESCALATION the client routes through
+  // iron-knowledge, which owns the assistant turn. Persisting a
+  // placeholder like content="READ_ANSWER" pollutes the conversation
+  // history that iron-knowledge loads next turn and confuses the agent.
+  const orchestratorOwnsAssistantTurn = classification.category === "FLOW_DISPATCH";
+  if (orchestratorOwnsAssistantTurn) {
+    await admin.from("iron_messages").insert({
+      conversation_id: conversationId,
+      workspace_id: workspaceId,
+      user_id: userId,
+      role: "iron",
+      content: redactString(`Routing to ${classification.flow_id}`),
+      classifier_output: classification as unknown as Record<string, unknown>,
+      tokens_in: llmCall.tokens_in,
+      tokens_out: llmCall.tokens_out,
+      model: llmCall.model,
+      latency_ms: llmCall.latency_ms,
+    });
+  }
 
   // Increment usage counters atomically
   await admin.rpc("iron_increment_usage", {
