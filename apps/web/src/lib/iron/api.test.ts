@@ -39,10 +39,21 @@ const fakeClient = new FakeFunctionsClient("us-east-1");
 
 // Every iron call now resolves the session explicitly and passes the JWT
 // in the invoke-level headers override. The test mock has to provide a
-// session or every call would correctly fail with "not signed in".
+// session with expires_at in the future or every call would correctly
+// fail with "not signed in".
+const futureExpiry = Math.floor(Date.now() / 1000) + 3600;
 const fakeAuth = {
   getSession: async () => ({
-    data: { session: { access_token: "fake-user-jwt-with-sub-claim" } },
+    data: {
+      session: {
+        access_token: "fake-user-jwt-with-sub-claim",
+        expires_at: futureExpiry,
+      },
+    },
+    error: null,
+  }),
+  refreshSession: async () => ({
+    data: { session: { access_token: "fresh-after-refresh" } },
     error: null,
   }),
 };
@@ -160,6 +171,10 @@ describe("iron api - explainInvokeError extracts real error body", () => {
             data: { session: null },
             error: null,
           }),
+          refreshSession: async () => ({
+            data: { session: null },
+            error: null,
+          }),
         },
       },
     }));
@@ -172,5 +187,75 @@ describe("iron api - explainInvokeError extracts real error body", () => {
     }
     expect(caught).toBeInstanceOf(Error);
     expect(caught?.message).toContain("not signed in");
+  });
+
+  test("invokeIron auto-refreshes an expired access token before calling the function", async () => {
+    const refreshClient = new FakeFunctionsClient("us-east-1");
+    const expiredAt = Math.floor(Date.now() / 1000) - 60; // expired 60s ago
+    let refreshCalled = false;
+    mock.module("@/lib/supabase", () => ({
+      supabase: {
+        functions: refreshClient,
+        auth: {
+          getSession: async () => ({
+            data: {
+              session: {
+                access_token: "stale-expired-token",
+                expires_at: expiredAt,
+              },
+            },
+            error: null,
+          }),
+          refreshSession: async () => {
+            refreshCalled = true;
+            return {
+              data: {
+                session: { access_token: "freshly-refreshed-token" },
+              },
+              error: null,
+            };
+          },
+        },
+      },
+    }));
+    const { ironOrchestrate: orch } = await import("./api?expired");
+    await orch({ text: "test" });
+    expect(refreshCalled).toBe(true);
+    expect(refreshClient.lastCall?.headers?.Authorization).toBe(
+      "Bearer freshly-refreshed-token",
+    );
+  });
+
+  test("invokeIron throws when refresh itself fails", async () => {
+    const expiredAt = Math.floor(Date.now() / 1000) - 60;
+    mock.module("@/lib/supabase", () => ({
+      supabase: {
+        functions: new FakeFunctionsClient("us-east-1"),
+        auth: {
+          getSession: async () => ({
+            data: {
+              session: {
+                access_token: "stale-expired-token",
+                expires_at: expiredAt,
+              },
+            },
+            error: null,
+          }),
+          refreshSession: async () => ({
+            data: { session: null },
+            error: { message: "refresh_token revoked" },
+          }),
+        },
+      },
+    }));
+    const { ironOrchestrate: orch } = await import("./api?refreshfail");
+    let caught: Error | null = null;
+    try {
+      await orch({ text: "test" });
+    } catch (err) {
+      caught = err as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toContain("session expired and refresh failed");
   });
 });

@@ -98,10 +98,29 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
       // user hits Enter, even before the first token arrives.
       presenceReleaseRef.current = pushPresence("iron-knowledge", "thinking");
 
-      const sessionResult = await supabase.auth.getSession();
-      const accessToken = sessionResult.data.session?.access_token;
+      // getSession() returns whatever's in localStorage, even if expired.
+      // Check expiry with a 30s skew and refresh if needed — same defense
+      // as iron/api.ts requireUserAccessToken().
+      let accessToken: string | null = null;
+      try {
+        const sessionResult = await supabase.auth.getSession();
+        const session = sessionResult.data.session;
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const expiresAt = session?.expires_at ?? 0;
+        if (session?.access_token && (!expiresAt || expiresAt >= nowSeconds + 30)) {
+          accessToken = session.access_token;
+        } else if (session?.access_token) {
+          // Token expired or about to — force refresh
+          const refreshed = await supabase.auth.refreshSession();
+          accessToken = refreshed.data.session?.access_token ?? null;
+        }
+      } catch (err) {
+        console.error("[useIronKnowledgeStream] auth lookup failed", err);
+      }
       if (!accessToken) {
-        setError("Iron: not signed in. Please reload the page and sign in again.");
+        setError(
+          "Iron: not signed in or session expired. Please reload the page and sign in again.",
+        );
         setStatus("error");
         releasePresence();
         return;
