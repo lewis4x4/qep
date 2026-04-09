@@ -35,8 +35,10 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import {
+  blendRoleWeights,
   buildPipelinePressure,
   getRoleWeights,
+  narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
   scoreDeals,
@@ -44,6 +46,7 @@ import {
 import type {
   ContactCompanyLookup,
   DealSignalBundle,
+  IronRoleWeightEntry,
   PipelineStageInput,
   RankableDeal,
 } from "../_shared/qrm-command-center/ranking.ts";
@@ -94,6 +97,34 @@ function deriveIronRole(legacyRole: string | null, ironRole: string | null): Iro
 
 function isElevated(role: IronRole): boolean {
   return role === "iron_manager";
+}
+
+// ── Phase 0 P0.5 — load active role blend for the calling user ──────────────
+//
+// Reads `v_profile_active_role_blend` (migration 210) and returns the
+// `IronRoleWeightEntry[]` shape the ranker's `blendRoleWeights()` consumes.
+//
+// Empty result is NOT an error: it falls back to single-role weights at the
+// caller. A throw IS an error and is caught by the caller — the caller
+// degrades to single-role rather than failing the request, mirroring the
+// frontend hook's empty-on-error semantics.
+//
+// Row narrowing is delegated to `narrowRoleBlendRows()` in the shared
+// ranker module so the defensive logic is unit-testable in isolation
+// (see `ranking.test.ts:"narrowRoleBlendRows ..."`).
+async function loadProfileRoleBlend(
+  // deno-lint-ignore no-explicit-any
+  adminClient: any,
+  userId: string,
+): Promise<IronRoleWeightEntry[]> {
+  const { data, error } = await adminClient
+    .from("v_profile_active_role_blend")
+    .select("iron_role, weight")
+    .eq("profile_id", userId);
+  if (error) throw error;
+  return narrowRoleBlendRows(
+    (data ?? []) as Array<{ iron_role: unknown; weight: unknown }>,
+  );
 }
 
 interface DealRow {
@@ -288,6 +319,26 @@ Deno.serve(async (req) => {
       (profile as { iron_role: string | null }).iron_role,
     );
 
+    // Phase 0 P0.5 — load the active role blend. Empty / error → fall back
+    // to a synthetic single-role blend at weight 1.0 so the rest of the
+    // path is uniform regardless of whether migration 210 is in effect.
+    // The blend never gates request success: a load error degrades to the
+    // legacy single-role behavior and the request still completes.
+    let roleBlend: IronRoleWeightEntry[] = [];
+    try {
+      roleBlend = await loadProfileRoleBlend(adminClient, userId);
+    } catch (blendErr) {
+      console.error(`[${FN_NAME}] role blend load failed:`, blendErr);
+      captureEdgeException(blendErr, {
+        fn: FN_NAME,
+        req,
+        extra: { phase: "role_blend_load", userId },
+      });
+    }
+    const effectiveBlend: IronRoleWeightEntry[] = roleBlend.length > 0
+      ? roleBlend
+      : [{ role: ironRole, weight: 1.0 }];
+
     // Scope resolution order:
     //   1. POST JSON body `{ scope }` — standard supabase.functions.invoke pattern.
     //   2. URL query string `?scope=` — legacy/debug access via direct fetch.
@@ -448,9 +499,19 @@ Deno.serve(async (req) => {
     };
 
     // ── Run the ranker ──
+    //
+    // Phase 0 P0.5 — weights now come from the blended role mix, not a
+    // single role. For a single-role-1.0 user (everyone post-migration-210
+    // backfill), `blendRoleWeights([{role: ironRole, weight: 1.0}])`
+    // produces the same FactorWeights as `getRoleWeights(ironRole)` — see
+    // `ranking.test.ts:"blendRoleWeights with single 1.0 entry equals
+    // getRoleWeights"` — so this swap is byte-identical for current
+    // production users. Operators with non-trivial blends (manager
+    // covering an advisor, etc) get linearly combined weights so the
+    // rationale and scoring reflect both roles.
     const nowTime = Date.now();
     const observedAt = new Date(nowTime).toISOString();
-    const weights = getRoleWeights(ironRole);
+    const weights = blendRoleWeights(effectiveBlend);
     const scored = scoreDeals(deals, signalsByDealId, weights, nowTime);
     const lanes = rankAndAssignLanes(scored, lookups, nowTime, observedAt);
     const chief = rankChiefOfStaff(scored, lanes);
@@ -555,7 +616,7 @@ Deno.serve(async (req) => {
 
     console.log(
       `[${FN_NAME}] ${ironRole} ${scope} ${deals.length} deals in ${Date.now() - overallStart}ms ` +
-        `(signals=${signalsLatency}ms ledger=${ledgerLatency}ms)`,
+        `(signals=${signalsLatency}ms ledger=${ledgerLatency}ms blend=${roleBlend.length})`,
     );
     return safeJsonOk(response, origin);
   } catch (err) {

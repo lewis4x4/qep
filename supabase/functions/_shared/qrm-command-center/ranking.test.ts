@@ -15,6 +15,7 @@ import {
   formatRationale,
   getDealSignalState,
   getRoleWeights,
+  narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
   scoreDealForRecommendation,
@@ -303,6 +304,78 @@ Deno.test("scoreDealsWithBlend matches scoreDeals when blend is single-role 1.0"
   assertEquals(byBlend.length, bySingle.length);
   assertEquals(byBlend[0].score, bySingle[0].score);
   assertEquals(byBlend[0].deal.id, bySingle[0].deal.id);
+});
+
+// ─── narrowRoleBlendRows (Day 9 audit fix) ────────────────────────────────
+
+Deno.test("narrowRoleBlendRows accepts a clean single-role-1.0 row", () => {
+  const out = narrowRoleBlendRows([{ iron_role: "iron_advisor", weight: 1.0 }]);
+  assertEquals(out.length, 1);
+  assertEquals(out[0].role, "iron_advisor");
+  assertEquals(out[0].weight, 1.0);
+});
+
+Deno.test("narrowRoleBlendRows coerces stringified numeric weights (postgres numeric → JSON string)", () => {
+  // Supabase JS client returns Postgres NUMERIC columns as strings by default.
+  // The narrower must coerce them to JS numbers without dropping the row.
+  const out = narrowRoleBlendRows([{ iron_role: "iron_manager", weight: "0.6" as unknown as number }]);
+  assertEquals(out.length, 1);
+  assertEquals(out[0].weight, 0.6);
+});
+
+Deno.test("narrowRoleBlendRows drops rows with unrecognized iron_role", () => {
+  const out = narrowRoleBlendRows([
+    { iron_role: "iron_advisor", weight: 0.5 },
+    { iron_role: "iron_grandmaster", weight: 0.5 },
+    { iron_role: 42 as unknown as string, weight: 0.5 },
+  ]);
+  assertEquals(out.length, 1);
+  assertEquals(out[0].role, "iron_advisor");
+});
+
+Deno.test("narrowRoleBlendRows drops rows with bad weights", () => {
+  const out = narrowRoleBlendRows([
+    { iron_role: "iron_advisor", weight: 0.5 },
+    { iron_role: "iron_manager", weight: 0 }, // tombstone
+    { iron_role: "iron_woman", weight: -0.1 },
+    { iron_role: "iron_man", weight: 1.5 }, // out of range
+    { iron_role: "iron_advisor", weight: NaN },
+    { iron_role: "iron_manager", weight: "not-a-number" as unknown as number },
+  ]);
+  assertEquals(out.length, 1);
+  assertEquals(out[0].role, "iron_advisor");
+});
+
+Deno.test("narrowRoleBlendRows handles empty / null / undefined input", () => {
+  assertEquals(narrowRoleBlendRows([]).length, 0);
+  assertEquals(narrowRoleBlendRows(null).length, 0);
+  assertEquals(narrowRoleBlendRows(undefined).length, 0);
+});
+
+Deno.test("narrowRoleBlendRows skips null entries inside the array", () => {
+  const out = narrowRoleBlendRows([
+    null,
+    undefined,
+    { iron_role: "iron_advisor", weight: 1.0 },
+  ]);
+  assertEquals(out.length, 1);
+});
+
+Deno.test("narrowRoleBlendRows feeds blendRoleWeights end-to-end (60/40 blend)", () => {
+  // The full audit-fix path: raw rows from the view → narrowed → blended.
+  // Validates that the byte-identical ranking guarantee from blendRoleWeights
+  // tests still holds when the rows come through the narrowing function.
+  const rawRows = [
+    { iron_role: "iron_manager", weight: "0.6" as unknown as number }, // numeric-as-string
+    { iron_role: "iron_advisor", weight: 0.4 },
+  ];
+  const narrowed = narrowRoleBlendRows(rawRows);
+  assertEquals(narrowed.length, 2);
+  const blended = blendRoleWeights(narrowed);
+  const m = getRoleWeights("iron_manager");
+  const a = getRoleWeights("iron_advisor");
+  const eps = 1e-9;
+  assert(Math.abs(blended.expectedRevenue - (m.expectedRevenue * 0.6 + a.expectedRevenue * 0.4)) < eps);
 });
 
 Deno.test("scoreDealsWithBlend produces different ranking than single-role for a 60/40 blend", () => {

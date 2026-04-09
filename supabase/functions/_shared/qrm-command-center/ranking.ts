@@ -172,6 +172,41 @@ export function getRoleWeights(role: IronRole): FactorWeights {
   }
 }
 
+// ─── Phase 0 P0.5 — role blend row narrowing ──────────────────────────────
+//
+// Pure narrowing helper consumed by both the frontend (`useIronRoleBlend`)
+// and the qrm-command-center edge function. Defensive against schema drift:
+// drops rows whose iron_role is not a recognized enum value, drops rows
+// with non-numeric / out-of-range / NaN weights, drops null/undefined rows.
+//
+// The narrowed shape is exactly what `blendRoleWeights()` consumes — no
+// further filtering happens downstream, but the combinator does its own
+// defensive filtering as a second line of defense.
+
+const VALID_IRON_ROLES = new Set<string>([
+  "iron_manager",
+  "iron_advisor",
+  "iron_woman",
+  "iron_man",
+]);
+
+export function narrowRoleBlendRows(
+  rawRows: ReadonlyArray<{ iron_role?: unknown; weight?: unknown } | null | undefined> | null | undefined,
+): IronRoleWeightEntry[] {
+  if (!rawRows || rawRows.length === 0) return [];
+  const out: IronRoleWeightEntry[] = [];
+  for (const row of rawRows) {
+    if (!row || typeof row !== "object") continue;
+    const role = row.iron_role;
+    if (typeof role !== "string" || !VALID_IRON_ROLES.has(role)) continue;
+    const rawWeight = row.weight;
+    const weight = typeof rawWeight === "number" ? rawWeight : Number(rawWeight);
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 1) continue;
+    out.push({ role: role as IronRole, weight });
+  }
+  return out;
+}
+
 // ─── Phase 0 P0.5 — blended role weights ───────────────────────────────────
 //
 // The single-role helper above is preserved for backwards compatibility.
