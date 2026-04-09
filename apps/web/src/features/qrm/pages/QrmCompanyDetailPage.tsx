@@ -25,6 +25,7 @@ import {
   AccountARTab,
 } from "../components/Account360Tabs";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
+import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { ARCreditBlockBanner } from "../components/ARCreditBlockBanner";
 import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
@@ -314,22 +315,12 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
           <div className="flex items-start justify-between gap-3">
             <QrmPageHeader title={companyQuery.data.name} subtitle={locationLabel} />
             <div className="flex items-center gap-2">
-              {account360Query.data?.health?.current_score != null && (
-                <button
-                  type="button"
-                  onClick={() => setHealthDrawerOpen(true)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold ${
-                    Number(account360Query.data.health.current_score) >= 75
-                      ? "border-emerald-500/40 text-emerald-400"
-                      : Number(account360Query.data.health.current_score) >= 50
-                        ? "border-amber-500/40 text-amber-400"
-                        : "border-red-500/40 text-red-400"
-                  }`}
-                  title="Health score — click for explainer"
-                >
-                  Health {Math.round(Number(account360Query.data.health.current_score))}
-                </button>
-              )}
+              <HealthScorePill
+                score={account360Query.data?.health?.current_score != null ? Number(account360Query.data.health.current_score) : null}
+                delta7d={account360Query.data?.health?.delta_7d != null ? Number(account360Query.data.health.delta_7d) : null}
+                size="md"
+                onClick={() => setHealthDrawerOpen(true)}
+              />
               <AskIronAdvisorButton contextType="company" contextId={companyId} variant="inline" />
             </div>
           </div>
