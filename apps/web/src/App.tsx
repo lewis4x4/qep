@@ -318,6 +318,12 @@ const ApprovalCenterPage = lazy(() =>
   }))
 );
 
+const BlockerBoardPage = lazy(() =>
+  import("./features/qrm/command-center/components/BlockerBoardPage").then((m) => ({
+    default: m.BlockerBoardPage,
+  }))
+);
+
 function RouteFallback() {
   return (
     <div
@@ -1332,6 +1338,17 @@ function App() {
                     <ApprovalCenterPage />
                   ) : (
                     <Navigate to="/qrm" replace />
+                  )
+                }
+              />
+              {/* Slice 1.5 — Blocker Board */}
+              <Route
+                path="/qrm/command/blockers"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <BlockerBoardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
                   )
                 }
               />
