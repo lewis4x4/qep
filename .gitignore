@@ -41,3 +41,5 @@ _workspace/
 /QEP Main Repo and Project/
 .omx/
 /qep/
+
+.claude/worktrees/
