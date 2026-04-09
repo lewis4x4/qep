@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mic, MessageSquare, FileText, ArrowRight, ArrowLeft, Save, MapPin } from "lucide-react";
+import { Mic, MessageSquare, FileText, FileDown, ArrowRight, ArrowLeft, Save, MapPin, Loader2 } from "lucide-react";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
@@ -13,6 +13,7 @@ import { IncentiveStack } from "../components/IncentiveStack";
 import { saveQuotePackage } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
+import { useQuotePDF } from "../hooks/useQuotePDF";
 import { AskIronAdvisorButton } from "@/components/primitives";
 
 type EntryMode = "voice" | "ai_chat" | "manual";
@@ -50,6 +51,9 @@ export function QuoteBuilderV2Page() {
   const dealerCost = subtotal * 0.8; // Estimated — real cost from catalog
   const marginAmount = netTotal - dealerCost;
   const marginPct = netTotal > 0 ? (marginAmount / netTotal) * 100 : 0;
+
+  const { generateAndDownload: downloadPDF, generating: pdfGenerating } = useQuotePDF();
+  const selectedBranch = branches.find((b) => b.id === quoteBranch);
 
   const saveMutation = useMutation({
     mutationFn: () => saveQuotePackage({
@@ -273,13 +277,48 @@ export function QuoteBuilderV2Page() {
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || !dealId}
-            >
-              <Save className="mr-1 h-4 w-4" />
-              {saveMutation.isPending ? "Saving..." : "Save Quote"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => downloadPDF({
+                  dealName: dealId || "Quote",
+                  customerName: contactId || "Customer",
+                  preparedBy: "QEP Sales Team",
+                  preparedDate: new Date().toLocaleDateString(),
+                  equipment: selectedEquipment.map((e) => ({ make: e.make ?? "", model: e.model ?? "", year: e.year, price: e.price ?? 0 })),
+                  attachments: selectedAttachments,
+                  equipmentTotal,
+                  attachmentTotal,
+                  subtotal,
+                  tradeAllowance,
+                  netTotal,
+                  financing: [],
+                  branch: (() => {
+                    const b = selectedBranch as unknown as Record<string, unknown> | undefined;
+                    return {
+                      name: (b?.display_name as string) ?? "Quality Equipment & Parts",
+                      address: (b?.address_line1 as string) ?? undefined,
+                      city: (b?.city as string) ?? undefined,
+                      state: (b?.state_province as string) ?? undefined,
+                      postalCode: (b?.postal_code as string) ?? undefined,
+                      phone: (b?.phone_main as string) ?? undefined,
+                      email: (b?.email_main as string) ?? undefined,
+                    };
+                  })(),
+                })}
+                disabled={pdfGenerating}
+              >
+                {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
+                {pdfGenerating ? "Generating..." : "Download PDF"}
+              </Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending || !dealId}
+              >
+                <Save className="mr-1 h-4 w-4" />
+                {saveMutation.isPending ? "Saving..." : "Save Quote"}
+              </Button>
+            </div>
           </div>
 
           {saveMutation.isSuccess && (
