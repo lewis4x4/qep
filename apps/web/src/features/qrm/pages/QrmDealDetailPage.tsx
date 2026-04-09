@@ -13,7 +13,7 @@ import { QrmDealUpdateCard } from "../components/QrmDealUpdateCard";
 import { NeedsAssessmentCard } from "../components/NeedsAssessmentCard";
 import { CadenceTimeline } from "../components/CadenceTimeline";
 import { DemoRequestCard } from "../components/DemoRequestCard";
-import { DgeScenarioPanel } from "../../dge/components/DgeScenarioPanel";
+import { DgeIntelligencePanel } from "../../dge/components/DgeIntelligencePanel";
 import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -332,7 +332,7 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
 
           <DemoRequestCard dealId={dealId!} prefetched={compositeQuery.data?.demos ?? null} />
 
-          <DgeScenarioPanel dealId={dealId!} />
+          <DgeIntelligencePanel dealId={dealId!} dealAmount={dealQueryData?.amount ?? undefined} userRole={userRole} />
 
           <QrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
 
