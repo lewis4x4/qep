@@ -48,6 +48,19 @@ export async function saveQuotePackage(data: Record<string, unknown>) {
   return res.json();
 }
 
+export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: boolean; to_email: string }> {
+  const res = await fetch(`${QUOTE_API_URL}/send-package`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ quote_package_id: quotePackageId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to send quote" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to send quote");
+  }
+  return res.json() as Promise<{ sent: boolean; to_email: string }>;
+}
+
 export async function searchCatalog(query: string) {
   // Sanitize query: strip PostgREST filter metacharacters to prevent injection
   const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);

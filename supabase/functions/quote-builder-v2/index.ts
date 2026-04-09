@@ -15,6 +15,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { sendResendEmail } from "../_shared/resend-email.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 async function aiEquipmentRecommendation(
@@ -362,6 +363,84 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ quote: data }, origin, 201);
+    }
+
+    // ── POST /send-package: Send quote to customer via email ──────────
+    if (action === "send-package") {
+      if (!body.quote_package_id) {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+
+      // Fetch quote package with contact email
+      const { data: pkg, error: pkgErr } = await supabase
+        .from("quote_packages")
+        .select("id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, crm_contacts(first_name, last_name, email)")
+        .eq("id", body.quote_package_id)
+        .single();
+
+      if (pkgErr || !pkg) {
+        return safeJsonError("Quote package not found", 404, origin);
+      }
+
+      // Resolve contact email
+      const contact = Array.isArray(pkg.crm_contacts) ? pkg.crm_contacts[0] : pkg.crm_contacts;
+      const toEmail = contact?.email;
+      if (!toEmail) {
+        return safeJsonError("No email address found for this contact. Update the contact record and try again.", 422, origin);
+      }
+
+      // Compose email body
+      const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ") || "Valued Customer";
+      const equipmentList = Array.isArray(pkg.equipment)
+        ? (pkg.equipment as Array<{ make?: string; model?: string; price?: number }>)
+          .map((e) => `  - ${e.make ?? ""} ${e.model ?? ""}: $${((e.price ?? 0)).toLocaleString()}`)
+          .join("\n")
+        : "  (Equipment details in attached proposal)";
+
+      const netTotal = typeof pkg.net_total === "number" ? `$${pkg.net_total.toLocaleString()}` : "See attached proposal";
+
+      const emailBody = [
+        `Dear ${contactName},`,
+        "",
+        "Thank you for your interest. Please find our equipment proposal below:",
+        "",
+        "Equipment:",
+        equipmentList,
+        "",
+        `Total: ${netTotal}`,
+        pkg.trade_allowance ? `Trade-In Allowance: $${Number(pkg.trade_allowance).toLocaleString()}` : null,
+        "",
+        "This proposal is valid for 30 days. Please don't hesitate to reach out with any questions.",
+        "",
+        "Best regards,",
+        "Quality Equipment & Parts",
+      ].filter((line) => line !== null).join("\n");
+
+      // Send via Resend
+      const result = await sendResendEmail({
+        to: toEmail,
+        subject: `Equipment Proposal from Quality Equipment & Parts`,
+        text: emailBody,
+      });
+
+      if (result.skipped) {
+        return safeJsonError("Email service not configured. Set RESEND_API_KEY.", 503, origin);
+      }
+      if (!result.ok) {
+        return safeJsonError("Email delivery failed", 502, origin);
+      }
+
+      // Update quote package status
+      await supabase
+        .from("quote_packages")
+        .update({
+          sent_at: new Date().toISOString(),
+          sent_via: "email",
+        })
+        .eq("id", body.quote_package_id);
+
+      console.log(`[quote-builder-v2] sent package ${body.quote_package_id} to ${toEmail}`);
+      return safeJsonOk({ sent: true, to_email: toEmail }, origin);
     }
 
     return safeJsonError("Unknown action", 400, origin);

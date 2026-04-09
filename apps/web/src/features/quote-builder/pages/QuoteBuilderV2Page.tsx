@@ -10,6 +10,7 @@ import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
 import { IncentiveStack } from "../components/IncentiveStack";
+import { SendQuoteSection } from "../components/SendQuoteSection";
 import { saveQuotePackage } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
@@ -329,7 +330,12 @@ export function QuoteBuilderV2Page() {
               {(() => {
                 const savedId = (saveMutation.data as { quote?: { id?: string }; id?: string } | undefined)?.quote?.id
                   ?? (saveMutation.data as { id?: string } | undefined)?.id;
-                return savedId ? <IncentiveStack quotePackageId={savedId} /> : null;
+                return savedId ? (
+                  <>
+                    <IncentiveStack quotePackageId={savedId} />
+                    <SendQuoteSection quotePackageId={savedId} />
+                  </>
+                ) : null;
               })()}
             </>
           )}
