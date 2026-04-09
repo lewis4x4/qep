@@ -21,6 +21,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 
@@ -30,12 +31,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!authHeader || authHeader !== `Bearer ${serviceRoleKey}`) {
+    // Phase 0 Wave 4a — accept BOTH legacy Bearer service_role_key AND
+    // modern x-internal-service-secret. See _shared/cron-auth.ts and
+    // migration 212 for the modern cron pattern.
+    if (!isServiceRoleCaller(req)) {
       return safeJsonError("Unauthorized — service role required", 401, null);
     }
 
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       serviceRoleKey!,

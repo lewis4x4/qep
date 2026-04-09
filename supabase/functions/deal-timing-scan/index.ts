@@ -30,6 +30,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -40,13 +41,21 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Phase 0 Wave 4a — service-role gate accepts BOTH legacy Bearer
+    // service_role_key AND modern x-internal-service-secret. The latter
+    // is the only path the modern pg_cron migration (212) can use because
+    // the legacy GUC-based service-role key lookup no longer works.
+    const isServiceRole = isServiceRoleCaller(req);
     const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+
+    // Reject anonymous requests that have neither auth header. Either a
+    // user JWT (Authorization: Bearer <jwt>) or a service-role credential
+    // (handled by isServiceRoleCaller above) is required.
+    if (!isServiceRole && !authHeader) {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -57,7 +66,7 @@ Deno.serve(async (req) => {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
 
       const { data: { user }, error } = await supabase.auth.getUser();

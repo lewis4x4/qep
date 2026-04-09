@@ -28,6 +28,7 @@
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
@@ -494,10 +495,11 @@ Deno.serve(async (req) => {
   }
 
   const adminClient = createAdminClient();
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const isServiceRole =
-    serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`;
+  // Phase 0 Wave 4a — accept BOTH legacy Bearer service_role_key AND modern
+  // x-internal-service-secret. The latter is the only path the modern
+  // pg_cron migrations (205 / 212) can use because the GUC-based service
+  // role key lookup no longer works on Supabase projects.
+  const isServiceRole = isServiceRoleCaller(req);
 
   if (!isServiceRole) {
     const caller = await resolveCallerContext(req, adminClient);
