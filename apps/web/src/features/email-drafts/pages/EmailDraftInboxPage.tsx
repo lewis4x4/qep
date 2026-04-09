@@ -10,6 +10,7 @@ import {
   updateEmailDraft,
   dismissEmailDraft,
   markEmailDraftSent,
+  sendEmailDraft,
   SCENARIO_LABELS,
   SCENARIO_COLORS,
   type EmailDraft,
@@ -60,11 +61,21 @@ export function EmailDraftInboxPage() {
     onError: handleActionError,
   });
 
-  const sendMutation = useMutation({
+  const markSentMutation = useMutation({
     mutationFn: (id: string) => markEmailDraftSent(id, "manual"),
     onSuccess: () => {
       setActionError(null);
       invalidate();
+    },
+    onError: handleActionError,
+  });
+
+  const sendViaMutation = useMutation({
+    mutationFn: (id: string) => sendEmailDraft(id),
+    onSuccess: (result) => {
+      setActionError(null);
+      invalidate();
+      // Toast handled by the card component
     },
     onError: handleActionError,
   });
@@ -195,10 +206,13 @@ export function EmailDraftInboxPage() {
                 onCancelEdit={() => setEditState(null)}
                 onSave={() => editState && saveMutation.mutate(editState)}
                 onDismiss={() => dismissMutation.mutate(draft.id)}
-                onMarkSent={() => sendMutation.mutate(draft.id)}
+                onMarkSent={() => markSentMutation.mutate(draft.id)}
+                onSendEmail={() => sendViaMutation.mutate(draft.id)}
                 isSaving={saveMutation.isPending}
                 isDismissing={dismissMutation.isPending && dismissMutation.variables === draft.id}
-                isSending={sendMutation.isPending && sendMutation.variables === draft.id}
+                isSending={markSentMutation.isPending && markSentMutation.variables === draft.id}
+                isEmailing={sendViaMutation.isPending && sendViaMutation.variables === draft.id}
+                toEmail={(draft as unknown as Record<string, unknown>).to_email as string | null ?? null}
               />
             );
           })}
@@ -224,8 +238,8 @@ function SummaryTile({ label, value, color, icon }: { label: string; value: stri
 
 function DraftCard({
   draft, isExpanded, isEditing, editState,
-  onToggle, onStartEdit, onEditChange, onCancelEdit, onSave, onDismiss, onMarkSent,
-  isSaving, isDismissing, isSending,
+  onToggle, onStartEdit, onEditChange, onCancelEdit, onSave, onDismiss, onMarkSent, onSendEmail,
+  isSaving, isDismissing, isSending, isEmailing, toEmail,
 }: {
   draft: EmailDraft;
   isExpanded: boolean;
@@ -238,9 +252,12 @@ function DraftCard({
   onSave: () => void;
   onDismiss: () => void;
   onMarkSent: () => void;
+  onSendEmail: () => void;
   isSaving: boolean;
   isDismissing: boolean;
   isSending: boolean;
+  isEmailing: boolean;
+  toEmail: string | null;
 }) {
   const urgency = draft.urgency_score ?? 0;
   const urgencyColor = urgency >= 0.8 ? "text-red-400" : urgency >= 0.5 ? "text-amber-400" : "text-muted-foreground";
@@ -350,8 +367,13 @@ function DraftCard({
                 <Button size="sm" variant="outline" onClick={openMailto}>
                   <ExternalLink className="mr-1 h-3 w-3" /> Open in mail
                 </Button>
-                <Button size="sm" onClick={onMarkSent} disabled={isSending}>
-                  <Send className="mr-1 h-3 w-3" />
+                {toEmail && (
+                  <Button size="sm" onClick={onSendEmail} disabled={isEmailing || isSending}>
+                    <Send className="mr-1 h-3 w-3" />
+                    {isEmailing ? "Sending…" : `Send to ${toEmail}`}
+                  </Button>
+                )}
+                <Button size="sm" variant={toEmail ? "outline" : "default"} onClick={onMarkSent} disabled={isSending || isEmailing}>
                   {isSending ? "Marking…" : "Mark sent"}
                 </Button>
               </div>

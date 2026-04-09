@@ -99,6 +99,26 @@ export async function markEmailDraftSent(
   }
 }
 
+/** POST to draft-email /send — actually sends the email via Resend. */
+export async function sendEmailDraft(
+  draftId: string,
+): Promise<{ sent: boolean; to_email: string }> {
+  const session = (await supabase.auth.getSession()).data.session;
+  const res = await fetch(`${DRAFT_EMAIL_URL}/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session?.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ draft_id: draftId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to send email" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to send email");
+  }
+  return res.json() as Promise<{ sent: boolean; to_email: string }>;
+}
+
 export const SCENARIO_LABELS: Record<DraftScenario, string> = {
   budget_cycle: "Budget cycle",
   price_increase: "Price increase",

@@ -39,6 +39,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
+import { sendResendEmail } from "../_shared/resend-email.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || Deno.env.get("OPENAI_KEY");
 
 type Scenario =
@@ -354,6 +355,55 @@ Deno.serve(async (req) => {
         origin,
         201,
       );
+    }
+
+    /* ─────────── POST /send ─────────── */
+    if (action === "send") {
+      if (!body.draft_id) return safeJsonError("draft_id required", 400, origin);
+
+      // Fetch the draft
+      const { data: draft, error: fetchErr } = await supabaseAdmin
+        .from("email_drafts")
+        .select("id, to_email, subject, body, status, workspace_id")
+        .eq("id", body.draft_id)
+        .eq("workspace_id", workspace)
+        .single();
+
+      if (fetchErr || !draft) return safeJsonError("Draft not found", 404, origin);
+      if (draft.status === "sent") return safeJsonError("Draft already sent", 409, origin);
+      if (!draft.to_email) return safeJsonError("No recipient email on this draft. Add a to_email before sending.", 422, origin);
+
+      // Send via Resend
+      const result = await sendResendEmail({
+        to: draft.to_email,
+        subject: draft.subject,
+        text: draft.body,
+      });
+
+      if (result.skipped) {
+        return safeJsonError("Email service not configured. Set RESEND_API_KEY in edge function secrets.", 503, origin);
+      }
+      if (!result.ok) {
+        // Update draft status to failed
+        await supabaseAdmin
+          .from("email_drafts")
+          .update({ status: "failed" })
+          .eq("id", body.draft_id);
+        return safeJsonError("Email delivery failed", 502, origin);
+      }
+
+      // Mark as sent
+      await supabaseAdmin
+        .from("email_drafts")
+        .update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+          sent_via: "resend",
+        })
+        .eq("id", body.draft_id);
+
+      console.log(`[draft-email] sent draft ${body.draft_id} to ${draft.to_email}`);
+      return safeJsonOk({ sent: true, draft_id: body.draft_id, to_email: draft.to_email }, origin);
     }
 
     /* ─────────── POST /mark-sent ─────────── */
