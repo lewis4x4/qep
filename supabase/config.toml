@@ -269,3 +269,9 @@ verify_jwt = false
 # QRM Prediction Scorer: nightly grader, service-role only.
 [functions.qrm-prediction-scorer]
 verify_jwt = false
+
+# QRM Honesty Calibration nightly scan (Phase 0 P0.6). Validates auth
+# internally via _shared/cron-auth.ts; gateway verify_jwt off so pg_cron
+# (migration 214) can call it with x-internal-service-secret.
+[functions.qrm-honesty-scan]
+verify_jwt = false
