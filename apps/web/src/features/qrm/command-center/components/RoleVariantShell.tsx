@@ -54,7 +54,11 @@ export function RoleVariantShell({
   const coveringEntries = (blend ?? []).filter((entry) => entry.role !== ironRole);
 
   function renderSection(section: SectionKey) {
-    const freshness = data.freshness[section];
+    const freshness = data.freshness?.[section] ?? {
+      generatedAt: new Date().toISOString(),
+      source: "unavailable" as const,
+      reason: "Section not yet deployed",
+    };
     switch (section) {
       case "commandStrip":
         return (

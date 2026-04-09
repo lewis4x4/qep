@@ -105,6 +105,9 @@ interface RevenueRealityBoardProps {
 }
 
 export function RevenueRealityBoard({ payload, freshness }: RevenueRealityBoardProps) {
+  // Guard: backend may not yet return this section (edge function not redeployed)
+  if (!payload) return null;
+
   // Empty state
   if (payload.openPipeline === 0) {
     return (

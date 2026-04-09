@@ -294,9 +294,6 @@ const QrmFollowUpSequencesPage = lazy(() =>
     default: m.QrmFollowUpSequencesPage,
   }))
 );
-const QrmHubPage = lazy(() =>
-  import("./features/qrm/pages/QrmHubPage").then((m) => ({ default: m.QrmHubPage }))
-);
 const QrmCommandCenterPage = lazy(() =>
   import("./features/qrm/command-center/components/QrmCommandCenterPage").then((m) => ({
     default: m.QrmCommandCenterPage,
@@ -1291,18 +1288,9 @@ function App() {
                   )
                 }
               />
+              {/* QRM Command Center — canonical route. Legacy QrmHubPage deleted in cutover. */}
               <Route
                 path="/qrm"
-                element={
-                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmHubPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
-                  ) : (
-                    <Navigate to="/dashboard" replace />
-                  )
-                }
-              />
-              <Route
-                path="/qrm/command"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QrmCommandCenterPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
@@ -1311,6 +1299,8 @@ function App() {
                   )
                 }
               />
+              {/* /qrm/command bookmark redirect → /qrm (cutover alias) */}
+              <Route path="/qrm/command" element={<Navigate to="/qrm" replace />} />
               {/* Phase 0 P0.8 — Prediction trace viewer (manager-gated) */}
               <Route
                 path="/qrm/command/trace/:predictionId"
@@ -1318,7 +1308,7 @@ function App() {
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <PredictionTracePage />
                   ) : (
-                    <Navigate to="/qrm/command" replace />
+                    <Navigate to="/qrm" replace />
                   )
                 }
               />
