@@ -55,6 +55,7 @@ import type {
 import { isIronRole } from "../_shared/qrm-command-center/types.ts";
 import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
 import { buildRevenueRealityBoard } from "../_shared/qrm-command-center/revenue-reality.ts";
+import { buildDealerRealityGrid } from "../_shared/qrm-command-center/dealer-grid.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
   buildLedgerBatch,
@@ -470,7 +471,11 @@ Deno.serve(async (req) => {
     // Display lookups (crm_contacts, crm_companies) are NOT signals and
     // remain as separate parallel queries.
     const signalsStart = Date.now();
-    const [signalsRes, contactsRes, companiesRes] = await Promise.all([
+    const [
+      signalsRes, contactsRes, companiesRes,
+      // Dealer Reality Grid queries (Slice 1.2) — all callerClient (RLS-enforced)
+      quotesRes, quotePackagesRes, tradesRes, demosRes, trafficRes, rentalsRes, escalationsRes, serviceJobsRes,
+    ] = await Promise.all([
       dealIds.length > 0
         ? callerClient
           .from("deal_signals")
@@ -491,6 +496,15 @@ Deno.serve(async (req) => {
           .select("id, name")
           .in("id", companyIds)
         : Promise.resolve({ data: [], error: null }),
+      // ── Dealer Reality Grid: 7 operational domain queries ──
+      callerClient.from("quotes").select("id, status, created_at, updated_at").is("deleted_at", null).limit(500),
+      callerClient.from("quote_packages").select("id, deal_id, status, net_total, margin_pct").in("status", ["draft", "sent"]).limit(500),
+      callerClient.from("trade_valuations").select("id, deal_id, status, preliminary_value, created_at").limit(500),
+      callerClient.from("demos").select("id, deal_id, status, scheduled_date, followup_due_at, followup_completed, requested_by, created_at").limit(500),
+      callerClient.from("traffic_tickets").select("id, deal_id, status, ticket_type, promised_delivery_at, blocker_reason, created_at").limit(500),
+      callerClient.from("rental_returns").select("id, status, charge_amount, has_charges, created_at, inspection_date").limit(500),
+      callerClient.from("escalation_tickets").select("id, status, severity, created_at").limit(500),
+      callerClient.from("service_jobs").select("id, status_flags, closed_at").is("closed_at", null).limit(500),
     ]);
     const signalsLatency = Date.now() - signalsStart;
 
@@ -512,6 +526,15 @@ Deno.serve(async (req) => {
     logSignalError("deal_signals", signalsRes);
     logSignalError("crm_contacts", contactsRes);
     logSignalError("crm_companies", companiesRes);
+    // Grid query errors — degrade individual tiles, never crash.
+    logSignalError("quotes", quotesRes);
+    logSignalError("quote_packages", quotePackagesRes);
+    logSignalError("trade_valuations", tradesRes);
+    logSignalError("demos", demosRes);
+    logSignalError("traffic_tickets", trafficRes);
+    logSignalError("rental_returns", rentalsRes);
+    logSignalError("escalation_tickets", escalationsRes);
+    logSignalError("service_jobs", serviceJobsRes);
 
     // Reduce view rows into the per-deal bundle map the ranker consumes.
     // Pure function — no DB, no IO. Tested in
@@ -681,6 +704,17 @@ Deno.serve(async (req) => {
     const pressure = buildPipelinePressure(stageInputs, deals, nowTime);
     const commandStrip = buildCommandStrip(deals, signalsByDealId, nowTime);
     const revenueReality = buildRevenueRealityBoard(deals, signalsByDealId, nowTime);
+    const dealerGrid = buildDealerRealityGrid(
+      quotesRes.error ? null : (quotesRes.data ?? []),
+      quotePackagesRes.error ? null : (quotePackagesRes.data ?? []),
+      tradesRes.error ? null : (tradesRes.data ?? []),
+      demosRes.error ? null : (demosRes.data ?? []),
+      trafficRes.error ? null : (trafficRes.data ?? []),
+      rentalsRes.error ? null : (rentalsRes.data ?? []),
+      escalationsRes.error ? null : (escalationsRes.data ?? []),
+      serviceJobsRes.error ? null : (serviceJobsRes.data ?? []),
+      nowTime,
+    );
 
     // Count voice signal rows for the AI Chief of Staff freshness chip.
     // After P0.2, voice rows arrive via the unified deal_signals view; we
@@ -700,6 +734,7 @@ Deno.serve(async (req) => {
       actionLanes: { generatedAt, source: "live", latencyMs: signalsLatency },
       pipelinePressure: { generatedAt, source: "live", latencyMs: stagesLatency },
       revenueRealityBoard: { generatedAt, source: "live", latencyMs: dealsLatency },
+      dealerRealityGrid: { generatedAt, source: "live", latencyMs: signalsLatency },
     };
 
     const response: CommandCenterResponse = {
@@ -711,6 +746,7 @@ Deno.serve(async (req) => {
       actionLanes: lanes,
       pipelinePressure: pressure,
       revenueRealityBoard: revenueReality,
+      dealerRealityGrid: dealerGrid,
     };
 
     console.log(

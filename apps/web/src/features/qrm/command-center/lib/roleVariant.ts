@@ -20,12 +20,14 @@ const ADVISOR_ORDER: RoleVariantSection[] = [
   "aiChiefOfStaff",
   "actionLanes",
   "revenueRealityBoard",
+  "dealerRealityGrid",
   "pipelinePressure",
 ];
 
 const MANAGER_ORDER: RoleVariantSection[] = [
   "commandStrip",
   "revenueRealityBoard",
+  "dealerRealityGrid",
   "pipelinePressure",
   "aiChiefOfStaff",
   "actionLanes",
@@ -35,6 +37,7 @@ const WOMAN_ORDER: RoleVariantSection[] = [
   "commandStrip",
   "actionLanes",
   "revenueRealityBoard",
+  "dealerRealityGrid",
   "aiChiefOfStaff",
   "pipelinePressure",
 ];
@@ -43,6 +46,7 @@ const MAN_ORDER: RoleVariantSection[] = [
   "commandStrip",
   "actionLanes",
   "revenueRealityBoard",
+  "dealerRealityGrid",
   "pipelinePressure",
   "aiChiefOfStaff",
 ];

@@ -14,6 +14,7 @@ import { AiChiefOfStaff } from "./AiChiefOfStaff";
 import { CommandStrip } from "./CommandStrip";
 import { PipelinePressureMap } from "./PipelinePressureMap";
 import { RevenueRealityBoard } from "./RevenueRealityBoard";
+import { DealerRealityGrid } from "./DealerRealityGrid";
 
 interface RoleVariantShellProps {
   data: CommandCenterResponse;
@@ -104,6 +105,14 @@ export function RoleVariantShell({
           <RevenueRealityBoard
             key={section}
             payload={data.revenueRealityBoard}
+            freshness={freshness}
+          />
+        );
+      case "dealerRealityGrid":
+        return (
+          <DealerRealityGrid
+            key={section}
+            payload={data.dealerRealityGrid}
             freshness={freshness}
           />
         );

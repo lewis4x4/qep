@@ -19,7 +19,8 @@ export type SectionKey =
   | "aiChiefOfStaff"
   | "actionLanes"
   | "pipelinePressure"
-  | "revenueRealityBoard";
+  | "revenueRealityBoard"
+  | "dealerRealityGrid";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -150,6 +151,31 @@ export interface RevenueRealityBoardPayload {
   dgeAvailability: "none" | "partial" | "full";
 }
 
+// ─── Dealer Reality Grid ───────────────────────────────────────────────────
+
+export type DealerGridTileKey =
+  | "quotes" | "trades" | "demos"
+  | "traffic" | "rentals" | "escalations";
+
+export interface DealerGridTile {
+  key: DealerGridTileKey;
+  label: string;
+  activeCount: number;
+  urgentCount: number;
+  totalValue: number;
+  summary: string;
+  movement: string | null;
+  ctaLabel: string;
+  ctaHref: string;
+  status: SectionStatus;
+  reason?: string;
+}
+
+export interface DealerRealityGridPayload {
+  tiles: DealerGridTile[];
+  generatedAt: string;
+}
+
 export interface CommandCenterResponse {
   scope: CommandCenterScope;
   roleVariant: IronRole;
@@ -159,4 +185,5 @@ export interface CommandCenterResponse {
   actionLanes: ActionLanesPayload;
   pipelinePressure: PipelinePressurePayload;
   revenueRealityBoard: RevenueRealityBoardPayload;
+  dealerRealityGrid: DealerRealityGridPayload;
 }
