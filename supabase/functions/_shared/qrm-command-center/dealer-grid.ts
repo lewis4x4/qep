@@ -121,7 +121,7 @@ function buildQuotesTile(
   packages: QuotePackageRow[] | null,
   nowTime: number,
 ): DealerGridTile {
-  if (!quotes) return makeDegradedTile("quotes", "Quotes", "View Quotes", "/quote-v2", "Query failed");
+  if (!quotes) return makeDegradedTile("quotes", "Quotes", "View Quotes", "/qrm/command/quotes", "Query failed");
 
   const active = quotes.filter((q) => q.status === "draft" || q.status === "sent");
   const aging = active.filter((q) => {
@@ -152,7 +152,7 @@ function buildQuotesTile(
     summary: parts.join(", "),
     movement: movementLabel(todayCount, yesterdayCount),
     ctaLabel: "View Quotes",
-    ctaHref: "/quote-v2",
+    ctaHref: "/qrm/command/quotes",
     status: "live",
   };
 }

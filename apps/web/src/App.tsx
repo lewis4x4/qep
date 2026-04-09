@@ -306,6 +306,12 @@ const PredictionTracePage = lazy(() =>
   }))
 );
 
+const QuoteVelocityCenterPage = lazy(() =>
+  import("./features/qrm/command-center/components/QuoteVelocityCenterPage").then((m) => ({
+    default: m.QuoteVelocityCenterPage,
+  }))
+);
+
 function RouteFallback() {
   return (
     <div
@@ -1301,6 +1307,17 @@ function App() {
               />
               {/* /qrm/command bookmark redirect → /qrm (cutover alias) */}
               <Route path="/qrm/command" element={<Navigate to="/qrm" replace />} />
+              {/* Slice 1.3 — Quote Velocity Center drill-down */}
+              <Route
+                path="/qrm/command/quotes"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <QuoteVelocityCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               {/* Phase 0 P0.8 — Prediction trace viewer (manager-gated) */}
               <Route
                 path="/qrm/command/trace/:predictionId"
