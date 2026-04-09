@@ -79,7 +79,12 @@ export function QrmCompanyEquipmentSection({ companyId }: QrmCompanyEquipmentSec
 
       {equipmentQuery.isLoading && <div className="h-12 animate-pulse rounded bg-muted/40" />}
       {equipmentQuery.isError && (
-        <p className="text-sm text-destructive">Couldn&apos;t load equipment records.</p>
+        <div className="text-sm text-destructive space-y-1">
+          <p>Couldn&apos;t load equipment records.</p>
+          <p className="text-xs text-destructive/70">
+            {equipmentQuery.error instanceof Error ? equipmentQuery.error.message : "Unknown error — check workspace access."}
+          </p>
+        </div>
       )}
 
       {!equipmentQuery.isLoading && !equipmentQuery.isError && (equipmentQuery.data?.length ?? 0) === 0 && (

@@ -34,7 +34,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   // ── Live pages ──────────────────────────────────
   {
     label: "Command Center",
-    href: "/dashboard",
+    href: "/qrm",
     icon: Crosshair,
     roles: ["rep", "admin", "manager", "owner"],
   },
@@ -130,7 +130,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
 ];
 
-export const BOTTOM_TAB_HREFS = ["/dashboard", "/service", "/chat", "/voice", "/quote-v2"];
+export const BOTTOM_TAB_HREFS = ["/qrm", "/service", "/chat", "/voice", "/quote-v2"];
 
 export function resolveNavItems(
   quoteBuilderEnabled: boolean,

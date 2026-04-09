@@ -47,7 +47,12 @@ export function QrmCompanySubtreeEquipmentSection({ companyId }: QrmCompanySubtr
 
         {query.isLoading && <div className="h-12 animate-pulse rounded bg-muted/40" />}
         {query.isError && (
-          <p className="text-sm text-destructive">Couldn&apos;t load roll-up equipment.</p>
+          <div className="text-sm text-destructive space-y-1">
+            <p>Couldn&apos;t load roll-up equipment.</p>
+            <p className="text-xs text-destructive/70">
+              {query.error instanceof Error ? query.error.message : "Unknown error — check workspace access."}
+            </p>
+          </div>
         )}
 
         {!query.isLoading && !query.isError && (query.data?.length ?? 0) === 0 && (

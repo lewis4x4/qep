@@ -168,7 +168,12 @@ export function QrmCustomFieldsCard({
 
       {fieldsQuery.isLoading && <div className="h-10 animate-pulse rounded bg-muted/40" />}
       {fieldsQuery.isError && (
-        <p className="text-sm text-destructive">Couldn&apos;t load custom fields.</p>
+        <div className="text-sm text-destructive space-y-1">
+          <p>Couldn&apos;t load custom fields.</p>
+          <p className="text-xs text-destructive/70">
+            {fieldsQuery.error instanceof Error ? fieldsQuery.error.message : "Unknown error — check workspace access."}
+          </p>
+        </div>
       )}
       {!fieldsQuery.isLoading && !fieldsQuery.isError && fields.length === 0 && (
         <p className="text-sm text-muted-foreground">No custom fields defined for this record type.</p>

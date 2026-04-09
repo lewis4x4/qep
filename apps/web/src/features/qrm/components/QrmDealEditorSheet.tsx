@@ -265,6 +265,8 @@ export function QrmDealEditorSheet({
               className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               <option value="">No primary contact</option>
+              {contactsQuery.isLoading && <option disabled>Searching...</option>}
+              {contactsQuery.isError && <option disabled>Search failed — check connection</option>}
               {contactOptions.map((contactOption) => (
                 <option key={contactOption.id} value={contactOption.id}>
                   {contactOption.firstName} {contactOption.lastName}
@@ -287,6 +289,8 @@ export function QrmDealEditorSheet({
               className="flex h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none"
             >
               <option value="">No company linked</option>
+              {companiesQuery.isLoading && <option disabled>Searching...</option>}
+              {companiesQuery.isError && <option disabled>Search failed — check connection</option>}
               {companyOptions.map((companyOption) => (
                 <option key={companyOption.id} value={companyOption.id}>
                   {companyOption.name}
