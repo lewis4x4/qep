@@ -241,3 +241,31 @@ verify_jwt = false
 
 [functions.iron-tts]
 verify_jwt = false
+
+# QRM Phase 0 publishers + edge functions. ALL validate auth internally
+# via _shared/cron-auth.ts (service-role / x-internal-service-secret) or
+# _shared/dge-auth.ts (user JWT for manual manager invocation). Gateway
+# verify_jwt MUST be off so the modern pg_cron pattern (migration 212)
+# can call them with `x-internal-service-secret` instead of a JWT —
+# otherwise the gateway 401s before the function's auth helper runs.
+[functions.anomaly-scan]
+verify_jwt = false
+
+[functions.follow-up-engine]
+verify_jwt = false
+
+[functions.nudge-scheduler]
+verify_jwt = false
+
+[functions.deal-timing-scan]
+verify_jwt = false
+
+# QRM Command Center: validates user JWT inside the function via
+# callerClient.auth.getUser(token). Same gateway-off pattern as the
+# Iron Companion functions above for the same reason.
+[functions.qrm-command-center]
+verify_jwt = false
+
+# QRM Prediction Scorer: nightly grader, service-role only.
+[functions.qrm-prediction-scorer]
+verify_jwt = false
