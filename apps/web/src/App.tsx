@@ -312,6 +312,12 @@ const QuoteVelocityCenterPage = lazy(() =>
   }))
 );
 
+const ApprovalCenterPage = lazy(() =>
+  import("./features/qrm/command-center/components/ApprovalCenterPage").then((m) => ({
+    default: m.ApprovalCenterPage,
+  }))
+);
+
 function RouteFallback() {
   return (
     <div
@@ -1315,6 +1321,17 @@ function App() {
                     <QuoteVelocityCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              {/* Slice 1.4 — Approval Center (manager-gated) */}
+              <Route
+                path="/qrm/command/approvals"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ApprovalCenterPage />
+                  ) : (
+                    <Navigate to="/qrm" replace />
                   )
                 }
               />
