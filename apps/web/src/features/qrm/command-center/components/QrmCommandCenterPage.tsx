@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
-import { resolveIronRoleAndBlend } from "../../lib/iron-roles";
+import { isIronRole, resolveIronRoleAndBlend } from "../../lib/iron-roles";
 import { useIronRoleBlend } from "../../lib/useIronRoleBlend";
 import type {
   CommandCenterScope,
@@ -29,12 +29,6 @@ interface QrmCommandCenterPageProps {
   userName: string | null;
   userEmail: string | null;
   ironRoleFromProfile?: string | null;
-}
-
-const IRON_VALUES: IronRole[] = ["iron_advisor", "iron_manager", "iron_woman", "iron_man"];
-
-function isIronRole(value: string): value is IronRole {
-  return (IRON_VALUES as string[]).includes(value);
 }
 
 export function QrmCommandCenterPage({
@@ -54,6 +48,14 @@ export function QrmCommandCenterPage({
     ironRoleFromProfile,
   );
   const ironRole: IronRole = isIronRole(ironRoleInfo.role) ? ironRoleInfo.role : "iron_advisor";
+  // P0.5 W1-2 — when the operator holds a non-trivial blend, render the
+  // dominant weight as a percentage on the role badge so the user can see
+  // the implicit "60%" alongside the "Also covering: 40%" entries shown
+  // by RoleVariantShell. Single-role users (blend.length <= 1) get the
+  // unadorned badge — adding a "100%" chip would just be noise.
+  const dominantWeightLabel = blend.length > 1
+    ? ` · ${Math.round(blend[0].weight * 100)}%`
+    : "";
   const headline = getRoleHeadline(ironRole);
   const [scope, setScope] = useState<CommandCenterScope>("mine");
 
@@ -80,6 +82,7 @@ export function QrmCommandCenterPage({
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="border-qep-orange/30 text-qep-orange">
             {ironRoleInfo.display}
+            {dominantWeightLabel}
           </Badge>
           <Badge variant="outline" className="border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
             Slice 1 · spine

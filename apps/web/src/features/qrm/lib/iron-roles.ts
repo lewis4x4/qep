@@ -65,8 +65,21 @@ const LEGACY_ROLE_MAP: Record<string, IronRole> = {
   rep: "iron_advisor",
 };
 
-function isIronRole(value: string): value is IronRole {
-  return value === "iron_manager" || value === "iron_advisor" || value === "iron_woman" || value === "iron_man";
+/**
+ * Canonical IronRole narrower for the frontend.
+ *
+ * Exported so other surfaces (pages, routers, hooks) don't reinvent the
+ * same enum check. The backend has its own narrower in
+ * `supabase/functions/_shared/qrm-command-center/types.ts` (Deno runtime
+ * cannot import from `apps/web`).
+ */
+export function isIronRole(value: string | null | undefined): value is IronRole {
+  return (
+    value === "iron_manager" ||
+    value === "iron_advisor" ||
+    value === "iron_woman" ||
+    value === "iron_man"
+  );
 }
 
 /**
@@ -97,6 +110,40 @@ export function getIronRole(userRole: UserRole, ironRoleFromProfile?: string | n
  */
 export function isIronElevated(userRole: UserRole, ironRoleFromProfile?: string | null): boolean {
   return getIronRole(userRole, ironRoleFromProfile).role === "iron_manager";
+}
+
+/**
+ * Coerce raw `v_profile_active_role_blend` rows into the
+ * {@link IronRoleBlendInput} contract that {@link getIronRoleBlend} consumes.
+ *
+ * Defensive against schema drift and type ambiguity:
+ *   1. Drops null / undefined entries inside the array.
+ *   2. Drops rows whose `iron_role` is not a recognized IronRole value.
+ *   3. Coerces stringified numeric weights via `Number()` (Supabase JS
+ *      returns Postgres NUMERIC columns as strings by default — this is
+ *      the only spot in the frontend that handles that quirk).
+ *   4. Drops rows with weight ≤ 0, > 1, or NaN.
+ *
+ * Used by `useIronRoleBlend` so the hook itself stays a thin React Query
+ * wrapper with no row-shaping logic. Mirrors the backend
+ * `narrowRoleBlendRows` in `_shared/qrm-command-center/ranking.ts` so the
+ * two stay in lock-step.
+ */
+export function coerceBlendRowsFromView(
+  rows: ReadonlyArray<{ iron_role?: unknown; weight?: unknown } | null | undefined> | null | undefined,
+): IronRoleBlendInput[] {
+  if (!rows || rows.length === 0) return [];
+  const out: IronRoleBlendInput[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const role = row.iron_role;
+    if (typeof role !== "string" || !isIronRole(role)) continue;
+    const rawWeight = row.weight;
+    const weight = typeof rawWeight === "number" ? rawWeight : Number(rawWeight);
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 1) continue;
+    out.push({ iron_role: role, weight });
+  }
+  return out;
 }
 
 /**

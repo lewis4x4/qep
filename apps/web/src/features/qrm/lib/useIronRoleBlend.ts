@@ -18,7 +18,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { crmSupabase } from "./qrm-supabase";
-import type { IronRoleBlendInput } from "./iron-roles";
+import { coerceBlendRowsFromView, type IronRoleBlendInput } from "./iron-roles";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
@@ -63,13 +63,10 @@ export function useIronRoleBlend(profileId: string | null | undefined): UseIronR
         .select("iron_role, weight")
         .eq("profile_id", profileId);
       if (error) throw error;
-      // Defensive: the view promises non-null iron_role + numeric weight,
-      // but we still narrow to the IronRoleBlendInput contract so future
-      // schema drift surfaces here, not deep inside the ranker.
-      return (data ?? []).map((row) => ({
-        iron_role: row.iron_role,
-        weight: Number(row.weight),
-      }));
+      // All row narrowing + defensive coercion lives in
+      // `coerceBlendRowsFromView` (iron-roles.ts) so the hook stays a
+      // thin React Query wrapper. The pure helper is unit-tested.
+      return coerceBlendRowsFromView(data);
     },
   });
 

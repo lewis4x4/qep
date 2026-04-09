@@ -6,15 +6,120 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  coerceBlendRowsFromView,
   getDominantIronRoleFromBlend,
   getEffectiveIronRole,
   getIronRole,
   getIronRoleBlend,
   isIronBlendElevated,
   isIronElevated,
+  isIronRole,
   resolveIronRoleAndBlend,
   type IronRoleBlendInput,
 } from "./iron-roles";
+
+// ─── isIronRole (canonical narrower) ─────────────────────────────────────────
+
+describe("isIronRole", () => {
+  test("accepts all four valid Iron roles", () => {
+    expect(isIronRole("iron_advisor")).toBe(true);
+    expect(isIronRole("iron_manager")).toBe(true);
+    expect(isIronRole("iron_woman")).toBe(true);
+    expect(isIronRole("iron_man")).toBe(true);
+  });
+
+  test("rejects unrecognized strings", () => {
+    expect(isIronRole("garbage")).toBe(false);
+    expect(isIronRole("iron_grandmaster")).toBe(false);
+    expect(isIronRole("manager")).toBe(false);
+  });
+
+  test("rejects empty string and whitespace", () => {
+    expect(isIronRole("")).toBe(false);
+    expect(isIronRole("   ")).toBe(false);
+  });
+
+  test("rejects null and undefined", () => {
+    expect(isIronRole(null)).toBe(false);
+    expect(isIronRole(undefined)).toBe(false);
+  });
+});
+
+// ─── coerceBlendRowsFromView (frontend narrower for view rows) ───────────────
+
+describe("coerceBlendRowsFromView", () => {
+  test("accepts a clean single-role-1.0 row", () => {
+    const out = coerceBlendRowsFromView([{ iron_role: "iron_advisor", weight: 1.0 }]);
+    expect(out.length).toBe(1);
+    expect(out[0].iron_role).toBe("iron_advisor");
+    expect(out[0].weight).toBe(1.0);
+  });
+
+  test("coerces stringified numeric weights (Postgres NUMERIC → JSON string)", () => {
+    // Supabase JS client returns Postgres NUMERIC columns as strings by default.
+    // The narrower must coerce them to JS numbers without dropping the row.
+    const out = coerceBlendRowsFromView([
+      { iron_role: "iron_manager", weight: "0.6" as unknown as number },
+    ]);
+    expect(out.length).toBe(1);
+    expect(out[0].weight).toBe(0.6);
+  });
+
+  test("drops rows with unrecognized iron_role values", () => {
+    const out = coerceBlendRowsFromView([
+      { iron_role: "iron_advisor", weight: 0.5 },
+      { iron_role: "iron_grandmaster", weight: 0.5 },
+      { iron_role: 42 as unknown as string, weight: 0.5 },
+    ]);
+    expect(out.length).toBe(1);
+    expect(out[0].iron_role).toBe("iron_advisor");
+  });
+
+  test("drops rows with bad weights (NaN, ≤ 0, > 1, non-numeric)", () => {
+    const out = coerceBlendRowsFromView([
+      { iron_role: "iron_advisor", weight: 0.5 },
+      { iron_role: "iron_manager", weight: 0 }, // tombstone
+      { iron_role: "iron_woman", weight: -0.1 }, // negative
+      { iron_role: "iron_man", weight: 1.5 }, // out of range
+      { iron_role: "iron_advisor", weight: NaN },
+      { iron_role: "iron_manager", weight: "not-a-number" as unknown as number },
+    ]);
+    expect(out.length).toBe(1);
+    expect(out[0].iron_role).toBe("iron_advisor");
+  });
+
+  test("handles empty / null / undefined input", () => {
+    expect(coerceBlendRowsFromView([]).length).toBe(0);
+    expect(coerceBlendRowsFromView(null).length).toBe(0);
+    expect(coerceBlendRowsFromView(undefined).length).toBe(0);
+  });
+
+  test("skips null entries inside the array", () => {
+    const out = coerceBlendRowsFromView([
+      null,
+      undefined,
+      { iron_role: "iron_advisor", weight: 1.0 },
+    ]);
+    expect(out.length).toBe(1);
+  });
+
+  test("output feeds getIronRoleBlend cleanly (round-trip parity)", () => {
+    // Wire-level parity: the rows that survive coerceBlendRowsFromView must
+    // also survive getIronRoleBlend. Two narrowers, two passes, same result.
+    const rawRows = [
+      { iron_role: "iron_manager", weight: "0.6" as unknown as number },
+      { iron_role: "iron_advisor", weight: 0.4 },
+      { iron_role: "iron_grandmaster", weight: 0.5 }, // dropped
+    ];
+    const coerced = coerceBlendRowsFromView(rawRows);
+    expect(coerced.length).toBe(2);
+    const blend = getIronRoleBlend(coerced);
+    expect(blend.length).toBe(2);
+    // getIronRoleBlend sorts by weight DESC, so manager (0.6) is first
+    expect(blend[0].role).toBe("iron_manager");
+    expect(blend[1].role).toBe("iron_advisor");
+  });
+});
 
 // ─── getIronRole (legacy shim) ───────────────────────────────────────────────
 
