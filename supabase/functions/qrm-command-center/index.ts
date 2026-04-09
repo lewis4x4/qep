@@ -56,6 +56,7 @@ import { isIronRole } from "../_shared/qrm-command-center/types.ts";
 import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
 import { buildRevenueRealityBoard } from "../_shared/qrm-command-center/revenue-reality.ts";
 import { buildDealerRealityGrid } from "../_shared/qrm-command-center/dealer-grid.ts";
+import { buildRelationshipEngine } from "../_shared/qrm-command-center/relationship-engine.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
   buildLedgerBatch,
@@ -475,6 +476,8 @@ Deno.serve(async (req) => {
       signalsRes, contactsRes, companiesRes,
       // Dealer Reality Grid queries (Slice 1.2) — all callerClient (RLS-enforced)
       quotesRes, quotePackagesRes, tradesRes, demosRes, trafficRes, rentalsRes, escalationsRes, serviceJobsRes,
+      // Relationship Engine (Slice 1.6)
+      healthProfilesRes, recentVoicesRes, fleetIntelRes,
     ] = await Promise.all([
       dealIds.length > 0
         ? callerClient
@@ -505,6 +508,10 @@ Deno.serve(async (req) => {
       callerClient.from("rental_returns").select("id, status, charge_amount, has_charges, created_at, inspection_date").limit(500),
       callerClient.from("escalation_tickets").select("id, status, severity, created_at").limit(500),
       callerClient.from("service_jobs").select("id, status_flags, closed_at").is("closed_at", null).limit(500),
+      // ── Relationship Engine queries (Slice 1.6) ──
+      callerClient.from("customer_profiles_extended").select("id, company_name, health_score, health_score_updated_at, last_interaction_at, fleet_size, last_deal_at").gt("health_score", 0).limit(500),
+      callerClient.from("voice_captures").select("id, linked_company_id, sentiment, competitor_mentions, created_at").gte("created_at", new Date(Date.now() - 30 * 86_400_000).toISOString()).limit(1000),
+      callerClient.from("fleet_intelligence").select("id, customer_profile_id, customer_name, make, model, year, predicted_replacement_date, replacement_confidence, outreach_status, outreach_deal_value").gte("predicted_replacement_date", new Date().toISOString()).lte("predicted_replacement_date", new Date(Date.now() + 90 * 86_400_000).toISOString()).limit(200),
     ]);
     const signalsLatency = Date.now() - signalsStart;
 
@@ -535,6 +542,9 @@ Deno.serve(async (req) => {
     logSignalError("rental_returns", rentalsRes);
     logSignalError("escalation_tickets", escalationsRes);
     logSignalError("service_jobs", serviceJobsRes);
+    logSignalError("customer_profiles_extended", healthProfilesRes);
+    logSignalError("voice_captures_recent", recentVoicesRes);
+    logSignalError("fleet_intelligence", fleetIntelRes);
 
     // Reduce view rows into the per-deal bundle map the ranker consumes.
     // Pure function — no DB, no IO. Tested in
@@ -716,6 +726,13 @@ Deno.serve(async (req) => {
       nowTime,
     );
 
+    const relationshipEngine = buildRelationshipEngine(
+      healthProfilesRes.error ? null : (healthProfilesRes.data ?? []),
+      recentVoicesRes.error ? null : (recentVoicesRes.data ?? []),
+      fleetIntelRes.error ? null : (fleetIntelRes.data ?? []),
+      nowTime,
+    );
+
     // Count voice signal rows for the AI Chief of Staff freshness chip.
     // After P0.2, voice rows arrive via the unified deal_signals view; we
     // derive the count by filtering to signal_source='voice' instead of
@@ -735,6 +752,7 @@ Deno.serve(async (req) => {
       pipelinePressure: { generatedAt, source: "live", latencyMs: stagesLatency },
       revenueRealityBoard: { generatedAt, source: "live", latencyMs: dealsLatency },
       dealerRealityGrid: { generatedAt, source: "live", latencyMs: signalsLatency },
+      relationshipEngine: { generatedAt, source: "live", latencyMs: signalsLatency },
     };
 
     const response: CommandCenterResponse = {
@@ -747,6 +765,7 @@ Deno.serve(async (req) => {
       pipelinePressure: pressure,
       revenueRealityBoard: revenueReality,
       dealerRealityGrid: dealerGrid,
+      relationshipEngine,
     };
 
     console.log(

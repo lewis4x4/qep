@@ -20,7 +20,8 @@ export type SectionKey =
   | "actionLanes"
   | "pipelinePressure"
   | "revenueRealityBoard"
-  | "dealerRealityGrid";
+  | "dealerRealityGrid"
+  | "relationshipEngine";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -176,6 +177,31 @@ export interface DealerRealityGridPayload {
   generatedAt: string;
 }
 
+// ─── Relationship & Opportunity Engine ─────────────────────────────────────
+
+export type RelationshipSignalKind =
+  | "heating_up" | "cooling_off" | "competitor_rising"
+  | "fleet_replacement" | "silent_key_account";
+
+export interface RelationshipSignal {
+  kind: RelationshipSignalKind;
+  companyId: string;
+  companyName: string;
+  detail: string;
+  score: number;
+  ctaLabel: string;
+  ctaHref: string;
+  observedAt: string;
+}
+
+export interface RelationshipEnginePayload {
+  heatingUp: RelationshipSignal[];
+  coolingOff: RelationshipSignal[];
+  competitorRising: RelationshipSignal[];
+  fleetReplacement: RelationshipSignal[];
+  silentKeyAccounts: RelationshipSignal[];
+}
+
 export interface CommandCenterResponse {
   scope: CommandCenterScope;
   roleVariant: IronRole;
@@ -186,4 +212,5 @@ export interface CommandCenterResponse {
   pipelinePressure: PipelinePressurePayload;
   revenueRealityBoard: RevenueRealityBoardPayload;
   dealerRealityGrid: DealerRealityGridPayload;
+  relationshipEngine: RelationshipEnginePayload;
 }

@@ -15,6 +15,7 @@ import { CommandStrip } from "./CommandStrip";
 import { PipelinePressureMap } from "./PipelinePressureMap";
 import { RevenueRealityBoard } from "./RevenueRealityBoard";
 import { DealerRealityGrid } from "./DealerRealityGrid";
+import { RelationshipEngine } from "./RelationshipEngine";
 
 interface RoleVariantShellProps {
   data: CommandCenterResponse;
@@ -113,6 +114,14 @@ export function RoleVariantShell({
           <DealerRealityGrid
             key={section}
             payload={data.dealerRealityGrid}
+            freshness={freshness}
+          />
+        );
+      case "relationshipEngine":
+        return (
+          <RelationshipEngine
+            key={section}
+            payload={data.relationshipEngine}
             freshness={freshness}
           />
         );
