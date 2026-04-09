@@ -57,6 +57,7 @@ import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bri
 import { buildRevenueRealityBoard } from "../_shared/qrm-command-center/revenue-reality.ts";
 import { buildDealerRealityGrid } from "../_shared/qrm-command-center/dealer-grid.ts";
 import { buildRelationshipEngine } from "../_shared/qrm-command-center/relationship-engine.ts";
+import { buildKnowledgeGapsPayload } from "../_shared/qrm-command-center/knowledge-gaps-engine.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
   buildLedgerBatch,
@@ -478,6 +479,8 @@ Deno.serve(async (req) => {
       quotesRes, quotePackagesRes, tradesRes, demosRes, trafficRes, rentalsRes, escalationsRes, serviceJobsRes,
       // Relationship Engine (Slice 1.6)
       healthProfilesRes, recentVoicesRes, fleetIntelRes,
+      // Knowledge Gaps + Absence Engine (Slice 1.7)
+      knowledgeGapsRes, assessmentsRes,
     ] = await Promise.all([
       dealIds.length > 0
         ? callerClient
@@ -512,6 +515,9 @@ Deno.serve(async (req) => {
       callerClient.from("customer_profiles_extended").select("id, company_name, health_score, health_score_updated_at, last_interaction_at, fleet_size, last_deal_at").gt("health_score", 0).limit(500),
       callerClient.from("voice_captures").select("id, linked_company_id, sentiment, competitor_mentions, created_at").gte("created_at", new Date(Date.now() - 30 * 86_400_000).toISOString()).limit(1000),
       callerClient.from("fleet_intelligence").select("id, customer_profile_id, customer_name, make, model, year, predicted_replacement_date, replacement_confidence, outreach_status, outreach_deal_value").gte("predicted_replacement_date", new Date().toISOString()).lte("predicted_replacement_date", new Date(Date.now() + 90 * 86_400_000).toISOString()).limit(200),
+      // ── Knowledge Gaps + Absence Engine queries (Slice 1.7) ──
+      adminClient.from("knowledge_gaps").select("id, question, frequency, last_asked_at, user_id, profiles(iron_role)").eq("resolved", false).order("frequency", { ascending: false }).limit(10),
+      callerClient.from("needs_assessments").select("id, created_by, completeness_pct").limit(500),
     ]);
     const signalsLatency = Date.now() - signalsStart;
 
@@ -545,6 +551,8 @@ Deno.serve(async (req) => {
     logSignalError("customer_profiles_extended", healthProfilesRes);
     logSignalError("voice_captures_recent", recentVoicesRes);
     logSignalError("fleet_intelligence", fleetIntelRes);
+    logSignalError("knowledge_gaps", knowledgeGapsRes);
+    logSignalError("needs_assessments", assessmentsRes);
 
     // Reduce view rows into the per-deal bundle map the ranker consumes.
     // Pure function — no DB, no IO. Tested in
@@ -726,6 +734,24 @@ Deno.serve(async (req) => {
       nowTime,
     );
 
+    // Knowledge Gaps + Absence Engine (Slice 1.7) — manager-gated
+    const callerRole = (profile as { role: string | null }).role;
+    const isManagerView = ["admin", "manager", "owner"].includes(callerRole ?? "");
+    const knowledgeGaps = buildKnowledgeGapsPayload(
+      knowledgeGapsRes.error ? null : (knowledgeGapsRes.data ?? []),
+      // Reuse the already-fetched deal rows for absence scoring (avoid duplicate query)
+      isManagerView ? dealRows.map((r: DealRow) => ({
+        id: r.id,
+        assigned_rep_id: r.assigned_rep_id,
+        amount: r.amount,
+        expected_close_on: r.expected_close_on,
+        primary_contact_id: r.primary_contact_id,
+        company_id: r.company_id,
+        profiles: null as { full_name: string | null; iron_role: string | null } | null,
+      })) : null,
+      isManagerView,
+    );
+
     const relationshipEngine = buildRelationshipEngine(
       healthProfilesRes.error ? null : (healthProfilesRes.data ?? []),
       recentVoicesRes.error ? null : (recentVoicesRes.data ?? []),
@@ -753,6 +779,7 @@ Deno.serve(async (req) => {
       revenueRealityBoard: { generatedAt, source: "live", latencyMs: dealsLatency },
       dealerRealityGrid: { generatedAt, source: "live", latencyMs: signalsLatency },
       relationshipEngine: { generatedAt, source: "live", latencyMs: signalsLatency },
+      knowledgeGaps: { generatedAt, source: isManagerView ? "live" : "unavailable", latencyMs: dealsLatency, reason: isManagerView ? undefined : "Manager view only" },
     };
 
     const response: CommandCenterResponse = {
@@ -766,6 +793,7 @@ Deno.serve(async (req) => {
       revenueRealityBoard: revenueReality,
       dealerRealityGrid: dealerGrid,
       relationshipEngine,
+      knowledgeGaps,
     };
 
     console.log(

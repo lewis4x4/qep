@@ -16,6 +16,7 @@ import { PipelinePressureMap } from "./PipelinePressureMap";
 import { RevenueRealityBoard } from "./RevenueRealityBoard";
 import { DealerRealityGrid } from "./DealerRealityGrid";
 import { RelationshipEngine } from "./RelationshipEngine";
+import { KnowledgeGapsEngine } from "./KnowledgeGapsEngine";
 
 interface RoleVariantShellProps {
   data: CommandCenterResponse;
@@ -122,6 +123,14 @@ export function RoleVariantShell({
           <RelationshipEngine
             key={section}
             payload={data.relationshipEngine}
+            freshness={freshness}
+          />
+        );
+      case "knowledgeGaps":
+        return (
+          <KnowledgeGapsEngine
+            key={section}
+            payload={data.knowledgeGaps}
             freshness={freshness}
           />
         );

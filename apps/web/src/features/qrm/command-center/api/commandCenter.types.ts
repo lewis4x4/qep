@@ -21,7 +21,8 @@ export type SectionKey =
   | "pipelinePressure"
   | "revenueRealityBoard"
   | "dealerRealityGrid"
-  | "relationshipEngine";
+  | "relationshipEngine"
+  | "knowledgeGaps";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -213,4 +214,34 @@ export interface CommandCenterResponse {
   revenueRealityBoard: RevenueRealityBoardPayload;
   dealerRealityGrid: DealerRealityGridPayload;
   relationshipEngine: RelationshipEnginePayload;
+  knowledgeGaps: KnowledgeGapsPayload;
+}
+
+// ─── Knowledge Gaps + Absence Engine ───────────────────────────────────────
+
+export interface RepAbsenceRow {
+  repId: string;
+  repName: string;
+  ironRole: string | null;
+  dealCount: number;
+  missingAmount: number;
+  missingCloseDate: number;
+  missingContact: number;
+  missingCompany: number;
+  absenceScore: number;
+}
+
+export interface KnowledgeGapItem {
+  id: string;
+  question: string;
+  frequency: number;
+  lastAskedAt: string;
+  askedByRole: string | null;
+}
+
+export interface KnowledgeGapsPayload {
+  topGaps: KnowledgeGapItem[];
+  repAbsence: RepAbsenceRow[];
+  worstFields: Array<{ field: string; label: string; missingPct: number }>;
+  isManagerView: boolean;
 }
