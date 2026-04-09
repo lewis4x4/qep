@@ -140,7 +140,10 @@ Slice 1 is on the working tree, not in git. Before any Phase 0 work:
 
 ### P0.6 — Honesty Calibration Index
 **Problem**: The moment AI Chief of Staff gets more confident in Phase 2/3, the temptation to perform-on-the-scoreboard becomes structural. The only antidote is a system-wide score that goes up when reported state matches observed state and down when it diverges. Ships invisibly in Phase 0 — the index computes but is not yet displayed to reps. Ownership view arrives in Phase 3.
-**Deliverable**: Migration `211_honesty_calibration.sql`:
+
+> **Migration numbering note (added 2026-04-09):** Migrations 211, 212, and 213 were consumed by post-Phase-0 audit work (211 = P2 audit follow-ups, 212 = Wave 4b publisher crons, 213 = Wave 5a scorer cron). Day 10 takes **214**, Day 11 takes **215**. The roadmap text below has been updated in place; the original 211/212 references are gone.
+
+**Deliverable**: Migration `214_honesty_calibration.sql`:
 - Table `qrm_honesty_observations` — `id, workspace_id, observed_at, observation_type, expected_state, actual_state, discrepancy_score, attributed_user_id, attributed_role`.
 - Table `qrm_honesty_probes` — probe registry with `id, probe_name, probe_type, is_enabled, depends_on text`. Lets probes 7 and 8 ship registered-but-disabled until their prerequisite surfaces land.
 - Nightly edge function `qrm-honesty-scan` that runs **8 honesty probes** (6 implementable today, 2 stubbed awaiting Phase 2/3 surfaces — per Day 2 verification §6):
@@ -161,7 +164,7 @@ Slice 1 is on the working tree, not in git. Before any Phase 0 work:
 ### P0.7 — Time primitive
 **Problem**: NEW-001 (Time Bank) needs time modeled as a balance, not a backdrop. Phase 3 will ship the visible Time Bank; Phase 0 ships the primitive.
 **Deliverable**:
-- Migration `212_time_primitive.sql`:
+- Migration `215_time_primitive.sql`:
   - Function `qrm_stage_age(deal_id uuid)` — returns days in current stage, using a new `qrm_stage_transitions` table backfilled from existing `crm_activities`.
   - Table `qrm_stage_transitions` — `id, deal_id, from_stage_id, to_stage_id, at timestamptz`.
   - Backfill script that walks `crm_activities` and `deal_composite` to reconstruct historical transitions.
@@ -850,14 +853,14 @@ Every idea from the original 84, the 16 NEW, and the 3 resurrected, with its pha
   - Default proposal (from §15 Q2): *Brian as owner, operator TBD at ship.* Operator owns interpreting the signal day-to-day; owner owns what to do with the signal structurally.
   - If no named operator exists by the time the scan is written, default to Brian for both roles until Phase 3.
   - Stamp the owner's user_id into the migration's `qrm_honesty_observations.assigned_owner_id` default so every probe has a human target from day one.
-- Write migration `211_honesty_calibration.sql` for `qrm_honesty_observations` + `qrm_honesty_daily` + `qrm_honesty_probes` (probe registry).
+- Write migration `214_honesty_calibration.sql` for `qrm_honesty_observations` + `qrm_honesty_daily` + `qrm_honesty_probes` (probe registry).
 - Write the nightly `qrm-honesty-scan` edge function with **8 honesty probes total** (see §4 P0.6 for the full list). Probes 1–6 are implementable against the current schema and ship live on Day 10. Probes 7 (decay-threshold-proximity) and 8 (protected-account gaming) ship as **registered-but-disabled stubs** — their probe functions exist and are wired in, but short-circuit to `return []` until Phase 2 Slice 2.X and Phase 3 Slice 3.3 respectively enable the surfaces they depend on.
 - Each implementable probe (1–6) is a pure function with a Deno test. Stub probes (7, 8) have placeholder tests that assert "when `depends_on` surface does not exist, the probe returns `[]` without throwing." The probes are the contract.
 - **Exit gate**: Nightly scan runs. Observations land for probes 1–6. Daily rollup computes. Probes 7 and 8 are registered in `qrm_honesty_probes` with `is_enabled = false` and `depends_on` set. **Day 10 exit gate asserts: 8 probes registered, exactly 2 stubbed, exactly 6 producing observations.** Index is not yet visible to anyone. Named owner stamped on every observation.
 
 **Day 11 — P0.7 Time Primitive + P0.8 Trace substrate**
 - **P0.7 BACKFILL SCOPE CORRECTION (from Day 2 verification §7)**: the original roadmap said "walk `crm_activities` and `deal_composite` to reconstruct historical transitions." This is impossible — `crm_activities.activity_type` has no stage-change enum values (`'note', 'call', 'email', 'meeting', 'task', 'sms'` only), no dedicated stage-history table exists, and `crm_deals.updated_at` is unreliable as a proxy (fires on any column change). **P0.7 backfill is now cold-start, not historical replay.**
-- Migration `212_time_primitive.sql`:
+- Migration `215_time_primitive.sql`:
   - Table `qrm_stage_transitions` — `id, deal_id, from_stage_id, to_stage_id, at timestamptz, source text`.
   - **Cold-start backfill loop**: insert one observation row per open deal with `from_stage_id = NULL`, `to_stage_id = current stage_id`, `at = crm_deals.updated_at`, `source = 'cold_start_backfill_2026_04_08'`. Honest about the limitation: historical transitions before the migration are not recoverable.
   - **New trigger** `crm_deals_log_stage_transition` on `AFTER UPDATE OF stage_id ON crm_deals FOR EACH ROW` — inserts a row into `qrm_stage_transitions` with `from_stage_id = OLD.stage_id`, `to_stage_id = NEW.stage_id`, `at = now()`, `source = 'trigger'`. This is the only way stage transitions become observable going forward.
@@ -869,7 +872,7 @@ Every idea from the original 84, the 16 NEW, and the 3 resurrected, with its pha
 - Wire Slice 1's `RecommendationCard` Accept/Dismiss/Snooze to call `trackRecommendationEvent()` with the prediction's `trace_id`.
 - Deno tests for `qrm_stage_age()` cold-start fallback, trigger firing on stage updates, and trace round-trip.
 - **~~DEFERRED-DECISION CLOSED — Slice 1 push timing~~** — SUPERSEDED by user override 2026-04-08. Slice 1 was pushed to `origin/main` on Day 1 as two commits (`0ba1498` + `79e767b`). The P0.2–P0.8 refactors now ship as normal follow-up commits against the pushed Slice 1 code, not as a single pre-push refactor. No force-pushes. See §15 Q1 for the full override note.
-- **Exit gate**: All P0 migrations through 212 applied. All P0 Deno tests green. All P0 gates passed. `qrm_stage_age(any_deal)` returns a sensible number for both cold-start deals (fallback path) and post-trigger deals (transition path).
+- **Exit gate**: All P0 migrations through 215 applied. All P0 Deno tests green. All P0 gates passed. `qrm_stage_age(any_deal)` returns a sensible number for both cold-start deals (fallback path) and post-trigger deals (transition path).
 
 **Day 12 — Phase 0 exit audit**
 - Refactor the Slice 1 edge function one more time to confirm it uses: P0.2 bridge view, P0.3 ledger writes, P0.4 flow engine publish on recommendation emit, P0.5 role blend, P0.8 trace.
