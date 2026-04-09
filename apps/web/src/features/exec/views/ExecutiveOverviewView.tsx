@@ -17,6 +17,7 @@ import { StatusChipStack } from "@/components/primitives";
 import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinitions } from "../lib/useExecData";
 import { formatForMetric, formatKpiValue, relativeRefresh } from "../lib/formatters";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
+import { ForecastScenarioLayer } from "../components/ForecastScenarioLayer";
 import type { AnalyticsAlertRow, ExecRoleTab, KpiSnapshot, MetricDefinition } from "../lib/types";
 
 interface ExecutiveOverviewViewProps {
@@ -304,6 +305,9 @@ export function ExecutiveOverviewView({ onOpenLens }: ExecutiveOverviewViewProps
           );
         })}
       </div>
+
+      {/* Forecast Scenarios (Slice 5.5) */}
+      <ForecastScenarioLayer />
     </div>
   );
 }
