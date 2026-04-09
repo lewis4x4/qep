@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Plus } from "lucide-react";
+import { BarChart3, Download, Plus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
@@ -32,8 +33,10 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const [selectedStageId, setSelectedStageId] = useState<string>("all");
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>("all");
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
+  const { toast } = useToast();
 
   const stagesQuery = useQuery({
     queryKey: ["crm", "deal-stages"],
@@ -99,6 +102,8 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     queryClient,
     hydratedDeals,
     setHydratedDeals,
+    stagesQuery.data,
+    (message) => toast({ title: "Stage gate", description: message, variant: "destructive" }),
   );
 
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
@@ -124,6 +129,16 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
       <QrmSubNav />
 
       <div className="flex justify-end gap-2">
+        {viewMode === "board" && (
+          <Button
+            variant={showAnalytics ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowAnalytics((p) => !p)}
+          >
+            <BarChart3 className="mr-1 h-4 w-4" />
+            {showAnalytics ? "Hide Stats" : "Stage Stats"}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={() => {
           import("@/lib/csv-export").then(({ exportDeals }) => {
             exportDeals(filteredDeals.map((d) => ({
@@ -197,6 +212,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
           onDragEnd={handleDragEnd}
           onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
           onSchedulePipelineRefresh={schedulePipelineRefresh}
+          showAnalytics={showAnalytics}
         />
       )}
 

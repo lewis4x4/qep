@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import type { QueryClient } from "@tanstack/react-query";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { patchCrmDeal } from "../lib/qrm-api";
-import type { QrmRepSafeDeal } from "../lib/types";
+import type { QrmDealStage, QrmRepSafeDeal } from "../lib/types";
 
 /**
  * Debounced invalidation of open deals after stage drag and optimistic updates.
@@ -11,6 +11,8 @@ export function useCrmPipelineDragDrop(
   queryClient: QueryClient,
   hydratedDeals: QrmRepSafeDeal[] | null,
   setHydratedDeals: Dispatch<SetStateAction<QrmRepSafeDeal[] | null>>,
+  stages?: QrmDealStage[],
+  onGateRejection?: (message: string) => void,
 ): {
   activeDragDealId: string | null;
   handleDragStart: (event: DragStartEvent) => void;
@@ -80,6 +82,26 @@ export function useCrmPipelineDragDrop(
       dragOriginalStageRef.current.delete(dealId);
 
       if (!originalStageId || originalStageId === newStageId) return;
+
+      // Gate validation: check if the deal meets requirements for the target stage
+      const deal = hydratedDealsRef.current?.find((d) => d.id === dealId);
+      const targetStage = (stages ?? []).find((s) => s.id === newStageId);
+      const targetOrder = targetStage?.sortOrder ?? 0;
+
+      if (deal && targetOrder >= 17 && deal.depositStatus !== "verified") {
+        // Hard gate: deposit must be verified for readiness/delivery stages
+        onGateRejection?.("Deposit must be verified before entering this stage. Verify the deposit in the Approval Center first.");
+        return;
+      }
+
+      if (deal && targetOrder >= 13 && targetOrder <= 16) {
+        // Soft warning: low margin at close/funding stages
+        const marginPct = (deal as unknown as Record<string, unknown>).marginPct as number | undefined;
+        if (marginPct !== undefined && marginPct < 10) {
+          onGateRejection?.("Low margin (" + marginPct.toFixed(1) + "%) — manager approval will be required at this stage.");
+          // Soft warning — allow the move to continue (DB trigger handles the flag)
+        }
+      }
 
       setHydratedDeals((current) =>
         current?.map((d) => (d.id === dealId ? { ...d, stageId: newStageId } : d)) ?? current,
