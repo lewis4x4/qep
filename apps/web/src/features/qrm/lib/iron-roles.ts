@@ -170,6 +170,11 @@ export function getDominantIronRoleFromBlend(
  * This is the function Day 9's frontend should adopt. The legacy
  * {@link getIronRole} remains for callers that genuinely have no blend
  * access yet.
+ *
+ * Performance: this helper parses the blend internally. If the caller
+ * also needs the parsed blend (e.g. to render a "covering" badge), use
+ * {@link resolveIronRoleAndBlend} instead — it returns both in a single
+ * pass instead of re-parsing the rows twice.
  */
 export function getEffectiveIronRole(
   userRole: UserRole,
@@ -182,6 +187,38 @@ export function getEffectiveIronRole(
     return IRON_ROLE_INFO[dominant.role];
   }
   return getIronRole(userRole, ironRoleFromProfile);
+}
+
+/**
+ * Resolve the dominant Iron role AND the parsed blend in a single pass.
+ *
+ * Combines {@link getIronRoleBlend} + {@link getEffectiveIronRole} so the
+ * blend rows are only parsed once. Use this when a component needs BOTH
+ * the dominant role (for routing / section ordering) AND the full blend
+ * (for the "Also covering" badge).
+ *
+ * Returns:
+ *   - `info`: dominant {@link IronRoleInfo} (same fallback chain as
+ *     {@link getEffectiveIronRole})
+ *   - `blend`: the parsed {@link IronRoleBlendEntry}[] sorted by weight
+ *     DESC. Empty when the blend rows yield no valid entries.
+ */
+export interface ResolvedIronRole {
+  info: IronRoleInfo;
+  blend: IronRoleBlendEntry[];
+}
+
+export function resolveIronRoleAndBlend(
+  userRole: UserRole,
+  blendRows: IronRoleBlendInput[] | null | undefined,
+  ironRoleFromProfile?: string | null,
+): ResolvedIronRole {
+  const blend = getIronRoleBlend(blendRows);
+  const dominant = getDominantIronRoleFromBlend(blend);
+  const info = dominant
+    ? IRON_ROLE_INFO[dominant.role]
+    : getIronRole(userRole, ironRoleFromProfile);
+  return { info, blend };
 }
 
 /**

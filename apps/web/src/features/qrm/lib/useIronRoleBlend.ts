@@ -22,6 +22,13 @@ import type { IronRoleBlendInput } from "./iron-roles";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
+// Stable empty-array sentinel — returning a fresh `[]` from the hook on
+// every render would break React.memo / useMemo downstream because the
+// array reference would change even though the contents didn't. This
+// constant lets every "loading" / "error" / "empty" render share the
+// SAME array instance.
+const EMPTY_BLEND: readonly IronRoleBlendInput[] = Object.freeze([]);
+
 export interface UseIronRoleBlendResult {
   blend: IronRoleBlendInput[];
   isLoading: boolean;
@@ -35,6 +42,13 @@ export interface UseIronRoleBlendResult {
  * @param profileId — the operator's profile id (typically `auth.uid()`).
  *                    When null/undefined the hook returns an empty blend
  *                    without ever hitting the network.
+ *
+ * Reference stability: the hook returns the SAME array reference across
+ * renders when the underlying data has not changed. React Query already
+ * keeps the resolved `query.data` reference stable across re-renders, but
+ * the empty-state fallback path (`?? []`) used to allocate a fresh `[]`
+ * on every render, breaking memoization downstream. The shared
+ * `EMPTY_BLEND` sentinel fixes that.
  */
 export function useIronRoleBlend(profileId: string | null | undefined): UseIronRoleBlendResult {
   const query = useQuery({
@@ -60,7 +74,11 @@ export function useIronRoleBlend(profileId: string | null | undefined): UseIronR
   });
 
   return {
-    blend: query.data ?? [],
+    // Cast away `readonly` only at the boundary — callers receive a normal
+    // mutable array type, but the underlying instance is the frozen shared
+    // sentinel and they should treat it as read-only. The helpers in
+    // iron-roles.ts never mutate.
+    blend: query.data ?? (EMPTY_BLEND as IronRoleBlendInput[]),
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,

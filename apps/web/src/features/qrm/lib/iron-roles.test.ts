@@ -12,6 +12,7 @@ import {
   getIronRoleBlend,
   isIronBlendElevated,
   isIronElevated,
+  resolveIronRoleAndBlend,
   type IronRoleBlendInput,
 } from "./iron-roles";
 
@@ -220,6 +221,62 @@ describe("getEffectiveIronRole", () => {
 });
 
 // ─── isIronBlendElevated ─────────────────────────────────────────────────────
+
+// ─── resolveIronRoleAndBlend (single-pass parser) ────────────────────────────
+
+describe("resolveIronRoleAndBlend", () => {
+  test("returns dominant role + parsed blend in a single call", () => {
+    const rows: IronRoleBlendInput[] = [
+      { iron_role: "iron_advisor", weight: 0.4 },
+      { iron_role: "iron_manager", weight: 0.6 },
+    ];
+    const { info, blend } = resolveIronRoleAndBlend("rep", rows, null);
+    expect(info.role).toBe("iron_manager");
+    expect(blend.length).toBe(2);
+    expect(blend[0].role).toBe("iron_manager");
+    expect(blend[1].role).toBe("iron_advisor");
+  });
+
+  test("returns empty blend + legacy fallback when blend is empty", () => {
+    const { info, blend } = resolveIronRoleAndBlend("manager", [], null);
+    expect(info.role).toBe("iron_manager");
+    expect(blend).toEqual([]);
+  });
+
+  test("returns empty blend + profile iron_role when blend rows are null", () => {
+    const { info, blend } = resolveIronRoleAndBlend("rep", null, "iron_man");
+    expect(info.role).toBe("iron_man");
+    expect(blend).toEqual([]);
+  });
+
+  test("blend overrides profile iron_role even when both are present", () => {
+    const rows: IronRoleBlendInput[] = [{ iron_role: "iron_advisor", weight: 1.0 }];
+    const { info, blend } = resolveIronRoleAndBlend("manager", rows, "iron_manager");
+    expect(info.role).toBe("iron_advisor");
+    expect(blend.length).toBe(1);
+  });
+
+  test("matches getEffectiveIronRole + getIronRoleBlend exactly", () => {
+    // Regression: the single-pass helper must produce IDENTICAL results to
+    // calling the two helpers separately, otherwise the refactor would
+    // change page behavior.
+    const cases: Array<[string, IronRoleBlendInput[] | null, string | null]> = [
+      ["rep", [{ iron_role: "iron_advisor", weight: 1.0 }], null],
+      ["manager", null, "iron_manager"],
+      ["rep", [{ iron_role: "iron_manager", weight: 0.6 }, { iron_role: "iron_advisor", weight: 0.4 }], null],
+      ["admin", [], null],
+      ["rep", [{ iron_role: "iron_grandmaster", weight: 1.0 }], null], // invalid → fallback
+    ];
+    for (const [userRole, rows, profile] of cases) {
+      const single = resolveIronRoleAndBlend(userRole as "rep" | "manager" | "admin", rows, profile);
+      const expectedInfo = getEffectiveIronRole(userRole as "rep" | "manager" | "admin", rows, profile);
+      const expectedBlend = getIronRoleBlend(rows);
+      expect(single.info.role).toBe(expectedInfo.role);
+      expect(single.blend.length).toBe(expectedBlend.length);
+      expect(single.blend.map((e) => e.role)).toEqual(expectedBlend.map((e) => e.role));
+    }
+  });
+});
 
 describe("isIronBlendElevated", () => {
   test("returns false for empty blend", () => {

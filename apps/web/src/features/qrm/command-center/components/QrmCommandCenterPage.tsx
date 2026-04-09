@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
-import { getEffectiveIronRole, getIronRoleBlend } from "../../lib/iron-roles";
+import { resolveIronRoleAndBlend } from "../../lib/iron-roles";
 import { useIronRoleBlend } from "../../lib/useIronRoleBlend";
 import type {
   CommandCenterScope,
@@ -43,9 +43,16 @@ export function QrmCommandCenterPage({
   ironRoleFromProfile,
 }: QrmCommandCenterPageProps) {
   // Phase 0 P0.5 — load blend; falls through to legacy single-role on empty.
+  // Single-pass: resolveIronRoleAndBlend parses the blend rows once and
+  // returns both the dominant role info AND the parsed blend, instead of
+  // calling getIronRoleBlend + getEffectiveIronRole separately (which would
+  // re-parse the rows twice per render).
   const { blend: blendRows } = useIronRoleBlend(userId);
-  const blend = getIronRoleBlend(blendRows);
-  const ironRoleInfo = getEffectiveIronRole(userRole, blendRows, ironRoleFromProfile);
+  const { info: ironRoleInfo, blend } = resolveIronRoleAndBlend(
+    userRole,
+    blendRows,
+    ironRoleFromProfile,
+  );
   const ironRole: IronRole = isIronRole(ironRoleInfo.role) ? ironRoleInfo.role : "iron_advisor";
   const headline = getRoleHeadline(ironRole);
   const [scope, setScope] = useState<CommandCenterScope>("mine");
