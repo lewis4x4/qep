@@ -479,16 +479,42 @@ Deno.serve(async (req: Request) => {
               },
             );
           }
+          console.error("[admin-users] create: createUser failed:", createErr.message);
           throw createErr;
         }
 
-        // The on_auth_user_created trigger auto-creates profile + workspace.
-        // Update the role/full_name to the requested values (trigger defaults to 'rep').
+        // The on_auth_user_created trigger MAY have created profile + workspace,
+        // but it's wrapped in exception handling and may silently fail.
+        // Upsert both to guarantee the user can actually sign in.
         if (newUser?.user) {
-          await adminClient
+          // Ensure workspace membership exists
+          const { error: pwErr } = await adminClient
+            .from("profile_workspaces")
+            .upsert(
+              { profile_id: newUser.user.id, workspace_id: "default" },
+              { onConflict: "profile_id,workspace_id" },
+            );
+          if (pwErr) {
+            console.error("[admin-users] create: profile_workspaces upsert failed:", pwErr.message);
+          }
+
+          // Upsert profile with correct role/name
+          const { error: profileErr } = await adminClient
             .from("profiles")
-            .update({ role: body.role, full_name: body.full_name })
-            .eq("id", newUser.user.id);
+            .upsert(
+              {
+                id: newUser.user.id,
+                email: body.email,
+                full_name: body.full_name,
+                role: body.role,
+                active_workspace_id: "default",
+                is_active: true,
+              },
+              { onConflict: "id" },
+            );
+          if (profileErr) {
+            console.error("[admin-users] create: profile upsert failed:", profileErr.message);
+          }
         }
 
         return new Response(
