@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Building2, Plus, Search } from "lucide-react";
+import { Building2, Download, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,7 +49,18 @@ export function QrmCompaniesPage() {
       />
       <QrmSubNav />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => {
+          import("@/lib/csv-export").then(({ exportCompanies }) => {
+            exportCompanies(companies.map((c) => ({
+              ...c,
+              assignedRepName: null,
+            })));
+          });
+        }}>
+          <Download className="mr-1 h-4 w-4" />
+          Export CSV
+        </Button>
         <Button onClick={() => setEditorOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New company

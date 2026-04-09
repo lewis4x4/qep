@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
@@ -123,7 +123,29 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
       />
       <QrmSubNav />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => {
+          import("@/lib/csv-export").then(({ exportDeals }) => {
+            exportDeals(filteredDeals.map((d) => ({
+              id: d.id,
+              name: d.name,
+              amount: d.amount,
+              expectedCloseOn: d.expectedCloseOn,
+              nextFollowUpAt: d.nextFollowUpAt,
+              lastActivityAt: d.lastActivityAt,
+              depositStatus: d.depositStatus,
+              depositAmount: d.depositAmount,
+              createdAt: d.createdAt,
+              stageName: null,
+              companyName: null,
+              contactName: null,
+              assignedRepName: null,
+            })));
+          });
+        }}>
+          <Download className="mr-1 h-4 w-4" />
+          Export CSV
+        </Button>
         <Button onClick={() => setEditorOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New deal
