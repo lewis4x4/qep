@@ -21,6 +21,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 /** Parsed GPT JSON; fields are optional at runtime. */
@@ -253,13 +254,14 @@ Deno.serve(async (req) => {
     // Verify role and get workspace
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, iron_role, active_workspace_id")
+      .select("role, iron_role")
       .eq("id", user.id)
       .single();
 
     if (!profile || !["rep", "manager", "owner"].includes(profile.role)) {
       return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
     }
+    const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
 
     // ── 1. Parse multipart form data ───���──────────────────────────────────
     const contentType = req.headers.get("content-type") || "";
@@ -341,17 +343,6 @@ Deno.serve(async (req) => {
       const rawTitle = ideaSignal.title || transcript.substring(0, 200);
       const title = rawTitle.substring(0, 200) || "Captured idea";
       const body = transcript.length > title.length ? transcript : null;
-
-      // Resolve caller workspace (voice-to-qrm already did auth above)
-      let workspace = "default";
-      try {
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("active_workspace_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (profile?.active_workspace_id) workspace = String(profile.active_workspace_id);
-      } catch { /* fall back to default */ }
 
       const tagsArray: string[] = [];
       if (ideaSignal.category) tagsArray.push(ideaSignal.category);
@@ -436,8 +427,6 @@ Deno.serve(async (req) => {
     // ── 5. Entity resolution: fuzzy match or create ───────────────────────
     const entityStart = Date.now();
     const errors: string[] = [];
-    const workspace = profile.active_workspace_id;
-
     // 5a. Company resolution
     let companyId: string | null = null;
     let companyMatchMethod: string | null = null;

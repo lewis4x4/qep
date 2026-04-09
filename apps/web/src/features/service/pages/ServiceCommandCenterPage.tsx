@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { Card } from "@/components/ui/card";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { isUuid } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 
@@ -195,7 +195,7 @@ export function ServiceCommandCenterPage() {
       )}
 
       {showCronHealth && cronFetched && (cronError || cronRuns.length > 0) && (
-        <Card className="overflow-hidden border-border/40 bg-muted/10 p-0 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.02]">
+        <GlassPanel className="overflow-hidden p-0">
           <div className="border-b border-border/40 bg-muted/20 px-4 py-2 dark:bg-white/[0.03]">
             <p className="text-xs font-semibold text-foreground">Cron Health</p>
           </div>
@@ -232,7 +232,7 @@ export function ServiceCommandCenterPage() {
               </ul>
             ) : null}
           </div>
-        </Card>
+        </GlassPanel>
       )}
 
       {/* View tabs + filters row */}

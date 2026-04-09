@@ -110,6 +110,17 @@ export function writeCachedProfile(
   );
 }
 
+export function clearCachedProfile(
+  userId: string,
+  storage: Pick<Storage, "removeItem"> | undefined = typeof window !== "undefined" ? window.sessionStorage : undefined,
+): void {
+  if (!storage) {
+    return;
+  }
+
+  storage.removeItem(`${PROFILE_CACHE_KEY_PREFIX}${userId}`);
+}
+
 export function hasCachedAuthProfile(
   storage: StorageScannerLike | undefined = typeof window !== "undefined" ? window.sessionStorage : undefined,
   now: number = Date.now()

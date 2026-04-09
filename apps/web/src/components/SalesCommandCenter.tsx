@@ -26,6 +26,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "@/features/qrm/lib/qrm-supabase";
 import { MorningBriefSection } from "@/features/dashboards/components/MorningBriefSection";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
+import { MotionList } from "@/components/primitives/MotionList";
+import { MotionItem } from "@/components/primitives/MotionItem";
 import type { UserRole } from "@/lib/database.types";
 import {
   getExtractedContactLabel,
@@ -423,26 +426,26 @@ function MetricCard({
   }[accent ?? "orange"];
 
   const inner = (
-    <Card className="group border-border bg-card px-4 py-3.5 transition-all duration-150 hover:shadow-md hover:border-white/20">
+    <GlassPanel className="p-6 transition-all duration-300 hover:shadow-2xl hover:border-white/20 group">
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">
             {label}
           </p>
-          <p className={`mt-1 text-2xl font-bold tabular-nums ${accentColor}`}>
+          <p className={`mt-2 text-3xl font-light tabular-nums text-white`}>
             {value}
           </p>
           {subValue && (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[11px] text-slate-400">
               {subValue}
             </p>
           )}
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] group-hover:bg-white/[0.08] transition-colors">
           <Icon className={`h-5 w-5 ${accentColor}`} aria-hidden="true" />
         </div>
       </div>
-    </Card>
+    </GlassPanel>
   );
 
   if (href) {
@@ -470,45 +473,40 @@ function FollowUpItem({ deal }: { deal: EnrichedDeal }) {
 
   const urgencyBadge = {
     overdue: (
-      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+      <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-red-400 bg-red-500/10 px-2 py-1 rounded-md">
         {formatOverdue(hours)}
-      </Badge>
+      </span>
     ),
     today: (
-      <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+      <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-qep-orange bg-qep-orange/10 px-2 py-1 rounded-md">
         Due today
-      </Badge>
+      </span>
     ),
     this_week: (
-      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+      <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-300 bg-white/5 px-2 py-1 rounded-md">
         This week
-      </Badge>
+      </span>
     ),
     upcoming: null,
   };
 
+  const navigate = useNavigate();
+
   return (
-    <Link to={`/qrm/deals/${deal.id}`} className="block group">
-      <div
-        className={`flex items-center gap-3 rounded-lg border border-border/60 border-l-[3px] px-4 py-3 transition-all duration-150 hover:shadow-md hover:border-white/20 ${urgencyStyles[urgency]}`}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-foreground group-hover:text-qep-orange transition-colors">
+    <MotionItem onClick={() => navigate(`/qrm/deals/${deal.id}`)}>
+      <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-4 items-center relative z-10">
+        <div className="col-span-12 md:col-span-6">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-white group-hover:text-qep-orange transition-colors">
               {deal.name}
             </span>
             {urgencyBadge[urgency]}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+          <div className="text-xs text-slate-400 flex items-center gap-2">
             <span className="inline-flex items-center gap-1">
               <CircleDot className="h-3 w-3" aria-hidden />
               {deal.stage_name}
             </span>
-            {deal.amount != null && (
-              <span className="tabular-nums">
-                {formatCurrency(deal.amount)}
-              </span>
-            )}
             {deal.contactName && (
               <>
                 <span className="text-white/20">·</span>
@@ -523,12 +521,18 @@ function FollowUpItem({ deal }: { deal: EnrichedDeal }) {
             )}
           </div>
         </div>
-        <ChevronRight
-          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange"
-          aria-hidden
-        />
+        <div className="col-span-6 md:col-span-5 flex justify-end">
+          {deal.amount != null && (
+            <span className="text-sm font-medium text-slate-200 tabular-nums">
+              {formatCurrency(deal.amount)}
+            </span>
+          )}
+        </div>
+        <div className="hidden md:flex col-span-1 justify-end text-slate-500 group-hover:text-qep-orange transition-colors">
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </div>
       </div>
-    </Link>
+    </MotionItem>
   );
 }
 
@@ -608,23 +612,23 @@ function ActionQueueSection({
   if (totalActions === 0) {
     return (
       <section aria-label="Follow-up queue">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="mb-4 flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">
           <Target className="h-4 w-4" aria-hidden />
           Action Queue
         </h2>
-        <Card className="border-border bg-card p-6">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
+        <GlassPanel>
+          <div className="flex flex-col items-center gap-2 text-center py-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 mb-2">
               <Zap className="h-5 w-5 text-emerald-400" aria-hidden />
             </div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-lg font-light text-white">
               All clear — no pending follow-ups
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-slate-400">
               Great work. Focus on advancing your active deals.
             </p>
           </div>
-        </Card>
+        </GlassPanel>
       </section>
     );
   }
@@ -692,20 +696,20 @@ function ActionQueueSection({
 
       {/* Expanded items for the selected category */}
       {openCategory && activeBucket.length > 0 && (
-        <div className="space-y-2 animate-in slide-in-from-top-2 fade-in duration-200">
+        <MotionList className="space-y-2 mt-4 animate-in slide-in-from-top-2 fade-in duration-200">
           {visibleDeals.map((deal) => (
             <FollowUpItem key={deal.id} deal={deal} />
           ))}
           {remaining > 0 && (
             <Link
               to="/qrm/deals"
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-qep-orange hover:border-qep-orange/30"
+              className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs font-bold tracking-[0.1em] uppercase text-slate-400 transition-colors hover:text-qep-orange hover:border-qep-orange/30"
             >
               View {remaining} more in pipeline
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-4 w-4" />
             </Link>
           )}
-        </div>
+        </MotionList>
       )}
     </section>
   );
@@ -733,19 +737,19 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
 
   return (
     <section aria-label="Deal momentum">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">
           <TrendingUp className="h-4 w-4" aria-hidden />
           Deal Momentum
         </h2>
         <Link
           to="/qrm/deals"
-          className="text-xs text-muted-foreground hover:text-qep-orange transition-colors"
+          className="text-xs font-bold tracking-[0.1em] uppercase text-slate-400 hover:text-qep-orange transition-colors"
         >
           All deals
         </Link>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {visibleDeals.map((deal) => {
           const heatCfg = HEAT_CONFIG[deal.heat];
           const HeatIcon = heatCfg.icon;
@@ -753,38 +757,38 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
             <Link
               key={deal.id}
               to={`/qrm/deals/${deal.id}`}
-              className="group"
+              className="group block"
             >
-              <Card className="h-full border-border bg-card p-4 transition-all duration-150 hover:shadow-md hover:border-white/20">
-                <div className="flex items-start justify-between mb-2">
+              <GlassPanel className="h-full p-5 transition-all duration-300 hover:-translate-y-1">
+                <div className="flex items-start justify-between mb-4">
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${heatCfg.badgeClass}`}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold tracking-[0.2em] uppercase ${heatCfg.badgeClass}`}
                   >
                     <HeatIcon className="h-3 w-3" aria-hidden />
                     {heatCfg.label}
                   </span>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ArrowUpRight className="h-3.5 w-3.5 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <p className="text-sm font-semibold text-foreground truncate group-hover:text-qep-orange transition-colors">
+                <p className="text-sm font-medium text-white truncate group-hover:text-qep-orange transition-colors">
                   {deal.name}
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                <p className="mt-1 text-xs text-slate-400 truncate">
                   {deal.stage_name}
                   {deal.contactName ? ` · ${deal.contactName}` : ""}
                 </p>
-                <div className="mt-3 flex items-baseline justify-between">
-                  <span className="text-lg font-bold tabular-nums text-foreground">
+                <div className="mt-4 flex items-baseline justify-between">
+                  <span className="text-xl font-light tabular-nums text-slate-200">
                     {deal.amount != null
                       ? formatCurrency(deal.amount)
                       : "—"}
                   </span>
                   {deal.last_activity_at && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">
                       {timeAgo(deal.last_activity_at)}
                     </span>
                   )}
                 </div>
-              </Card>
+              </GlassPanel>
             </Link>
           );
         })}
@@ -792,7 +796,7 @@ function DealMomentumSection({ deals }: { deals: EnrichedDeal[] }) {
       {hasMore && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/40 bg-white/[0.02] px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground hover:border-white/20"
+          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400 transition-colors hover:text-white hover:border-white/20"
         >
           {showAll ? "Show less" : `Show ${topDeals.length - MOMENTUM_PEEK} more deals`}
           <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAll && "rotate-180")} />
@@ -814,49 +818,50 @@ function FieldIntelligenceSection({
   if (voiceCaptures.length === 0) {
     return (
       <section aria-label="Field intelligence">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="mb-4 flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">
           <Mic className="h-4 w-4" aria-hidden />
           Field Intelligence
         </h2>
-        <Card className="border-border bg-card p-6">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-qep-orange/10">
+        <GlassPanel>
+          <div className="flex flex-col items-center gap-2 text-center py-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-qep-orange/10 mb-2">
               <Mic className="h-5 w-5 text-qep-orange" aria-hidden />
             </div>
-            <p className="text-sm font-medium text-foreground">
+            <p className="text-lg font-light text-white">
               No voice captures yet
             </p>
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-sm text-slate-400 mb-4">
               Record field visits to build your deal intelligence.
             </p>
             <Button
               size="sm"
               variant="outline"
               onClick={() => navigate("/voice")}
+              className="rounded-full border-white/10 text-slate-300 hover:text-white hover:bg-white/5"
             >
               Record Field Note
             </Button>
           </div>
-        </Card>
+        </GlassPanel>
       </section>
     );
   }
 
   return (
     <section aria-label="Field intelligence">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">
           <Mic className="h-4 w-4" aria-hidden />
           Field Intelligence
         </h2>
         <Link
           to="/voice/history"
-          className="text-xs text-muted-foreground hover:text-qep-orange transition-colors"
+          className="text-xs font-bold tracking-[0.1em] uppercase text-slate-400 hover:text-qep-orange transition-colors"
         >
           All captures
         </Link>
       </div>
-      <div className="space-y-2">
+      <MotionList>
         {voiceCaptures.map((vc) => {
           const extracted = normalizeExtractedDealData(vc.extracted_data);
           const contactName = getExtractedContactLabel(extracted);
@@ -869,31 +874,30 @@ function FieldIntelligenceSection({
             : null;
 
           return (
-            <Card
+            <MotionItem
               key={vc.id}
-              className="border-border bg-card px-4 py-3 transition-all duration-150 hover:shadow-md hover:border-white/20"
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="w-full flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground">
+                  <div className="flex items-center gap-3 flex-wrap mb-1">
+                    <span className="text-sm font-medium text-white">
                       {contactName ?? "Voice capture"}
                     </span>
                     {sentimentInfo && (
-                      <Badge
-                        variant={sentimentInfo.variant}
-                        className="text-[10px] px-1.5 py-0"
+                      <span
+                        className={cn("text-[10px] font-bold tracking-[0.2em] uppercase px-2 py-1 rounded-md", 
+                          sentimentInfo.variant === "success" ? "bg-emerald-500/10 text-emerald-400" :
+                          sentimentInfo.variant === "destructive" ? "bg-red-500/10 text-red-400" :
+                          "bg-white/5 text-slate-300"
+                        )}
                       >
                         {sentimentInfo.label}
-                      </Badge>
+                      </span>
                     )}
                     {vc.manager_attention && (
-                      <Badge
-                        variant="destructive"
-                        className="text-[10px] px-1.5 py-0"
-                      >
+                      <span className="text-[10px] font-bold tracking-[0.2em] uppercase px-2 py-1 rounded-md bg-red-500/10 text-red-400">
                         Flagged
-                      </Badge>
+                      </span>
                     )}
                   </div>
                   {snippet && (
@@ -906,14 +910,13 @@ function FieldIntelligenceSection({
                   {timeAgo(vc.created_at)}
                 </span>
               </div>
-            </Card>
+            </MotionItem>
           );
         })}
-      </div>
+      </MotionList>
     </section>
   );
 }
-
 
 // ─── Loading Skeleton ────────────────────────────────────────────
 
@@ -1021,20 +1024,20 @@ export function SalesCommandCenter({
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto bg-qep-bg min-h-full">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto min-h-full">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="mb-6 sm:mb-8">
+      <div className="mb-10 sm:mb-12">
         <div className="flex items-baseline justify-between flex-wrap gap-2">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+          <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white">
             {greeting}, {firstName}.
           </h1>
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500 tabular-nums">
             {todayFormatted}
           </span>
         </div>
         {subtitle && (
           <p
-            className={`mt-1.5 text-sm font-medium ${subtitleColorMap[subtitle.tone]}`}
+            className={`mt-4 text-lg font-light ${subtitleColorMap[subtitle.tone]}`}
           >
             {subtitle.text}
           </p>
@@ -1042,12 +1045,12 @@ export function SalesCommandCenter({
       </div>
 
       {/* ── AI Briefing (hero position, shared with the Iron dashboards) ─ */}
-      <div className="mb-8">
+      <div className="mb-10">
         <MorningBriefSection />
       </div>
 
       {/* ── Metrics ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <MetricCard
           label="Pipeline"
           value={formatCurrency(data.totalPipelineValue)}
@@ -1093,12 +1096,12 @@ export function SalesCommandCenter({
       </div>
 
       {/* ── Deal Momentum ──────────────────────────────────────── */}
-      <div className="mb-8">
+      <div className="mb-10">
         <DealMomentumSection deals={data.deals} />
       </div>
 
       {/* ── Action Queue (with filter pills) ───────────────────── */}
-      <div className="mb-8">
+      <div className="mb-10">
         <ActionQueueSection
           overdueFollowUps={data.overdueFollowUps}
           todayFollowUps={data.todayFollowUps}
@@ -1107,7 +1110,7 @@ export function SalesCommandCenter({
       </div>
 
       {/* ── Field Intelligence ─────────────────────────────────── */}
-      <div className="mb-8">
+      <div className="mb-10">
         <FieldIntelligenceSection voiceCaptures={data.voiceCaptures} />
       </div>
     </div>

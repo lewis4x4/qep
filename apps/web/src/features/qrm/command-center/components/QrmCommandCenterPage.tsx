@@ -10,7 +10,7 @@ import { useCallback, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
 import type { UserRole } from "@/lib/database.types";
 import { isIronRole, resolveIronRoleAndBlend } from "../../lib/iron-roles";
 import { useIronRoleBlend } from "../../lib/useIronRoleBlend";
@@ -76,41 +76,41 @@ export function QrmCommandCenterPage({
   }, []);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-[1400px] space-y-6 p-4 sm:p-6 lg:p-8 min-h-full">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
-          <h1 className="text-[28px] font-bold leading-8 text-foreground">{headline.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{headline.subtitle}</p>
+          <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mb-2">{headline.title}</h1>
+          <p className="text-lg font-light text-slate-400">{headline.subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="border-qep-orange/30 text-qep-orange">
+          <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-qep-orange bg-qep-orange/10 px-3 py-1 rounded-full">
             {ironRoleInfo.display}
             {dominantWeightLabel}
-          </Badge>
-          <Badge variant="outline" className="border-border/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+          </span>
+          <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500 bg-white/5 px-3 py-1 rounded-full">
             Slice 1 · spine
-          </Badge>
+          </span>
         </div>
       </header>
 
       {query.isLoading && (
-        <Card className="flex items-center justify-center gap-3 border-border/60 bg-card/40 p-10 text-sm text-muted-foreground">
+        <GlassPanel className="flex items-center justify-center gap-3 py-20 text-sm text-slate-400">
           <Loader2 className="h-4 w-4 animate-spin text-qep-orange" />
           Loading QRM Command Center...
-        </Card>
+        </GlassPanel>
       )}
 
       {query.isError && (
-        <Card className="flex flex-col items-center gap-3 border-rose-500/40 bg-rose-500/[0.05] p-10 text-sm text-rose-500">
+        <GlassPanel className="flex flex-col items-center gap-3 border-red-500/40 bg-red-500/[0.02] py-20 text-sm text-red-400">
           <AlertTriangle className="h-5 w-5" />
-          <p className="font-medium">Could not load Command Center</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-lg font-light">Could not load Command Center</p>
+          <p className="text-xs text-red-400/80 mb-4">
             {query.error instanceof Error ? query.error.message : "Unknown error"}
           </p>
-          <Button size="sm" variant="outline" onClick={() => query.refetch()}>
+          <Button size="sm" variant="outline" onClick={() => query.refetch()} className="rounded-full border-red-500/20 hover:bg-red-500/10">
             Retry
           </Button>
-        </Card>
+        </GlassPanel>
       )}
 
       {query.data && (

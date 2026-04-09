@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { DashboardPivotToggle } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
@@ -125,28 +125,28 @@ export function CommandCenterPage() {
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-6 mb-8">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-qep-orange">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-qep-orange font-bold">
             QEP OS · Live Executive Operating Room
           </p>
-          <h1 className="text-2xl font-bold text-foreground">Executive Command Center</h1>
-          <p className="mt-0.5 max-w-3xl text-[11px] text-muted-foreground">
+          <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mt-2">Executive Command Center</h1>
+          <p className="mt-3 max-w-3xl text-sm font-light text-slate-400">
             The leadership control surface for revenue, finance discipline, execution reliability, and intervention
             flow. This is the live command layer, not the showcase.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <CommandCenterExportMenu role={exportRole} />
-          <Button size="sm" variant="outline" onClick={handleRefresh}>
-            <RefreshCcw className="mr-1 h-3 w-3" /> Refresh
+          <Button size="sm" variant="outline" onClick={handleRefresh} className="rounded-full border-white/10 hover:bg-white/5 text-white">
+            <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
           </Button>
         </div>
       </div>
 
       {tab !== "overview" && (
-        <div className="grid gap-4 xl:grid-cols-[1.45fr_0.95fr]">
-          <Card className="overflow-hidden border-qep-orange/20 bg-[radial-gradient(circle_at_top_left,rgba(184,115,51,0.16),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-5">
+        <div className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr] mb-6">
+          <GlassPanel className="p-8">
             <div className="flex flex-col gap-5">
               <div className="space-y-2">
                 <div className="inline-flex items-center rounded-full border border-qep-orange/25 bg-qep-orange/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-qep-orange">
@@ -189,15 +189,15 @@ export function CommandCenterPage() {
                           <p className="text-[10px] text-muted-foreground">{lens.title}</p>
                         </div>
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-muted-foreground">{lens.detail}</p>
+                      <p className="mt-3 text-xs leading-5 text-slate-400">{lens.detail}</p>
                     </button>
                   );
                 })}
               </div>
             </div>
-          </Card>
+          </GlassPanel>
 
-          <Card className="p-5">
+          <GlassPanel className="p-8">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-qep-orange">Intervention paths</p>
@@ -233,7 +233,7 @@ export function CommandCenterPage() {
                 );
               })}
             </div>
-          </Card>
+          </GlassPanel>
         </div>
       )}
 

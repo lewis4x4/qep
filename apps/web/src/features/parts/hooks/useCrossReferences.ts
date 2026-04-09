@@ -34,18 +34,19 @@ export function useCrossReferences(
   partNumber: string | null | undefined,
   branchId?: string | null,
 ) {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery({
-    queryKey: ["parts-cross-references", partNumber, branchId, ws],
-    enabled: Boolean(partNumber) && Boolean(ws),
+    queryKey: ["parts-cross-references", partNumber, branchId, workspaceId],
+    enabled: Boolean(partNumber) && Boolean(workspaceId),
     staleTime: 2 * 60_000,
     queryFn: async (): Promise<SubstituteRow[]> => {
-      if (!partNumber || !ws) return [];
+      if (!partNumber || !workspaceId) return [];
 
       try {
         const params: Record<string, unknown> = {
-          p_workspace_id: ws,
+          p_workspace_id: workspaceId,
           p_part_number: partNumber,
         };
         if (branchId) params.p_branch_id = branchId;

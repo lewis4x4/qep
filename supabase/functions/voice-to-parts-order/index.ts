@@ -13,6 +13,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -259,13 +260,7 @@ Deno.serve(async (req) => {
   }
   const transcript = rawTranscript.slice(0, MAX_TRANSCRIPT_LENGTH);
 
-  // Get workspace
-  const { data: pw } = await supabase
-    .from("profile_workspaces")
-    .select("workspace_id")
-    .eq("profile_id", userId)
-    .maybeSingle();
-  const workspaceId = pw?.workspace_id ?? "default";
+  const workspaceId = await resolveProfileActiveWorkspaceId(adminClient, userId);
 
   // 1. AI extraction
   const extraction = await extractFromTranscript(transcript);

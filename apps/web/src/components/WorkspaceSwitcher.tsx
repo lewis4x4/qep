@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, ChevronDown } from "lucide-react";
 import {
@@ -12,6 +12,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useWorkspaceMemberships } from "@/hooks/useWorkspaceMemberships";
+import { toast } from "@/hooks/use-toast";
+import { clearCachedProfile } from "@/lib/auth-recovery";
+import { performWorkspaceSwitch } from "@/components/workspace-switcher-actions";
+import { pushPresence } from "@/lib/iron/presence";
 
 interface WorkspaceSwitcherProps {
   activeWorkspaceId: string;
@@ -26,32 +30,31 @@ export function WorkspaceSwitcher({ activeWorkspaceId }: WorkspaceSwitcherProps)
   const queryClient = useQueryClient();
   const { data: memberships = [], isLoading } = useWorkspaceMemberships();
   const [switching, setSwitching] = useState(false);
+  const switchingRef = useRef(false);
 
   const handleSwitch = useCallback(
     async (target: string) => {
-      if (target === activeWorkspaceId || switching) return;
       setSwitching(true);
+      // Iron presence: pulse the avatar 'listening' for the duration of
+      // the switch so the user gets a visible "I'm hearing you" cue.
+      const releasePresence = pushPresence("workspace-switch", "listening", { ttlMs: 6000 });
       try {
-        const { error } = await supabase.rpc("set_active_workspace", { target });
-        if (error) {
-          // eslint-disable-next-line no-console
-          console.error("[workspace-switcher] set_active_workspace failed:", error.message);
-          return;
-        }
-        // Pull a fresh JWT so app_metadata claims reflect the new workspace.
-        await supabase.auth.refreshSession();
-        // Invalidate the entire react-query cache — most keys are workspace-scoped.
-        queryClient.clear();
-        // Hard reload as a v1 safety net so every module re-initializes cleanly.
-        window.location.reload();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[workspace-switcher] switch failed:", err);
+        await performWorkspaceSwitch({
+          activeWorkspaceId,
+          target,
+          switchingRef,
+          supabaseClient: supabase,
+          queryClient,
+          notify: toast,
+          clearProfileCache: clearCachedProfile,
+          reload: () => window.location.reload(),
+        });
       } finally {
         setSwitching(false);
+        releasePresence();
       }
     },
-    [activeWorkspaceId, queryClient, switching],
+    [activeWorkspaceId, queryClient],
   );
 
   // Don't render anything unless the user has more than one membership.

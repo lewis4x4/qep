@@ -6,8 +6,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
 import { resolveNavItems, BOTTOM_TAB_HREFS } from "@/lib/nav-config";
-import { NavRail } from "@/components/NavRail";
 import { TopBar } from "@/components/TopBar";
+import { AmbientMatrix } from "@/components/primitives/AmbientMatrix";
 
 interface Profile {
   id: string;
@@ -223,14 +223,13 @@ export function AppLayout({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-transparent relative z-0">
+      <AmbientMatrix />
+      
       {/* Desktop: enhanced top bar */}
-      <TopBar profile={profile} onLogout={onLogout} />
-
-      {/* Desktop: hover-expand nav rail */}
-      <NavRail
-        profile={profile}
-        onLogout={onLogout}
+      <TopBar 
+        profile={profile} 
+        onLogout={onLogout} 
         quoteBuilderEnabled={quoteBuilderEnabled}
         quoteBuilderLoading={quoteBuilderLoading}
       />
@@ -275,8 +274,8 @@ export function AppLayout({
 
       {/* Main content */}
       {/* pt-14: clears mobile top header; pb-16: clears mobile bottom tab bar */}
-      {/* lg:pt-[56px]: clears desktop top bar; lg:pb-0; lg:ml-16: always-collapsed rail width */}
-      <main className="flex-1 pt-14 pb-16 lg:pt-[56px] lg:pb-0 lg:ml-16 min-h-screen">
+      {/* lg:pt-[72px]: clears desktop top bar; lg:pb-0; no left margin */}
+      <main className="flex-1 pt-14 pb-16 lg:pt-[72px] lg:pb-0 min-h-screen">
         {children}
       </main>
     </div>

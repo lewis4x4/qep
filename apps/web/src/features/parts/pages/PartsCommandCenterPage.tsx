@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Card } from "@/components/ui/card";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { Button } from "@/components/ui/button";
 import { PartsSubNav } from "../components/PartsSubNav";
 import { OrderPipelineBoard } from "../components/OrderPipelineBoard";
@@ -62,7 +62,7 @@ export function PartsCommandCenterPage() {
 
       {/* Orders section — loading/error only gates the pipeline, not all cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <Card className="p-4">
+        <GlassPanel className="p-6">
           {ordersQ.isLoading ? (
             <div className="space-y-2">
               <div className="h-3 w-20 rounded bg-muted animate-pulse" />
@@ -82,10 +82,10 @@ export function PartsCommandCenterPage() {
               </Link>
             </>
           )}
-        </Card>
+        </GlassPanel>
         <VendorMetricsCard />
         {stockoutCount > 0 && (
-          <Card className="p-4 border-red-500/30 bg-red-500/5">
+          <GlassPanel className="p-6 border-red-500/30 bg-red-500/5">
             <p className="text-[11px] font-medium uppercase text-red-700 dark:text-red-400">
               Stockouts
             </p>
@@ -98,7 +98,7 @@ export function PartsCommandCenterPage() {
             >
               Resolve now
             </Link>
-          </Card>
+          </GlassPanel>
         )}
       </div>
 

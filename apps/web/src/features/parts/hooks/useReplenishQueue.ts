@@ -35,13 +35,17 @@ export interface ReplenishSummary {
 }
 
 export function useReplenishQueue() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<ReplenishSummary>({
-    queryKey: ["replenish-queue", ws],
-    enabled: !!ws,
+    queryKey: ["replenish-queue", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 30_000,
     queryFn: async () => {
+      if (!workspaceId) {
+        return { rows: [], pendingCount: 0, autoApprovedCount: 0, totalEstimated: 0 };
+      }
       let rows: ReplenishQueueRow[] = [];
 
       try {
@@ -51,7 +55,7 @@ export function useReplenishQueue() {
             *,
             vendor_profiles!parts_auto_replenish_queue_selected_vendor_id_fkey ( name )
           `)
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .in("status", ["pending", "auto_approved"])
           .order("created_at", { ascending: false })
           .limit(50);
@@ -67,7 +71,7 @@ export function useReplenishQueue() {
         const { data, error } = await supabase
           .from("parts_auto_replenish_queue")
           .select("*")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .in("status", ["pending", "auto_approved"])
           .order("created_at", { ascending: false })
           .limit(50);

@@ -4,6 +4,7 @@ import {
   resolveCallerContext,
   type UserRole,
 } from "../_shared/dge-auth.ts";
+import { resolveEffectiveWorkspaceId } from "../_shared/workspace.ts";
 import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -200,28 +201,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function cleanUuid(value: unknown): string | null {
   const s = cleanString(value);
   return s && UUID_RE.test(s) ? s : null;
-}
-
-function parseWorkspaceIdFromAuthHeader(authHeader: string | null): string {
-  if (!authHeader?.startsWith("Bearer ")) return "default";
-
-  try {
-    const token = authHeader.slice("Bearer ".length);
-    const parts = token.split(".");
-    if (parts.length < 2) return "default";
-    const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const payload = JSON.parse(payloadJson) as {
-      workspace_id?: string;
-      app_metadata?: { workspace_id?: string };
-      user_metadata?: { workspace_id?: string };
-    };
-    return payload.workspace_id ??
-      payload.app_metadata?.workspace_id ??
-      payload.user_metadata?.workspace_id ??
-      "default";
-  } catch {
-    return "default";
-  }
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -2238,7 +2217,11 @@ Deno.serve(async (req) => {
     }
 
     const context = parseChatContext(rawContext);
-    const workspaceId = parseWorkspaceIdFromAuthHeader(caller.authHeader);
+    const workspaceId = await resolveEffectiveWorkspaceId({
+      adminClient,
+      callerClient,
+      userId: caller.userId,
+    });
     const retrievalStartedAt = Date.now();
     const embedResult = await embedQuery(rawMessage, traceId);
     const failClosedOnEmbedding = Deno.env.get("CHAT_FAIL_CLOSED_ON_EMBEDDING") === "true";

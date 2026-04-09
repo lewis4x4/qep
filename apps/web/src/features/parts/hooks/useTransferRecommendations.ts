@@ -30,18 +30,22 @@ export interface TransferSummary {
 }
 
 export function useTransferRecommendations() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<TransferSummary>({
-    queryKey: ["transfer-recommendations", ws],
-    enabled: !!ws,
+    queryKey: ["transfer-recommendations", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 60_000,
     queryFn: async () => {
+      if (!workspaceId) {
+        return { rows: [], pendingCount: 0, totalSavings: 0, criticalCount: 0 };
+      }
       try {
         const { data, error } = await supabase
           .from("parts_transfer_recommendations")
           .select("*")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .eq("status", "pending")
           .order("net_savings", { ascending: false })
           .limit(20);

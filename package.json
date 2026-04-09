@@ -37,12 +37,15 @@
     "demo:full:local": "QEP_DEMO_PREFER_LOCAL=1 bun ./scripts/demo/full-seed.mjs baseline-local",
     "demo:verify": "bun ./scripts/demo/verify-seed.mjs",
     "verify:parts-contracts": "bun ./scripts/verify/parts-engine-contracts.mjs",
+    "verify:workspace-identity": "bun ./scripts/verify/workspace-identity-contracts.mjs",
     "verify:service-cron-logging": "bun ./scripts/verify/service-cron-logging.mjs",
     "test:planner-rules": "bun test apps/web/src/features/service/lib/planner-rules.test.ts",
+    "test:workspace-web": "bun test apps/web/src/hooks/useMyWorkspaceId.test.ts apps/web/src/features/parts/hooks/workspace-scoped-hooks.test.ts apps/web/src/components/WorkspaceSwitcher.test.ts",
+    "test:workspace-edge": "deno test supabase/functions/_shared/workspace.test.ts",
     "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net",
     "test:vendor-inbound-contract": "deno test supabase/functions/_shared/vendor-inbound-contract.test.ts",
     "test:vendor-escalation-resend": "deno test supabase/functions/_shared/vendor-escalation-resend.test.ts",
-    "verify:service-slice": "bun run verify:parts-contracts && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:vendor-inbound-contract && bun run test:vendor-escalation-resend"
+    "verify:service-slice": "bun run verify:parts-contracts && bun run verify:workspace-identity && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:workspace-web && bun run test:workspace-edge && bun run test:vendor-inbound-contract && bun run test:vendor-escalation-resend"
   },
   "dependencies": {
     "@sentry/node": "^10.47.0"

@@ -23,6 +23,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
@@ -57,13 +58,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
 
-    // Resolve caller workspace from profiles (never trust the request)
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("active_workspace_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    const workspace = (profile?.active_workspace_id as string | undefined) ?? "default";
+    const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
 
     // ── /create-checkout ──────────────────────────────────────────────
     if (action === "create-checkout" && req.method === "POST") {

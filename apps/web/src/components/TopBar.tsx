@@ -33,7 +33,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
-import { getInitials } from "@/lib/nav-config";
+import { getInitials, resolveNavItems } from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
 import { QrmGlobalSearchCommand } from "@/features/qrm/components/QrmGlobalSearchCommand";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
@@ -52,6 +52,8 @@ interface Profile {
 interface TopBarProps {
   profile: Profile;
   onLogout: () => void;
+  quoteBuilderEnabled?: boolean;
+  quoteBuilderLoading?: boolean;
 }
 
 const BELL_STORAGE_KEY = "qep-bell-last-click";
@@ -222,7 +224,7 @@ function useTopBarBell(profileId: string) {
   };
 }
 
-export function TopBar({ profile, onLogout }: TopBarProps) {
+export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBuilderLoading = false }: TopBarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState("");
@@ -238,6 +240,13 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
   } = useTopBarBell(profile.id);
   const { preference, resolvedDark } = useTheme();
   const showCrmSearch = location.pathname.startsWith("/qrm");
+
+  // Nav Items
+  const navItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
+    .filter((item) => item.roles.includes(profile.role));
+
+  const topLevelNavItems = navItems.filter(item => ["/dashboard", "/qrm", "/service", "/chat", "/os"].includes(item.href));
+  const moreNavItems = navItems.filter(item => !["/dashboard", "/qrm", "/service", "/chat", "/os"].includes(item.href));
 
   const themeAriaLabel =
     preference === "system"
@@ -284,95 +293,87 @@ export function TopBar({ profile, onLogout }: TopBarProps) {
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 z-50 flex items-center px-4 gap-4 bg-qep-dark border-b border-white/10"
-        style={{ height: "56px", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}
+        className="fixed top-4 left-4 right-4 z-50 flex items-center px-6 py-4 gap-4 bg-slate-900/40 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl"
         role="banner"
       >
-        {/* Left: Logo + Breadcrumb */}
+        {/* Left: Logo */}
         <div className="flex items-center gap-3 shrink-0">
           <Link
             to="/dashboard"
-            className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-2"
+            className="flex min-w-0 items-center gap-2"
             aria-label={`${BRAND_NAME} — dashboard`}
           >
-            <div className="shrink-0 rounded bg-black/40 p-0.5 ring-1 ring-white/10">
-              <BrandLogo className="h-7 w-auto max-w-[104px]" decorative />
-            </div>
+            <div className="w-2 h-2 rounded-full bg-qep-orange shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
             <span
-              className="hidden font-semibold text-xs leading-tight text-white sm:inline sm:max-w-[11rem] sm:truncate md:max-w-[14rem] lg:max-w-none"
+              className="hidden font-display tracking-tight font-medium text-sm leading-tight text-white sm:inline"
               title={BRAND_NAME}
               aria-hidden
             >
               {BRAND_NAME}
             </span>
           </Link>
+        </div>
 
+        {/* Center Nav Items */}
+        <nav className="hidden lg:flex items-center justify-center flex-1 gap-6 text-[11px] font-bold tracking-[0.1em] uppercase text-slate-300">
+           {topLevelNavItems.map((item) => {
+             const isActive = location.pathname.startsWith(item.href) && (item.href !== "/dashboard" || location.pathname === "/dashboard" || location.pathname === "/");
+             return (
+               <Link
+                 key={item.href}
+                 to={item.href}
+                 className={cn(
+                   "flex items-center gap-2 hover:text-white transition-colors cursor-pointer",
+                   isActive ? "text-qep-orange" : ""
+                 )}
+               >
+                 <item.icon className="w-4 h-4" />
+                 {item.label}
+               </Link>
+             )
+           })}
+
+           {moreNavItems.length > 0 && (
+             <DropdownMenu>
+               <DropdownMenuTrigger className="flex items-center gap-2 hover:text-white transition-colors outline-none cursor-pointer">
+                 More
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="center" className="w-56 p-2 rounded-2xl bg-slate-900/90 backdrop-blur-xl border-white/10">
+                 {moreNavItems.map(item => (
+                   <DropdownMenuItem key={item.href} asChild className="rounded-xl focus:bg-white/10 focus:text-white cursor-pointer py-3 px-3">
+                     <Link to={item.href} className="flex items-center gap-3 w-full">
+                       <item.icon className="w-4 h-4 text-slate-400" />
+                       <span className="font-medium text-sm capitalize tracking-normal">{item.label}</span>
+                     </Link>
+                   </DropdownMenuItem>
+                 ))}
+               </DropdownMenuContent>
+             </DropdownMenu>
+           )}
+        </nav>
+
+        {/* Right: Search + Bell + Workspace + Avatar */}
+        <div className="flex items-center gap-3 ml-auto shrink-0">
+          <div className="hidden lg:block w-48 transition-all focus-within:w-64">
+            {showCrmSearch ? (
+              <QrmGlobalSearchCommand />
+            ) : (
+              <form onSubmit={handleSearchSubmit} className="w-full">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    placeholder="Search..."
+                    className="w-full pl-9 pr-4 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-qep-orange focus:bg-white/10 transition-all"
+                  />
+                </div>
+              </form>
+            )}
+          </div>
+          
           <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
-
-          {breadcrumbLabel && (
-            <nav
-              aria-label="Breadcrumb"
-              className="hidden lg:flex items-center gap-1.5 text-sm"
-            >
-              {isCrmSubPage ? (
-                <>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <Link to="/qrm" className="text-[#8A9BAE] hover:text-white transition-colors">
-                    QRM
-                  </Link>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <span className="text-white font-medium">{breadcrumbLabel}</span>
-                </>
-              ) : isAdminSubPage ? (
-                <>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <Link to="/admin" className="text-[#8A9BAE] hover:text-white transition-colors">
-                    Admin
-                  </Link>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <span className="text-white font-medium">{breadcrumbLabel}</span>
-                </>
-              ) : (
-                <>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#8A9BAE]" aria-hidden="true" />
-                  <span className="text-white font-medium">{breadcrumbLabel}</span>
-                </>
-              )}
-            </nav>
-          )}
-        </div>
-
-        {/* Center: Global search */}
-        <div className="hidden lg:flex flex-1 justify-center" role="search">
-          {showCrmSearch ? (
-            <QrmGlobalSearchCommand />
-          ) : (
-            <form onSubmit={handleSearchSubmit} className="w-full max-w-[400px]">
-              <div className="relative">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8A9BAE] pointer-events-none"
-                  aria-hidden="true"
-                />
-                <input
-                  type="search"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  placeholder="Search knowledge base, quotes, team..."
-                  aria-label="Global search"
-                  className={cn(
-                    "w-full pl-9 pr-4 py-1.5 text-sm rounded-full",
-                    "bg-white/10 border border-white/20 text-white placeholder:text-[#8A9BAE]",
-                    "focus:outline-none focus:ring-2 focus:ring-qep-orange focus:bg-white/15",
-                    "transition-all duration-150"
-                  )}
-                />
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Right: Quick action + Bell + Avatar */}
-        <div className="flex items-center gap-2 ml-auto shrink-0">
           {/* Quick action pill */}
           {quickAction && (
             <Button

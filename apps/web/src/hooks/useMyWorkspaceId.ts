@@ -13,15 +13,16 @@ import { useAuth } from "./useAuth";
  * preserved so the 11 existing consumers don't need edits.
  */
 export function useMyWorkspaceId() {
-  const { profile, loading } = useAuth();
+  const { profile, loading, error } = useAuth();
   const workspaceId = profile?.active_workspace_id ?? null;
+  const workspaceError = !loading && error ? new Error(error) : null;
 
   return {
     data: workspaceId,
     isLoading: loading,
     isPending: loading,
-    isError: false as const,
-    error: null,
+    isError: workspaceError !== null,
+    error: workspaceError,
     isSuccess: !loading && workspaceId !== null,
   };
 }

@@ -40,13 +40,17 @@ export interface PredictiveKitsSummary {
 }
 
 export function usePredictiveKits() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<PredictiveKitsSummary>({
-    queryKey: ["predictive-kits", ws],
-    enabled: !!ws,
+    queryKey: ["predictive-kits", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 60_000,
     queryFn: async () => {
+      if (!workspaceId) {
+        return { kits: [], suggestedCount: 0, allInStockCount: 0, partialCount: 0, totalKitValue: 0 };
+      }
       let kits: PredictiveKit[] = [];
 
       try {
@@ -56,7 +60,7 @@ export function usePredictiveKits() {
             *,
             crm_companies!parts_predictive_kits_crm_company_id_fkey ( name )
           `)
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .in("status", ["suggested", "staged"])
           .order("confidence", { ascending: false })
           .limit(30);
@@ -72,7 +76,7 @@ export function usePredictiveKits() {
         const { data, error } = await supabase
           .from("parts_predictive_kits")
           .select("*")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .in("status", ["suggested", "staged"])
           .order("confidence", { ascending: false })
           .limit(30);

@@ -11,6 +11,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -322,16 +323,9 @@ Deno.serve(async (req) => {
     ? body.equipment_context.trim() || null
     : null;
 
-  // Get workspace
-  const { data: pw } = await auth.supabase
-    .from("profile_workspaces")
-    .select("workspace_id")
-    .eq("profile_id", auth.userId)
-    .maybeSingle();
-  const workspaceId = pw?.workspace_id ?? "default";
-
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+  const workspaceId = await resolveProfileActiveWorkspaceId(adminClient, auth.userId);
 
   // 1. Vision identification
   const identification = await identifyFromPhoto(imageBase64, mimeType, equipmentContext);

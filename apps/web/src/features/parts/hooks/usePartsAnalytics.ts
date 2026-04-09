@@ -58,18 +58,20 @@ export interface VendorTrend {
 }
 
 export function usePartsAnalytics() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<AnalyticsSnapshot | null>({
-    queryKey: ["parts-analytics", ws],
-    enabled: !!ws,
+    queryKey: ["parts-analytics", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 120_000,
     queryFn: async () => {
+      if (!workspaceId) return null;
       try {
         const { data, error } = await supabase
           .from("parts_analytics_snapshots")
           .select("*")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .order("snapshot_date", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -84,18 +86,20 @@ export function usePartsAnalytics() {
 }
 
 export function useVendorTrends() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<VendorTrend[]>({
-    queryKey: ["vendor-trends", ws],
-    enabled: !!ws,
+    queryKey: ["vendor-trends", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 120_000,
     queryFn: async () => {
+      if (!workspaceId) return [];
       try {
         const { data, error } = await supabase
           .from("vendor_profiles")
           .select("id, name, avg_lead_time_hours, responsiveness_score, fill_rate, composite_score, machine_down_priority")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .is("deleted_at", null)
           .order("composite_score", { ascending: false })
           .limit(20);
@@ -109,18 +113,20 @@ export function useVendorTrends() {
 }
 
 export function usePartsVelocityLive() {
-  const ws = useMyWorkspaceId();
+  const workspaceQ = useMyWorkspaceId();
+  const workspaceId = workspaceQ.data;
 
   return useQuery<{ fastest: FastMovingPart[]; slowest: Array<{ part_number: string; description: string; qty_on_hand: number; updated_at: string }> }>({
-    queryKey: ["parts-velocity", ws],
-    enabled: !!ws,
+    queryKey: ["parts-velocity", workspaceId],
+    enabled: Boolean(workspaceId),
     staleTime: 120_000,
     queryFn: async () => {
+      if (!workspaceId) return { fastest: [], slowest: [] };
       try {
         const { data: lines } = await supabase
           .from("parts_order_lines")
           .select("part_number, description, quantity, unit_price")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .limit(500);
 
         const velocityMap = new Map<string, { desc: string; qty: number; revenue: number }>();
@@ -141,7 +147,7 @@ export function usePartsVelocityLive() {
         const { data: inv } = await supabase
           .from("parts_inventory")
           .select("part_number, qty_on_hand, updated_at")
-          .eq("workspace_id", ws!)
+          .eq("workspace_id", workspaceId)
           .is("deleted_at", null)
           .gt("qty_on_hand", 0)
           .lt("updated_at", cutoff)
