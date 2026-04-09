@@ -327,6 +327,7 @@ Deno.serve(async (req: Request) => {
       const body = parsed as {
         action: string;
         email?: string;
+        password?: string;
         full_name?: string;
         role?: UserRole;
         userId?: string;
@@ -399,6 +400,90 @@ Deno.serve(async (req: Request) => {
         }
 
         // The trigger auto-creates the profile — update role immediately after
+        if (newUser?.user) {
+          await adminClient
+            .from("profiles")
+            .update({ role: body.role, full_name: body.full_name })
+            .eq("id", newUser.user.id);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, userId: newUser?.user?.id }),
+          {
+            status: 201,
+            headers: { ...ch, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // ── CREATE USER (direct, no email invite) ─────────────────────────────
+      if (body.action === "create") {
+        if (!body.email || !body.password || !body.full_name || !body.role) {
+          return new Response(
+            JSON.stringify({
+              error: "email, password, full_name, and role are required",
+            }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (body.password.length < 8) {
+          return new Response(
+            JSON.stringify({
+              error: "Password must be at least 8 characters",
+            }),
+            {
+              status: 400,
+              headers: { ...ch, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        const allowedRoles: UserRole[] = isOwner(caller.role)
+          ? ["rep", "admin", "manager", "owner"]
+          : ["rep"];
+
+        if (!allowedRoles.includes(body.role)) {
+          return deniedResponse({
+            ch,
+            route,
+            action: body.action,
+            callerUserId: caller.id,
+            reasonCode: "create_role_not_allowed",
+            status: 403,
+            error: "You can only create users with role: " +
+              allowedRoles.join(", "),
+          });
+        }
+
+        const { data: newUser, error: createErr } = await adminClient.auth.admin
+          .createUser({
+            email: body.email,
+            password: body.password,
+            email_confirm: true,
+            user_metadata: { full_name: body.full_name },
+          });
+
+        if (createErr) {
+          if (createErr.message.includes("already been registered")) {
+            return new Response(
+              JSON.stringify({
+                error: "A user with that email already exists.",
+              }),
+              {
+                status: 409,
+                headers: { ...ch, "Content-Type": "application/json" },
+              },
+            );
+          }
+          throw createErr;
+        }
+
+        // The on_auth_user_created trigger auto-creates profile + workspace.
+        // Update the role/full_name to the requested values (trigger defaults to 'rep').
         if (newUser?.user) {
           await adminClient
             .from("profiles")

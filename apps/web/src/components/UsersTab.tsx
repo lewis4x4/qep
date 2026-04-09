@@ -104,6 +104,8 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("rep");
   const [inviting, setInviting] = useState(false);
+  const [inviteMode, setInviteMode] = useState<"invite" | "create">("invite");
+  const [invitePassword, setInvitePassword] = useState("");
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [roleDialog, setRoleDialog] = useState<UserRecord | null>(null);
@@ -176,24 +178,35 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   async function handleInvite(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!inviteEmail.trim() || !inviteName.trim()) return;
+    if (inviteMode === "create" && invitePassword.length < 8) return;
     setInviting(true);
     try {
-      await callAdminUsers({
-        action: "invite",
+      const payload: Record<string, unknown> = {
+        action: inviteMode,
         email: inviteEmail.trim().toLowerCase(),
         full_name: inviteName.trim(),
         role: inviteRole,
+      };
+      if (inviteMode === "create") {
+        payload.password = invitePassword;
+      }
+      await callAdminUsers(payload);
+      toast({
+        title: inviteMode === "create" ? "User created" : "Invite sent",
+        description: inviteMode === "create"
+          ? `${inviteName.trim()} can now sign in.`
+          : `Invite sent to ${inviteEmail.trim()}`,
       });
-      toast({ title: "Invite sent", description: `Invite sent to ${inviteEmail.trim()}` });
       setInviteEmail("");
       setInviteName("");
       setInviteRole("rep");
+      setInvitePassword("");
       setShowInvite(false);
       await loadUsers();
     } catch (err) {
       toast({
-        title: "Invite failed",
-        description: err instanceof Error ? err.message : "Invite failed",
+        title: inviteMode === "create" ? "Creation failed" : "Invite failed",
+        description: err instanceof Error ? err.message : "Failed",
         variant: "destructive",
       });
     } finally {
@@ -276,15 +289,48 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
       </div>
 
       {/* Invite Dialog */}
-      <Dialog open={showInvite} onOpenChange={setShowInvite}>
+      <Dialog open={showInvite} onOpenChange={(open) => {
+        setShowInvite(open);
+        if (!open) { setInviteMode("invite"); setInvitePassword(""); }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite team member</DialogTitle>
+            <DialogTitle>Add team member</DialogTitle>
             <DialogDescription>
-              They'll receive an email to set up their account.
+              {inviteMode === "create"
+                ? "Create an account with a password. The user can sign in immediately."
+                : "They'll receive an email to set up their account."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => void handleInvite(e)} className="space-y-4 pt-1">
+            {/* Mode toggle */}
+            <div className="flex rounded-md border border-input overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setInviteMode("invite")}
+                className={cn(
+                  "flex-1 px-3 py-1.5 text-xs font-medium transition-colors",
+                  inviteMode === "invite"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted",
+                )}
+              >
+                Send Invite
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteMode("create")}
+                className={cn(
+                  "flex-1 px-3 py-1.5 text-xs font-medium transition-colors",
+                  inviteMode === "create"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background text-muted-foreground hover:bg-muted",
+                )}
+              >
+                Create Directly
+              </button>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="invite-name">Full Name</Label>
               <Input
@@ -306,6 +352,20 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                 required
               />
             </div>
+            {inviteMode === "create" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="invite-password">Password</Label>
+                <Input
+                  id="invite-password"
+                  type="password"
+                  value={invitePassword}
+                  onChange={(e) => setInvitePassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  minLength={8}
+                  required
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Label htmlFor="invite-role">Role</Label>
@@ -338,7 +398,9 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                 Cancel
               </Button>
               <Button type="submit" disabled={inviting}>
-                {inviting ? "Sending…" : "Send Invite"}
+                {inviting
+                  ? (inviteMode === "create" ? "Creating…" : "Sending…")
+                  : (inviteMode === "create" ? "Create User" : "Send Invite")}
               </Button>
             </DialogFooter>
           </form>
