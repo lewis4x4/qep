@@ -33,7 +33,8 @@ import { supabase } from "@/lib/supabase";
 import { crmSupabase } from "../lib/qrm-supabase";
 import type { UserRole } from "@/lib/database.types";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { getIronRole } from "../lib/iron-roles";
+import { getEffectiveIronRole } from "../lib/iron-roles";
+import { useIronRoleBlend } from "../lib/useIronRoleBlend";
 
 // ─── Props ──────────────────────────────────────────────────────
 
@@ -710,7 +711,9 @@ function QrmSkeleton() {
 export function QrmHubPage({ userRole, userId, ironRoleFromProfile }: QrmHubPageProps) {
   const queryClient = useQueryClient();
   const isElevated = ["admin", "manager", "owner"].includes(userRole);
-  const ironRole = getIronRole(userRole, ironRoleFromProfile);
+  // Phase 0 P0.5 — blend-aware effective role.
+  const { blend: blendRows } = useIronRoleBlend(userId);
+  const ironRole = getEffectiveIronRole(userRole, blendRows, ironRoleFromProfile);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["crm-intel", userId],

@@ -8,6 +8,7 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import {
   assignLane,
+  blendRoleWeights,
   buildPipelinePressure,
   classifyBlocker,
   classifyMetaStage,
@@ -18,6 +19,7 @@ import {
   rankChiefOfStaff,
   scoreDealForRecommendation,
   scoreDeals,
+  scoreDealsWithBlend,
 } from "./ranking.ts";
 import type {
   ContactCompanyLookup,
@@ -218,4 +220,124 @@ Deno.test("formatRationale rewrites bare 'CRM' to 'QRM'", () => {
 Deno.test("formatRationale leaves substrings like 'scrambler' alone", () => {
   assertEquals(formatRationale("scrambler running"), "scrambler running");
   assertEquals(formatRationale("microcrm not a token"), "microcrm not a token");
+});
+
+// ─── Phase 0 P0.5 — blendRoleWeights + scoreDealsWithBlend ────────────────
+
+Deno.test("blendRoleWeights with single 1.0 entry equals getRoleWeights for that role", () => {
+  for (const role of ["iron_advisor", "iron_manager", "iron_woman", "iron_man"] as const) {
+    const blended = blendRoleWeights([{ role, weight: 1.0 }]);
+    const direct = getRoleWeights(role);
+    assertEquals(blended, direct, `blend with single ${role} 1.0 should equal getRoleWeights(${role})`);
+  }
+});
+
+Deno.test("blendRoleWeights with empty input falls back to ADVISOR_WEIGHTS", () => {
+  const blended = blendRoleWeights([]);
+  const direct = getRoleWeights("iron_advisor");
+  assertEquals(blended, direct);
+});
+
+Deno.test("blendRoleWeights linearly combines per-role weights", () => {
+  // Manager covering an advisor at 60/40 — every output factor must equal
+  // 0.6 * MANAGER + 0.4 * ADVISOR for that factor.
+  const blended = blendRoleWeights([
+    { role: "iron_manager", weight: 0.6 },
+    { role: "iron_advisor", weight: 0.4 },
+  ]);
+  const m = getRoleWeights("iron_manager");
+  const a = getRoleWeights("iron_advisor");
+  const eps = 1e-9;
+  assert(Math.abs(blended.expectedRevenue - (m.expectedRevenue * 0.6 + a.expectedRevenue * 0.4)) < eps);
+  assert(Math.abs(blended.urgencyFromCloseDate - (m.urgencyFromCloseDate * 0.6 + a.urgencyFromCloseDate * 0.4)) < eps);
+  assert(Math.abs(blended.stalledPenalty - (m.stalledPenalty * 0.6 + a.stalledPenalty * 0.4)) < eps);
+  assert(Math.abs(blended.overdueFollowUp - (m.overdueFollowUp * 0.6 + a.overdueFollowUp * 0.4)) < eps);
+  assert(Math.abs(blended.blockerSeverity - (m.blockerSeverity * 0.6 + a.blockerSeverity * 0.4)) < eps);
+  assert(Math.abs(blended.voiceHeat - (m.voiceHeat * 0.6 + a.voiceHeat * 0.4)) < eps);
+  assert(Math.abs(blended.competitorPressure - (m.competitorPressure * 0.6 + a.competitorPressure * 0.4)) < eps);
+  assert(Math.abs(blended.healthScoreTrend - (m.healthScoreTrend * 0.6 + a.healthScoreTrend * 0.4)) < eps);
+});
+
+Deno.test("blendRoleWeights drops invalid weights without crashing", () => {
+  const blended = blendRoleWeights([
+    { role: "iron_advisor", weight: 1.0 },
+    // @ts-expect-error — testing runtime guard for non-numeric weight
+    { role: "iron_manager", weight: "high" },
+    { role: "iron_woman", weight: 0 }, // tombstone
+    { role: "iron_man", weight: 1.5 }, // out of range
+    { role: "iron_advisor", weight: NaN },
+  ]);
+  // Only the first row survives → blended should equal advisor weights.
+  const direct = getRoleWeights("iron_advisor");
+  assertEquals(blended, direct);
+});
+
+Deno.test("blendRoleWeights with all-invalid input falls back to ADVISOR_WEIGHTS", () => {
+  const blended = blendRoleWeights([
+    { role: "iron_advisor", weight: 0 },
+    { role: "iron_manager", weight: -0.5 },
+  ]);
+  assertEquals(blended, getRoleWeights("iron_advisor"));
+});
+
+Deno.test("blendRoleWeights does NOT normalize sums (drift is a P0.6 concern)", () => {
+  // Sum is 0.6, not 1.0. Result should NOT be scaled up to a "full" weight.
+  const blended = blendRoleWeights([
+    { role: "iron_manager", weight: 0.3 },
+    { role: "iron_advisor", weight: 0.3 },
+  ]);
+  const m = getRoleWeights("iron_manager");
+  const a = getRoleWeights("iron_advisor");
+  const expectedExpectedRevenue = m.expectedRevenue * 0.3 + a.expectedRevenue * 0.3;
+  const eps = 1e-9;
+  assert(Math.abs(blended.expectedRevenue - expectedExpectedRevenue) < eps);
+  // Sanity check: blended.expectedRevenue should be < (m.expectedRevenue) * 1.0
+  assert(blended.expectedRevenue < m.expectedRevenue);
+});
+
+Deno.test("scoreDealsWithBlend matches scoreDeals when blend is single-role 1.0", () => {
+  const deal = makeDeal({ lastActivityAt: "2026-03-15T00:00:00.000Z" });
+  const signals = new Map<string, DealSignalBundle>();
+  const bySingle = scoreDeals([deal], signals, getRoleWeights("iron_manager"), NOW);
+  const byBlend = scoreDealsWithBlend([deal], signals, [{ role: "iron_manager", weight: 1.0 }], NOW);
+  assertEquals(byBlend.length, bySingle.length);
+  assertEquals(byBlend[0].score, bySingle[0].score);
+  assertEquals(byBlend[0].deal.id, bySingle[0].deal.id);
+});
+
+Deno.test("scoreDealsWithBlend produces different ranking than single-role for a 60/40 blend", () => {
+  // Construct two deals where the blocker_severity weight matters: a deal
+  // with a margin-flagged blocker scores higher under MANAGER weights
+  // (blockerSeverity=0.9) than ADVISOR weights (0.6). A 60/40 manager/advisor
+  // blend should land between the two.
+  const blockedDeal = makeDeal({
+    id: "blocked",
+    marginCheckStatus: "flagged",
+    amount: 80_000,
+  });
+  const calmDeal = makeDeal({
+    id: "calm",
+    amount: 80_000,
+    expectedCloseOn: "2026-04-09",
+  });
+  const signals = new Map<string, DealSignalBundle>();
+
+  const advisorScores = scoreDeals([blockedDeal, calmDeal], signals, getRoleWeights("iron_advisor"), NOW);
+  const managerScores = scoreDeals([blockedDeal, calmDeal], signals, getRoleWeights("iron_manager"), NOW);
+  const blendScores = scoreDealsWithBlend(
+    [blockedDeal, calmDeal],
+    signals,
+    [{ role: "iron_manager", weight: 0.6 }, { role: "iron_advisor", weight: 0.4 }],
+    NOW,
+  );
+
+  const advisorBlocked = advisorScores.find((s) => s.deal.id === "blocked")!;
+  const managerBlocked = managerScores.find((s) => s.deal.id === "blocked")!;
+  const blendBlocked = blendScores.find((s) => s.deal.id === "blocked")!;
+
+  // The blend score for the blocked deal must lie strictly between the
+  // advisor-only and manager-only scores (manager weight is heavier on
+  // blocker_severity, so manager > blend > advisor for this deal).
+  assert(blendBlocked.score > advisorBlocked.score, "blend should give blockers more weight than advisor-only");
+  assert(blendBlocked.score < managerBlocked.score, "blend should give blockers less weight than manager-only");
 });

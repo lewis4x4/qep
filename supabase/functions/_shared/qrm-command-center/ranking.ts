@@ -172,6 +172,71 @@ export function getRoleWeights(role: IronRole): FactorWeights {
   }
 }
 
+// ─── Phase 0 P0.5 — blended role weights ───────────────────────────────────
+//
+// The single-role helper above is preserved for backwards compatibility.
+// `blendRoleWeights` is the new canonical entry point: it accepts a list of
+// {role, weight} entries (matching `IronRoleBlendEntry` from
+// apps/web/src/features/qrm/lib/iron-roles.ts) and returns a linearly
+// combined `FactorWeights` so a manager covering an advisor at 0.4 weight
+// gets ranking priorities that are 60% manager / 40% advisor.
+//
+// Empty input falls back to ADVISOR_WEIGHTS (the safest default — Iron
+// Advisor is the role with no special elevation, so any operator that
+// somehow has no blend gets the customer-facing default rather than a
+// manager-elevated view that might leak data).
+//
+// The combinator does NOT normalize the input weights to sum to 1.0 — it
+// trusts the caller to have validated via `getIronRoleBlend()` first. This
+// is deliberate: drift away from 1.0 is a P0.6 honesty probe concern, not a
+// scoring concern, and forcing normalization here would mask the drift.
+
+export interface IronRoleWeightEntry {
+  role: IronRole;
+  /** Blend weight in [0, 1]. Sum across the array SHOULD equal 1.0. */
+  weight: number;
+}
+
+export function blendRoleWeights(entries: IronRoleWeightEntry[]): FactorWeights {
+  if (!entries || entries.length === 0) {
+    return { ...ADVISOR_WEIGHTS };
+  }
+
+  const result: FactorWeights = {
+    expectedRevenue: 0,
+    urgencyFromCloseDate: 0,
+    stalledPenalty: 0,
+    overdueFollowUp: 0,
+    blockerSeverity: 0,
+    voiceHeat: 0,
+    competitorPressure: 0,
+    healthScoreTrend: 0,
+  };
+
+  let appliedWeightSum = 0;
+  for (const entry of entries) {
+    if (!entry || typeof entry.weight !== "number" || !Number.isFinite(entry.weight)) continue;
+    if (entry.weight <= 0 || entry.weight > 1) continue;
+    const w = getRoleWeights(entry.role);
+    result.expectedRevenue += w.expectedRevenue * entry.weight;
+    result.urgencyFromCloseDate += w.urgencyFromCloseDate * entry.weight;
+    result.stalledPenalty += w.stalledPenalty * entry.weight;
+    result.overdueFollowUp += w.overdueFollowUp * entry.weight;
+    result.blockerSeverity += w.blockerSeverity * entry.weight;
+    result.voiceHeat += w.voiceHeat * entry.weight;
+    result.competitorPressure += w.competitorPressure * entry.weight;
+    result.healthScoreTrend += w.healthScoreTrend * entry.weight;
+    appliedWeightSum += entry.weight;
+  }
+
+  // If every entry was filtered out as invalid, fall back to ADVISOR.
+  if (appliedWeightSum === 0) {
+    return { ...ADVISOR_WEIGHTS };
+  }
+
+  return result;
+}
+
 // ─── Blocker classification ────────────────────────────────────────────────
 
 export type BlockerKind =
@@ -703,4 +768,23 @@ export function scoreDeals(
     };
     return scoreDealForRecommendation(deal, signals, ctx);
   });
+}
+
+/**
+ * Phase 0 P0.5 — blend-aware bulk scoring.
+ *
+ * Convenience overload of {@link scoreDeals} that accepts a role blend
+ * (`IronRoleWeightEntry[]`) instead of a single `FactorWeights` object.
+ * Internally combines via {@link blendRoleWeights} and delegates the rest
+ * of the work to the existing `scoreDeals` path. Same return shape, same
+ * fallback behavior on missing signals.
+ */
+export function scoreDealsWithBlend(
+  deals: RankableDeal[],
+  signalsByDealId: Map<string, DealSignalBundle>,
+  blend: IronRoleWeightEntry[],
+  nowTime: number,
+): ScoredDeal[] {
+  const weights = blendRoleWeights(blend);
+  return scoreDeals(deals, signalsByDealId, weights, nowTime);
 }
