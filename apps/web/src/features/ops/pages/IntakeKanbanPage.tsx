@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 
@@ -69,7 +70,15 @@ export function IntakeKanbanPage() {
                     <Card key={item.id} className="p-2.5">
                       <p className="text-xs font-semibold text-foreground">{item.stock_number || "No Stock #"}</p>
                       <p className="text-[10px] text-muted-foreground">{item.ship_to_branch || "No branch"}</p>
-                      {stage.num < 8 && (
+                      {stage.num === 3 && (
+                        <Link
+                          to={`/ops/intake/${item.id}/pdi`}
+                          className="mt-2 block w-full rounded bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-400 text-center hover:bg-amber-500/20 transition"
+                        >
+                          PDI Checklist →
+                        </Link>
+                      )}
+                      {stage.num < 8 && stage.num !== 3 && (
                         <button
                           onClick={() => advanceMutation.mutate({ id: item.id, newStage: stage.num + 1 })}
                           className="mt-2 w-full rounded bg-qep-orange/10 px-2 py-1 text-[10px] font-medium text-qep-orange hover:bg-qep-orange/20 transition"

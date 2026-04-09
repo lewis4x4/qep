@@ -90,6 +90,9 @@ const ServicePublicTrackPage = lazy(() =>
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
+const PdiChecklistPage = lazy(() =>
+  import("./features/ops/pages/PdiChecklistPage").then((m) => ({ default: m.PdiChecklistPage }))
+);
 const TrafficTicketsPage = lazy(() =>
   import("./features/ops/pages/TrafficTicketsPage").then((m) => ({ default: m.TrafficTicketsPage }))
 );
@@ -880,6 +883,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <IntakeKanbanPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/ops/intake/:intakeId/pdi"
+                element={
+                  ["admin", "manager", "owner", "rep"].includes(profile.role) ? (
+                    <PdiChecklistPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
