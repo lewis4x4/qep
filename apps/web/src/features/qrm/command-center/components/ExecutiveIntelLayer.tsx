@@ -31,12 +31,7 @@ import type {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  if (amount > 0) return `$${Math.round(amount)}`;
-  return "$0";
-}
+import { formatCurrency } from "@/lib/format";
 
 const listVariants = {
   hidden: { opacity: 0 },

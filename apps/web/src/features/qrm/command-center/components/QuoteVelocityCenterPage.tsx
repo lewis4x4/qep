@@ -13,7 +13,6 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { cn } from "@/lib/utils";
 import {
@@ -35,11 +34,7 @@ import { computeQuoteVelocity, type QuoteVelocityRow, type StatusBucket } from "
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  return `$${Math.round(amount)}`;
-}
+import { formatCurrency } from "@/lib/format";
 
 // ─── KPI Card ──────────────────────────────────────────────────────────────
 

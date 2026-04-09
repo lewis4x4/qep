@@ -42,12 +42,7 @@ const TILE_ICONS: Record<DealerGridTileKey, LucideIcon> = {
   escalations: ShieldAlert,
 };
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  if (amount > 0) return `$${Math.round(amount)}`;
-  return "";
-}
+import { formatCurrency } from "@/lib/format";
 
 function tileUrgencyTone(tile: DealerGridTile): string {
   if (tile.status === "degraded" || tile.status === "unavailable") {

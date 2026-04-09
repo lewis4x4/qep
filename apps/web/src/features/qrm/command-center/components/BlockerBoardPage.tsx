@@ -35,12 +35,7 @@ import { groupBlockedDeals, type BlockedDeal, type BlockerCategory, type Blocker
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  if (amount > 0) return `$${Math.round(amount)}`;
-  return "$0";
-}
+import { formatCurrency } from "@/lib/format";
 
 const CATEGORY_CONFIG: Record<BlockerCategory, { icon: LucideIcon; color: string; bg: string; border: string; label: string; actionLabel: string }> = {
   deposit_missing: { icon: Wallet, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/25", label: "Deposit Missing", actionLabel: "Verify Deposit" },
@@ -125,6 +120,7 @@ function BlockerDealRow({
           size="sm"
           onClick={onResolve}
           disabled={isResolving}
+          aria-label={`${config.actionLabel} for ${deal.dealName}`}
           className="rounded-full bg-qep-orange hover:bg-qep-orange/80 text-white min-h-[44px] px-4 text-xs font-semibold"
         >
           {isResolving ? (

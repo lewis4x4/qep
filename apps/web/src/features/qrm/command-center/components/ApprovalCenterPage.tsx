@@ -59,12 +59,7 @@ const TYPE_CONFIG: Record<ApprovalType, { icon: LucideIcon; color: string; bg: s
   demo: { icon: MonitorPlay, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Demo", actionLabel: "Approve Demo" },
 };
 
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  if (amount > 0) return `$${Math.round(amount)}`;
-  return "";
-}
+import { formatCurrency } from "@/lib/format";
 
 function timeAgo(isoDate: string): string {
   const ms = Date.now() - Date.parse(isoDate);
@@ -173,6 +168,7 @@ function ApprovalCard({
             size="sm"
             onClick={onApprove}
             disabled={isApproving}
+            aria-label={`${config.actionLabel} for ${item.dealName}`}
             className="rounded-full bg-qep-orange hover:bg-qep-orange/80 text-white min-h-[44px] px-4 text-xs font-semibold"
           >
             {isApproving ? (
