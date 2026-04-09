@@ -22,7 +22,8 @@ export type SectionKey =
   | "revenueRealityBoard"
   | "dealerRealityGrid"
   | "relationshipEngine"
-  | "knowledgeGaps";
+  | "knowledgeGaps"
+  | "executiveIntel";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -215,6 +216,51 @@ export interface CommandCenterResponse {
   dealerRealityGrid: DealerRealityGridPayload;
   relationshipEngine: RelationshipEnginePayload;
   knowledgeGaps: KnowledgeGapsPayload;
+  executiveIntel: ExecutiveIntelPayload;
+}
+
+// ─── Executive Intelligence Layer ──────────────────────────────────────────
+
+export interface ForecastConfidenceCard {
+  weightedPipeline: number;
+  rawPipeline: number;
+  confidenceScore: number;
+  confidenceLabel: "Strong" | "Moderate" | "Weak";
+  activeDeals: number;
+  avgInactivityDays: number;
+  depositsVerifiedPct: number;
+}
+
+export interface RepPerformanceCard {
+  repId: string;
+  repName: string;
+  visits7d: number;
+  targetMetStreak: number;
+  opportunitiesCreated: number;
+  quotesGenerated: number;
+}
+
+export interface MarginPressureCard {
+  flaggedDealCount: number;
+  flaggedDealValue: number;
+  negativeMarginCloses30d: number;
+  medianMarginPct30d: number | null;
+}
+
+export interface BranchHealthCard {
+  branchId: string;
+  branchName: string;
+  dealCount: number;
+  pipelineValue: number;
+  avgAgeDays: number;
+}
+
+export interface ExecutiveIntelPayload {
+  forecast: ForecastConfidenceCard;
+  topReps: RepPerformanceCard[];
+  marginPressure: MarginPressureCard;
+  branchHealth: BranchHealthCard[];
+  isElevatedView: boolean;
 }
 
 // ─── Knowledge Gaps + Absence Engine ───────────────────────────────────────

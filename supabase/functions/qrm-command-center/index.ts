@@ -58,6 +58,7 @@ import { buildRevenueRealityBoard } from "../_shared/qrm-command-center/revenue-
 import { buildDealerRealityGrid } from "../_shared/qrm-command-center/dealer-grid.ts";
 import { buildRelationshipEngine } from "../_shared/qrm-command-center/relationship-engine.ts";
 import { buildKnowledgeGapsPayload } from "../_shared/qrm-command-center/knowledge-gaps-engine.ts";
+import { buildExecutiveIntel } from "../_shared/qrm-command-center/executive-intel.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
   buildLedgerBatch,
@@ -481,6 +482,8 @@ Deno.serve(async (req) => {
       healthProfilesRes, recentVoicesRes, fleetIntelRes,
       // Knowledge Gaps + Absence Engine (Slice 1.7)
       knowledgeGapsRes, assessmentsRes,
+      // Executive Intelligence Layer (Slice 1.8)
+      prospectingKpisRes, marginDailyRes, branchesRes,
     ] = await Promise.all([
       dealIds.length > 0
         ? callerClient
@@ -518,6 +521,10 @@ Deno.serve(async (req) => {
       // ── Knowledge Gaps + Absence Engine queries (Slice 1.7) ──
       adminClient.from("knowledge_gaps").select("id, question, frequency, last_asked_at, user_id, profiles(iron_role)").eq("resolved", false).order("frequency", { ascending: false }).limit(10),
       callerClient.from("needs_assessments").select("id, created_by, completeness_pct").limit(500),
+      // ── Executive Intelligence Layer queries (Slice 1.8) ──
+      callerClient.from("prospecting_kpis").select("rep_id, kpi_date, total_visits, positive_visits, target_met, consecutive_days_met, opportunities_created, quotes_generated, profiles(full_name)").gte("kpi_date", new Date(Date.now() - 7 * 86_400_000).toISOString().split("T")[0]).limit(500),
+      adminClient.from("mv_exec_margin_daily").select("day, margin_dollars, median_margin, negative_margin_deal_count").gte("day", new Date(Date.now() - 30 * 86_400_000).toISOString().split("T")[0]).limit(30),
+      callerClient.from("branches").select("id, display_name, is_active").eq("is_active", true).limit(50),
     ]);
     const signalsLatency = Date.now() - signalsStart;
 
@@ -553,6 +560,9 @@ Deno.serve(async (req) => {
     logSignalError("fleet_intelligence", fleetIntelRes);
     logSignalError("knowledge_gaps", knowledgeGapsRes);
     logSignalError("needs_assessments", assessmentsRes);
+    logSignalError("prospecting_kpis", prospectingKpisRes);
+    logSignalError("mv_exec_margin_daily", marginDailyRes);
+    logSignalError("branches", branchesRes);
 
     // Reduce view rows into the per-deal bundle map the ranker consumes.
     // Pure function — no DB, no IO. Tested in
@@ -759,6 +769,24 @@ Deno.serve(async (req) => {
       nowTime,
     );
 
+    // Executive Intelligence Layer (Slice 1.8) — manager-gated
+    const execDeals = dealRows.map((r: DealRow) => ({
+      id: r.id, amount: r.amount, stage_id: r.stage_id,
+      deposit_status: r.deposit_status, margin_check_status: r.margin_check_status,
+      margin_pct: null as number | null,
+      expected_close_on: r.expected_close_on, last_activity_at: r.last_activity_at,
+      assigned_rep_id: r.assigned_rep_id,
+      stage_probability: stageMap.get(r.stage_id)?.probability ?? null,
+    }));
+    const executiveIntel = buildExecutiveIntel(
+      isManagerView ? execDeals : null,
+      prospectingKpisRes.error ? null : (prospectingKpisRes.data ?? []),
+      marginDailyRes.error ? null : (marginDailyRes.data ?? []),
+      branchesRes.error ? null : (branchesRes.data ?? []),
+      isManagerView,
+      nowTime,
+    );
+
     // Count voice signal rows for the AI Chief of Staff freshness chip.
     // After P0.2, voice rows arrive via the unified deal_signals view; we
     // derive the count by filtering to signal_source='voice' instead of
@@ -780,6 +808,7 @@ Deno.serve(async (req) => {
       dealerRealityGrid: { generatedAt, source: "live", latencyMs: signalsLatency },
       relationshipEngine: { generatedAt, source: "live", latencyMs: signalsLatency },
       knowledgeGaps: { generatedAt, source: isManagerView ? "live" : "unavailable", latencyMs: dealsLatency, reason: isManagerView ? undefined : "Manager view only" },
+      executiveIntel: { generatedAt, source: isManagerView ? "live" : "unavailable", latencyMs: signalsLatency, reason: isManagerView ? undefined : "Elevated view only" },
     };
 
     const response: CommandCenterResponse = {
@@ -794,6 +823,7 @@ Deno.serve(async (req) => {
       dealerRealityGrid: dealerGrid,
       relationshipEngine,
       knowledgeGaps,
+      executiveIntel,
     };
 
     console.log(

@@ -24,10 +24,12 @@ const ADVISOR_ORDER: RoleVariantSection[] = [
   "dealerRealityGrid",
   "pipelinePressure",
   "knowledgeGaps",
+  "executiveIntel",
 ];
 
 const MANAGER_ORDER: RoleVariantSection[] = [
   "commandStrip",
+  "executiveIntel",
   "revenueRealityBoard",
   "dealerRealityGrid",
   "relationshipEngine",
@@ -46,6 +48,7 @@ const WOMAN_ORDER: RoleVariantSection[] = [
   "aiChiefOfStaff",
   "pipelinePressure",
   "knowledgeGaps",
+  "executiveIntel",
 ];
 
 const MAN_ORDER: RoleVariantSection[] = [
@@ -57,6 +60,7 @@ const MAN_ORDER: RoleVariantSection[] = [
   "pipelinePressure",
   "aiChiefOfStaff",
   "knowledgeGaps",
+  "executiveIntel",
 ];
 
 export function getSectionOrder(role: IronRole): RoleVariantSection[] {

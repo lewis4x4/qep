@@ -17,6 +17,7 @@ import { RevenueRealityBoard } from "./RevenueRealityBoard";
 import { DealerRealityGrid } from "./DealerRealityGrid";
 import { RelationshipEngine } from "./RelationshipEngine";
 import { KnowledgeGapsEngine } from "./KnowledgeGapsEngine";
+import { ExecutiveIntelLayer } from "./ExecutiveIntelLayer";
 
 interface RoleVariantShellProps {
   data: CommandCenterResponse;
@@ -131,6 +132,14 @@ export function RoleVariantShell({
           <KnowledgeGapsEngine
             key={section}
             payload={data.knowledgeGaps}
+            freshness={freshness}
+          />
+        );
+      case "executiveIntel":
+        return (
+          <ExecutiveIntelLayer
+            key={section}
+            payload={data.executiveIntel}
             freshness={freshness}
           />
         );
