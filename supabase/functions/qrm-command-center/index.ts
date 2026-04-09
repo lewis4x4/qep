@@ -38,6 +38,7 @@ import {
   blendRoleWeights,
   buildPipelinePressure,
   getRoleWeights,
+  isBlendTeamScopeEligible,
   narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
@@ -50,6 +51,7 @@ import type {
   PipelineStageInput,
   RankableDeal,
 } from "../_shared/qrm-command-center/ranking.ts";
+import { isIronRole } from "../_shared/qrm-command-center/types.ts";
 import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
@@ -74,12 +76,6 @@ const VALID_SCOPES: CommandCenterScope[] = ["mine", "team", "branch", "company"]
 
 function isValidScope(value: string): value is CommandCenterScope {
   return VALID_SCOPES.includes(value as CommandCenterScope);
-}
-
-const IRON_VALUES: IronRole[] = ["iron_advisor", "iron_manager", "iron_woman", "iron_man"];
-
-function isIronRole(value: string | null | undefined): value is IronRole {
-  return !!value && IRON_VALUES.includes(value as IronRole);
 }
 
 const LEGACY_ROLE_MAP: Record<string, IronRole> = {
@@ -304,13 +300,31 @@ Deno.serve(async (req) => {
     }
     const userId = authData.user.id;
 
-    // Resolve role and Iron role from profiles using the admin client
-    // (the caller client cannot read the profiles row by id without RLS).
-    const { data: profile, error: profileError } = await adminClient
-      .from("profiles")
-      .select("id, role, iron_role")
-      .eq("id", userId)
-      .maybeSingle();
+    // Phase 0 P0.5 — parallel profile + blend reads.
+    //
+    // Both reads only need `userId` and have no dependency on each other,
+    // so we run them concurrently to save ~30-50ms of serial latency on
+    // every page load. Failure modes are independent:
+    //   - Profile failure → hard 401 (Profile not found)
+    //   - Blend failure   → degrade to empty blend → single-role fallback
+    //
+    // Promise.allSettled (not Promise.all) so a blend failure doesn't
+    // short-circuit the profile read result.
+    const [profileSettled, blendSettled] = await Promise.allSettled([
+      adminClient
+        .from("profiles")
+        .select("id, role, iron_role")
+        .eq("id", userId)
+        .maybeSingle(),
+      loadProfileRoleBlend(adminClient, userId),
+    ]);
+
+    // Profile read: hard 401 on failure (same behavior as pre-W2-1).
+    if (profileSettled.status === "rejected") {
+      console.error(`[${FN_NAME}] profile load failed:`, profileSettled.reason);
+      return safeJsonError("Profile not found", 401, origin);
+    }
+    const { data: profile, error: profileError } = profileSettled.value;
     if (profileError || !profile) {
       return safeJsonError("Profile not found", 401, origin);
     }
@@ -319,17 +333,14 @@ Deno.serve(async (req) => {
       (profile as { iron_role: string | null }).iron_role,
     );
 
-    // Phase 0 P0.5 — load the active role blend. Empty / error → fall back
-    // to a synthetic single-role blend at weight 1.0 so the rest of the
-    // path is uniform regardless of whether migration 210 is in effect.
-    // The blend never gates request success: a load error degrades to the
-    // legacy single-role behavior and the request still completes.
+    // Blend read: degrade to empty on failure (best-effort; never blocks
+    // the request). Sentry capture mirrors the prior inline-try/catch.
     let roleBlend: IronRoleWeightEntry[] = [];
-    try {
-      roleBlend = await loadProfileRoleBlend(adminClient, userId);
-    } catch (blendErr) {
-      console.error(`[${FN_NAME}] role blend load failed:`, blendErr);
-      captureEdgeException(blendErr, {
+    if (blendSettled.status === "fulfilled") {
+      roleBlend = blendSettled.value;
+    } else {
+      console.error(`[${FN_NAME}] role blend load failed:`, blendSettled.reason);
+      captureEdgeException(blendSettled.reason, {
         fn: FN_NAME,
         req,
         extra: { phase: "role_blend_load", userId },
@@ -374,9 +385,15 @@ Deno.serve(async (req) => {
         origin,
       );
     }
-    if (scope === "team" && !isElevated(ironRole)) {
+    // Phase 0 P0.5 W2-5 — team-scope gate is now blend-aware.
+    // An operator gets team scope if their cumulative iron_manager weight
+    // in the active blend is ≥ 0.5. Single-role iron_manager users (the
+    // post-migration-210 backfill default) get 1.0 ≥ 0.5 → identical to
+    // the legacy behavior. Other single-role users get 0 < 0.5 → also
+    // identical. Behavior change is ONLY for blended operators.
+    if (scope === "team" && !isBlendTeamScopeEligible(effectiveBlend)) {
       return safeJsonError(
-        "Team scope requires Iron Manager privileges",
+        "Team scope requires Iron Manager privileges (blend weight ≥ 0.5)",
         403,
         origin,
       );
@@ -543,6 +560,7 @@ Deno.serve(async (req) => {
         chief,
         weights,
         ironRole,
+        roleBlend: effectiveBlend,
         rankerVersion: QRM_RANKER_VERSION,
         modelSource: "rules",
       });

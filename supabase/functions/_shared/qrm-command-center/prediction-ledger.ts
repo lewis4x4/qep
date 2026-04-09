@@ -22,6 +22,7 @@
 
 import type {
   FactorWeights,
+  IronRoleWeightEntry,
   RankableDeal,
   ScoredDeal,
 } from "./ranking.ts";
@@ -82,20 +83,36 @@ export async function hashRationale(rationale: readonly string[]): Promise<strin
 
 /**
  * Hash the deal-side inputs the ranker considered: deal core fields plus
- * the role weights and ranker version. Two predictions are "the same input"
- * if and only if their `inputs_hash` matches.
+ * the role weights, the active role blend, and the ranker version. Two
+ * predictions are "the same input" if and only if their `inputs_hash`
+ * matches.
  *
  * Excludes signals — those have their own hash so a deal scored at two
  * different times with different signal sets has the same `inputs_hash`
  * but different `signals_hash`. This lets the grader group by inputs_hash
  * to ask "how does the ranker behave on this deal across signal changes?"
+ *
+ * Phase 0 P0.5 W2-3 — `roleBlend` is now part of the canonical input.
+ * Two operators with the same dominant role but different blends produce
+ * different inputs_hashes (correct: they ARE different inputs). The blend
+ * is sorted alphabetically by role to keep the canonicalization
+ * deterministic across producer order. The version bump in
+ * QRM_RANKER_VERSION reflects the hash semantics change.
  */
 export async function hashInputs(
   deal: RankableDeal,
   weights: FactorWeights,
   ironRole: IronRole,
+  roleBlend: IronRoleWeightEntry[],
   rankerVersion: string,
 ): Promise<string> {
+  // Sort the blend alphabetically by role for deterministic canonical JSON
+  // (insertion order of producer arrays would otherwise leak into the
+  // hash). canonicalJson already sorts object keys but arrays preserve
+  // order — that's where the explicit sort comes in.
+  const sortedBlend = [...roleBlend].sort((a, b) =>
+    a.role.localeCompare(b.role)
+  );
   return await sha256Hex(
     canonicalJson({
       deal_id: deal.id,
@@ -108,6 +125,7 @@ export async function hashInputs(
       deposit_status: deal.depositStatus,
       margin_check_status: deal.marginCheckStatus,
       iron_role: ironRole,
+      role_blend: sortedBlend,
       weights,
       ranker_version: rankerVersion,
     }),
@@ -180,6 +198,14 @@ export interface PredictionRowInsert {
   signals_hash: string;
   model_source: "rules" | "rules+llm";
   trace_steps: TraceStep[];
+  /**
+   * Phase 0 P0.5 W2-3 — the active role blend the ranker used. For
+   * single-role-1.0 users (everyone post-migration-210 backfill) this is
+   * `[{role: <ironRole>, weight: 1.0}]`. Stored as a queryable jsonb
+   * column on `qrm_predictions` (migration 211) so the grader can group
+   * by blend without parsing trace_steps.
+   */
+  role_blend: IronRoleWeightEntry[];
 }
 
 interface BuildPredictionRowParams {
@@ -189,6 +215,8 @@ interface BuildPredictionRowParams {
   predictionKind: string;
   weights: FactorWeights;
   ironRole: IronRole;
+  /** Phase 0 P0.5 W2-3 — active role blend at scoring time. */
+  roleBlend: IronRoleWeightEntry[];
   rankerVersion: string;
   modelSource: "rules" | "rules+llm";
 }
@@ -207,13 +235,14 @@ export async function buildPredictionRow(
     predictionKind,
     weights,
     ironRole,
+    roleBlend,
     rankerVersion,
     modelSource,
   } = params;
 
   const [rationaleHash, inputsHash, signalsHash] = await Promise.all([
     hashRationale(card.rationale),
-    hashInputs(scored.deal, weights, ironRole, rankerVersion),
+    hashInputs(scored.deal, weights, ironRole, roleBlend, rankerVersion),
     hashSignals(scored),
   ]);
 
@@ -229,6 +258,7 @@ export async function buildPredictionRow(
     signals_hash: signalsHash,
     model_source: modelSource,
     trace_steps: extractTraceSteps(scored, weights),
+    role_blend: roleBlend,
   };
 }
 
@@ -241,6 +271,8 @@ interface BuildLedgerBatchParams {
   chief: AiChiefOfStaffPayload;
   weights: FactorWeights;
   ironRole: IronRole;
+  /** Phase 0 P0.5 W2-3 — active role blend, propagated to every row. */
+  roleBlend: IronRoleWeightEntry[];
   rankerVersion: string;
   modelSource: "rules" | "rules+llm";
 }
@@ -283,6 +315,7 @@ export async function buildLedgerBatch(
       predictionKind: kind,
       weights: params.weights,
       ironRole: params.ironRole,
+      roleBlend: params.roleBlend,
       rankerVersion: params.rankerVersion,
       modelSource: params.modelSource,
     });
@@ -331,6 +364,9 @@ function kindForLane(lane: LaneKey): string {
  *
  * Format: 'YYYY-MM-DD.N' where N increments per change on the same day.
  * Slice 1 spine baseline: 2026-04-08.1
- * Day 4 P0.3 ledger ship: 2026-04-08.1 (no scoring change)
+ * Day 4 P0.3 ledger ship:  2026-04-08.1 (no scoring change)
+ * P2 W2-3 role_blend hash: 2026-04-09.1 (hashInputs now includes the
+ *                          active role blend; pre-existing dedupe history
+ *                          is invalidated. Currently ~0 production rows.)
  */
-export const QRM_RANKER_VERSION = "2026-04-08.1";
+export const QRM_RANKER_VERSION = "2026-04-09.1";

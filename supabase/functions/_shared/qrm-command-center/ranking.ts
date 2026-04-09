@@ -11,17 +11,18 @@
  * ranker never disagree on whether a deal is at risk.
  */
 
-import type {
-  ActionLanesPayload,
-  AiChiefOfStaffPayload,
-  IronRole,
-  LaneKey,
-  PipelineMetaStage,
-  PipelinePressurePayload,
-  PipelineRiskState,
-  PipelineStageBucket,
-  RecommendationAction,
-  RecommendationCardPayload,
+import {
+  isIronRole,
+  type ActionLanesPayload,
+  type AiChiefOfStaffPayload,
+  type IronRole,
+  type LaneKey,
+  type PipelineMetaStage,
+  type PipelinePressurePayload,
+  type PipelineRiskState,
+  type PipelineStageBucket,
+  type RecommendationAction,
+  type RecommendationCardPayload,
 } from "./types.ts";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -174,22 +175,17 @@ export function getRoleWeights(role: IronRole): FactorWeights {
 
 // ─── Phase 0 P0.5 — role blend row narrowing ──────────────────────────────
 //
-// Pure narrowing helper consumed by both the frontend (`useIronRoleBlend`)
-// and the qrm-command-center edge function. Defensive against schema drift:
-// drops rows whose iron_role is not a recognized enum value, drops rows
-// with non-numeric / out-of-range / NaN weights, drops null/undefined rows.
+// Pure narrowing helper consumed by the qrm-command-center edge function.
+// Defensive against schema drift: drops rows whose iron_role is not a
+// recognized enum value, drops rows with non-numeric / out-of-range /
+// NaN weights, drops null/undefined rows.
 //
 // The narrowed shape is exactly what `blendRoleWeights()` consumes — no
 // further filtering happens downstream, but the combinator does its own
 // defensive filtering as a second line of defense.
-
-const VALID_IRON_ROLES = new Set<string>([
-  "iron_manager",
-  "iron_advisor",
-  "iron_woman",
-  "iron_man",
-]);
-
+//
+// `isIronRole` is the canonical narrower from types.ts — used here AND
+// at the edge function entry point so the enum check lives in one place.
 export function narrowRoleBlendRows(
   rawRows: ReadonlyArray<{ iron_role?: unknown; weight?: unknown } | null | undefined> | null | undefined,
 ): IronRoleWeightEntry[] {
@@ -198,11 +194,11 @@ export function narrowRoleBlendRows(
   for (const row of rawRows) {
     if (!row || typeof row !== "object") continue;
     const role = row.iron_role;
-    if (typeof role !== "string" || !VALID_IRON_ROLES.has(role)) continue;
+    if (typeof role !== "string" || !isIronRole(role)) continue;
     const rawWeight = row.weight;
     const weight = typeof rawWeight === "number" ? rawWeight : Number(rawWeight);
     if (!Number.isFinite(weight) || weight <= 0 || weight > 1) continue;
-    out.push({ role: role as IronRole, weight });
+    out.push({ role, weight });
   }
   return out;
 }
@@ -270,6 +266,36 @@ export function blendRoleWeights(entries: IronRoleWeightEntry[]): FactorWeights 
   }
 
   return result;
+}
+
+// ─── Phase 0 P0.5 — team-scope eligibility for blended operators ──────────
+//
+// `team` scope in the QRM Command Center exposes cross-rep deal data and
+// is gated to managers. With role blends, an operator can be PARTIALLY a
+// manager (e.g. covering for an absent advisor at 0.4 weight). The owner
+// rule is "manager weight ≥ 0.5" — cumulative iron_manager weight in the
+// blend must meet or exceed half. Single-role iron_manager users
+// (everyone post-migration-210 backfill) get 1.0 ≥ 0.5 → true, identical
+// to the legacy `isElevated(role) === "iron_manager"` behavior. Other
+// single-role users get 0 < 0.5 → false, also identical. Backwards
+// compatible by construction; only blended operators see new behavior.
+//
+// Threshold lives here so it's:
+//   1. Unit-testable in isolation (no edge function bootstrapping)
+//   2. Consistent across any future caller (web admin, SQL view, etc.)
+//   3. Documented next to the policy it implements
+
+export const TEAM_SCOPE_MANAGER_WEIGHT_THRESHOLD = 0.5;
+
+export function isBlendTeamScopeEligible(blend: IronRoleWeightEntry[]): boolean {
+  let managerWeight = 0;
+  for (const entry of blend) {
+    if (!entry || entry.role !== "iron_manager") continue;
+    if (typeof entry.weight !== "number" || !Number.isFinite(entry.weight)) continue;
+    if (entry.weight <= 0) continue;
+    managerWeight += entry.weight;
+  }
+  return managerWeight >= TEAM_SCOPE_MANAGER_WEIGHT_THRESHOLD;
 }
 
 // ─── Blocker classification ────────────────────────────────────────────────

@@ -33,6 +33,7 @@ import {
   getRoleWeights,
   scoreDealForRecommendation,
   type FactorWeights,
+  type IronRoleWeightEntry,
   type RankableDeal,
   type ScoredDeal,
 } from "./ranking.ts";
@@ -80,6 +81,16 @@ function makeScored(deal?: RankableDeal): ScoredDeal {
     { nowTime: NOW, maxOpenAmount: 100_000, weights },
   );
 }
+
+// Default single-role-1.0 blend used by every test that does not
+// specifically test blended-operator behavior. Mirrors the post-migration-210
+// production default (everyone has a single weight=1.0 row).
+const ADVISOR_BLEND: IronRoleWeightEntry[] = [{ role: "iron_advisor", weight: 1.0 }];
+const MANAGER_BLEND: IronRoleWeightEntry[] = [{ role: "iron_manager", weight: 1.0 }];
+const COVER_BLEND: IronRoleWeightEntry[] = [
+  { role: "iron_manager", weight: 0.6 },
+  { role: "iron_advisor", weight: 0.4 },
+];
 
 function makeCard(overrides: Partial<RecommendationCardPayload> = {}): RecommendationCardPayload {
   return {
@@ -146,8 +157,8 @@ Deno.test("hashRationale differs for different rationale arrays", async () => {
 Deno.test("hashInputs is deterministic for the same deal + role + version", async () => {
   const deal = makeDeal();
   const weights = getRoleWeights("iron_advisor");
-  const a = await hashInputs(deal, weights, "iron_advisor", QRM_RANKER_VERSION);
-  const b = await hashInputs(deal, weights, "iron_advisor", QRM_RANKER_VERSION);
+  const a = await hashInputs(deal, weights, "iron_advisor", ADVISOR_BLEND, QRM_RANKER_VERSION);
+  const b = await hashInputs(deal, weights, "iron_advisor", ADVISOR_BLEND, QRM_RANKER_VERSION);
   assertEquals(a, b);
 });
 
@@ -157,12 +168,14 @@ Deno.test("hashInputs differs when role changes", async () => {
     deal,
     getRoleWeights("iron_advisor"),
     "iron_advisor",
+    ADVISOR_BLEND,
     QRM_RANKER_VERSION,
   );
   const manager = await hashInputs(
     deal,
     getRoleWeights("iron_manager"),
     "iron_manager",
+    MANAGER_BLEND,
     QRM_RANKER_VERSION,
   );
   assert(advisor !== manager);
@@ -171,9 +184,56 @@ Deno.test("hashInputs differs when role changes", async () => {
 Deno.test("hashInputs differs when ranker version changes", async () => {
   const deal = makeDeal();
   const weights = getRoleWeights("iron_advisor");
-  const v1 = await hashInputs(deal, weights, "iron_advisor", "2026-04-08.1");
-  const v2 = await hashInputs(deal, weights, "iron_advisor", "2026-04-08.2");
+  const v1 = await hashInputs(deal, weights, "iron_advisor", ADVISOR_BLEND, "2026-04-08.1");
+  const v2 = await hashInputs(deal, weights, "iron_advisor", ADVISOR_BLEND, "2026-04-08.2");
   assert(v1 !== v2);
+});
+
+// ─── Phase 0 P0.5 W2-3 — role_blend in hashInputs ────────────────────────
+
+Deno.test("hashInputs differs when blend changes (same dominant role)", async () => {
+  // A manager covering an advisor 60/40 vs a pure manager (1.0) — same
+  // dominant role, different blends, MUST produce different hashes.
+  const deal = makeDeal();
+  const blendedWeights = {
+    ...getRoleWeights("iron_manager"),
+    expectedRevenue:
+      getRoleWeights("iron_manager").expectedRevenue * 0.6 +
+      getRoleWeights("iron_advisor").expectedRevenue * 0.4,
+  };
+  const pureManagerHash = await hashInputs(
+    deal,
+    getRoleWeights("iron_manager"),
+    "iron_manager",
+    MANAGER_BLEND,
+    QRM_RANKER_VERSION,
+  );
+  const coverHash = await hashInputs(
+    deal,
+    blendedWeights as FactorWeights,
+    "iron_manager",
+    COVER_BLEND,
+    QRM_RANKER_VERSION,
+  );
+  assert(pureManagerHash !== coverHash, "blended cover should produce a different hash than pure manager");
+});
+
+Deno.test("hashInputs is deterministic regardless of blend insertion order", async () => {
+  // The blend is sorted alphabetically inside hashInputs so producer
+  // ordering does not leak into the hash.
+  const deal = makeDeal();
+  const weights = getRoleWeights("iron_manager");
+  const blendForward: IronRoleWeightEntry[] = [
+    { role: "iron_manager", weight: 0.6 },
+    { role: "iron_advisor", weight: 0.4 },
+  ];
+  const blendReversed: IronRoleWeightEntry[] = [
+    { role: "iron_advisor", weight: 0.4 },
+    { role: "iron_manager", weight: 0.6 },
+  ];
+  const a = await hashInputs(deal, weights, "iron_manager", blendForward, QRM_RANKER_VERSION);
+  const b = await hashInputs(deal, weights, "iron_manager", blendReversed, QRM_RANKER_VERSION);
+  assertEquals(a, b);
 });
 
 Deno.test("hashSignals is deterministic for the same scored deal", async () => {
@@ -222,6 +282,7 @@ Deno.test("buildPredictionRow populates every column required by migration 208",
     predictionKind: "recommendation:revenue_ready",
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor",
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules",
   });
@@ -237,6 +298,38 @@ Deno.test("buildPredictionRow populates every column required by migration 208",
   assertEquals(row.model_source, "rules");
   assert(Array.isArray(row.trace_steps));
   assert(row.trace_steps.length > 0);
+  assertEquals(row.role_blend, ADVISOR_BLEND);
+});
+
+Deno.test("buildPredictionRow propagates a non-trivial blend (Phase 0 P0.5 W2-3)", async () => {
+  const scored = makeScored();
+  const card = makeCard();
+  const row = await buildPredictionRow({
+    workspaceId: "default",
+    scored,
+    card,
+    predictionKind: "recommendation:revenue_ready",
+    weights: getRoleWeights("iron_manager"), // pretend the call site supplied blended weights
+    ironRole: "iron_manager",
+    roleBlend: COVER_BLEND,
+    rankerVersion: QRM_RANKER_VERSION,
+    modelSource: "rules",
+  });
+  assertEquals(row.role_blend, COVER_BLEND);
+  // hash must reflect the blend (regression: a sibling call with
+  // ADVISOR_BLEND would produce a different hash)
+  const sibling = await buildPredictionRow({
+    workspaceId: "default",
+    scored,
+    card,
+    predictionKind: "recommendation:revenue_ready",
+    weights: getRoleWeights("iron_manager"),
+    ironRole: "iron_manager",
+    roleBlend: MANAGER_BLEND,
+    rankerVersion: QRM_RANKER_VERSION,
+    modelSource: "rules",
+  });
+  assert(row.inputs_hash !== sibling.inputs_hash, "different blends must produce different inputs_hashes");
 });
 
 // ─── buildLedgerBatch dedupe ──────────────────────────────────────────────
@@ -273,6 +366,7 @@ Deno.test("buildLedgerBatch produces one row per (subject, kind) pair", async ()
     chief,
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor",
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules",
   });
@@ -320,6 +414,7 @@ Deno.test("buildLedgerBatch skips cards without a corresponding scored deal", as
     chief,
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor",
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules",
   });
@@ -341,6 +436,7 @@ Deno.test("buildLedgerBatch handles null Chief-of-Staff slots cleanly", async ()
     chief: { bestMove: null, biggestRisk: null, fastestPath: null, additional: [], source: "rules" },
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor",
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules",
   });
@@ -356,6 +452,7 @@ Deno.test("buildLedgerBatch returns empty array when there are no cards", async 
     chief: { bestMove: null, biggestRisk: null, fastestPath: null, additional: [], source: "rules" },
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor",
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules",
   });
@@ -382,6 +479,7 @@ Deno.test("buildLedgerBatch produces identical hashes for identical inputs acros
     } as AiChiefOfStaffPayload,
     weights: getRoleWeights("iron_advisor"),
     ironRole: "iron_advisor" as const,
+    roleBlend: ADVISOR_BLEND,
     rankerVersion: QRM_RANKER_VERSION,
     modelSource: "rules" as const,
   };

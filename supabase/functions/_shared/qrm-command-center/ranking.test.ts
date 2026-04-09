@@ -15,6 +15,7 @@ import {
   formatRationale,
   getDealSignalState,
   getRoleWeights,
+  isBlendTeamScopeEligible,
   narrowRoleBlendRows,
   rankAndAssignLanes,
   rankChiefOfStaff,
@@ -22,6 +23,7 @@ import {
   scoreDeals,
   scoreDealsWithBlend,
 } from "./ranking.ts";
+import { isIronRole } from "./types.ts";
 import type {
   ContactCompanyLookup,
   DealSignalBundle,
@@ -221,6 +223,76 @@ Deno.test("formatRationale rewrites bare 'CRM' to 'QRM'", () => {
 Deno.test("formatRationale leaves substrings like 'scrambler' alone", () => {
   assertEquals(formatRationale("scrambler running"), "scrambler running");
   assertEquals(formatRationale("microcrm not a token"), "microcrm not a token");
+});
+
+// ─── Phase 0 P0.5 W2-2 — isIronRole shared narrower ──────────────────────
+
+Deno.test("isIronRole accepts all four valid Iron roles", () => {
+  assertEquals(isIronRole("iron_advisor"), true);
+  assertEquals(isIronRole("iron_manager"), true);
+  assertEquals(isIronRole("iron_woman"), true);
+  assertEquals(isIronRole("iron_man"), true);
+});
+
+Deno.test("isIronRole rejects unrecognized strings", () => {
+  assertEquals(isIronRole("iron_grandmaster"), false);
+  assertEquals(isIronRole("manager"), false);
+  assertEquals(isIronRole("garbage"), false);
+});
+
+Deno.test("isIronRole rejects null and undefined", () => {
+  assertEquals(isIronRole(null), false);
+  assertEquals(isIronRole(undefined), false);
+});
+
+Deno.test("isIronRole rejects empty string", () => {
+  assertEquals(isIronRole(""), false);
+});
+
+// ─── Phase 0 P0.5 W2-5 — isBlendTeamScopeEligible (manager weight ≥ 0.5) ──
+
+Deno.test("isBlendTeamScopeEligible: pure iron_manager (1.0) is eligible", () => {
+  assertEquals(isBlendTeamScopeEligible([{ role: "iron_manager", weight: 1.0 }]), true);
+});
+
+Deno.test("isBlendTeamScopeEligible: pure iron_advisor (1.0) is NOT eligible", () => {
+  assertEquals(isBlendTeamScopeEligible([{ role: "iron_advisor", weight: 1.0 }]), false);
+});
+
+Deno.test("isBlendTeamScopeEligible: 0.5 manager + 0.5 advisor is eligible (boundary)", () => {
+  assertEquals(
+    isBlendTeamScopeEligible([
+      { role: "iron_manager", weight: 0.5 },
+      { role: "iron_advisor", weight: 0.5 },
+    ]),
+    true,
+  );
+});
+
+Deno.test("isBlendTeamScopeEligible: 0.49 manager + 0.51 advisor is NOT eligible (just below)", () => {
+  assertEquals(
+    isBlendTeamScopeEligible([
+      { role: "iron_manager", weight: 0.49 },
+      { role: "iron_advisor", weight: 0.51 },
+    ]),
+    false,
+  );
+});
+
+Deno.test("isBlendTeamScopeEligible: two iron_manager rows summing to ≥ 0.5 is eligible", () => {
+  // Edge case: a manager could theoretically appear twice in the blend
+  // (e.g. covering two absences). The helper sums all manager weights.
+  assertEquals(
+    isBlendTeamScopeEligible([
+      { role: "iron_manager", weight: 0.3 },
+      { role: "iron_manager", weight: 0.3 },
+    ]),
+    true,
+  );
+});
+
+Deno.test("isBlendTeamScopeEligible: empty blend is NOT eligible", () => {
+  assertEquals(isBlendTeamScopeEligible([]), false);
 });
 
 // ─── Phase 0 P0.5 — blendRoleWeights + scoreDealsWithBlend ────────────────

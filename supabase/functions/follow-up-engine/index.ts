@@ -203,7 +203,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 3. Process touchpoints (AI per row) then batch DB writes (2 queries) ─
+    // ── 3. Build per-touchpoint context (no AI yet — pure CPU) ──────────
+    //
+    // P2 W2-4 fix: the original loop was sequential `await
+    // generateValueContent(...)` per touchpoint, costing 50 × 500ms = 25s
+    // of cron latency at the upper end. The fix splits this into two
+    // phases: (a) build all the deal contexts up front in a tight CPU
+    // loop, (b) call OpenAI in chunks of 10 via Promise.allSettled.
+    //
+    // This is the same pattern Day 7 used for the bus publish loop in
+    // anomaly-scan but with a smaller chunk size because OpenAI's
+    // per-minute rate limits are tighter than Postgres connections.
+
     type TouchpointAiRow = {
       id: string;
       suggested_message: string;
@@ -212,6 +223,71 @@ Deno.serve(async (req) => {
       set_overdue: boolean;
     };
 
+    type TouchpointContext = {
+      tp: TouchpointWithContext;
+      dealContext: Record<string, unknown>;
+      contactName: string;
+      isOverdue: boolean;
+    };
+
+    const todayDate = new Date(today);
+
+    // Phase A: build contexts in a tight loop (no awaits, no errors)
+    const touchpointContexts: TouchpointContext[] = touchpoints.map((tp) => {
+      const cadence = tp.follow_up_cadences;
+      const deal = dealMap.get(cadence.deal_id);
+      const assessment = assessmentMap.get(cadence.deal_id);
+      const contactName = (cadence.contact_id && contactMap.get(cadence.contact_id)) || "Customer";
+
+      const dealContext = {
+        deal_name: deal?.name,
+        deal_amount: deal?.amount,
+        contact_name: contactName,
+        application: assessment?.application,
+        machine_interest: assessment?.machine_interest,
+        budget_type: assessment?.budget_type,
+        current_issues: assessment?.current_equipment_issues,
+      };
+
+      const scheduledDate = new Date(tp.scheduled_date);
+      const isOverdue = scheduledDate < todayDate;
+
+      return { tp, dealContext, contactName, isOverdue };
+    });
+
+    // Phase B: chunked parallel OpenAI calls.
+    // Chunk size 10 keeps concurrent OpenAI requests within a comfortable
+    // gpt-4o-mini rate-limit envelope. 50 touchpoints → 5 chunks → 10
+    // concurrent requests max. If touchpoints > 50 (only possible if
+    // batch_size override is supplied), the chunking still bounds the
+    // load.
+    const AI_CHUNK_SIZE = 10;
+    const aiResults = new Map<string, string>(); // touchpoint id → message
+
+    for (let chunkStart = 0; chunkStart < touchpointContexts.length; chunkStart += AI_CHUNK_SIZE) {
+      const chunk = touchpointContexts.slice(chunkStart, chunkStart + AI_CHUNK_SIZE);
+      const settled = await Promise.allSettled(
+        chunk.map((ctx) => generateValueContent(ctx.tp, ctx.dealContext)),
+      );
+      for (let i = 0; i < settled.length; i += 1) {
+        const result = settled[i];
+        const ctx = chunk[i];
+        if (result.status === "fulfilled") {
+          aiResults.set(ctx.tp.id, result.value);
+        } else {
+          // AI call failed → use the same fallback message as
+          // generateValueContent's internal catch path so the touchpoint
+          // still gets persisted with SOMETHING. The error is still
+          // counted in results.errors.
+          console.error(`AI call failed for touchpoint ${ctx.tp.id}:`, result.reason);
+          results.errors++;
+          aiResults.set(ctx.tp.id, `Follow-up for: ${ctx.tp.purpose}`);
+        }
+      }
+    }
+
+    // Phase C: build the touchpoint AI rows + notification rows from the
+    // context array + the AI results map. No awaits in this phase.
     const touchpointAiRows: TouchpointAiRow[] = [];
     const notificationRows: Array<{
       workspace_id: string;
@@ -223,30 +299,13 @@ Deno.serve(async (req) => {
       metadata: Record<string, unknown>;
     }> = [];
 
-    for (const tp of touchpoints) {
+    for (const ctx of touchpointContexts) {
       try {
         results.touchpoints_processed++;
+        const { tp, dealContext, contactName, isOverdue } = ctx;
         const cadence = tp.follow_up_cadences;
-        const deal = dealMap.get(cadence.deal_id);
-        const assessment = assessmentMap.get(cadence.deal_id);
-        const contactName = (cadence.contact_id && contactMap.get(cadence.contact_id)) || "Customer";
-
-        const dealContext = {
-          deal_name: deal?.name,
-          deal_amount: deal?.amount,
-          contact_name: contactName,
-          application: assessment?.application,
-          machine_interest: assessment?.machine_interest,
-          budget_type: assessment?.budget_type,
-          current_issues: assessment?.current_equipment_issues,
-        };
-
-        const suggestedMessage = await generateValueContent(tp, dealContext);
+        const suggestedMessage = aiResults.get(tp.id) ?? `Follow-up for: ${tp.purpose}`;
         results.content_generated++;
-
-        const scheduledDate = new Date(tp.scheduled_date);
-        const todayDate = new Date(today);
-        const isOverdue = scheduledDate < todayDate;
 
         touchpointAiRows.push({
           id: tp.id,
@@ -275,7 +334,7 @@ Deno.serve(async (req) => {
           });
         }
       } catch (tpError) {
-        console.error(`Error processing touchpoint ${tp.id}:`, tpError);
+        console.error(`Error processing touchpoint ${ctx.tp.id}:`, tpError);
         results.errors++;
       }
     }

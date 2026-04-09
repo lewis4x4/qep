@@ -11,6 +11,25 @@
 
 export type IronRole = "iron_advisor" | "iron_manager" | "iron_woman" | "iron_man";
 
+/**
+ * Canonical IronRole narrower for the Deno backend.
+ *
+ * Frontend has its own narrower in
+ * `apps/web/src/features/qrm/lib/iron-roles.ts` (different runtime —
+ * Deno can't import from `apps/web`). The two MUST stay in lock-step;
+ * any new IronRole value gets added in BOTH places.
+ */
+const IRON_ROLE_VALUES: ReadonlySet<string> = new Set([
+  "iron_advisor",
+  "iron_manager",
+  "iron_woman",
+  "iron_man",
+]);
+
+export function isIronRole(value: string | null | undefined): value is IronRole {
+  return !!value && IRON_ROLE_VALUES.has(value);
+}
+
 export type CommandCenterScope = "mine" | "team" | "branch" | "company";
 
 export type SectionStatus = "live" | "degraded" | "unavailable";
