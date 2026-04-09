@@ -2,12 +2,16 @@
  * Right-rail alerts panel for the command center. Reads `analytics_alerts`
  * filtered by role_target. Acknowledge / resolve buttons mutate status and
  * write a row in `analytics_action_log`.
+ *
+ * Slice 5.4: Shows intervention memory — "what solved this last time" —
+ * for recurring alert types.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertOctagon, Check, X, Loader2 } from "lucide-react";
+import { AlertOctagon, Check, X, Loader2, History } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import type { AnalyticsAlertRow, ExecRoleTab, AlertSeverity } from "../lib/types";
@@ -104,6 +108,7 @@ function AlertRow({
   disabled: boolean;
   onTransition: (next: "acknowledged" | "resolved" | "dismissed") => void;
 }) {
+  const [showHistory, setShowHistory] = useState(false);
   const recordLink = resolveExecAlertRecordLink(alert);
   const playbookLink = resolveExecAlertPlaybookLink(alert);
 
@@ -124,6 +129,10 @@ function AlertRow({
           → {alert.suggested_action}
         </p>
       )}
+
+      {/* Intervention memory: what solved this last time */}
+      <InterventionHistory alert={alert} show={showHistory} onToggle={() => setShowHistory(!showHistory)} />
+
       <div className="flex items-center gap-1.5 pt-1">
         {recordLink && (
           <Button asChild size="sm" variant="ghost">
@@ -152,6 +161,93 @@ function AlertRow({
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Intervention History (Slice 5.4) ─────────────────────────────────────
+
+interface InterventionRow {
+  id: string;
+  resolution_type: string;
+  resolution_notes: string | null;
+  resolved_at: string;
+  time_to_resolve_minutes: number | null;
+  recurrence_count: number;
+}
+
+function InterventionHistory({
+  alert,
+  show,
+  onToggle,
+}: {
+  alert: AnalyticsAlertRow;
+  show: boolean;
+  onToggle: () => void;
+}) {
+  const { data: history = [], isLoading } = useQuery({
+    queryKey: ["intervention-history", alert.alert_type, alert.title],
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: InterventionRow[] | null; error: unknown }>;
+      }).rpc("lookup_intervention_history", {
+        p_alert_type: alert.alert_type ?? "unknown",
+        p_alert_title: (alert.title ?? "").slice(0, 120),
+        p_limit: 3,
+      });
+      if (error) return [];
+      return data ?? [];
+    },
+    enabled: show,
+    staleTime: 60_000,
+  });
+
+  if (!show) {
+    // Show a subtle "history" button if there might be past resolutions
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="mt-1 flex items-center gap-1 text-[9px] text-slate-500 hover:text-slate-300 transition-colors"
+      >
+        <History className="h-2.5 w-2.5" /> What solved this last time?
+      </button>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mt-1 flex items-center gap-1 text-[9px] text-slate-500">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading history...
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <p className="mt-1 text-[9px] text-slate-500">No past resolutions for this alert type.</p>
+    );
+  }
+
+  return (
+    <div className="mt-1 rounded bg-violet-500/5 border border-violet-500/10 px-2 py-1.5 space-y-1">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-violet-400">
+        Past resolutions ({history.length})
+      </p>
+      {history.map((row) => (
+        <div key={row.id} className="flex items-start gap-2 text-[10px]">
+          <span className="text-slate-400 shrink-0">
+            {new Date(row.resolved_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </span>
+          <span className="text-foreground capitalize">{row.resolution_type}</span>
+          {row.time_to_resolve_minutes != null && (
+            <span className="text-slate-500">{row.time_to_resolve_minutes}min</span>
+          )}
+          {row.recurrence_count > 1 && (
+            <span className="text-amber-400">x{row.recurrence_count}</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
