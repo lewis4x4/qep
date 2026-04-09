@@ -153,6 +153,9 @@ const ExecCommandCenterPage = lazy(() =>
 const IncentiveCatalogPage = lazy(() =>
   import("./features/admin/pages/IncentiveCatalogPage").then((m) => ({ default: m.IncentiveCatalogPage }))
 );
+const CatalogImportPage = lazy(() =>
+  import("./features/admin/pages/CatalogImportPage").then((m) => ({ default: m.CatalogImportPage }))
+);
 const FleetRadarPage = lazy(() =>
   import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
 );
@@ -1087,6 +1090,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <IncentiveCatalogPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/catalog-import"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <CatalogImportPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

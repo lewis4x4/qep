@@ -234,7 +234,16 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
 
-          <MarginCheckBanner marginPct={marginPct} />
+          <MarginCheckBanner
+            marginPct={marginPct}
+            waterfall={{
+              equipmentTotal: subtotal,
+              dealerCost,
+              tradeAllowance,
+              netTotal,
+              marginAmount,
+            }}
+          />
 
           <Card className="p-4 space-y-3">
             {/* Branch letterhead on printed quote */}
