@@ -47,6 +47,7 @@ import {
   safeJsonError,
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 const FN_NAME = "qrm-prediction-scorer";
 
@@ -182,19 +183,13 @@ Deno.serve(async (req) => {
   // Phase 0: service-role only. The scorer is a cron job, not a user surface.
   // Phase 4 will add a per-user JWT path so reps can manually re-grade their
   // own predictions.
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const internalSecretHeader = req.headers.get("x-internal-service-secret") ?? "";
-  const internalServiceSecret =
-    Deno.env.get("INTERNAL_SERVICE_SECRET") ??
-    Deno.env.get("DGE_INTERNAL_SERVICE_SECRET") ??
-    "";
-
-  const isServiceRole =
-    (serviceRoleKey.length > 0 && authHeader === `Bearer ${serviceRoleKey}`) ||
-    (internalServiceSecret.length > 0 && internalSecretHeader === internalServiceSecret);
-
-  if (!isServiceRole) {
+  //
+  // Wave 5a refactor: replaced inline morning-briefing-style auth check with
+  // the shared `isServiceRoleCaller` helper. Identical contract (legacy
+  // Bearer service_role_key OR modern x-internal-service-secret), zero
+  // behavior change. The shared helper has 9 unit tests covering both paths
+  // and the empty-env defensive cases.
+  if (!isServiceRoleCaller(req)) {
     return safeJsonError("Unauthorized — service role required", 401, origin);
   }
 
