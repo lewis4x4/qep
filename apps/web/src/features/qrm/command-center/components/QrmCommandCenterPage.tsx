@@ -62,14 +62,17 @@ export function QrmCommandCenterPage({
   const query = useCommandCenter(scope);
 
   const handleAccept = useCallback((card: RecommendationCardPayload) => {
-    // Slice 1: telemetry-only. Backend memory table arrives in Slice 4.
-    void card;
+    // Phase 0 P0.8 — log trace_id for telemetry. Full event emission in Phase 2.
+    if (card.traceId) {
+      console.info("[QRM] recommendation accepted", { traceId: card.traceId, entityId: card.entityId });
+    }
   }, []);
 
   const handleDismiss = useCallback((card: RecommendationCardPayload) => {
-    // Slice 1: snooze persists locally inside RecommendationCard;
-    // dismiss is also local-only until Slice 4.
-    void card;
+    // Phase 0 P0.8 — log trace_id for telemetry. Full event emission in Phase 2.
+    if (card.traceId) {
+      console.info("[QRM] recommendation dismissed", { traceId: card.traceId, entityId: card.entityId });
+    }
   }, []);
 
   return (

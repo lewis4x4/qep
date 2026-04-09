@@ -858,7 +858,7 @@ Every idea from the original 84, the 16 NEW, and the 3 resurrected, with its pha
 - Each implementable probe (1–6) is a pure function with a Deno test. Stub probes (7, 8) have placeholder tests that assert "when `depends_on` surface does not exist, the probe returns `[]` without throwing." The probes are the contract.
 - **Exit gate**: Nightly scan runs. Observations land for probes 1–6. Daily rollup computes. Probes 7 and 8 are registered in `qrm_honesty_probes` with `is_enabled = false` and `depends_on` set. **Day 10 exit gate asserts: 8 probes registered, exactly 2 stubbed, exactly 6 producing observations.** Index is not yet visible to anyone. Named owner stamped on every observation.
 
-**Day 11 — P0.7 Time Primitive + P0.8 Trace substrate**
+**Day 11 — P0.7 Time Primitive + P0.8 Trace substrate** ✅ Shipped (commit `2630b7b`)
 - **P0.7 BACKFILL SCOPE CORRECTION (from Day 2 verification §7)**: the original roadmap said "walk `crm_activities` and `deal_composite` to reconstruct historical transitions." This is impossible — `crm_activities.activity_type` has no stage-change enum values (`'note', 'call', 'email', 'meeting', 'task', 'sms'` only), no dedicated stage-history table exists, and `crm_deals.updated_at` is unreliable as a proxy (fires on any column change). **P0.7 backfill is now cold-start, not historical replay.**
 - Migration `215_time_primitive.sql`:
   - Table `qrm_stage_transitions` — `id, deal_id, from_stage_id, to_stage_id, at timestamptz, source text`.
@@ -872,12 +872,12 @@ Every idea from the original 84, the 16 NEW, and the 3 resurrected, with its pha
 - Wire Slice 1's `RecommendationCard` Accept/Dismiss/Snooze to call `trackRecommendationEvent()` with the prediction's `trace_id`.
 - Deno tests for `qrm_stage_age()` cold-start fallback, trigger firing on stage updates, and trace round-trip.
 - **~~DEFERRED-DECISION CLOSED — Slice 1 push timing~~** — SUPERSEDED by user override 2026-04-08. Slice 1 was pushed to `origin/main` on Day 1 as two commits (`0ba1498` + `79e767b`). The P0.2–P0.8 refactors now ship as normal follow-up commits against the pushed Slice 1 code, not as a single pre-push refactor. No force-pushes. See §15 Q1 for the full override note.
-- **Exit gate**: All P0 migrations through 215 applied. All P0 Deno tests green. All P0 gates passed. `qrm_stage_age(any_deal)` returns a sensible number for both cold-start deals (fallback path) and post-trigger deals (transition path).
+- **Exit gate**: All P0 migrations through 215 applied. All P0 Deno tests green. All P0 gates passed. `qrm_stage_age(any_deal)` returns a sensible number for both cold-start deals (fallback path) and post-trigger deals (transition path). **GATE PASSED — 2630b7b.**
 
-**Day 12 — Phase 0 exit audit**
-- Refactor the Slice 1 edge function one more time to confirm it uses: P0.2 bridge view, P0.3 ledger writes, P0.4 flow engine publish on recommendation emit, P0.5 role blend, P0.8 trace.
-- Run the full verification from Slice 1 again: every functional check in the Slice 1 verification section of [/Users/brianlewis/.claude/plans/reflective-scribbling-bear.md](/Users/brianlewis/.claude/plans/reflective-scribbling-bear.md).
-- Write a Phase 0 exit report at `/Users/brianlewis/.claude/plans/phase-0-exit-report.md` naming which contracts are now clean to cite and which (if any) leaked scope into Phase 2.
+**Day 12 — Phase 0 exit audit** ✅ Shipped
+- Refactored Slice 1 edge function to confirm all P0 substrates: P0.2 (deal_signals view), P0.3 (prediction ledger), P0.4 (flow bus publish — wired in Day 12), P0.5 (role blend), P0.8 (trace_id on cards).
+- Full verification: 215 migrations, 119/119 Deno tests, 4/4 deno checks, bun build clean.
+- Phase 0 exit report written at `/Users/brianlewis/.claude/plans/phase-0-exit-report.md`.
 - **Exit gate**: Phase 0 signed off. Phase 2 Slice 2.1 can open.
 
 **Day 13 — Phase 2 Slice 2.1 backend (Revenue Reality Board)**

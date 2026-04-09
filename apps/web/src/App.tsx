@@ -303,6 +303,12 @@ const QrmCommandCenterPage = lazy(() =>
   }))
 );
 
+const PredictionTracePage = lazy(() =>
+  import("./features/qrm/command-center/components/PredictionTracePage").then((m) => ({
+    default: m.PredictionTracePage,
+  }))
+);
+
 function RouteFallback() {
   return (
     <div
@@ -1302,6 +1308,17 @@ function App() {
                     <QrmCommandCenterPage userRole={profile.role} userId={profile.id} userName={profile.full_name} userEmail={profile.email} ironRoleFromProfile={profile.iron_role} />
                   ) : (
                     <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              {/* Phase 0 P0.8 — Prediction trace viewer (manager-gated) */}
+              <Route
+                path="/qrm/command/trace/:predictionId"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <PredictionTracePage />
+                  ) : (
+                    <Navigate to="/qrm/command" replace />
                   )
                 }
               />

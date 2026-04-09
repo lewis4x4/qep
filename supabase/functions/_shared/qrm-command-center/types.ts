@@ -95,6 +95,8 @@ export interface RecommendationCardPayload {
   stageName: string | null;
   /** ISO timestamp the contributing signals were observed. */
   observedAt: string;
+  /** P0.8 trace ID — links the card to its prediction ledger row for trace viewing. */
+  traceId?: string | null;
 }
 
 export interface CommandStripPayload {

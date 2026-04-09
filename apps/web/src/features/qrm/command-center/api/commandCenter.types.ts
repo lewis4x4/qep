@@ -68,6 +68,8 @@ export interface RecommendationCardPayload {
   contactName: string | null;
   stageName: string | null;
   observedAt: string;
+  /** P0.8 trace ID — links the card to its prediction ledger row for trace viewing. */
+  traceId?: string | null;
 }
 
 export interface CommandStripPayload {

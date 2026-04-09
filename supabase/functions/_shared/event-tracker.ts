@@ -36,6 +36,7 @@ export interface TrackEventInput {
   role?: UserRole;
   session_id?: string | null;
   request_id?: string | null;
+  trace_id?: string | null;
   source?: EventSource;
   entity_type?: EntityType;
   entity_id?: string | null;

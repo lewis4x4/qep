@@ -275,3 +275,9 @@ verify_jwt = false
 # (migration 214) can call it with x-internal-service-secret.
 [functions.qrm-honesty-scan]
 verify_jwt = false
+
+# QRM Prediction Trace — user-facing trace viewer (Phase 0 P0.8).
+# JWT validated inside the function; gateway verify_jwt off for consistency
+# with the other QRM functions.
+[functions.qrm-prediction-trace]
+verify_jwt = false

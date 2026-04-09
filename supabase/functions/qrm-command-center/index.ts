@@ -29,6 +29,7 @@
 import { createAdminClient, createCallerClient } from "../_shared/dge-auth.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
 import {
   optionsResponse,
   safeJsonError,
@@ -64,6 +65,8 @@ import type {
   CommandCenterScope,
   CommandStripPayload,
   IronRole,
+  LaneKey,
+  RecommendationCardPayload,
   SectionFreshness,
   SectionKey,
 } from "../_shared/qrm-command-center/types.ts";
@@ -76,6 +79,15 @@ const VALID_SCOPES: CommandCenterScope[] = ["mine", "team", "branch", "company"]
 
 function isValidScope(value: string): value is CommandCenterScope {
   return VALID_SCOPES.includes(value as CommandCenterScope);
+}
+
+/** Map a lane key to its prediction_kind for trace_id lookup. */
+function kindForCard(lane: LaneKey): string {
+  switch (lane) {
+    case "revenue_ready": return "recommendation:revenue_ready";
+    case "revenue_at_risk": return "recommendation:revenue_at_risk";
+    case "blockers": return "recommendation:blockers";
+  }
 }
 
 const LEGACY_ROLE_MAP: Record<string, IronRole> = {
@@ -565,9 +577,10 @@ Deno.serve(async (req) => {
         modelSource: "rules",
       });
       if (ledgerRows.length > 0) {
-        const { error: ledgerError } = await adminClient
+        const { data: insertedRows, error: ledgerError } = await adminClient
           .from("qrm_predictions")
-          .insert(ledgerRows);
+          .insert(ledgerRows)
+          .select("subject_id, prediction_kind, trace_id");
         if (ledgerError) {
           console.error(`[${FN_NAME}] ledger insert failed:`, ledgerError.message);
           captureEdgeException(new Error(`ledger insert: ${ledgerError.message}`), {
@@ -580,6 +593,34 @@ Deno.serve(async (req) => {
               ironRole,
             },
           });
+        } else if (insertedRows) {
+          // Phase 0 P0.8 — stamp trace_id onto cards so the frontend can link
+          // to the prediction trace viewer. Map by (subject_id, prediction_kind).
+          const traceMap = new Map<string, string>();
+          for (const row of insertedRows) {
+            traceMap.set(`${row.subject_id}:${row.prediction_kind}`, row.trace_id);
+          }
+          const stampTraceId = (cards: RecommendationCardPayload[]) => {
+            for (const card of cards) {
+              const key = `${card.entityId}:${kindForCard(card.lane)}`;
+              card.traceId = traceMap.get(key) ?? null;
+            }
+          };
+          stampTraceId(lanes.revenueReady);
+          stampTraceId(lanes.revenueAtRisk);
+          stampTraceId(lanes.blockers);
+          // Chief of Staff cards
+          for (const c of [chief.bestMove, chief.biggestRisk, chief.fastestPath]) {
+            if (!c) continue;
+            const ck = `${c.entityId}:chief_of_staff:*`;
+            // Match any chief_of_staff kind for this entity
+            for (const [mapKey, tid] of traceMap) {
+              if (mapKey.startsWith(`${c.entityId}:chief_of_staff:`)) {
+                c.traceId = tid;
+                break;
+              }
+            }
+          }
         }
       }
     } catch (err) {
@@ -592,6 +633,40 @@ Deno.serve(async (req) => {
       });
     }
     const ledgerLatency = Date.now() - ledgerStart;
+
+    // ── Publish flow events for each recommendation (Phase 0 P0.4) ──
+    //
+    // After the prediction ledger write, publish one flow event per card so
+    // downstream subscribers (notification dispatchers, escalation routers)
+    // can react without point-to-point coupling. Fire-and-forget — flow bus
+    // failures never fail the request. Each event carries an idempotency key
+    // derived from the deal ID + lane + observation timestamp so re-runs
+    // deduplicate cleanly.
+    const allCards = [
+      ...lanes.revenueReady,
+      ...lanes.revenueAtRisk,
+      ...lanes.blockers,
+    ];
+    for (const card of allCards) {
+      publishFlowEvent(adminClient, {
+        workspaceId,
+        eventType: "qrm_recommendation_issued",
+        sourceModule: "qrm-command-center",
+        dealId: card.entityId,
+        severity: card.lane === "blockers" ? "high" : card.lane === "revenue_at_risk" ? "medium" : "low",
+        payload: {
+          prediction_kind: kindForCard(card.lane),
+          score: card.score,
+          confidence: card.confidence,
+          lane: card.lane,
+          trace_id: card.traceId ?? null,
+        },
+        idempotencyKey: `qrm-rec-${card.entityId}-${card.lane}-${observedAt}`,
+      }).catch((err) => {
+        // Never fail the request for a flow bus publish failure.
+        console.error(`[${FN_NAME}] flow bus publish failed for ${card.entityId}:`, err);
+      });
+    }
 
     const stageInputs: PipelineStageInput[] = stages.map((s) => ({
       id: s.id,
