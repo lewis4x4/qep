@@ -13,7 +13,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import type { UserRole } from "@/lib/database.types";
 
@@ -136,38 +136,42 @@ export function OperatingSystemHubPage({ userRole }: OperatingSystemHubPageProps
   const visibleModules = MODULES.filter((item) => item.roles.includes(userRole));
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      <div className="flex items-start justify-between gap-3">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 sm:px-6 lg:px-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Operating System</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-qep-orange shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
+            <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-400">Quality Equipment & Parts</span>
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mb-2">Operating System</h1>
+          <p className="text-lg font-light text-slate-400">
             The real live modules inside QEP OS. This is the front door to the system that has been built.
           </p>
         </div>
         <AskIronAdvisorButton contextType="os_hub" variant="inline" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         {visibleModules.map((module) => {
           const Icon = module.icon;
           return (
-            <Link key={module.href} to={module.href} className="block">
-              <Card className={`h-full p-4 transition hover:border-qep-orange/50 ${module.tone}`}>
-                <div className="flex items-start justify-between gap-3">
+            <Link key={module.href} to={module.href} className="block group">
+              <GlassPanel className={`h-full p-6 transition-all duration-300 hover:shadow-2xl hover:border-qep-orange/50 hover:-translate-y-1 ${module.tone}`}>
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4" />
-                      <h2 className="text-sm font-bold text-foreground">{module.title}</h2>
+                    <div className="flex items-center gap-3 mb-3">
+                      <Icon className="h-5 w-5" />
+                      <h2 className="text-lg font-medium text-white">{module.title}</h2>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">{module.description}</p>
+                    <p className="text-sm text-slate-400 font-light leading-relaxed">{module.description}</p>
                   </div>
                   {module.badge && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                    <span className="shrink-0 text-[9px] font-bold tracking-[0.1em] uppercase text-slate-500 bg-white/5 px-2 py-1 rounded-md">
                       {module.badge}
                     </span>
                   )}
                 </div>
-              </Card>
+              </GlassPanel>
             </Link>
           );
         })}

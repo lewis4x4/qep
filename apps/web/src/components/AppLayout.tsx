@@ -273,9 +273,9 @@ export function AppLayout({
       />
 
       {/* Main content */}
-      {/* pt-14: clears mobile top header; pb-16: clears mobile bottom tab bar */}
-      {/* lg:pt-[72px]: clears desktop top bar; lg:pb-0; no left margin */}
-      <main className="flex-1 pt-14 pb-16 lg:pt-[72px] lg:pb-0 min-h-screen">
+      {/* pt-20: clears mobile top header; pb-16: clears mobile bottom tab bar */}
+      {/* lg:pt-[104px]: clears desktop floating top bar; lg:pb-8; no left margin */}
+      <main className="flex-1 pt-20 pb-16 lg:pt-[104px] lg:pb-8 min-h-screen">
         {children}
       </main>
     </div>

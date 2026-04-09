@@ -18,7 +18,8 @@ export type SectionKey =
   | "commandStrip"
   | "aiChiefOfStaff"
   | "actionLanes"
-  | "pipelinePressure";
+  | "pipelinePressure"
+  | "revenueRealityBoard";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -126,6 +127,29 @@ export interface PipelinePressurePayload {
   };
 }
 
+// ─── Revenue Reality Board ─────────────────────────────────────────────────
+
+export type BlockerType = "deposit_missing" | "margin_flagged" | "anomaly_critical";
+
+export interface BlockerBreakdownEntry {
+  type: BlockerType;
+  count: number;
+  totalValue: number;
+}
+
+export interface RevenueRealityBoardPayload {
+  openPipeline: number;
+  weightedRevenue: number;
+  closable7d: number;
+  closable30d: number;
+  atRisk: number;
+  marginAtRisk: number;
+  stalledQuotes: { count: number; totalValue: number };
+  blockedByType: BlockerBreakdownEntry[];
+  dgeBlendedDealCount: number;
+  dgeAvailability: "none" | "partial" | "full";
+}
+
 export interface CommandCenterResponse {
   scope: CommandCenterScope;
   roleVariant: IronRole;
@@ -134,4 +158,5 @@ export interface CommandCenterResponse {
   aiChiefOfStaff: AiChiefOfStaffPayload;
   actionLanes: ActionLanesPayload;
   pipelinePressure: PipelinePressurePayload;
+  revenueRealityBoard: RevenueRealityBoardPayload;
 }

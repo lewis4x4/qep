@@ -53,6 +53,8 @@ export interface RankableDeal {
   primaryContactId: string | null;
   companyId: string | null;
   assignedRepId: string | null;
+  /** DGE optimizer expected value — used by Revenue Reality Board for probability blending. */
+  dgeScore: number | null;
 }
 
 export interface DealSignalBundle {

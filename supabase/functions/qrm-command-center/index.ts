@@ -54,6 +54,7 @@ import type {
 } from "../_shared/qrm-command-center/ranking.ts";
 import { isIronRole } from "../_shared/qrm-command-center/types.ts";
 import { reduceSignalsToBundles } from "../_shared/qrm-command-center/signal-bridge.ts";
+import { buildRevenueRealityBoard } from "../_shared/qrm-command-center/revenue-reality.ts";
 import type { DealSignalRow } from "../_shared/qrm-command-center/signal-bridge.ts";
 import {
   buildLedgerBatch,
@@ -150,6 +151,7 @@ interface DealRow {
   created_at: string;
   deposit_status: string | null;
   margin_check_status: string | null;
+  dge_score: number | null;
 }
 
 interface StageRow {
@@ -179,6 +181,7 @@ function toRankableDeal(row: DealRow, stageMap: Map<string, StageRow>): Rankable
     primaryContactId: row.primary_contact_id,
     companyId: row.company_id,
     assignedRepId: row.assigned_rep_id,
+    dgeScore: row.dge_score,
   };
 }
 
@@ -418,7 +421,7 @@ Deno.serve(async (req) => {
     let dealsQuery = callerClient
       .from("crm_deals")
       .select(
-        "id, name, amount, stage_id, primary_contact_id, company_id, assigned_rep_id, expected_close_on, next_follow_up_at, last_activity_at, closed_at, created_at, deposit_status, margin_check_status",
+        "id, name, amount, stage_id, primary_contact_id, company_id, assigned_rep_id, expected_close_on, next_follow_up_at, last_activity_at, closed_at, created_at, deposit_status, margin_check_status, dge_score",
       )
       .is("deleted_at", null)
       .is("closed_at", null);
@@ -677,6 +680,7 @@ Deno.serve(async (req) => {
     }));
     const pressure = buildPipelinePressure(stageInputs, deals, nowTime);
     const commandStrip = buildCommandStrip(deals, signalsByDealId, nowTime);
+    const revenueReality = buildRevenueRealityBoard(deals, signalsByDealId, nowTime);
 
     // Count voice signal rows for the AI Chief of Staff freshness chip.
     // After P0.2, voice rows arrive via the unified deal_signals view; we
@@ -695,6 +699,7 @@ Deno.serve(async (req) => {
       },
       actionLanes: { generatedAt, source: "live", latencyMs: signalsLatency },
       pipelinePressure: { generatedAt, source: "live", latencyMs: stagesLatency },
+      revenueRealityBoard: { generatedAt, source: "live", latencyMs: dealsLatency },
     };
 
     const response: CommandCenterResponse = {
@@ -705,6 +710,7 @@ Deno.serve(async (req) => {
       aiChiefOfStaff: chief,
       actionLanes: lanes,
       pipelinePressure: pressure,
+      revenueRealityBoard: revenueReality,
     };
 
     console.log(

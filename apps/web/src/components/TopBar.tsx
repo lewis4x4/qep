@@ -292,12 +292,13 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
   return (
     <>
-      <header
-        className="fixed top-4 left-4 right-4 z-50 flex items-center px-6 py-4 gap-4 bg-slate-900/40 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl"
-        role="banner"
-      >
-        {/* Left: Logo */}
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 sm:px-6 lg:px-8 pointer-events-none">
+        <header
+          className="w-full max-w-7xl flex items-center px-6 py-3.5 gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl pointer-events-auto"
+          role="banner"
+        >
+          {/* Left: Logo */}
+          <div className="flex items-center gap-3 shrink-0">
           <Link
             to="/dashboard"
             className="flex min-w-0 items-center gap-2"
@@ -507,7 +508,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </header>
+        </header>
+      </div>
 
       {/* Sign out confirmation dialog */}
       <Dialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>

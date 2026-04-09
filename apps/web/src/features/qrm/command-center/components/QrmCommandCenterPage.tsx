@@ -76,7 +76,7 @@ export function QrmCommandCenterPage({
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 p-4 sm:p-6 lg:p-8 min-h-full">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8 min-h-full">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mb-2">{headline.title}</h1>

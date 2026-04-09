@@ -123,7 +123,7 @@ export function CommandCenterPage() {
   const exportRole: ExecRoleTab = tab === "overview" ? "ceo" : tab;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-24 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-6 mb-8">
         <div>

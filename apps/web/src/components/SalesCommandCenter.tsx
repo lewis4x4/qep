@@ -1024,7 +1024,7 @@ export function SalesCommandCenter({
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto min-h-full">
+    <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto min-h-full">
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="mb-10 sm:mb-12">
         <div className="flex items-baseline justify-between flex-wrap gap-2">

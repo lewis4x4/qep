@@ -38,7 +38,8 @@ export type SectionKey =
   | "commandStrip"
   | "aiChiefOfStaff"
   | "actionLanes"
-  | "pipelinePressure";
+  | "pipelinePressure"
+  | "revenueRealityBoard";
 
 export interface SectionFreshness {
   generatedAt: string;
@@ -155,6 +156,39 @@ export interface PipelinePressurePayload {
   };
 }
 
+// ─── Revenue Reality Board ─────────────────────────────────────────────────
+
+export type BlockerType = "deposit_missing" | "margin_flagged" | "anomaly_critical";
+
+export interface BlockerBreakdownEntry {
+  type: BlockerType;
+  count: number;
+  totalValue: number;
+}
+
+export interface RevenueRealityBoardPayload {
+  /** Sum of all open deal amounts (raw, unweighted). */
+  openPipeline: number;
+  /** Sum of (amount × effectiveProbability) for all open deals. */
+  weightedRevenue: number;
+  /** Weighted revenue for deals closing within 7 days with effectiveProb ≥ 0.5. */
+  closable7d: number;
+  /** Weighted revenue for deals closing within 30 days with effectiveProb ≥ 0.5. */
+  closable30d: number;
+  /** Weighted revenue for stalled (>7d no activity) or overdue follow-up deals. */
+  atRisk: number;
+  /** Total deal value where margin_check_status = 'flagged'. */
+  marginAtRisk: number;
+  /** Deals with no activity for >14 days. */
+  stalledQuotes: { count: number; totalValue: number };
+  /** Deals grouped by blocker kind. */
+  blockedByType: BlockerBreakdownEntry[];
+  /** How many deals used DGE close-probability blending. */
+  dgeBlendedDealCount: number;
+  /** DGE coverage: "none" | "partial" | "full". */
+  dgeAvailability: "none" | "partial" | "full";
+}
+
 export interface CommandCenterResponse {
   scope: CommandCenterScope;
   roleVariant: IronRole;
@@ -164,4 +198,5 @@ export interface CommandCenterResponse {
   aiChiefOfStaff: AiChiefOfStaffPayload;
   actionLanes: ActionLanesPayload;
   pipelinePressure: PipelinePressurePayload;
+  revenueRealityBoard: RevenueRealityBoardPayload;
 }

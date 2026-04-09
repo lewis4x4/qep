@@ -13,6 +13,7 @@ import { ActionLanes } from "./ActionLanes";
 import { AiChiefOfStaff } from "./AiChiefOfStaff";
 import { CommandStrip } from "./CommandStrip";
 import { PipelinePressureMap } from "./PipelinePressureMap";
+import { RevenueRealityBoard } from "./RevenueRealityBoard";
 
 interface RoleVariantShellProps {
   data: CommandCenterResponse;
@@ -91,6 +92,14 @@ export function RoleVariantShell({
           <PipelinePressureMap
             key={section}
             payload={data.pipelinePressure}
+            freshness={freshness}
+          />
+        );
+      case "revenueRealityBoard":
+        return (
+          <RevenueRealityBoard
+            key={section}
+            payload={data.revenueRealityBoard}
             freshness={freshness}
           />
         );
