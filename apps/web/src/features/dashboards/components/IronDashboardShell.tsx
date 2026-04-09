@@ -34,7 +34,7 @@ export function IronDashboardShell({
   legacy,
 }: IronDashboardShellProps) {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">{title}</h1>
