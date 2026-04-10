@@ -178,6 +178,9 @@ const BranchCommandCenterPage = lazy(() =>
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
+const MobileFieldCommandPage = lazy(() =>
+  import("./features/qrm/pages/MobileFieldCommandPage").then((m) => ({ default: m.MobileFieldCommandPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -956,6 +959,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <VoiceQrmPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/m/qrm"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <MobileFieldCommandPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
