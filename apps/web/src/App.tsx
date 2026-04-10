@@ -190,6 +190,9 @@ const ExceptionHandlingPage = lazy(() =>
 const OpportunityMapPage = lazy(() =>
   import("./features/qrm/pages/OpportunityMapPage").then((m) => ({ default: m.OpportunityMapPage }))
 );
+const RevenueRescueCenterPage = lazy(() =>
+  import("./features/qrm/pages/RevenueRescueCenterPage").then((m) => ({ default: m.RevenueRescueCenterPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1701,6 +1704,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <OpportunityMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/revenue-rescue"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <RevenueRescueCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

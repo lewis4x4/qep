@@ -12,6 +12,7 @@ import {
   Package,
   ShieldAlert,
   Map,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Parts Intel", href: "/qrm/parts-intelligence", icon: Package },
   { label: "Exceptions", href: "/qrm/exceptions", icon: ShieldAlert },
   { label: "Map", href: "/qrm/opportunity-map", icon: Map },
+  { label: "Rescue", href: "/qrm/revenue-rescue", icon: LifeBuoy },
 ];
 
 export function QrmSubNav() {
