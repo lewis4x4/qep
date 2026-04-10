@@ -18,6 +18,7 @@ import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinition
 import { formatForMetric, formatKpiValue, relativeRefresh } from "../lib/formatters";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
 import { ForecastScenarioLayer } from "../components/ForecastScenarioLayer";
+import { HandoffTrustPanel } from "../components/HandoffTrustPanel";
 import type { AnalyticsAlertRow, ExecRoleTab, KpiSnapshot, MetricDefinition } from "../lib/types";
 
 interface ExecutiveOverviewViewProps {
@@ -308,6 +309,9 @@ export function ExecutiveOverviewView({ onOpenLens }: ExecutiveOverviewViewProps
 
       {/* Forecast Scenarios (Slice 5.5) */}
       <ForecastScenarioLayer />
+
+      {/* Handoff Trust Ledger (Phase 3 Slice 3.1) */}
+      <HandoffTrustPanel />
     </div>
   );
 }
