@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface LoginPageProps {
   authError?: string | null;
+  mode?: "internal" | "portal";
 }
 
 function signInErrorDescription(error: AuthError): ReactNode {
@@ -56,7 +57,7 @@ const HERO_METRICS = [
   { label: "Quote turnaround", value: "Same day", icon: Wrench },
 ];
 
-export function LoginPage({ authError }: LoginPageProps) {
+export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
   const { toast, dismiss } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -101,6 +102,13 @@ export function LoginPage({ authError }: LoginPageProps) {
     }
     setLoading(false);
   }
+
+  const isPortal = mode === "portal";
+  const headline = isPortal ? "Portal access" : "Welcome back";
+  const subcopy = isPortal
+    ? `Sign in with your ${BRAND_NAME} customer portal account to view your equipment, service status, invoices, and documents.`
+    : `Sign in with your ${BRAND_NAME} work account to access knowledge, QRM follow-up, voice capture, and quotes.`;
+  const badgeLabel = isPortal ? "Secure customer portal" : "Secure operator access";
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(232,119,34,0.14),_transparent_28%),linear-gradient(135deg,_#08111F_0%,_#101A2C_52%,_#162134_100%)] px-4 py-4 sm:px-6 lg:px-8">
@@ -214,16 +222,15 @@ export function LoginPage({ authError }: LoginPageProps) {
               <div className="mb-8 space-y-4">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
                   <HardHat className="h-3.5 w-3.5 text-primary" />
-                  Secure operator access
+                  {badgeLabel}
                 </div>
 
                 <div>
                   <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem] sm:leading-[1.02]">
-                    Welcome back
+                    {headline}
                   </h2>
                   <p className="mt-3 max-w-md text-base leading-7 text-slate-400">
-                    Sign in with your {BRAND_NAME} work account to access knowledge, QRM follow-up, voice capture, and
-                    quotes.
+                    {subcopy}
                   </p>
                 </div>
 

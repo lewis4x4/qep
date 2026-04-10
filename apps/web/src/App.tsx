@@ -20,6 +20,7 @@ import {
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
+import { PortalLoginPage } from "./features/portal/pages/PortalLoginPage";
 
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
@@ -576,6 +577,8 @@ function App() {
           >
             <Routes>
               <Route path="/service/track" element={<ServicePublicTrackPage />} />
+              <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
+              <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="*" element={<LoginPage authError={error} />} />
             </Routes>
           </Suspense>

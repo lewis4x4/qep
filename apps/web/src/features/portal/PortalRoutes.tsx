@@ -1,6 +1,7 @@
 import { Route } from "react-router-dom";
 import { lazy } from "react";
 import type { ReactElement } from "react";
+import { PortalAuthGate } from "./components/PortalAuthGate";
 
 const PortalFleetPage = lazy(() =>
   import("./pages/PortalFleetPage").then((m) => ({ default: m.PortalFleetPage })),
@@ -37,15 +38,16 @@ const PortalFleetMapPage = lazy(() =>
  * any element whose type !== Route).
  */
 export function portalRouteElements(): ReactElement[] {
+  const wrap = (element: ReactElement) => <PortalAuthGate>{element}</PortalAuthGate>;
   return [
-    <Route key="portal" path="/portal" element={<PortalFleetPage />} />,
-    <Route key="portal-deals" path="/portal/deals" element={<PortalDealsPage />} />,
-    <Route key="portal-service" path="/portal/service" element={<PortalServicePage />} />,
-    <Route key="portal-parts" path="/portal/parts" element={<PortalPartsPage />} />,
-    <Route key="portal-invoices" path="/portal/invoices" element={<PortalInvoicesPage />} />,
-    <Route key="portal-quotes" path="/portal/quotes" element={<PortalQuotesPage />} />,
-    <Route key="portal-settings" path="/portal/settings" element={<PortalSettingsPage />} />,
-    <Route key="portal-documents" path="/portal/documents" element={<PortalDocumentsPage />} />,
-    <Route key="portal-fleet-map" path="/portal/fleet" element={<PortalFleetMapPage />} />,
+    <Route key="portal" path="/portal" element={wrap(<PortalFleetPage />)} />,
+    <Route key="portal-deals" path="/portal/deals" element={wrap(<PortalDealsPage />)} />,
+    <Route key="portal-service" path="/portal/service" element={wrap(<PortalServicePage />)} />,
+    <Route key="portal-parts" path="/portal/parts" element={wrap(<PortalPartsPage />)} />,
+    <Route key="portal-invoices" path="/portal/invoices" element={wrap(<PortalInvoicesPage />)} />,
+    <Route key="portal-quotes" path="/portal/quotes" element={wrap(<PortalQuotesPage />)} />,
+    <Route key="portal-settings" path="/portal/settings" element={wrap(<PortalSettingsPage />)} />,
+    <Route key="portal-documents" path="/portal/documents" element={wrap(<PortalDocumentsPage />)} />,
+    <Route key="portal-fleet-map" path="/portal/fleet" element={wrap(<PortalFleetMapPage />)} />,
   ];
 }
