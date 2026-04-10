@@ -12,9 +12,11 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useActiveBranches } from "@/hooks/useBranches";
 import { FileDown, Loader2, Download, Check, History } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { ExecRoleTab } from "../lib/types";
+import { EXEC_PACKET_PRESETS, getPacketPreset } from "../lib/packet-presets";
 
 interface PacketResponse {
   ok: boolean;
@@ -35,6 +37,8 @@ interface PacketRunRow {
   alerts_count: number;
   delivery_status: string | null;
   delivered_at: string | null;
+  delivery_target: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface Props {
@@ -45,6 +49,10 @@ export function CommandCenterExportMenu({ role }: Props) {
   const queryClient = useQueryClient();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [packet, setPacket] = useState<PacketResponse | null>(null);
+  const [presetId, setPresetId] = useState(EXEC_PACKET_PRESETS[role][0].id);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const preset = getPacketPreset(role, presetId);
+  const branchesQuery = useActiveBranches();
 
   const { data: history = [] } = useQuery({
     queryKey: ["exec", "packet-runs", role],
@@ -60,7 +68,7 @@ export function CommandCenterExportMenu({ role }: Props) {
           };
         };
       }).from("exec_packet_runs")
-        .select("id, generated_at, packet_md, metrics_count, alerts_count, delivery_status, delivered_at")
+        .select("id, generated_at, packet_md, metrics_count, alerts_count, delivery_status, delivered_at, delivery_target, metadata")
         .eq("role", role)
         .order("generated_at", { ascending: false })
         .limit(5);
@@ -75,7 +83,14 @@ export function CommandCenterExportMenu({ role }: Props) {
       const supa = supabase as unknown as {
         functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: PacketResponse | null; error: { message?: string } | null }> };
       };
-      const res = await supa.functions.invoke("exec-packet-generator", { body: { role } });
+      const res = await supa.functions.invoke("exec-packet-generator", {
+        body: {
+          role,
+          preset: preset.id,
+          board_ready: preset.boardReady,
+          branch_id: branchId,
+        },
+      });
       if (res.error) throw new Error(res.error.message ?? "packet generation failed");
       if (!res.data?.ok) throw new Error(res.data?.error ?? "packet generation failed");
       return res.data;
@@ -88,11 +103,11 @@ export function CommandCenterExportMenu({ role }: Props) {
   });
 
   const markDelivered = useMutation({
-    mutationFn: async (input: { runId: string; deliveryStatus: "previewed" | "downloaded" }) => {
+    mutationFn: async (input: { runId: string; deliveryStatus: "previewed" | "downloaded" | "emailed" }) => {
       const patch: Record<string, unknown> = {
         delivery_status: input.deliveryStatus,
       };
-      if (input.deliveryStatus === "downloaded") {
+      if (input.deliveryStatus === "downloaded" || input.deliveryStatus === "emailed") {
         patch.delivered_at = new Date().toISOString();
       }
       const { error } = await (supabase as unknown as {
@@ -182,6 +197,68 @@ export function CommandCenterExportMenu({ role }: Props) {
 
           {packet && (
             <>
+              <Card className="mt-4 p-4">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Packet preset</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {EXEC_PACKET_PRESETS[role].map((option) => (
+                        <Button
+                          key={option.id}
+                          size="sm"
+                          variant={presetId === option.id ? "default" : "outline"}
+                          onClick={() => setPresetId(option.id)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{preset.description}</p>
+                  </div>
+
+                  {branchesQuery.data && branchesQuery.data.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Branch focus</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant={branchId === null ? "default" : "outline"}
+                          onClick={() => setBranchId(null)}
+                        >
+                          Workspace-wide
+                        </Button>
+                        {branchesQuery.data.map((branch) => (
+                          <Button
+                            key={branch.slug}
+                            size="sm"
+                            variant={branchId === branch.slug ? "default" : "outline"}
+                            onClick={() => setBranchId(branch.slug)}
+                          >
+                            {branch.display_name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={generate.isPending} onClick={() => generate.mutate()}>
+                      Refresh with settings
+                    </Button>
+                    {packet.run_id && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={markDelivered.isPending}
+                        onClick={() => markDelivered.mutate({ runId: packet.run_id!, deliveryStatus: "emailed" })}
+                      >
+                        Mark emailed
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+
               <div className="mt-4 flex items-center justify-between">
                 <p className="text-[10px] text-muted-foreground">
                   Generated {new Date(packet.generated_at).toLocaleString()}
@@ -216,6 +293,7 @@ export function CommandCenterExportMenu({ role }: Props) {
                       </p>
                       <p className="text-[10px] text-muted-foreground">
                         {run.metrics_count} metrics · {run.alerts_count} alerts
+                        {run.delivery_target ? ` · ${run.delivery_target}` : ""}
                         {run.delivered_at ? ` · delivered ${new Date(run.delivered_at).toLocaleDateString()}` : ""}
                       </p>
                     </div>
