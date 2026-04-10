@@ -10,6 +10,7 @@ import { SlaCountdown } from "./SlaCountdown";
 import { DepositGateBadge } from "./DepositGateBadge";
 import { FollowUpQuickActions } from "./FollowUpQuickActions";
 import type { QrmRepSafeDeal } from "../lib/types";
+import { SopNudgeInline } from "@/features/sop/components/SopNudgeInline";
 
 export function PipelineDealCard({
   deal,
@@ -97,6 +98,10 @@ export function PipelineDealCard({
           depositAmount={effectiveDeal.depositAmount ?? null}
         />
       </div>
+      <SopNudgeInline
+        contextEntityType="deal"
+        contextEntityId={effectiveDeal.id}
+      />
       <div className="mt-2 flex gap-2">
         <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
           <Link to={`/crm/deals/${deal.id}`}>Open</Link>
