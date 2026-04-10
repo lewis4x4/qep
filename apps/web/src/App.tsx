@@ -1530,6 +1530,16 @@ function App() {
                 }
               />
               <Route
+                path="/qrm/deals/:dealId/autopsy"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <QrmDealDetailPage userId={profile.id} userRole={profile.role} mode="autopsy" />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/qrm/accounts/:accountId/command"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (

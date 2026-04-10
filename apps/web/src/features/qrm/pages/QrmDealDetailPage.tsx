@@ -26,6 +26,7 @@ import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildTradeWalkaroundHref } from "../lib/trade-walkaround";
 import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
+import { buildDealAutopsySummary } from "../lib/deal-autopsy";
 import {
   createCrmActivity,
   listDealActivities,
@@ -39,7 +40,7 @@ import type { QrmDealPatchInput } from "../lib/types";
 interface QrmDealDetailPageProps {
   userId: string;
   userRole: UserRole;
-  mode?: "detail" | "room";
+  mode?: "detail" | "room" | "autopsy";
 }
 
 export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDealDetailPageProps) {
@@ -226,11 +227,19 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   const isLoading = compositeQuery.isLoading;
   const hasError = compositeQuery.isError;
   const hasDeal = Boolean(dealQueryData);
+  const isClosedLost = Boolean(selectedStage?.isClosedLost);
   const roomSummary = buildDealRoomSummary({
     activities: activitiesData,
     demos: compositeQuery.data?.demos ?? [],
     approvals: approvalsQuery.data ?? [],
   });
+  const autopsySummary = dealQueryData
+    ? buildDealAutopsySummary({
+      deal: dealQueryData,
+        lossFields: lossFieldsData ?? null,
+        activities: activitiesData,
+      })
+    : null;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -247,10 +256,21 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
             <Button asChild variant="outline" className="hidden sm:inline-flex">
               <Link to={`/qrm/deals/${dealId}`}>Open detail</Link>
             </Button>
-          ) : (
+          ) : mode === "autopsy" ? (
             <Button asChild variant="outline" className="hidden sm:inline-flex">
-              <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
+              <Link to={`/qrm/deals/${dealId}`}>Open detail</Link>
             </Button>
+          ) : (
+            <>
+              <Button asChild variant="outline" className="hidden sm:inline-flex">
+                <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
+              </Button>
+              {isClosedLost && (
+                <Button asChild variant="outline" className="hidden sm:inline-flex">
+                  <Link to={`/qrm/deals/${dealId}/autopsy`}>Deal Autopsy</Link>
+                </Button>
+              )}
+            </>
           )}
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             Edit Deal
@@ -352,6 +372,52 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                     ))}
                   </div>
                 ) : null}
+              </Card>
+            </>
+          )}
+
+          {mode === "autopsy" && autopsySummary && (
+            <>
+              <div className="grid gap-4 md:grid-cols-4">
+                <RoomSummaryCard label="Days Open" value={String(autopsySummary.daysOpen)} detail="Lifecycle length before loss." />
+                <RoomSummaryCard
+                  label="Overdue Tasks"
+                  value={String(autopsySummary.overdueTaskCount)}
+                  detail="Tasks still open when the deal closed lost."
+                  tone={autopsySummary.overdueTaskCount > 0 ? "warn" : "default"}
+                />
+                <RoomSummaryCard
+                  label="Competitor Signals"
+                  value={String(autopsySummary.competitorMentionCount)}
+                  detail="Voice evidence mentioning competitors."
+                  tone={autopsySummary.competitorMentionCount > 0 ? "warn" : "default"}
+                />
+                <RoomSummaryCard
+                  label="Last Touch Gap"
+                  value={autopsySummary.lastTouchGapDays == null ? "—" : `${autopsySummary.lastTouchGapDays}d`}
+                  detail="Days between the final recorded touch and loss."
+                  tone={(autopsySummary.lastTouchGapDays ?? 0) >= 14 ? "warn" : "default"}
+                />
+              </div>
+
+              <Card className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={dealQueryData.companyId ? buildAccountCommandHref(dealQueryData.companyId) : "/qrm/companies"}>
+                      Account Command
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
+                  </Button>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {autopsySummary.findings.map((finding) => (
+                    <div key={finding} className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-sm text-foreground">
+                      {finding}
+                    </div>
+                  ))}
+                </div>
               </Card>
             </>
           )}
