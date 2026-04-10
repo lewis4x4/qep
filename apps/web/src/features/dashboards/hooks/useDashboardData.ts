@@ -13,6 +13,11 @@ export function useIronManagerData() {
     queryKey: ["dashboard", "iron-manager"],
     queryFn: async () => {
       const sb = supabase;
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
       const agingCutoff = new Date();
       agingCutoff.setDate(agingCutoff.getDate() - INVENTORY_AGING_DAYS);
@@ -25,6 +30,12 @@ export function useIronManagerData() {
         { data: pipelineDeals },
         { data: dealStages },
         { data: agingEquipment },
+        { data: marginAnalytics },
+        { data: pipelineVelocity },
+        { data: forecastDeals },
+        { data: expiringIncentives },
+        { data: dealEquipmentLinks },
+        { data: resolvedPredictions },
       ] = await Promise.all([
         sb.from("demos").select("id, deal_id, status, equipment_category, created_at").eq("status", "requested"),
         sb.from("trade_valuations").select("id, deal_id, make, model, status, preliminary_value").eq("status", "manager_review"),
@@ -44,6 +55,36 @@ export function useIronManagerData() {
           .lte("created_at", agingCutoff.toISOString())
           .order("created_at", { ascending: true })
           .limit(40),
+        sb
+          .from("margin_analytics_view")
+          .select("rep_id, rep_name, equipment_category, month_bucket, deal_count, total_pipeline, avg_margin_pct, flagged_deal_count")
+          .order("month_bucket", { ascending: false })
+          .order("total_pipeline", { ascending: false })
+          .limit(24),
+        sb.rpc("pipeline_velocity_rpc", { p_threshold_days: 14 }),
+        sb
+          .from("crm_deals_weighted")
+          .select("id, name, amount, weighted_amount, expected_close_on, stage_name")
+          .order("expected_close_on", { ascending: true, nullsFirst: false })
+          .limit(250),
+        sb
+          .from("manufacturer_incentives")
+          .select("id, manufacturer, program_name, expiration_date, discount_type, discount_value")
+          .gte("expiration_date", todayStr)
+          .lte("expiration_date", tomorrowStr)
+          .order("expiration_date", { ascending: true })
+          .limit(20),
+        sb
+          .from("crm_deal_equipment")
+          .select("deal_id, role, crm_equipment!inner(make, category)")
+          .limit(400),
+        sb
+          .from("qrm_predictions")
+          .select("id, predicted_at, outcome")
+          .eq("subject_type", "deal")
+          .not("outcome", "is", null)
+          .order("predicted_at", { ascending: false })
+          .limit(200),
       ]);
 
       const deals = (pipelineDeals ?? []) as PipelineDealRow[];
@@ -68,6 +109,12 @@ export function useIronManagerData() {
         pipelineHealthByRep,
         agingEquipment: agingEquipment ?? [],
         approvalCount: (pendingDemos?.length ?? 0) + (pendingTrades?.length ?? 0) + (marginFlags?.length ?? 0),
+        marginAnalytics: marginAnalytics ?? [],
+        pipelineVelocity: pipelineVelocity ?? [],
+        forecastDeals: forecastDeals ?? [],
+        expiringIncentives: expiringIncentives ?? [],
+        dealEquipmentLinks: dealEquipmentLinks ?? [],
+        resolvedPredictions: resolvedPredictions ?? [],
       };
     },
     staleTime: 30_000,

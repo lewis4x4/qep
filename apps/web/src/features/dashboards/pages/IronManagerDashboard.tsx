@@ -1,5 +1,6 @@
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { IronDashboardShell } from "../components/IronDashboardShell";
+import { OwnershipIntelPanel } from "../components/OwnershipIntelPanel";
 import { useIronManagerData } from "../hooks/useDashboardData";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Users, TrendingUp, AlertTriangle, DollarSign, Package } from "lucide-react";
@@ -56,6 +57,7 @@ export function IronManagerDashboard() {
       subtitle="Pipeline oversight, approvals, team KPIs"
       kpis={kpis}
       widgetIds={DEFAULT_WIDGETS.iron_manager}
+      legacy={<OwnershipIntelPanel />}
     />
   );
 }

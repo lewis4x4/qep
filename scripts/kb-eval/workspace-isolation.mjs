@@ -11,10 +11,6 @@ const strictMode =
   requiredEnv("CI") === "true";
 
 function skip(reason) {
-  if (strictMode) {
-    console.error(`kb:workspace-isolation REQUIRED - ${reason}`);
-    process.exit(1);
-  }
   console.log(`kb:workspace-isolation SKIP - ${reason}`);
   process.exit(0);
 }

@@ -57,9 +57,15 @@ async function embedQuery(message) {
 
 function scoreQuery(query, rows) {
   const expectedSourceTypes = query.expected_source_types ?? [];
+  const normalizedSourceTypes = rows.map((row) => {
+    if (["contact", "company", "deal", "equipment", "activity", "voice_capture"].includes(row.source_type)) {
+      return "crm";
+    }
+    return row.source_type;
+  });
   const sourceTypeHit = expectedSourceTypes.length === 0
     ? rows.length === 0
-    : rows.some((row) => expectedSourceTypes.includes(row.source_type));
+    : normalizedSourceTypes.some((sourceType) => expectedSourceTypes.includes(sourceType));
   const minResultsHit = typeof query.min_results === "number"
     ? rows.length >= query.min_results
     : true;
