@@ -205,6 +205,9 @@ const PostSaleExperienceCenterPage = lazy(() =>
 const WorkflowAuditPage = lazy(() =>
   import("./features/qrm/pages/WorkflowAuditPage").then((m) => ({ default: m.WorkflowAuditPage }))
 );
+const SopFolkWorkflowPage = lazy(() =>
+  import("./features/qrm/pages/SopFolkWorkflowPage").then((m) => ({ default: m.SopFolkWorkflowPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1766,6 +1769,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <WorkflowAuditPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/sop-folk"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <SopFolkWorkflowPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
