@@ -129,6 +129,15 @@ interface DocumentVisibilityAuditRow {
   reason: string | null;
 }
 
+interface PortalNotificationFeedItem {
+  id: string;
+  category: "service" | "parts";
+  label: string;
+  detail: string;
+  channel: "portal" | "email" | "sms";
+  occurred_at: string;
+}
+
 function titleCaseStatus(raw: string | null | undefined): string {
   if (!raw) return "Status unavailable";
   return raw.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
@@ -493,6 +502,55 @@ function normalizePortalDocumentVisibility(input: {
     detail: reason,
     released_at: releaseAt,
   };
+}
+
+function notificationLabel(notificationType: string): string {
+  switch (notificationType) {
+    case "quote_ready":
+      return "Quote available";
+    case "schedule_confirmed":
+      return "Service scheduled";
+    case "job_started":
+      return "Service started";
+    case "job_completed":
+      return "Service completed";
+    case "invoice_ready":
+      return "Invoice ready";
+    case "tat_delay_advisory":
+      return "Service delay advisory";
+    case "parts_shipped":
+      return "Parts order shipped";
+    default:
+      return titleCaseStatus(notificationType);
+  }
+}
+
+function notificationDetail(input: {
+  notificationType: string;
+  channel: "portal" | "email" | "sms";
+  metadata: Record<string, unknown>;
+}): string {
+  const explicitMessage = typeof input.metadata.message === "string" ? input.metadata.message.trim() : "";
+  if (explicitMessage) return explicitMessage;
+
+  switch (input.notificationType) {
+    case "quote_ready":
+      return "Your dealership published a service quote for review.";
+    case "schedule_confirmed":
+      return "Your dealership confirmed the service appointment timing.";
+    case "job_started":
+      return "Your machine is actively being worked on.";
+    case "job_completed":
+      return "Your machine is ready for pickup or final handoff.";
+    case "invoice_ready":
+      return "A customer-facing invoice is ready in the portal.";
+    case "tat_delay_advisory":
+      return "The service team flagged a delay against the original timing target.";
+    case "parts_shipped":
+      return "The parts team marked your order as shipped.";
+    default:
+      return `Notification sent via ${input.channel}.`;
+  }
 }
 
 function normalizePortalPartsOrderStatus(input: {
@@ -1615,6 +1673,158 @@ Deno.serve(async (req) => {
         });
 
         return safeJsonOk({ documents }, origin);
+      }
+    }
+
+    // ── /settings — Portal profile + notification preferences/history ───
+    if (route === "settings") {
+      if (req.method === "GET") {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("Portal settings are not configured on this environment.", 503, origin);
+        }
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: customerRow, error: customerErr } = await supabase
+          .from("portal_customers")
+          .select("id, first_name, last_name, email, phone, notification_preferences")
+          .eq("id", portalCustomer.id)
+          .maybeSingle();
+
+        if (customerErr || !customerRow) {
+          return safeJsonError("Failed to load portal settings", 500, origin);
+        }
+
+        const { data: requestRows } = await admin
+          .from("service_requests")
+          .select("id")
+          .eq("portal_customer_id", portalCustomer.id);
+        const requestIds = ((requestRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+
+        let notificationFeed: PortalNotificationFeedItem[] = [];
+
+        if (requestIds.length > 0) {
+          const { data: jobRows } = await admin
+            .from("service_jobs")
+            .select("id, portal_request_id")
+            .in("portal_request_id", requestIds);
+
+          const jobIds = ((jobRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+          if (jobIds.length > 0) {
+            const { data: notificationRows } = await admin
+              .from("service_customer_notifications")
+              .select("id, notification_type, channel, sent_at, metadata")
+              .in("job_id", jobIds)
+              .order("sent_at", { ascending: false })
+              .limit(20);
+
+            notificationFeed = notificationFeed.concat(
+              ((notificationRows ?? []) as Array<Record<string, unknown>>).map((row) => {
+                const notificationType = typeof row.notification_type === "string" ? row.notification_type : "update";
+                const channel = typeof row.channel === "string" && ["portal", "email", "sms"].includes(row.channel)
+                  ? row.channel as "portal" | "email" | "sms"
+                  : "portal";
+                const metadata = (row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata))
+                  ? row.metadata as Record<string, unknown>
+                  : {};
+                return {
+                  id: String(row.id),
+                  category: "service",
+                  label: notificationLabel(notificationType),
+                  detail: notificationDetail({ notificationType, channel, metadata }),
+                  channel,
+                  occurred_at: typeof row.sent_at === "string" ? row.sent_at : new Date().toISOString(),
+                };
+              }),
+            );
+          }
+        }
+
+        const { data: partsRows } = await admin
+          .from("parts_orders")
+          .select("id")
+          .eq("portal_customer_id", portalCustomer.id);
+        const partOrderIds = ((partsRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+
+        if (partOrderIds.length > 0) {
+          const { data: partNotifications } = await admin
+            .from("parts_order_notification_sends")
+            .select("id, event_type, created_at")
+            .in("parts_order_id", partOrderIds)
+            .order("created_at", { ascending: false })
+            .limit(20);
+
+          notificationFeed = notificationFeed.concat(
+            ((partNotifications ?? []) as Array<Record<string, unknown>>).map((row) => ({
+              id: String(row.id),
+              category: "parts",
+              label: notificationLabel(typeof row.event_type === "string" ? row.event_type : "parts_update"),
+              detail: "The parts desk recorded a shipment update for one of your orders.",
+              channel: "email",
+              occurred_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+            })),
+          );
+        }
+
+        notificationFeed.sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+
+        const prefs = (customerRow.notification_preferences && typeof customerRow.notification_preferences === "object" && !Array.isArray(customerRow.notification_preferences))
+          ? customerRow.notification_preferences as Record<string, unknown>
+          : {};
+
+        return safeJsonOk({
+          customer: {
+            id: customerRow.id,
+            first_name: customerRow.first_name,
+            last_name: customerRow.last_name,
+            email: customerRow.email,
+            phone: customerRow.phone,
+            notification_preferences: {
+              email: prefs.email !== false,
+              sms: prefs.sms === true,
+            },
+          },
+          notifications: notificationFeed.slice(0, 20),
+        }, origin);
+      }
+
+      if (req.method === "PUT") {
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceKey) {
+          return safeJsonError("Portal settings are not configured on this environment.", 503, origin);
+        }
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+
+        const body = parsed.body as Record<string, unknown>;
+        const rawPrefs = (body.notification_preferences && typeof body.notification_preferences === "object" && !Array.isArray(body.notification_preferences))
+          ? body.notification_preferences as Record<string, unknown>
+          : {};
+
+        const admin = createClient(supabaseUrl, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const nextPrefs = {
+          email: rawPrefs.email !== false,
+          sms: rawPrefs.sms === true,
+        };
+
+        const { data: updated, error: updateErr } = await admin
+          .from("portal_customers")
+          .update({ notification_preferences: nextPrefs })
+          .eq("id", portalCustomer.id)
+          .select("notification_preferences")
+          .maybeSingle();
+
+        if (updateErr || !updated) {
+          return safeJsonError("Failed to update notification preferences", 500, origin);
+        }
+
+        return safeJsonOk({ notification_preferences: updated.notification_preferences }, origin);
       }
     }
 

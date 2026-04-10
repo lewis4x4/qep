@@ -54,6 +54,27 @@ export type PortalInvoicesResponse = { invoices?: Record<string, unknown>[] };
 export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
 export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };
 export type PortalSubscriptionsResponse = Record<string, unknown>;
+export type PortalSettingsResponse = {
+  customer?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    phone: string | null;
+    notification_preferences: {
+      email: boolean;
+      sms: boolean;
+    };
+  };
+  notifications?: Array<{
+    id: string;
+    category: "service" | "parts";
+    label: string;
+    detail: string;
+    channel: "portal" | "email" | "sms";
+    occurred_at: string;
+  }>;
+};
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const session = (await supabase.auth.getSession()).data.session;
@@ -136,6 +157,9 @@ export const portalApi = {
   getQuotes: (): Promise<PortalQuotesResponse> => portalFetch<PortalQuotesResponse>("quotes"),
   updateQuote: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("quotes", { method: "PUT", body: JSON.stringify(data) }),
+  getSettings: (): Promise<PortalSettingsResponse> => portalFetch<PortalSettingsResponse>("settings"),
+  updateSettings: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    portalFetch<Record<string, unknown>>("settings", { method: "PUT", body: JSON.stringify(data) }),
   getSubscriptions: (): Promise<PortalSubscriptionsResponse> =>
     portalFetch<PortalSubscriptionsResponse>("subscriptions"),
 };
