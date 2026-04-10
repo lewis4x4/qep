@@ -15,6 +15,7 @@ import {
 } from "@/components/primitives";
 import { fetchAsset360, type Asset360Response } from "../lib/asset-360-api";
 import { CommercialActionTab } from "../components/CommercialActionTab";
+import { MachineLifecycleCard } from "../components/MachineLifecycleCard";
 
 type TabKey = "service" | "parts" | "deal" | "telematics" | "docs" | "photos" | "commercial";
 
@@ -100,6 +101,13 @@ export function AssetDetailPage() {
       </div>
 
       {/* Badge row */}
+      <MachineLifecycleCard
+        equipmentId={equipment.id}
+        serialNumber={equipment.serial_number}
+        ownership={equipment.ownership}
+        availability={equipment.availability}
+      />
+
       <AssetBadgeRow equipmentId={equipment.id} />
 
       {/* Countdowns + Last24h */}

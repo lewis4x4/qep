@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getEquipmentById, patchEquipment } from "../lib/qrm-router-api";
 import { QrmEquipmentFormSheet, draftToPayload } from "../components/QrmEquipmentFormSheet";
 import { EquipmentVision } from "@/components/EquipmentVision";
+import { MachineLifecycleCard } from "../../equipment/components/MachineLifecycleCard";
 
 interface QrmEquipmentDetailPageProps {
   userId: string;
@@ -188,6 +189,15 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <div className="lg:col-span-2">
+          <MachineLifecycleCard
+            equipmentId={eq.id}
+            serialNumber={eq.serialNumber}
+            ownership={eq.ownership}
+            availability={eq.availability}
+          />
+        </div>
+
         {/* ─── Identity & Identification ─────────────── */}
         <SectionCard title="Identity">
           <div className="divide-y divide-border">
