@@ -19,6 +19,7 @@ import { ForecastScenarioLayer } from "../components/ForecastScenarioLayer";
 import { HandoffTrustPanel } from "../components/HandoffTrustPanel";
 import type { AnalyticsAlertRow, ExecRoleTab, KpiSnapshot, MetricDefinition } from "../lib/types";
 import { EXEC_LENS_META } from "../lib/lens-meta";
+import { deriveBusinessPosture, rankLensPressure } from "../lib/pulse-overview";
 
 interface ExecutiveOverviewViewProps {
   onOpenLens: (lens: ExecRoleTab) => void;
@@ -131,10 +132,97 @@ export function ExecutiveOverviewView({ onOpenLens }: ExecutiveOverviewViewProps
   const criticalAlerts = allAlerts.filter((alert) => alert.severity === "critical" || alert.severity === "error").length;
   const totalImpact = allAlerts.reduce((sum, alert) => sum + Number(alert.business_impact_value ?? 0), 0);
   const topAlerts = allAlerts.slice(0, 3);
+  const posture = deriveBusinessPosture({ criticalAlerts, staleMetrics, totalImpact });
+  const rankedLensPressure = rankLensPressure(
+    lensSummaries.map((summary) => ({
+      role: summary.role,
+      label: summary.label,
+      alerts: summary.alerts,
+      criticalAlerts: summary.criticalAlerts,
+      staleMetrics: summary.staleMetrics,
+    })),
+  );
+  const hottestLens = rankedLensPressure[0] ?? null;
+  const nextAction = topAlerts[0] ?? null;
 
   return (
     <div className="space-y-4">
       <AiExecutiveSummaryStrip role="ceo" />
+
+      <Card className="overflow-hidden border-white/10 bg-white/[0.03] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-qep-orange">Leadership Pulse</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+                posture.tone === "red"
+                  ? "bg-red-500/10 text-red-300"
+                  : posture.tone === "yellow"
+                  ? "bg-amber-500/10 text-amber-300"
+                  : "bg-emerald-500/10 text-emerald-300"
+              }`}>
+                Business posture: {posture.label}
+              </span>
+              <span className="text-xs text-muted-foreground">{posture.detail}</span>
+            </div>
+          </div>
+          <StatusChipStack
+            chips={[
+              { label: `${allAlerts.length} alert signals`, tone: allAlerts.length > 0 ? "yellow" : "green" },
+              { label: `${criticalAlerts} urgent`, tone: criticalAlerts > 0 ? "red" : "green" },
+              { label: `${staleMetrics} stale metrics`, tone: staleMetrics > 0 ? "yellow" : "green" },
+            ]}
+          />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <PulseBlock
+            title="What Changed"
+            body={allAlerts.length > 0
+              ? `${allAlerts.length} executive alerts are active across the command stack.`
+              : "No new executive alerts are pushing the business off baseline right now."}
+          />
+          <PulseBlock
+            title="What Is At Risk"
+            body={hottestLens
+              ? `${hottestLens.label} is carrying the highest pressure: ${hottestLens.criticalAlerts} critical, ${hottestLens.alerts} total alerts.`
+              : "No lens is under concentrated pressure right now."}
+          />
+          <PulseBlock
+            title="What To Do Next"
+            body={nextAction
+              ? nextAction.title
+              : "No immediate intervention is required. Review the lens previews for early drift."}
+          />
+          <PulseBlock
+            title="Where To Drill"
+            body={hottestLens
+              ? `Open the ${hottestLens.label} lens first, then move into the linked queue or record action.`
+              : "Open the overview lens cards to inspect current KPI posture and freshness."}
+          />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {rankedLensPressure.map((lens) => (
+            <div key={lens.role} className="rounded-xl border border-border/70 bg-black/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">{lens.label} pressure</p>
+                <StatusChipStack
+                  chips={[
+                    { label: `${lens.alerts} alerts`, tone: lens.alerts > 0 ? "yellow" : "green" },
+                    { label: `${lens.criticalAlerts} critical`, tone: lens.criticalAlerts > 0 ? "red" : "green" },
+                  ]}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {lens.staleMetrics === 0
+                  ? "Metrics are current."
+                  : `${lens.staleMetrics} metrics are stale and lowering confidence on this lens.`}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
         <Card className="overflow-hidden border-qep-orange/25 bg-[radial-gradient(circle_at_top_left,_rgba(218,131,48,0.18),_transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5">
@@ -318,6 +406,15 @@ function PostureStat({
       </div>
       <p className="mt-3 text-2xl font-black tracking-tight text-foreground">{value}</p>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function PulseBlock({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-foreground">{body}</p>
     </div>
   );
 }
