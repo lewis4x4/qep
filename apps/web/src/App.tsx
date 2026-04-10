@@ -1520,6 +1520,16 @@ function App() {
                 }
               />
               <Route
+                path="/qrm/deals/:dealId/room"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <QrmDealDetailPage userId={profile.id} userRole={profile.role} mode="room" />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/qrm/accounts/:accountId/command"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (

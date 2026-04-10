@@ -16,6 +16,7 @@ import { DemoRequestCard } from "../components/DemoRequestCard";
 import { DgeIntelligencePanel } from "../../dge/components/DgeIntelligencePanel";
 import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -24,6 +25,7 @@ import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation"
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildTradeWalkaroundHref } from "../lib/trade-walkaround";
+import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
 import {
   createCrmActivity,
   listDealActivities,
@@ -37,9 +39,10 @@ import type { QrmDealPatchInput } from "../lib/types";
 interface QrmDealDetailPageProps {
   userId: string;
   userRole: UserRole;
+  mode?: "detail" | "room";
 }
 
-export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) {
+export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDealDetailPageProps) {
   const { dealId } = useParams<{ dealId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -70,6 +73,25 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
     queryKey: ["crm", "deal", dealId, "activities"],
     queryFn: () => listDealActivities(dealId!),
     enabled: Boolean(dealId) && compositeQuery.isError,
+  });
+
+  const approvalsQuery = useQuery({
+    queryKey: ["crm", "deal", dealId, "room-approvals"],
+    enabled: Boolean(dealId) && mode === "room",
+    queryFn: async (): Promise<DealRoomApproval[]> => {
+      try {
+        const { data, error } = await supabase
+          .from("flow_approvals")
+          .select("id, subject, status")
+          .in("status", ["pending", "escalated"])
+          .contains("context_summary", { entity_id: dealId });
+        if (error) throw error;
+        return (data ?? []) as DealRoomApproval[];
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -204,6 +226,11 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
   const isLoading = compositeQuery.isLoading;
   const hasError = compositeQuery.isError;
   const hasDeal = Boolean(dealQueryData);
+  const roomSummary = buildDealRoomSummary({
+    activities: activitiesData,
+    demos: compositeQuery.data?.demos ?? [],
+    approvals: approvalsQuery.data ?? [],
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -216,6 +243,15 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
           Back to deals
         </Link>
         <div className="flex items-center gap-2">
+          {mode === "room" ? (
+            <Button asChild variant="outline" className="hidden sm:inline-flex">
+              <Link to={`/qrm/deals/${dealId}`}>Open detail</Link>
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="hidden sm:inline-flex">
+              <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             Edit Deal
           </Button>
@@ -266,9 +302,59 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
       {dealQueryData && (
         <>
           <div className="flex items-start justify-between gap-3">
-            <QrmPageHeader title={dealQueryData.name} subtitle="Deal detail, follow-up cadence, and close controls." />
+            <QrmPageHeader
+              title={dealQueryData.name}
+              subtitle={mode === "room" ? "Deal room with notes, tasks, scenarios, and approvals in one operating surface." : "Deal detail, follow-up cadence, and close controls."}
+            />
             <AskIronAdvisorButton contextType="deal" contextId={dealId} variant="inline" />
           </div>
+
+          {mode === "room" && (
+            <>
+              <div className="grid gap-4 md:grid-cols-4">
+                <RoomSummaryCard label="Notes" value={String(roomSummary.noteCount)} detail="Logged context on the deal timeline." />
+                <RoomSummaryCard
+                  label="Open Tasks"
+                  value={String(roomSummary.openTaskCount)}
+                  detail={roomSummary.overdueTaskCount > 0 ? `${roomSummary.overdueTaskCount} overdue` : "No overdue tasks"}
+                  tone={roomSummary.overdueTaskCount > 0 ? "warn" : "default"}
+                />
+                <RoomSummaryCard
+                  label="Approvals"
+                  value={String(roomSummary.pendingApprovalCount)}
+                  detail="Demo and flow approvals still waiting on a decision."
+                  tone={roomSummary.pendingApprovalCount > 0 ? "warn" : "default"}
+                />
+                <RoomSummaryCard label="Scenarios" value={String(roomSummary.scenarioCount)} detail="DGE optimization paths for this opportunity." />
+              </div>
+
+              <Card className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/qrm/command/approvals">Approval Center</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/quote?crm_deal_id=${dealId}${dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""}`}>
+                      New Quote
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={buildTradeWalkaroundHref(dealId)}>Trade Walkaround</Link>
+                  </Button>
+                </div>
+                {(approvalsQuery.data ?? []).length > 0 ? (
+                  <div className="mt-4 space-y-2">
+                    {(approvalsQuery.data ?? []).map((approval) => (
+                      <div key={approval.id} className="rounded-md border border-border/60 bg-muted/10 px-3 py-2">
+                        <p className="text-sm font-medium text-foreground">{approval.subject}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{approval.status}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </Card>
+            </>
+          )}
 
           <SopSuggestionWidget
             entityType="deal"
@@ -399,5 +485,25 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
         onArchived={() => navigate("/qrm/deals")}
       />
     </div>
+  );
+}
+
+function RoomSummaryCard({
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "default" | "warn";
+}) {
+  return (
+    <Card className="p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className={`mt-3 text-3xl font-semibold ${tone === "warn" ? "text-amber-400" : "text-foreground"}`}>{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </Card>
   );
 }
