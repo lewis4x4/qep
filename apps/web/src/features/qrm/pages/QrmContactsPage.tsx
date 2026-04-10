@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Building2, Download, Plus, Search, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase";
+import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
+import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { QrmContactEditorSheet } from "../components/QrmContactEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -22,6 +25,7 @@ export function QrmContactsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,6 +57,38 @@ export function QrmContactsPage() {
   });
 
   const contacts = contactsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const profileIds = useMemo(
+    () => contacts.map((contact) => contact.dgeCustomerProfileId).filter((value): value is string => Boolean(value)),
+    [contacts],
+  );
+  const { data: healthProfiles = [] } = useQuery({
+    queryKey: ["crm", "contacts", "health-profiles", profileIds.join(",")],
+    enabled: profileIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
+          };
+        };
+      })
+        .from("customer_profiles_extended")
+        .select("id, health_score")
+        .in("id", profileIds);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+  const healthProfileById = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const row of healthProfiles) {
+      if (typeof row.id === "string") {
+        map.set(row.id, typeof row.health_score === "number" ? row.health_score : null);
+      }
+    }
+    return map;
+  }, [healthProfiles]);
   const hasNextPage = contactsQuery.hasNextPage;
   const isFetchingNextPage = contactsQuery.isFetchingNextPage;
 
@@ -157,7 +193,7 @@ export function QrmContactsPage() {
                   <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <UserRound className="h-4 w-4" aria-hidden="true" />
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">
                       {contact.firstName} {contact.lastName}
                     </p>
@@ -168,6 +204,12 @@ export function QrmContactsPage() {
                       {contact.email || contact.phone || "No contact details"}
                     </p>
                   </div>
+                  {contact.dgeCustomerProfileId && healthProfileById.has(contact.dgeCustomerProfileId) && (
+                    <HealthScorePill
+                      score={healthProfileById.get(contact.dgeCustomerProfileId) ?? null}
+                      onClick={() => setHealthDrawerProfileId(contact.dgeCustomerProfileId)}
+                    />
+                  )}
                 </div>
               </Link>
             ))}
@@ -197,6 +239,11 @@ export function QrmContactsPage() {
         open={editorOpen}
         onOpenChange={setEditorOpen}
         onSaved={(contact) => navigate(`/qrm/contacts/${contact.id}`)}
+      />
+      <HealthScoreDrawer
+        customerProfileId={healthDrawerProfileId}
+        open={healthDrawerProfileId !== null}
+        onOpenChange={(open) => !open && setHealthDrawerProfileId(null)}
       />
     </div>
   );

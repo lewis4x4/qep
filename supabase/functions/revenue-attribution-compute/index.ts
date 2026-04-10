@@ -31,6 +31,20 @@ interface Touch {
   occurred_at: string;
 }
 
+interface DealEquipmentRow {
+  role: string | null;
+  crm_equipment: {
+    vin_pin: string | null;
+  } | {
+    vin_pin: string | null;
+  }[] | null;
+}
+
+function one<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
@@ -224,6 +238,53 @@ Deno.serve(async (req) => {
               { onConflict: "deal_id,attribution_model" },
             );
           if (!upErr) persisted += 1;
+        }
+
+        const { data: equipmentRows } = await supabaseAdmin
+          .from("crm_deal_equipment")
+          .select("role, crm_equipment(vin_pin)")
+          .eq("deal_id", dealId);
+
+        const serials = ((equipmentRows ?? []) as DealEquipmentRow[])
+          .filter((row) => !row.role || row.role === "subject")
+          .map((row) => one(row.crm_equipment)?.vin_pin ?? null)
+          .filter((value): value is string => Boolean(value));
+
+        if (serials.length > 0 && typeof deal.company_id === "string" && deal.company_id.trim()) {
+          const serialShare = dealAmount > 0 ? dealAmount / serials.length : 0;
+          const { data: profile } = await supabaseAdmin
+            .from("customer_profiles_extended")
+            .select("id, revenue_attribution")
+            .eq("crm_company_id", deal.company_id)
+            .limit(1)
+            .maybeSingle();
+
+          if (profile?.id) {
+            const currentAttribution =
+              profile.revenue_attribution && typeof profile.revenue_attribution === "object" && !Array.isArray(profile.revenue_attribution)
+                ? profile.revenue_attribution as Record<string, unknown>
+                : {};
+            const nextAttribution: Record<string, unknown> = { ...currentAttribution };
+
+            for (const serial of serials) {
+              const existing =
+                nextAttribution[serial] && typeof nextAttribution[serial] === "object" && !Array.isArray(nextAttribution[serial])
+                  ? nextAttribution[serial] as Record<string, unknown>
+                  : {};
+              const nextPurchase = Number(existing.purchase ?? 0) + serialShare;
+              nextAttribution[serial] = {
+                parts: Number(existing.parts ?? 0),
+                service: Number(existing.service ?? 0),
+                purchase: Math.round(nextPurchase * 100) / 100,
+                rental: Number(existing.rental ?? 0),
+              };
+            }
+
+            await supabaseAdmin
+              .from("customer_profiles_extended")
+              .update({ revenue_attribution: nextAttribution })
+              .eq("id", profile.id);
+          }
         }
 
         results.push({ deal_id: dealId, touches: touches.length, models_persisted: persisted });

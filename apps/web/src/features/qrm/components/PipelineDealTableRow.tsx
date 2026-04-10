@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { formatMoney, formatDate, getFutureFollowUpIso } from "../lib/pipeline-utils";
 import { patchCrmDeal } from "../lib/qrm-api";
 import type { QrmRepSafeDeal } from "../lib/types";
@@ -11,13 +12,17 @@ import { FollowUpQuickActions } from "./FollowUpQuickActions";
 export function PipelineDealTableRow({
   deal,
   stageName,
+  healthProfile,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
+  onOpenHealthProfile,
 }: {
   deal: QrmRepSafeDeal;
   stageName: string;
+  healthProfile: { profileId: string; score: number | null } | null;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
+  onOpenHealthProfile: (profileId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
@@ -78,9 +83,17 @@ export function PipelineDealTableRow({
   return (
     <tr className="border-t border-border">
       <td className="px-4 py-3">
-        <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-foreground hover:text-primary">
-          {effectiveDeal.name}
-        </Link>
+        <div className="flex items-start justify-between gap-2">
+          <Link to={`/crm/deals/${deal.id}`} className="font-semibold text-foreground hover:text-primary">
+            {effectiveDeal.name}
+          </Link>
+          {healthProfile && (
+            <HealthScorePill
+              score={healthProfile.score}
+              onClick={() => onOpenHealthProfile(healthProfile.profileId)}
+            />
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">Last activity: {formatDate(effectiveDeal.lastActivityAt)}</p>
       </td>
       <td className="px-4 py-3 text-muted-foreground">{stageName}</td>

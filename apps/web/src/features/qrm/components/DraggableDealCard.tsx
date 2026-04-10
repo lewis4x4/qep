@@ -5,12 +5,16 @@ import type { QrmRepSafeDeal } from "../lib/types";
 
 export const DraggableDealCard = memo(function DraggableDealCard({
   deal,
+  healthProfile,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
+  onOpenHealthProfile,
 }: {
   deal: QrmRepSafeDeal;
+  healthProfile: { profileId: string; score: number | null } | null;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
+  onOpenHealthProfile: (profileId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: deal.id,
@@ -25,8 +29,10 @@ export const DraggableDealCard = memo(function DraggableDealCard({
     <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing">
       <PipelineDealCard
         deal={deal}
+        healthProfile={healthProfile}
         onCommitPipelineFollowUp={onCommitPipelineFollowUp}
         onSchedulePipelineRefresh={onSchedulePipelineRefresh}
+        onOpenHealthProfile={onOpenHealthProfile}
       />
     </div>
   );

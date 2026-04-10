@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Building2, Download, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { supabase } from "@/lib/supabase";
+import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
+import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -14,6 +17,7 @@ export function QrmCompaniesPage() {
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,6 +42,38 @@ export function QrmCompaniesPage() {
   });
 
   const companies = companiesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const companyIds = useMemo(() => companies.map((company) => company.id), [companies]);
+  const { data: healthProfiles = [] } = useQuery({
+    queryKey: ["crm", "companies", "health-profiles", companyIds.join(",")],
+    enabled: companyIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
+          };
+        };
+      })
+        .from("customer_profiles_extended")
+        .select("id, crm_company_id, health_score")
+        .in("crm_company_id", companyIds);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+  const healthProfileByCompanyId = useMemo(() => {
+    const map = new Map<string, { profileId: string; score: number | null }>();
+    for (const row of healthProfiles) {
+      if (typeof row.crm_company_id === "string" && typeof row.id === "string") {
+        map.set(row.crm_company_id, {
+          profileId: row.id,
+          score: typeof row.health_score === "number" ? row.health_score : null,
+        });
+      }
+    }
+    return map;
+  }, [healthProfiles]);
   const hasNextPage = companiesQuery.hasNextPage;
   const isFetchingNextPage = companiesQuery.isFetchingNextPage;
 
@@ -124,13 +160,19 @@ export function QrmCompaniesPage() {
                   <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                     <Building2 className="h-4 w-4" aria-hidden="true" />
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{company.name}</p>
                     <p className="truncate text-sm text-muted-foreground">
                       {[company.city, company.state, company.country].filter(Boolean).join(", ") ||
                         "Location not specified"}
                     </p>
                   </div>
+                  {healthProfileByCompanyId.get(company.id) && (
+                    <HealthScorePill
+                      score={healthProfileByCompanyId.get(company.id)?.score ?? null}
+                      onClick={() => setHealthDrawerProfileId(healthProfileByCompanyId.get(company.id)?.profileId ?? null)}
+                    />
+                  )}
                 </div>
               </Link>
             ))}
@@ -160,6 +202,11 @@ export function QrmCompaniesPage() {
         open={editorOpen}
         onOpenChange={setEditorOpen}
         onSaved={(company) => navigate(`/crm/companies/${company.id}`)}
+      />
+      <HealthScoreDrawer
+        customerProfileId={healthDrawerProfileId}
+        open={healthDrawerProfileId !== null}
+        onOpenChange={(open) => !open && setHealthDrawerProfileId(null)}
       />
     </div>
   );

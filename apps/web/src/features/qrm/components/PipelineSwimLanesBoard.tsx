@@ -18,10 +18,12 @@ export interface PipelineSwimLaneColumn {
 interface PipelineSwimLanesBoardProps {
   stages: QrmDealStage[] | undefined;
   stageColumns: PipelineSwimLaneColumn[];
+  healthProfileByCompanyId: Map<string, { profileId: string; score: number | null }>;
   onDragStart: (event: DragStartEvent) => void;
   onDragEnd: (event: DragEndEvent) => Promise<void>;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
+  onOpenHealthProfile: (profileId: string) => void;
   showAnalytics?: boolean;
 }
 
@@ -57,10 +59,12 @@ function sortByPosition(deals: QrmRepSafeDeal[]): QrmRepSafeDeal[] {
 export function PipelineSwimLanesBoard({
   stages,
   stageColumns,
+  healthProfileByCompanyId,
   onDragStart,
   onDragEnd,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
+  onOpenHealthProfile,
   showAnalytics = false,
 }: PipelineSwimLanesBoardProps) {
   return (
@@ -130,8 +134,10 @@ export function PipelineSwimLanesBoard({
                               <DraggableDealCard
                                 key={deal.id}
                                 deal={deal}
+                                healthProfile={deal.companyId ? healthProfileByCompanyId.get(deal.companyId) ?? null : null}
                                 onCommitPipelineFollowUp={onCommitPipelineFollowUp}
                                 onSchedulePipelineRefresh={onSchedulePipelineRefresh}
+                                onOpenHealthProfile={onOpenHealthProfile}
                               />
                             ))}
                           </SortableContext>

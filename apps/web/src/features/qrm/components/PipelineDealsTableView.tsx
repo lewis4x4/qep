@@ -5,15 +5,19 @@ import type { QrmRepSafeDeal } from "../lib/types";
 interface PipelineDealsTableViewProps {
   deals: QrmRepSafeDeal[];
   stageNameById: Map<string, string>;
+  healthProfileByCompanyId: Map<string, { profileId: string; score: number | null }>;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
+  onOpenHealthProfile: (profileId: string) => void;
 }
 
 export function PipelineDealsTableView({
   deals,
   stageNameById,
+  healthProfileByCompanyId,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
+  onOpenHealthProfile,
 }: PipelineDealsTableViewProps) {
   return (
     <Card className="overflow-hidden">
@@ -35,8 +39,10 @@ export function PipelineDealsTableView({
                 key={deal.id}
                 deal={deal}
                 stageName={stageNameById.get(deal.stageId) ?? "Unknown stage"}
+                healthProfile={deal.companyId ? healthProfileByCompanyId.get(deal.companyId) ?? null : null}
                 onCommitPipelineFollowUp={onCommitPipelineFollowUp}
                 onSchedulePipelineRefresh={onSchedulePipelineRefresh}
+                onOpenHealthProfile={onOpenHealthProfile}
               />
             ))}
           </tbody>

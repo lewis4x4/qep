@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { formatMoney, formatDate, getFutureFollowUpIso } from "../lib/pipeline-utils";
 import { patchCrmDeal } from "../lib/qrm-api";
 import { QrmDealSignalBadges } from "./QrmDealSignalBadges";
@@ -14,12 +15,16 @@ import { SopNudgeInline } from "@/features/sop/components/SopNudgeInline";
 
 export function PipelineDealCard({
   deal,
+  healthProfile,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
+  onOpenHealthProfile,
 }: {
   deal: QrmRepSafeDeal;
+  healthProfile: { profileId: string; score: number | null } | null;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
+  onOpenHealthProfile: (profileId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [displayFollowUpAt, setDisplayFollowUpAt] = useState<string | null>(deal.nextFollowUpAt);
@@ -80,12 +85,20 @@ export function PipelineDealCard({
   return (
     <article className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="flex items-start justify-between gap-1">
-        <Link
-          to={`/crm/deals/${deal.id}`}
-          className="text-sm font-semibold text-foreground hover:text-primary"
-        >
-          {effectiveDeal.name}
-        </Link>
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          <Link
+            to={`/crm/deals/${deal.id}`}
+            className="text-sm font-semibold text-foreground hover:text-primary"
+          >
+            {effectiveDeal.name}
+          </Link>
+          {healthProfile && (
+            <HealthScorePill
+              score={healthProfile.score}
+              onClick={() => onOpenHealthProfile(healthProfile.profileId)}
+            />
+          )}
+        </div>
         <SlaCountdown deadline={effectiveDeal.slaDeadlineAt ?? null} />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">

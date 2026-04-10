@@ -5,6 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
+import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmDealEditorSheet } from "../components/QrmDealEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -35,6 +37,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const [viewMode, setViewMode] = useState<"board" | "table">("board");
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
   const { toast } = useToast();
 
@@ -61,6 +64,41 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
 
   const openDeals = hydratedDeals ?? dealsQuery.data?.items ?? [];
   const deferredOpenDeals = useDeferredValue(openDeals);
+  const companyIds = useMemo(
+    () => [...new Set(deferredOpenDeals.map((deal) => deal.companyId).filter((value): value is string => Boolean(value)))],
+    [deferredOpenDeals],
+  );
+  const { data: healthProfiles = [] } = useQuery({
+    queryKey: ["crm", "pipeline", "health-profiles", companyIds.join(",")],
+    enabled: companyIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as unknown as {
+        from: (table: string) => {
+          select: (columns: string) => {
+            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
+          };
+        };
+      })
+        .from("customer_profiles_extended")
+        .select("id, crm_company_id, health_score")
+        .in("crm_company_id", companyIds);
+      if (error) return [];
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+  const healthProfileByCompanyId = useMemo(() => {
+    const map = new Map<string, { profileId: string; score: number | null }>();
+    for (const row of healthProfiles) {
+      if (typeof row.crm_company_id === "string" && typeof row.id === "string") {
+        map.set(row.crm_company_id, {
+          profileId: row.id,
+          score: typeof row.health_score === "number" ? row.health_score : null,
+        });
+      }
+    }
+    return map;
+  }, [healthProfiles]);
 
   const weightedDealsQuery = useQuery({
     queryKey: ["crm", "pipeline", "weighted-open-deals"],
@@ -199,8 +237,10 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
         <PipelineDealsTableView
           deals={filteredDeals}
           stageNameById={stageNameById}
+          healthProfileByCompanyId={healthProfileByCompanyId}
           onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
           onSchedulePipelineRefresh={schedulePipelineRefresh}
+          onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
         />
       )}
 
@@ -208,10 +248,12 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
         <PipelineSwimLanesBoard
           stages={stagesQuery.data}
           stageColumns={stageColumns}
+          healthProfileByCompanyId={healthProfileByCompanyId}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
           onSchedulePipelineRefresh={schedulePipelineRefresh}
+          onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
           showAnalytics={showAnalytics}
         />
       )}
@@ -220,6 +262,11 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
         open={editorOpen}
         onOpenChange={setEditorOpen}
         onSaved={(deal) => navigate(`/crm/deals/${deal.id}`)}
+      />
+      <HealthScoreDrawer
+        customerProfileId={healthDrawerProfileId}
+        open={healthDrawerProfileId !== null}
+        onOpenChange={(open) => !open && setHealthDrawerProfileId(null)}
       />
     </div>
   );
