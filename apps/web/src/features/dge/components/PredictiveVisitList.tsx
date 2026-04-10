@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { MapPin, Clock, Target } from "lucide-react";
 
@@ -47,6 +49,9 @@ export function PredictiveVisitList({ userId }: PredictiveVisitListProps) {
         <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
           {data?.visits_completed ?? 0}/{data?.visits_total ?? 10}
         </span>
+        <Button asChild size="sm" variant="ghost" className="ml-auto h-7 text-[10px]">
+          <Link to="/qrm/visit-intelligence">Visit intelligence</Link>
+        </Button>
       </div>
       <div className="space-y-2">
         {recommendations.map((rec: any, index: number) => (

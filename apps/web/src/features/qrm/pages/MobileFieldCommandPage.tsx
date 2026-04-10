@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, Route, Building2, Timer, Map as MapIcon, AlertTriangle, Lock, DollarSign, Clock4 } from "lucide-react";
+import { Brain, Mic, Route, Building2, Timer, Map as MapIcon, AlertTriangle, Lock, DollarSign, Clock4 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIronRoleBlend } from "../lib/useIronRoleBlend";
 import { resolveIronRoleAndBlend } from "../lib/iron-roles";
@@ -52,6 +52,7 @@ export function MobileFieldCommandPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <QuickAction to="/voice-qrm" icon={Mic} label="Voice note" />
+        <QuickAction to="/qrm/visit-intelligence" icon={Brain} label="Visit brief" />
         <QuickAction to="/qrm/deals" icon={Route} label="My deals" />
         <QuickAction to="/qrm/companies" icon={Building2} label="Accounts" />
         <QuickAction to="/qrm/time-bank" icon={Timer} label="Time bank" />

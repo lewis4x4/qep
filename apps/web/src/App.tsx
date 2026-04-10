@@ -181,6 +181,9 @@ const TerritoryCommandCenterPage = lazy(() =>
 const MobileFieldCommandPage = lazy(() =>
   import("./features/qrm/pages/MobileFieldCommandPage").then((m) => ({ default: m.MobileFieldCommandPage }))
 );
+const VisitIntelligencePage = lazy(() =>
+  import("./features/qrm/pages/VisitIntelligencePage").then((m) => ({ default: m.VisitIntelligencePage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -969,6 +972,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <MobileFieldCommandPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/visit-intelligence"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VisitIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
