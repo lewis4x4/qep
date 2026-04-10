@@ -495,6 +495,106 @@ function normalizePortalDocumentVisibility(input: {
   };
 }
 
+function normalizePortalPartsOrderStatus(input: {
+  orderStatus: string | null;
+  estimatedDelivery: string | null;
+  updatedAt: string | null;
+}): {
+  label: string;
+  source: "default";
+  source_label: string;
+  eta: string | null;
+  last_updated_at: string | null;
+  next_action?: string | null;
+} {
+  const status = (input.orderStatus ?? "").toLowerCase();
+
+  if (status === "draft") {
+    return {
+      label: "Draft order",
+      source: "default",
+      source_label: "Parts counter",
+      eta: null,
+      last_updated_at: input.updatedAt,
+      next_action: "Submit the draft when you are ready for the dealership to process it.",
+    };
+  }
+
+  if (status === "submitted") {
+    return {
+      label: "Submitted to dealership",
+      source: "default",
+      source_label: "Parts counter",
+      eta: input.estimatedDelivery,
+      last_updated_at: input.updatedAt,
+      next_action: "The parts team is reviewing availability and will confirm next steps.",
+    };
+  }
+
+  if (status === "confirmed") {
+    return {
+      label: "Availability confirmed",
+      source: "default",
+      source_label: "Parts counter",
+      eta: input.estimatedDelivery,
+      last_updated_at: input.updatedAt,
+      next_action: "Your dealership has confirmed the order and is preparing fulfillment.",
+    };
+  }
+
+  if (status === "processing") {
+    return {
+      label: "Preparing shipment",
+      source: "default",
+      source_label: "Parts counter",
+      eta: input.estimatedDelivery,
+      last_updated_at: input.updatedAt,
+      next_action: "The parts team is picking and staging your order.",
+    };
+  }
+
+  if (status === "shipped") {
+    return {
+      label: "Shipped",
+      source: "default",
+      source_label: "Parts counter",
+      eta: input.estimatedDelivery,
+      last_updated_at: input.updatedAt,
+      next_action: "Watch the delivery ETA and contact your dealership if the shipment changes.",
+    };
+  }
+
+  if (status === "delivered") {
+    return {
+      label: "Delivered",
+      source: "default",
+      source_label: "Parts counter",
+      eta: input.estimatedDelivery,
+      last_updated_at: input.updatedAt,
+      next_action: "If anything is missing or damaged, contact your dealership team.",
+    };
+  }
+
+  if (status === "cancelled") {
+    return {
+      label: "Cancelled",
+      source: "default",
+      source_label: "Parts counter",
+      eta: null,
+      last_updated_at: input.updatedAt,
+      next_action: "Contact your dealership if you need to place a replacement order.",
+    };
+  }
+
+  return {
+    label: "Order update pending",
+    source: "default",
+    source_label: "Parts counter",
+    eta: input.estimatedDelivery,
+    last_updated_at: input.updatedAt,
+  };
+}
+
 /** Internal users in profile_workspaces for this tenant + eligible roles (no cross-workspace blast). */
 async function workspaceStaffRecipientIds(
   admin: SupabaseClient,
@@ -955,7 +1055,15 @@ Deno.serve(async (req) => {
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load orders", 500, origin);
-        return safeJsonOk({ orders: data }, origin);
+        const orders = ((data ?? []) as Array<Record<string, unknown>>).map((order) => ({
+          ...order,
+          portal_status: normalizePortalPartsOrderStatus({
+            orderStatus: typeof order.status === "string" ? order.status : null,
+            estimatedDelivery: typeof order.estimated_delivery === "string" ? order.estimated_delivery : null,
+            updatedAt: typeof order.updated_at === "string" ? order.updated_at : null,
+          }),
+        }));
+        return safeJsonOk({ orders }, origin);
       }
 
       if (req.method === "POST") {

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { portalApi } from "../lib/portal-api";
+import { portalApi, type PortalCanonicalStatus, type PortalPartsOrderSummary } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { PartsReorderHistory } from "../components/PartsReorderHistory";
 import { normalizePortalOrderLines, portalCartSummary } from "../lib/portal-order-utils";
@@ -401,15 +401,39 @@ export function PortalPartsPage() {
       )}
 
       <div className="space-y-2">
-        {orders.map((o: Record<string, unknown>) => {
-          const oid = o.id as string;
-          const isDraft = String(o.status ?? "") === "draft";
+        {orders.map((o: PortalPartsOrderSummary) => {
+          const oid = o.id;
+          const isDraft = o.status === "draft";
           const submitting =
             submitToDealerMutation.isPending && submitToDealerMutation.variables === oid;
+          const portalStatus = o.portal_status as PortalCanonicalStatus | undefined;
+          const etaLabel = portalStatus?.eta
+            ? new Date(portalStatus.eta).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+            : null;
           return (
             <Card key={oid} className="p-4">
               <div className="flex justify-between gap-2 flex-wrap items-start">
-                <span className="text-sm font-semibold text-foreground capitalize">{String(o.status ?? "")}</span>
+                <div className="space-y-1">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    /delivered/i.test(portalStatus?.label ?? "") ? "bg-emerald-500/10 text-emerald-400" :
+                    /cancelled/i.test(portalStatus?.label ?? "") ? "bg-red-500/10 text-red-400" :
+                    /shipment|submitted|confirmed/i.test(portalStatus?.label ?? "") ? "bg-blue-500/10 text-blue-400" :
+                    "bg-amber-500/10 text-amber-400"
+                  }`}>
+                    {portalStatus?.label ?? o.status}
+                  </span>
+                  {portalStatus && (
+                    <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
+                      <span>Source: {portalStatus.source_label}</span>
+                      {etaLabel && <span>ETA: <span className="text-foreground font-medium">{etaLabel}</span></span>}
+                      {portalStatus.last_updated_at && (
+                        <span>
+                          Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="flex flex-col items-end gap-2">
                   <span className="text-xs text-muted-foreground">
                     {o.created_at ? new Date(String(o.created_at)).toLocaleString() : ""}
@@ -436,6 +460,9 @@ export function PortalPartsPage() {
               )}
               {o.ai_suggested_pm_kit === true && typeof o.ai_suggestion_reason === "string" && (
                 <p className="mt-2 text-xs text-amber-200/90 border-l-2 border-amber-500/60 pl-2">{o.ai_suggestion_reason}</p>
+              )}
+              {portalStatus?.next_action && (
+                <p className="mt-2 text-xs text-muted-foreground">{portalStatus.next_action}</p>
               )}
               <pre className="mt-2 text-[10px] bg-muted/40 rounded p-2 overflow-x-auto max-h-32">
                 {JSON.stringify(o.line_items, null, 2)}

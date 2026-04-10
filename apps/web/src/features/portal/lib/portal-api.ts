@@ -11,6 +11,16 @@ export interface PortalCanonicalStatus {
   next_action?: string | null;
 }
 
+export interface PortalPartsOrderSummary {
+  id: string;
+  status: string;
+  created_at: string | null;
+  ai_suggested_pm_kit?: boolean;
+  ai_suggestion_reason?: string | null;
+  line_items?: unknown;
+  portal_status: PortalCanonicalStatus;
+}
+
 export interface PortalActiveDeal {
   deal_id: string;
   deal_name: string;
@@ -39,7 +49,7 @@ export interface PortalQuoteSummary {
 
 export type PortalFleetResponse = { fleet?: Record<string, unknown>[] };
 export type PortalServiceRequestsResponse = { requests?: Record<string, unknown>[] };
-export type PortalPartsOrdersResponse = { orders?: Record<string, unknown>[] };
+export type PortalPartsOrdersResponse = { orders?: PortalPartsOrderSummary[] };
 export type PortalInvoicesResponse = { invoices?: Record<string, unknown>[] };
 export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
 export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };

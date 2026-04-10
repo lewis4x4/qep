@@ -291,17 +291,17 @@ export function PortalServicePage() {
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground mr-2">{req.request_type}</span>
                   <span className="text-sm font-medium text-foreground">{req.description?.substring(0, 60)}{req.description && req.description.length > 60 ? "..." : ""}</span>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
-                  req.status === "completed" ? "bg-emerald-500/10 text-emerald-400" :
-                  req.status === "submitted" ? "bg-blue-500/10 text-blue-400" :
-                  "bg-amber-500/10 text-amber-400"
-                }`}>{req.status}</span>
+                {portalStatus && (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
+                    portalStatus.source === "service_job" ? "bg-blue-500/10 text-blue-400" :
+                    /completed/i.test(portalStatus.label) ? "bg-emerald-500/10 text-emerald-400" :
+                    /waiting/i.test(portalStatus.label) ? "bg-red-500/10 text-red-400" :
+                    "bg-amber-500/10 text-amber-400"
+                  }`}>{portalStatus.label}</span>
+                )}
               </div>
               {portalStatus && (
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p>
-                    Status: <span className="text-foreground font-medium">{portalStatus.label}</span>
-                  </p>
                   <div className="flex flex-wrap items-center gap-3">
                     <span>Source: {portalStatus.source_label}</span>
                     {etaLabel && <span>ETA: <span className="text-foreground font-medium">{etaLabel}</span></span>}
