@@ -217,6 +217,9 @@ const AccountCommandCenterPage = lazy(() =>
 const CustomerGenomePage = lazy(() =>
   import("./features/qrm/pages/CustomerGenomePage").then((m) => ({ default: m.CustomerGenomePage }))
 );
+const CustomerOperatingProfilePage = lazy(() =>
+  import("./features/qrm/pages/CustomerOperatingProfilePage").then((m) => ({ default: m.CustomerOperatingProfilePage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1584,6 +1587,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CustomerGenomePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/operating-profile"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CustomerOperatingProfilePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

@@ -10,6 +10,7 @@ import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
   buildAccountGenomeHref,
+  buildAccountOperatingProfileHref,
   buildAccountTimelineHref,
 } from "../lib/account-command";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -82,6 +83,9 @@ export function CustomerGenomePage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountCommandHref(accountId)}>Account Command</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}`}>Legacy detail</Link>
@@ -182,6 +186,22 @@ export function CustomerGenomePage() {
               </div>
               <Button asChild size="sm" variant="ghost">
                 <Link to={buildAccountGenomeHref(accountId)}>Refresh genome</Link>
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Customer Operating Profile to see how this account actually buys and works in the field.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountOperatingProfileHref(accountId)}>
+                  Operating profile <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
               </Button>
             </div>
           </Card>

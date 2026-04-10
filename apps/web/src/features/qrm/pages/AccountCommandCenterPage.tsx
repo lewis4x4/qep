@@ -11,6 +11,7 @@ import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountGenomeHref,
+  buildAccountOperatingProfileHref,
   buildAccountTimelineHref,
 } from "../lib/account-command";
 import {
@@ -93,6 +94,9 @@ export function AccountCommandCenterPage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>
