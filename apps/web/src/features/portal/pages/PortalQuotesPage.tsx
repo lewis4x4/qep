@@ -13,7 +13,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { portalApi, type PortalQuoteSummary } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
-import { Check, FileText, X } from "lucide-react";
+import { summarizePortalQuoteReview } from "../lib/portal-quote-review";
+import { Check, ExternalLink, FileText, X } from "lucide-react";
 import {
   PortalSignaturePad,
   signatureDataUrlToRawBase64,
@@ -24,7 +25,9 @@ export function PortalQuotesPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const sigRef = useRef<PortalSignaturePadHandle>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [pendingQuoteId, setPendingQuoteId] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
 
@@ -56,6 +59,22 @@ export function PortalQuotesPage() {
     },
   });
 
+  const reviewMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => portalApi.updateQuote(body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", "quotes"] }),
+  });
+
+  const selectedQuote = (data?.quotes ?? []).find((quote) => quote.id === selectedQuoteId) ?? null;
+  const reviewSummary = summarizePortalQuoteReview(selectedQuote?.quote_data ?? null);
+
+  const openReview = (quote: PortalQuoteSummary) => {
+    setSelectedQuoteId(quote.id);
+    setReviewOpen(true);
+    if (quote.status === "sent") {
+      reviewMutation.mutate({ id: quote.id, status: "viewed" });
+    }
+  };
+
   const openSign = (quoteId: string) => {
     setPendingQuoteId(quoteId);
     setSignerName("");
@@ -82,6 +101,132 @@ export function PortalQuotesPage() {
   return (
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Quotes & Proposals</h1>
+
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review proposal</DialogTitle>
+          </DialogHeader>
+          {selectedQuote && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {selectedQuote.deal_name ?? "Proposal"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {reviewSummary.headline ?? "Review the proposal details below before accepting or declining."}
+                    </p>
+                  </div>
+                  {selectedQuote.amount != null ? (
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Quoted amount</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(selectedQuote.amount)}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                  {selectedQuote.expires_at ? <span>Expires {new Date(selectedQuote.expires_at).toLocaleDateString()}</span> : null}
+                  {selectedQuote.viewed_at ? <span>Viewed {new Date(selectedQuote.viewed_at).toLocaleDateString()}</span> : null}
+                  {selectedQuote.signed_at ? <span>Signed {new Date(selectedQuote.signed_at).toLocaleDateString()}</span> : null}
+                </div>
+              </div>
+
+              {reviewSummary.lineItems.length > 0 && (
+                <div className="rounded-lg border border-border/60 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40 text-left">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Item</th>
+                        <th className="px-3 py-2 font-medium text-right">Qty</th>
+                        <th className="px-3 py-2 font-medium text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reviewSummary.lineItems.map((item, index) => (
+                        <tr key={`${item.description}-${index}`} className="border-t border-border/50">
+                          <td className="px-3 py-2">{item.description}</td>
+                          <td className="px-3 py-2 text-right">{item.quantity ?? "—"}</td>
+                          <td className="px-3 py-2 text-right">
+                            {item.amount == null
+                              ? "—"
+                              : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {reviewSummary.notes.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
+                  <div className="space-y-1">
+                    {reviewSummary.notes.map((note, index) => (
+                      <p key={`${note}-${index}`} className="text-sm text-foreground">{note}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {reviewSummary.terms.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Terms</p>
+                  <div className="space-y-1">
+                    {reviewSummary.terms.map((term, index) => (
+                      <p key={`${term}-${index}`} className="text-sm text-foreground">{term}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedQuote.quote_pdf_url ? (
+                <div className="flex justify-end">
+                  <Button asChild variant="outline" size="sm">
+                    <a href={selectedQuote.quote_pdf_url} target="_blank" rel="noreferrer">
+                      <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                      Open proposal PDF
+                    </a>
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>
+              Close
+            </Button>
+            {selectedQuote && (selectedQuote.status === "sent" || selectedQuote.status === "viewed") ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={updateMutation.isPending}
+                  onClick={() => updateMutation.mutate({ id: selectedQuote.id, status: "rejected" })}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Decline
+                </Button>
+                <Button
+                  type="button"
+                  disabled={updateMutation.isPending}
+                  onClick={() => {
+                    setReviewOpen(false);
+                    openSign(selectedQuote.id);
+                  }}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  Accept & sign
+                </Button>
+              </>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={signOpen} onOpenChange={setSignOpen}>
         <DialogContent className="sm:max-w-md">
@@ -159,25 +304,16 @@ export function PortalQuotesPage() {
                     </p>
                   ) : null}
                 </div>
-                {canAct && (
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => updateMutation.mutate({ id: quote.id, status: "rejected" })}
-                      disabled={updateMutation.isPending}
-                    >
-                      <X className="mr-1 h-3.5 w-3.5" /> Decline
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => openSign(quote.id)}
-                      disabled={updateMutation.isPending}
-                    >
-                      <Check className="mr-1 h-3.5 w-3.5" /> Accept & Sign
-                    </Button>
-                  </div>
-                )}
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openReview(quote)}
+                    disabled={updateMutation.isPending || reviewMutation.isPending}
+                  >
+                    <FileText className="mr-1 h-3.5 w-3.5" /> Review proposal
+                  </Button>
+                </div>
               </div>
               {quote.deal_id && (
                 <div className="mt-3 flex justify-end">

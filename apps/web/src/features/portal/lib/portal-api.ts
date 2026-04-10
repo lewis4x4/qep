@@ -32,6 +32,8 @@ export interface PortalQuoteSummary {
   signed_at: string | null;
   signer_name: string | null;
   expires_at: string | null;
+  quote_pdf_url?: string | null;
+  quote_data?: Record<string, unknown> | null;
   portal_status: PortalCanonicalStatus;
 }
 
