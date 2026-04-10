@@ -196,6 +196,9 @@ const RevenueRescueCenterPage = lazy(() =>
 const CompetitiveDisplacementCenterPage = lazy(() =>
   import("./features/qrm/pages/CompetitiveDisplacementCenterPage").then((m) => ({ default: m.CompetitiveDisplacementCenterPage }))
 );
+const OperatorIntelligencePage = lazy(() =>
+  import("./features/qrm/pages/OperatorIntelligencePage").then((m) => ({ default: m.OperatorIntelligencePage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1727,6 +1730,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CompetitiveDisplacementCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/operator-intelligence"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OperatorIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
