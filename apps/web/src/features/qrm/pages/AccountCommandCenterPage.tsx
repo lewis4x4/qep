@@ -9,6 +9,7 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
 import { fetchAccount360 } from "../lib/account-360-api";
+import { buildAccountTimelineHref } from "../lib/account-command";
 import {
   AccountARTab,
   AccountCommercialTab,
@@ -85,7 +86,7 @@ export function AccountCommandCenterPage() {
             <Link to={`/qrm/companies/${accountId}`}>Legacy detail</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/qrm/companies/${accountId}/lifecycle`}>Lifecycle</Link>
+            <Link to={buildAccountTimelineHref(accountId)}>Timeline</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>
@@ -173,8 +174,8 @@ export function AccountCommandCenterPage() {
                       </p>
                     </div>
                     <Button asChild size="sm" variant="outline">
-                      <Link to={`/qrm/companies/${accountId}/lifecycle`}>
-                        Open lifecycle <ArrowUpRight className="ml-1 h-3 w-3" />
+                      <Link to={buildAccountTimelineHref(accountId)}>
+                        Open timeline <ArrowUpRight className="ml-1 h-3 w-3" />
                       </Link>
                     </Button>
                   </div>

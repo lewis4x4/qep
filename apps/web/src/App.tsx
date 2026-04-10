@@ -1614,6 +1614,16 @@ function App() {
                 }
               />
               <Route
+                path="/qrm/accounts/:accountId/timeline"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <LifecyclePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/qrm/time-bank"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (

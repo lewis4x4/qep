@@ -15,7 +15,7 @@ import { QrmCustomFieldsCard } from "../components/QrmCustomFieldsCard";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchAccount360 } from "../lib/account-360-api";
-import { buildAccountCommandHref } from "../lib/account-command";
+import { buildAccountCommandHref, buildAccountTimelineHref } from "../lib/account-command";
 import {
   AccountNextBestActions,
   AccountCommercialTab,
@@ -395,7 +395,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                         </p>
                       </div>
                       <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
-                        <Link to={`/qrm/companies/${companyId}/lifecycle`}>
+                        <Link to={buildAccountTimelineHref(companyId)}>
                           Open timeline →
                         </Link>
                       </Button>
