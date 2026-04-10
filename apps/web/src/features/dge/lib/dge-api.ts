@@ -58,12 +58,14 @@ export async function fetchMarketValuation(
 }
 
 export async function fetchCustomerProfile(params: {
+  customerProfileId?: string;
   email?: string;
   hubspotContactId?: string;
   intellidealerCustomerId?: string;
   includeFleet?: boolean;
 }): Promise<CustomerProfileResponse | null> {
   const query = new URLSearchParams();
+  if (params.customerProfileId) query.set("customer_profiles_extended_id", params.customerProfileId);
   if (params.email) query.set("email", params.email);
   if (params.hubspotContactId) query.set("hubspot_contact_id", params.hubspotContactId);
   if (params.intellidealerCustomerId) {

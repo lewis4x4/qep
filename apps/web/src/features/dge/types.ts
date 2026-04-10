@@ -59,6 +59,8 @@ export interface CustomerProfileResponse {
   intellidealer_customer_id: string | null;
   customer_name: string;
   company_name: string | null;
+  industry?: string | null;
+  region?: string | null;
   pricing_persona: string | null;
   persona_confidence: number;
   persona_reasoning: string | null;
@@ -69,6 +71,10 @@ export interface CustomerProfileResponse {
   avg_days_to_close: number | null;
   price_sensitivity_score: number;
   fleet_size: number;
+  budget_cycle_month?: number | null;
+  budget_cycle_notes?: string | null;
+  fiscal_year_end_month?: number | null;
+  notes?: string | null;
   last_interaction_at: string | null;
   updated_at: string;
   data_badges: DataBadge[];

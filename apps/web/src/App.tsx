@@ -214,6 +214,9 @@ const RepRealityReflectionPage = lazy(() =>
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
+const CustomerGenomePage = lazy(() =>
+  import("./features/qrm/pages/CustomerGenomePage").then((m) => ({ default: m.CustomerGenomePage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1571,6 +1574,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <AccountCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/genome"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CustomerGenomePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

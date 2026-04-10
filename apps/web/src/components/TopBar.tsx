@@ -289,6 +289,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? "Visit Intelligence" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? "Deal Room" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? "Deal Autopsy" : undefined) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/genome") ? "Customer Genome" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/timeline") ? "Customer 360 Timeline" : undefined) ??
     (location.pathname.includes("/trade-walkaround") ? "Trade Walkaround" : undefined) ??
     (location.pathname.startsWith("/qrm/deals/") ? "Deal Detail" : undefined) ??
@@ -302,6 +303,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? { label: "QRM", route: "/qrm" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? { label: "Deals", route: "/qrm/deals" } : null) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/genome") ? { label: "Account Command", route: location.pathname.replace(/\/genome$/, "/command") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/timeline") ? { label: "Companies", route: "/qrm/companies" } : null) ??
     (location.pathname.includes("/trade-walkaround") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.startsWith("/qrm/deals/") ? { label: "Deals", route: "/qrm/deals" } : null) ??

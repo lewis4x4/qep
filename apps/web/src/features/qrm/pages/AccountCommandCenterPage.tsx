@@ -9,7 +9,10 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
 import { fetchAccount360 } from "../lib/account-360-api";
-import { buildAccountTimelineHref } from "../lib/account-command";
+import {
+  buildAccountGenomeHref,
+  buildAccountTimelineHref,
+} from "../lib/account-command";
 import {
   AccountARTab,
   AccountCommercialTab,
@@ -87,6 +90,9 @@ export function AccountCommandCenterPage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountTimelineHref(accountId)}>Timeline</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>

@@ -5,3 +5,7 @@ export function buildAccountCommandHref(companyId: string): string {
 export function buildAccountTimelineHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/timeline`;
 }
+
+export function buildAccountGenomeHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/genome`;
+}

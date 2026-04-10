@@ -7,9 +7,15 @@ export interface CustomerProfileRow {
   intellidealer_customer_id: string | null;
   customer_name: string;
   company_name: string | null;
+  industry: string | null;
+  region: string | null;
   pricing_persona: string | null;
   persona_confidence: number | null;
   persona_model_version: string | null;
+  budget_cycle_month: number | null;
+  budget_cycle_notes: string | null;
+  fiscal_year_end_month: number | null;
+  notes: string | null;
   lifetime_value: number | null;
   total_deals: number | null;
   avg_deal_size: number | null;
@@ -100,16 +106,22 @@ export function mapCustomerProfileDto(
     intellidealer_customer_id: input.row.intellidealer_customer_id,
     customer_name: input.row.customer_name,
     company_name: input.row.company_name,
+    industry: input.row.industry,
+    region: input.row.region,
     pricing_persona: input.row.pricing_persona,
     persona_confidence: input.row.persona_confidence ?? 0,
     persona_reasoning: personaReasoning,
     persona_model_version: input.row.persona_model_version,
+    budget_cycle_month: input.row.budget_cycle_month,
+    budget_cycle_notes: input.row.budget_cycle_notes,
+    fiscal_year_end_month: input.row.fiscal_year_end_month,
     total_lifetime_value: input.row.lifetime_value ?? 0,
     total_deals: input.row.total_deals ?? 0,
     avg_deal_size: input.row.avg_deal_size ?? 0,
     avg_days_to_close: input.row.avg_days_to_close,
     price_sensitivity_score: input.row.price_sensitivity_score ?? 0,
     fleet_size: input.row.fleet_size ?? 0,
+    notes: input.row.notes,
     last_interaction_at: input.row.last_interaction_at,
     updated_at: input.row.updated_at,
     data_badges: dataBadges,
