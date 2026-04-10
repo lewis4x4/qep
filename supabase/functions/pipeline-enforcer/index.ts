@@ -17,6 +17,41 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+
+interface DealStageSummary {
+  name: string;
+  sort_order: number | null;
+  sla_minutes: number | null;
+}
+
+interface SlaViolationRow {
+  id: string;
+  name: string;
+  assigned_rep_id: string | null;
+  sla_started_at: string | null;
+  sla_deadline_at: string | null;
+  crm_deal_stages: DealStageSummary | DealStageSummary[] | null;
+}
+
+interface MarginFlagRow {
+  id: string;
+  name: string;
+  margin_pct: number | null;
+}
+
+interface StaleDealRow {
+  id: string;
+  name: string;
+  assigned_rep_id: string | null;
+  last_activity_at: string | null;
+  crm_deal_stages: DealStageSummary | DealStageSummary[] | null;
+}
+
+function getStageSummary(stage: DealStageSummary | DealStageSummary[] | null): DealStageSummary | null {
+  if (Array.isArray(stage)) return stage[0] ?? null;
+  return stage;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200 });
@@ -63,13 +98,15 @@ Deno.serve(async (req) => {
       .lt("sla_deadline_at", new Date().toISOString())
       .is("deleted_at", null);
 
-    if (slaViolations && slaViolations.length > 0) {
-      results.sla_violations_found = slaViolations.length;
+    const typedSlaViolations = (slaViolations ?? []) as SlaViolationRow[];
+    if (typedSlaViolations.length > 0) {
+      results.sla_violations_found = typedSlaViolations.length;
 
-      for (const deal of slaViolations) {
-        const stage = (deal as any).crm_deal_stages;
+      for (const deal of typedSlaViolations) {
+        const stage = getStageSummary(deal.crm_deal_stages);
+        if (!stage || !deal.sla_deadline_at || !deal.sla_started_at) continue;
         const now = new Date();
-        const deadline = new Date(deal.sla_deadline_at!);
+        const deadline = new Date(deal.sla_deadline_at);
         const minutesPast = Math.floor((now.getTime() - deadline.getTime()) / 60000);
 
         // Check if we already notified for this SLA period
@@ -78,7 +115,7 @@ Deno.serve(async (req) => {
           .select("id")
           .eq("deal_id", deal.id)
           .eq("kind", "sla_violation")
-          .gte("created_at", deal.sla_started_at!)
+          .gte("created_at", deal.sla_started_at)
           .maybeSingle();
 
         if (existingAlert) continue;
@@ -141,8 +178,9 @@ Deno.serve(async (req) => {
       .eq("margin_check_status", "flagged")
       .is("deleted_at", null);
 
-    if (marginFlags && marginFlags.length > 0) {
-      for (const deal of marginFlags) {
+    const typedMarginFlags = (marginFlags ?? []) as MarginFlagRow[];
+    if (typedMarginFlags.length > 0) {
+      for (const deal of typedMarginFlags) {
         // Check if already notified
         const { data: existingNotif } = await supabaseAdmin
           .from("crm_in_app_notifications")
@@ -153,17 +191,11 @@ Deno.serve(async (req) => {
 
         if (existingNotif) continue;
 
-        // Notify Iron Managers
-        const { data: managers } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .eq("iron_role", "iron_manager");
-
-        if (managers) {
-          for (const mgr of managers) {
+        if (managerIds.length > 0) {
+          for (const managerId of managerIds) {
             await supabaseAdmin.from("crm_in_app_notifications").insert({
               workspace_id: "default",
-              user_id: mgr.id,
+              user_id: managerId,
               kind: "margin_flag",
               title: `Low Margin Alert: ${deal.name}`,
               body: `Deal margin is ${deal.margin_pct?.toFixed(1)}% (below 10% threshold). Manager approval required.`,
@@ -194,11 +226,13 @@ Deno.serve(async (req) => {
       .lt("last_activity_at", sevenDaysAgo.toISOString())
       .is("deleted_at", null);
 
-    if (staleDeals && staleDeals.length > 0) {
-      for (const deal of staleDeals) {
-        const stage = (deal as any).crm_deal_stages;
+    const typedStaleDeals = (staleDeals ?? []) as StaleDealRow[];
+    if (typedStaleDeals.length > 0) {
+      for (const deal of typedStaleDeals) {
+        const stage = getStageSummary(deal.crm_deal_stages);
+        if (!stage || !deal.last_activity_at) continue;
         // Skip terminal stages
-        if (stage.sort_order >= 20) continue;
+        if ((stage.sort_order ?? 0) >= 20) continue;
 
         const { data: existingStale } = await supabaseAdmin
           .from("crm_in_app_notifications")
@@ -212,7 +246,7 @@ Deno.serve(async (req) => {
 
         if (deal.assigned_rep_id) {
           const daysSince = Math.floor(
-            (Date.now() - new Date(deal.last_activity_at!).getTime()) / 86400000,
+            (Date.now() - new Date(deal.last_activity_at).getTime()) / 86400000,
           );
           await supabaseAdmin.from("crm_in_app_notifications").insert({
             workspace_id: "default",

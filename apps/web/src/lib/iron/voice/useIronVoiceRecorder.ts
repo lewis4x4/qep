@@ -43,6 +43,16 @@ interface PendingRecording {
   resolve: (value: { blob: Blob; fileName: string; fingerprint: SpeakerFingerprint } | null) => void;
 }
 
+type AudioContextConstructor = typeof AudioContext;
+
+function getAudioContextConstructor(): AudioContextConstructor | undefined {
+  if (typeof window === "undefined") return undefined;
+  const audioWindow = window as Window & {
+    webkitAudioContext?: AudioContextConstructor;
+  };
+  return window.AudioContext ?? audioWindow.webkitAudioContext;
+}
+
 function pickMimeType(): { mimeType: string; fileName: string } {
   const candidates = [
     { mimeType: "audio/webm;codecs=opus", fileName: "iron-utterance.webm" },
@@ -123,9 +133,7 @@ export function useIronVoiceRecorder(): IronVoiceRecorderApi {
       streamRef.current = stream;
 
       // Audio analysis path
-      // deno-lint-ignore no-explicit-any
-      const AudioCtor: typeof AudioContext | undefined =
-        (window as any).AudioContext || (window as any).webkitAudioContext;
+      const AudioCtor = getAudioContextConstructor();
       if (AudioCtor) {
         const audioCtx = new AudioCtor();
         audioCtxRef.current = audioCtx;

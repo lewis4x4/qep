@@ -1,10 +1,71 @@
+function loadLocalEnv() {
+  const envFiles = [
+    `${Deno.cwd()}/.env.local`,
+    `${Deno.cwd()}/.secrets`,
+  ];
+
+  for (const filePath of envFiles) {
+    try {
+      const raw = Deno.readTextFileSync(filePath);
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const separatorIndex = trimmed.indexOf("=");
+        if (separatorIndex === -1) continue;
+        const key = trimmed.slice(0, separatorIndex).trim();
+        const value = trimmed.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, "");
+        if (!key || Deno.env.get(key)) continue;
+        Deno.env.set(key, value);
+      }
+    } catch {
+      // Local env files are optional in CI and remote environments.
+    }
+  }
+
+  if (!Deno.env.get("SUPABASE_URL")) {
+    Deno.env.set("SUPABASE_URL", Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") ?? "");
+  }
+  if (!Deno.env.get("SUPABASE_ANON_KEY")) {
+    Deno.env.set("SUPABASE_ANON_KEY", Deno.env.get("NEXT_PUBLIC_SUPABASE_ANON_KEY") ?? "");
+  }
+}
+
+loadLocalEnv();
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const ADMIN_TOKEN = Deno.env.get("KB_TEST_ADMIN_TOKEN") ?? "";
-const REP_TOKEN = Deno.env.get("KB_TEST_REP_TOKEN") ?? "";
+const EXPLICIT_ADMIN_TOKEN = Deno.env.get("KB_TEST_ADMIN_TOKEN") ?? "";
+const EXPLICIT_REP_TOKEN = Deno.env.get("KB_TEST_REP_TOKEN") ?? "";
+const DEMO_PASSWORD = Deno.env.get("QEP_DEMO_PASSWORD") ?? "QepDemo!2026";
 const strictMode =
   (Deno.env.get("KB_INTEGRATION_REQUIRED") ?? "") === "true" ||
   (Deno.env.get("CI") ?? "") === "true";
+
+async function signInForTest(email: string): Promise<string> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return "";
+
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      password: DEMO_PASSWORD,
+    }),
+  });
+
+  if (!response.ok) {
+    return "";
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  return typeof payload?.access_token === "string" ? payload.access_token : "";
+}
+
+const ADMIN_TOKEN = EXPLICIT_ADMIN_TOKEN || await signInForTest("demo.admin@qep-demo.local");
+const REP_TOKEN = EXPLICIT_REP_TOKEN || await signInForTest("demo.rep@qep-demo.local");
 
 const canRunLive =
   SUPABASE_URL.length > 0 &&

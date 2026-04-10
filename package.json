@@ -42,7 +42,7 @@
     "test:planner-rules": "bun test apps/web/src/features/service/lib/planner-rules.test.ts",
     "test:workspace-web": "bun test apps/web/src/hooks/useMyWorkspaceId.test.ts apps/web/src/features/parts/hooks/workspace-scoped-hooks.test.ts apps/web/src/components/WorkspaceSwitcher.test.ts",
     "test:workspace-edge": "deno test supabase/functions/_shared/workspace.test.ts",
-    "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net",
+    "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
     "test:vendor-inbound-contract": "deno test supabase/functions/_shared/vendor-inbound-contract.test.ts",
     "test:vendor-escalation-resend": "deno test supabase/functions/_shared/vendor-escalation-resend.test.ts",
     "verify:service-slice": "bun run verify:parts-contracts && bun run verify:workspace-identity && bun run verify:service-cron-logging && bun run test:planner-rules && bun run test:workspace-web && bun run test:workspace-edge && bun run test:vendor-inbound-contract && bun run test:vendor-escalation-resend"

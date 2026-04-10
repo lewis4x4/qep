@@ -6,9 +6,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { loadLocalEnv } from "../_shared/local-env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..");
+loadLocalEnv(repoRoot);
 const outputDir = join(repoRoot, "test-results", "kb-eval");
 const queriesPath = join(__dirname, "golden-queries.json");
 const latestPath = join(outputDir, "latest.json");

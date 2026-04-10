@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { loadLocalEnv } from "../_shared/local-env.mjs";
 
 function parseArgs(argv) {
   const options = {
@@ -85,6 +86,7 @@ function summarize(check) {
 
 const options = parseArgs(process.argv.slice(2));
 const repoRoot = process.cwd();
+loadLocalEnv(repoRoot);
 const reportTimestamp = nowIso();
 const reportDir = join(repoRoot, "test-results", "agent-gates");
 mkdirSync(reportDir, { recursive: true });

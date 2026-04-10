@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
 import { createClient } from "@supabase/supabase-js";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadLocalEnv } from "../_shared/local-env.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadLocalEnv(join(__dirname, "..", ".."));
 
 function requiredEnv(name) {
   return process.env[name]?.trim() ?? "";
