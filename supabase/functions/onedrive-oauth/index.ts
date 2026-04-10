@@ -8,16 +8,27 @@ import { encryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function corsResponse(origin: string | null, body: string, status = 200, extraHeaders: Record<string, string> = {}): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Access-Control-Allow-Origin": origin ?? "",
+      ...extraHeaders,
+    },
+  });
+}
 
 const TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const GRAPH_DRIVE_URL = "https://graph.microsoft.com/v1.0/me/drive?$select=id,driveType,webUrl";
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return corsResponse(origin, "ok");
   }
 
   const url = new URL(req.url);
@@ -26,17 +37,17 @@ Deno.serve(async (req) => {
   const mode = url.searchParams.get("mode");
 
   if (error) {
-    return respondError(`OneDrive OAuth error: ${error}`, mode);
+    return respondError(`OneDrive OAuth error: ${error}`, mode, origin);
   }
 
   if (!code) {
-    return respondError("No authorization code received", mode);
+    return respondError("No authorization code received", mode, origin);
   }
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return respondError("Not authenticated", mode, 401);
+      return respondError("Not authenticated", mode, origin, 401);
     }
 
     const supabase = createClient(
@@ -48,7 +59,7 @@ Deno.serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     const user = authData.user;
     if (authError || !user) {
-      return respondError("Not authenticated", mode, 401);
+      return respondError("Not authenticated", mode, origin, 401);
     }
 
     const tokenRes = await fetch(TOKEN_URL, {
@@ -65,7 +76,7 @@ Deno.serve(async (req) => {
 
     if (!tokenRes.ok) {
       const tokenError = await tokenRes.text();
-      return respondError(`Token exchange failed: ${tokenError}`, mode, 400);
+      return respondError(`Token exchange failed: ${tokenError}`, mode, origin, 400);
     }
 
     const tokens = await tokenRes.json();
@@ -78,7 +89,7 @@ Deno.serve(async (req) => {
 
     if (!driveRes.ok) {
       const driveError = await driveRes.text();
-      return respondError(`Failed to load drive info: ${driveError}`, mode, 400);
+      return respondError(`Failed to load drive info: ${driveError}`, mode, origin, 400);
     }
 
     const drive = await driveRes.json();
@@ -115,7 +126,7 @@ Deno.serve(async (req) => {
 
     const { error: saveError } = await operation;
     if (saveError) {
-      return respondError(`Failed to save connection: ${saveError.message}`, mode, 500);
+      return respondError(`Failed to save connection: ${saveError.message}`, mode, origin, 500);
     }
 
     return respondSuccess(
@@ -126,31 +137,27 @@ Deno.serve(async (req) => {
         webUrl: drive.webUrl ?? null,
       },
       mode,
+      origin,
     );
   } catch (oauthError) {
     captureEdgeException(oauthError, { fn: "onedrive-oauth", req });
     console.error("OneDrive OAuth error:", oauthError);
-    return respondError("Internal error during OAuth flow", mode, 500);
+    return respondError("Internal error during OAuth flow", mode, origin, 500);
   }
 });
 
-function respondSuccess(payload: Record<string, unknown>, mode: string | null): Response {
+function respondSuccess(payload: Record<string, unknown>, mode: string | null, origin: string | null): Response {
   if (mode === "json") {
-    return new Response(JSON.stringify(payload), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return corsResponse(origin, JSON.stringify(payload), 200, { "Content-Type": "application/json" });
   }
 
   const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";
   return Response.redirect(`${appUrl}/admin/integrations?onedrive=connected`, 302);
 }
 
-function respondError(message: string, mode: string | null, status = 400): Response {
+function respondError(message: string, mode: string | null, origin: string | null, status = 400): Response {
   if (mode === "json") {
-    return new Response(JSON.stringify({ error: message }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return corsResponse(origin, JSON.stringify({ error: message }), status, { "Content-Type": "application/json" });
   }
 
   const appUrl = Deno.env.get("APP_URL") ?? "http://localhost:5173";

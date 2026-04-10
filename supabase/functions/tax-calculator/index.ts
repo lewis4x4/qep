@@ -66,6 +66,17 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
 
+    // Role check: tax calculator requires authenticated user with deal access
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
+      return safeJsonError("Insufficient permissions", 403, origin);
+    }
+
     const body = await req.json();
     if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);
 

@@ -713,7 +713,7 @@ Deno.serve(async (req) => {
       "Connection": "keep-alive",
       "X-Trace-Id": traceId,
       "X-Iron-Conversation-Id": conversationId,
-      "Access-Control-Allow-Origin": origin ?? "*",
+      "Access-Control-Allow-Origin": origin ?? "",
       "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     },
   });

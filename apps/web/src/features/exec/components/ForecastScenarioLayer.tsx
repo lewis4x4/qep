@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -203,10 +204,10 @@ export function ForecastScenarioLayer() {
   const { data, isLoading } = useQuery({
     queryKey: ["exec", "forecast-scenarios"],
     queryFn: async () => {
-      // Get raw pipeline total from the command center or QRM deals
+      const session = (await supabase.auth.getSession()).data.session;
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/qrm-command-center?scope=mine`, {
         headers: {
-          Authorization: `Bearer ${(await import("@/lib/supabase")).supabase.auth.getSession().then(s => s.data.session?.access_token ?? "")}`,
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
           "Content-Type": "application/json",
         },
       });

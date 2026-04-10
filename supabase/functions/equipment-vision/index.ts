@@ -70,6 +70,20 @@ Deno.serve(async (req) => {
       return jsonError("Unauthorized", 401, ch);
     }
 
+    // Role check: equipment vision requires authenticated user
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
+      return jsonError("Insufficient permissions", 403, ch);
+    }
     const contentType = req.headers.get("content-type") ?? "";
     let imageBase64: string;
     let imageMimeType: string;
