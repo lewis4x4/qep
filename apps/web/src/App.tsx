@@ -175,6 +175,9 @@ const PrimitivesPlaygroundPage = lazy(() =>
 const CommandCenterPage = lazy(() =>
   import("./features/exec/pages/CommandCenterPage").then((m) => ({ default: m.CommandCenterPage }))
 );
+const HandoffTrustLedgerPage = lazy(() =>
+  import("./features/exec/pages/HandoffTrustLedgerPage").then((m) => ({ default: m.HandoffTrustLedgerPage }))
+);
 const FlowAdminPage = lazy(() =>
   import("./features/admin/pages/FlowAdminPage").then((m) => ({ default: m.FlowAdminPage }))
 );
@@ -1286,6 +1289,16 @@ function App() {
                 element={
                   ["manager", "owner"].includes(profile.role) ? (
                     <ExecutiveIntelligenceShowcase />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive/handoffs"
+                element={
+                  ["manager", "owner"].includes(profile.role) ? (
+                    <HandoffTrustLedgerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

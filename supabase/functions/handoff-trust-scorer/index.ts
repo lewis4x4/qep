@@ -17,6 +17,16 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import {
+  assessDealOutcome,
+  buildHandoffEvidence,
+  countSubjectActivities,
+  findFirstSubjectActivity,
+  scoreInfoCompleteness,
+  scoreOutcomeAlignment,
+  scoreRecipientReadiness,
+  type HandoffOutcome,
+} from "./scoring.ts";
 
 interface UnscoredHandoff {
   id: string;
@@ -28,48 +38,6 @@ interface UnscoredHandoff {
   handoff_at: string;
 }
 
-// ─── Scoring functions (pure) ──────────────────────────────────────────────
-
-/**
- * Score info completeness: did the sender leave context?
- * Checks for activities created by the sender within 48h before handoff.
- */
-function scoreInfoCompleteness(senderActivityCount: number): number {
-  if (senderActivityCount >= 3) return 1.0;
-  if (senderActivityCount >= 2) return 0.8;
-  if (senderActivityCount >= 1) return 0.5;
-  return 0.2; // No activity doesn't mean zero — there may be verbal context
-}
-
-/**
- * Score recipient readiness: how quickly did they act?
- */
-function scoreRecipientReadiness(hoursToFirstAction: number | null): number {
-  if (hoursToFirstAction === null) return 0.1; // No action taken yet
-  if (hoursToFirstAction <= 4) return 1.0;
-  if (hoursToFirstAction <= 24) return 0.7;
-  if (hoursToFirstAction <= 72) return 0.4;
-  return 0.1;
-}
-
-/**
- * Score outcome alignment: did the subject improve?
- */
-function scoreOutcomeAlignment(
-  outcome: "improved" | "unchanged" | "degraded" | "unknown",
-): number {
-  switch (outcome) {
-    case "improved":
-      return 1.0;
-    case "unchanged":
-      return 0.5;
-    case "degraded":
-      return 0.1;
-    case "unknown":
-      return 0.3;
-  }
-}
-
 /**
  * Determine outcome by comparing subject state before and after handoff.
  * For deals: check if stage advanced (probability increased) or deal was won.
@@ -79,7 +47,7 @@ async function determineOutcome(
   subjectType: string,
   subjectId: string,
   handoffAt: string,
-): Promise<"improved" | "unchanged" | "degraded" | "unknown"> {
+): Promise<HandoffOutcome> {
   const afterCutoff = new Date(
     Date.parse(handoffAt) + 7 * 86_400_000,
   ).toISOString(); // 7 days after
@@ -95,12 +63,6 @@ async function determineOutcome(
       .order("at", { ascending: true })
       .limit(3);
 
-    if (transitions && transitions.length > 0) {
-      // Any forward transition counts as improved
-      return "improved";
-    }
-
-    // Check if deal was won or lost
     const { data: deal } = await admin
       .from("crm_deals")
       .select("stage_id, closed_at")
@@ -108,21 +70,26 @@ async function determineOutcome(
       .maybeSingle();
 
     if (deal?.closed_at) {
-      // Check stage
       const { data: stage } = await admin
         .from("crm_deal_stages")
         .select("is_closed_won, is_closed_lost")
         .eq("id", deal.stage_id)
         .maybeSingle();
 
-      if (stage?.is_closed_won) return "improved";
-      if (stage?.is_closed_lost) return "degraded";
+      return assessDealOutcome({
+        transitionCount: transitions?.length ?? 0,
+        isClosedWon: Boolean(stage?.is_closed_won),
+        isClosedLost: Boolean(stage?.is_closed_lost),
+      });
     }
 
-    return "unchanged";
+    return assessDealOutcome({
+      transitionCount: transitions?.length ?? 0,
+      isClosedWon: false,
+      isClosedLost: false,
+    });
   }
 
-  // For other subject types, default to unknown for now
   return "unknown";
 }
 
@@ -158,7 +125,7 @@ Deno.serve(async (req) => {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (!profile || !["manager", "owner", "admin"].includes(profile.role)) {
+      if (!profile || !["manager", "owner"].includes(profile.role)) {
         return safeJsonError("Requires manager or owner role", 403, origin);
       }
     }
@@ -186,31 +153,37 @@ Deno.serve(async (req) => {
           handoffTime + 72 * 3_600_000,
         ).toISOString(); // 72h after
 
-        // 1. Info completeness: sender activities before handoff
-        const { count: senderCount } = await admin
+        const { data: senderActivities } = await admin
           .from("crm_activities")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", h.from_user_id)
+          .select("created_at, deal_id, activity_type")
+          .eq("created_by", h.from_user_id)
           .gte("created_at", beforeCutoff)
           .lt("created_at", h.handoff_at);
 
-        const infoScore = scoreInfoCompleteness(senderCount ?? 0);
+        const senderCount = countSubjectActivities(
+          (senderActivities ?? []) as Array<{ created_at: string; deal_id: string | null; activity_type?: string | null }>,
+          h.subject_id,
+        );
+        const infoScore = scoreInfoCompleteness(senderCount);
 
-        // 2. Recipient readiness: first action after handoff
-        const { data: firstAction } = await admin
+        const { data: recipientActivities } = await admin
           .from("crm_activities")
-          .select("created_at")
-          .eq("user_id", h.to_user_id)
+          .select("created_at, deal_id, activity_type")
+          .eq("created_by", h.to_user_id)
           .gte("created_at", h.handoff_at)
           .lt("created_at", afterCutoff)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+          .order("created_at", { ascending: true });
 
-        const hoursToAction = firstAction
-          ? (Date.parse(firstAction.created_at) - handoffTime) / 3_600_000
-          : null;
-        const readinessScore = scoreRecipientReadiness(hoursToAction);
+        const firstAction = findFirstSubjectActivity(
+          (recipientActivities ?? []) as Array<{ created_at: string; deal_id: string | null; activity_type?: string | null }>,
+          h.subject_id,
+        );
+        const evidence = buildHandoffEvidence({
+          senderActivityCount: senderCount,
+          firstAction,
+          handoffAt: h.handoff_at,
+        });
+        const readinessScore = scoreRecipientReadiness(evidence.hours_to_first_action);
 
         // 3. Outcome alignment
         const outcome = await determineOutcome(
@@ -229,6 +202,7 @@ Deno.serve(async (req) => {
             recipient_readiness: readinessScore,
             outcome_alignment: outcomeScore,
             outcome,
+            evidence,
             scored_at: new Date().toISOString(),
           })
           .eq("id", h.id);
