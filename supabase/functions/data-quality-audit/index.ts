@@ -81,8 +81,24 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
   }
 
   // 4. Duplicate equipment (same serial number)
-  const { data: dupSerials } = await admin.rpc("detect_duplicate_equipment" as string, {}) as { data: { count: number }[] | null };
-  const dupCount = dupSerials?.[0]?.count ?? 0;
+  let dupCount = 0;
+  try {
+    const { data: dupSerials } = await admin
+      .from("equipment")
+      .select("serial_number")
+      .not("serial_number", "is", null)
+      .neq("serial_number", "");
+    if (dupSerials) {
+      const counts = new Map<string, number>();
+      for (const row of dupSerials) {
+        const sn = row.serial_number?.trim();
+        if (sn) counts.set(sn, (counts.get(sn) ?? 0) + 1);
+      }
+      dupCount = [...counts.values()].filter((c) => c > 1).length;
+    }
+  } catch {
+    // Table may not have serial_number column — skip gracefully
+  }
   if (dupCount > 0) {
     results.push({
       issue_class: "duplicate_equipment",
@@ -110,11 +126,17 @@ async function runAudit(admin: ReturnType<typeof createClient>): Promise<AuditRe
   }
 
   // 6. Stale health scores (>7 days without refresh)
-  const { count: staleHealth } = await admin
-    .from("customer_profiles_extended")
-    .select("*", { count: "exact", head: true })
-    .not("health_score", "is", null)
-    .lt("health_score_updated_at", new Date(Date.now() - 7 * 86_400_000).toISOString());
+  let staleHealth: number | null = null;
+  try {
+    const result = await admin
+      .from("customer_profiles_extended")
+      .select("*", { count: "exact", head: true })
+      .not("health_score", "is", null)
+      .lt("health_score_updated_at", new Date(Date.now() - 7 * 86_400_000).toISOString());
+    staleHealth = result.count;
+  } catch {
+    // health_score_updated_at column may not exist yet
+  }
   if (staleHealth && staleHealth > 0) {
     results.push({
       issue_class: "stale_health_scores",
