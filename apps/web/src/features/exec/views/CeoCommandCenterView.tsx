@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
 import { AlertsInboxPanel } from "../components/AlertsInboxPanel";
 import { AiExecutiveSummaryStrip } from "../components/AiExecutiveSummaryStrip";
+import { CeoGrowthExplorer } from "../components/ceo/CeoGrowthExplorer";
 import { useMetricDefinitions, useLatestSnapshots, useFallbackKpis } from "../lib/useExecData";
 
 interface Props {
@@ -59,6 +60,8 @@ export function CeoCommandCenterView({ onDrill }: Props) {
             })}
           </div>
         )}
+
+        <CeoGrowthExplorer />
       </div>
 
       {/* Right rail: alerts inbox */}
