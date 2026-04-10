@@ -3,6 +3,7 @@
  * Auth: internal service user JWT (requireServiceUser).
  */
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { insertPortalCustomerNotification } from "../_shared/portal-customer-notify.ts";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
@@ -46,6 +47,7 @@ Deno.serve(async (req) => {
       status,
       tracking_number,
       estimated_delivery,
+      portal_customer_id,
       crm_company_id,
       portal_customers ( email, notification_preferences )
     `)
@@ -69,6 +71,23 @@ Deno.serve(async (req) => {
   let email = typeof cust?.email === "string" ? cust.email.trim() : "";
   const prefs = cust?.notification_preferences as { email?: boolean } | undefined;
   if (cust && prefs?.email === false) {
+    await insertPortalCustomerNotification(supabase, {
+      workspace_id: typeof row.workspace_id === "string" ? row.workspace_id : "default",
+      portal_customer_id: typeof row.portal_customer_id === "string" ? row.portal_customer_id : null,
+      category: "parts",
+      event_type: "parts_shipped",
+      channel: "portal",
+      title: "Parts order shipped",
+      body: `Your parts order (${orderId.replace(/-/g, "").slice(0, 8).toUpperCase()}) has shipped.`,
+      related_entity_type: "parts_order",
+      related_entity_id: orderId,
+      metadata: {
+        tracking_number: row.tracking_number ? String(row.tracking_number).trim() : null,
+        estimated_delivery: row.estimated_delivery ? String(row.estimated_delivery).trim() : null,
+        email_status: "skipped_preferences",
+      },
+      dedupe_key: `parts_shipped:${orderId}`,
+    });
     return safeJsonOk({ ok: true, email: "skipped_preferences" }, origin);
   }
 
@@ -89,16 +108,50 @@ Deno.serve(async (req) => {
   }
 
   if (!email.includes("@")) {
+    await insertPortalCustomerNotification(supabase, {
+      workspace_id: typeof row.workspace_id === "string" ? row.workspace_id : "default",
+      portal_customer_id: typeof row.portal_customer_id === "string" ? row.portal_customer_id : null,
+      category: "parts",
+      event_type: "parts_shipped",
+      channel: "portal",
+      title: "Parts order shipped",
+      body: `Your parts order (${orderId.replace(/-/g, "").slice(0, 8).toUpperCase()}) has shipped.`,
+      related_entity_type: "parts_order",
+      related_entity_id: orderId,
+      metadata: {
+        tracking_number: row.tracking_number ? String(row.tracking_number).trim() : null,
+        estimated_delivery: row.estimated_delivery ? String(row.estimated_delivery).trim() : null,
+        email_status: "skipped_no_address",
+      },
+      dedupe_key: `parts_shipped:${orderId}`,
+    });
     return safeJsonOk({ ok: true, email: "skipped_no_address" }, origin);
   }
 
   const workspaceId = typeof row.workspace_id === "string" ? row.workspace_id : "default";
+  const portalCustomerId = typeof row.portal_customer_id === "string" ? row.portal_customer_id : null;
   const { error: dedupeErr } = await supabase.from("parts_order_notification_sends").insert({
     workspace_id: workspaceId,
     parts_order_id: orderId,
     event_type: event,
   });
   if (dedupeErr?.code === "23505") {
+    await insertPortalCustomerNotification(supabase, {
+      workspace_id: workspaceId,
+      portal_customer_id: portalCustomerId,
+      category: "parts",
+      event_type: "parts_shipped",
+      channel: "email",
+      title: "Parts order shipped",
+      body: `Your parts order (${shortId}) has shipped.`,
+      related_entity_type: "parts_order",
+      related_entity_id: orderId,
+      metadata: {
+        tracking_number: tr || null,
+        estimated_delivery: eta || null,
+      },
+      dedupe_key: `parts_shipped:${orderId}`,
+    });
     return safeJsonOk({ ok: true, email: "deduped_already_sent" }, origin);
   }
   if (dedupeErr) {
@@ -119,6 +172,23 @@ Deno.serve(async (req) => {
   });
 
   if (result.skipped) {
+    await insertPortalCustomerNotification(supabase, {
+      workspace_id: workspaceId,
+      portal_customer_id: portalCustomerId,
+      category: "parts",
+      event_type: "parts_shipped",
+      channel: "portal",
+      title: "Parts order shipped",
+      body: `Your parts order (${shortId}) has shipped.`,
+      related_entity_type: "parts_order",
+      related_entity_id: orderId,
+      metadata: {
+        tracking_number: tr || null,
+        estimated_delivery: eta || null,
+        email_status: "skipped_resend_unconfigured",
+      },
+      dedupe_key: `parts_shipped:${orderId}`,
+    });
     await supabase
       .from("parts_order_notification_sends")
       .delete()
@@ -133,6 +203,23 @@ Deno.serve(async (req) => {
       .eq("parts_order_id", orderId)
       .eq("event_type", event);
   }
+  await insertPortalCustomerNotification(supabase, {
+    workspace_id: workspaceId,
+    portal_customer_id: portalCustomerId,
+    category: "parts",
+    event_type: "parts_shipped",
+    channel: result.ok ? "email" : "portal",
+    title: "Parts order shipped",
+    body: `Your parts order (${shortId}) has shipped.`,
+    related_entity_type: "parts_order",
+    related_entity_id: orderId,
+    metadata: {
+      tracking_number: tr || null,
+      estimated_delivery: eta || null,
+      email_status: result.ok ? "sent" : "failed",
+    },
+    dedupe_key: `parts_shipped:${orderId}`,
+  });
   return safeJsonOk(
     { ok: true, email: result.ok ? "sent" : "failed" },
     origin,

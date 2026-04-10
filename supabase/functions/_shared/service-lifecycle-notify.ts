@@ -3,7 +3,27 @@
  * (used by service-job-router, service-quote-engine, service-haul-router).
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import {
+  insertPortalCustomerNotification,
+  resolvePortalCustomerIdForJob,
+} from "./portal-customer-notify.ts";
 import { resolveCustomerRecipientForJob } from "./service-customer-recipient.ts";
+
+const PORTAL_NOTIFICATION_TITLES: Record<string, string> = {
+  quote_ready: "Quote available",
+  schedule_confirmed: "Service scheduled",
+  job_started: "Service started",
+  job_completed: "Service completed",
+  invoice_ready: "Invoice ready",
+};
+
+const PORTAL_NOTIFICATION_BODIES: Record<string, string> = {
+  quote_ready: "A service quote is ready for review in your customer portal.",
+  schedule_confirmed: "Your dealership confirmed the service appointment timing.",
+  job_started: "Your machine is actively being worked on.",
+  job_completed: "Your machine is ready for pickup or final handoff.",
+  invoice_ready: "A customer-facing invoice is now available in the portal.",
+};
 
 export async function notifyAfterStageChange(
   supabase: SupabaseClient,
@@ -41,11 +61,13 @@ export async function notifyAfterStageChange(
    */
   const insertCustomerOutbound = async (notificationType: string) => {
     const resolved = await resolveCustomerRecipientForJob(supabase, jobId);
+    const portalCustomerId = await resolvePortalCustomerIdForJob(supabase, jobId);
     const meta = {
       stage: toStage,
       delivery: "queued",
       recipient_source: resolved.source,
     } as Record<string, unknown>;
+    let channel: "portal" | "email" | "sms" = "portal";
 
     if (resolved.email) {
       const { error } = await supabase.from("service_customer_notifications").insert({
@@ -57,10 +79,10 @@ export async function notifyAfterStageChange(
         metadata: meta,
       });
       if (error) console.warn("notifyAfterStageChange customer outbound:", error.message);
-      return;
+      channel = "email";
     }
 
-    if (resolved.phone) {
+    if (channel === "portal" && resolved.phone) {
       const { error } = await supabase.from("service_customer_notifications").insert({
         workspace_id: workspaceId,
         job_id: jobId,
@@ -70,15 +92,31 @@ export async function notifyAfterStageChange(
         metadata: meta,
       });
       if (error) console.warn("notifyAfterStageChange customer sms:", error.message);
-      return;
+      channel = "sms";
     }
 
-    await insertInApp(
-      advisorId,
-      "service_customer_contact_missing",
-      "Customer contact missing",
-      `Cannot send "${notificationType}" — no customer email or phone on file for this job (${toStage}).`,
-    );
+    if (channel === "portal") {
+      await insertInApp(
+        advisorId,
+        "service_customer_contact_missing",
+        "Customer contact missing",
+        `Cannot send "${notificationType}" — no customer email or phone on file for this job (${toStage}).`,
+      );
+    }
+
+    await insertPortalCustomerNotification(supabase, {
+      workspace_id: workspaceId,
+      portal_customer_id: portalCustomerId,
+      category: "service",
+      event_type: notificationType,
+      channel,
+      title: PORTAL_NOTIFICATION_TITLES[notificationType] ?? notificationType,
+      body: PORTAL_NOTIFICATION_BODIES[notificationType] ?? `Service update: ${notificationType}`,
+      related_entity_type: "service_job",
+      related_entity_id: jobId,
+      metadata: meta,
+      dedupe_key: `service:${jobId}:${notificationType}:${toStage}`,
+    });
   };
 
   try {

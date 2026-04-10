@@ -68,7 +68,7 @@ export type PortalSettingsResponse = {
   };
   notifications?: Array<{
     id: string;
-    category: "service" | "parts";
+    category: "service" | "parts" | "quotes" | "fleet";
     label: string;
     detail: string;
     channel: "portal" | "email" | "sms";

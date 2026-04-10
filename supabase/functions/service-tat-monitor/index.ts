@@ -8,6 +8,10 @@
  * Auth: service_role (cron invocation)
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  insertPortalCustomerNotification,
+  resolvePortalCustomerIdForJob,
+} from "../_shared/portal-customer-notify.ts";
 import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
@@ -203,6 +207,24 @@ Deno.serve(async (req) => {
               message:
                 "Your service may be taking longer than expected. Our team is working on it.",
             },
+          });
+          const portalCustomerId = await resolvePortalCustomerIdForJob(supabase, job.id);
+          await insertPortalCustomerNotification(supabase, {
+            workspace_id: job.workspace_id,
+            portal_customer_id: portalCustomerId,
+            category: "service",
+            event_type: "tat_delay_advisory",
+            channel: "portal",
+            title: "Service delay advisory",
+            body: "Your service may be taking longer than expected. Our team is working on it.",
+            related_entity_type: "service_job",
+            related_entity_id: job.id,
+            metadata: {
+              stage: job.current_stage,
+              elapsed_hours: Math.round(elapsedHours * 10) / 10,
+              target_hours: targetHours,
+            },
+            dedupe_key: `tat_delay:${job.id}:${job.current_stage}:${new Date(now).toISOString().slice(0, 10)}`,
           });
           results.customer_delay_notices++;
         }
