@@ -1286,7 +1286,7 @@ function App() {
                 path="/executive"
                 element={
                   ["manager", "owner"].includes(profile.role) ? (
-                    profile.role === "owner" ? <CommandCenterPage /> : <ExecCommandCenterPage />
+                    <CommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1296,7 +1296,7 @@ function App() {
                 path="/executive/summary"
                 element={
                   ["manager", "owner"].includes(profile.role) ? (
-                    <ExecCommandCenterPage />
+                    <Navigate to="/executive" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

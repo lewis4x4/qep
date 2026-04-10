@@ -13,10 +13,6 @@
 import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Crown,
-  Wallet,
-  Truck,
-  Gauge,
   RefreshCcw,
   ArrowRight,
   AlertTriangle,
@@ -37,30 +33,7 @@ import { ExecutiveOverviewView } from "../views/ExecutiveOverviewView";
 import { MetricDrillDrawer } from "../components/MetricDrillDrawer";
 import { CommandCenterExportMenu } from "../components/CommandCenterExportMenu";
 import type { ExecRoleTab } from "../lib/types";
-
-type ExecutiveTab = "overview" | ExecRoleTab;
-
-const TABS = [
-  { key: "overview" as const, label: "Overview", icon: <Gauge className="h-3 w-3" /> },
-  { key: "ceo" as const, label: "CEO", icon: <Crown className="h-3 w-3" /> },
-  { key: "cfo" as const, label: "CFO", icon: <Wallet className="h-3 w-3" /> },
-  { key: "coo" as const, label: "COO", icon: <Truck className="h-3 w-3" /> },
-];
-
-const LENS_SUMMARIES: Record<ExecRoleTab, { title: string; detail: string }> = {
-  ceo: {
-    title: "Growth, risk concentration, and operating leverage",
-    detail: "Use this lens to pressure-test pipeline quality, branch variance, customer health, and where the business is gaining or leaking momentum.",
-  },
-  cfo: {
-    title: "Cash discipline, margin integrity, and policy pressure",
-    detail: "Use this lens to spot AR exposure, margin leakage, deposit misses, payment breakdowns, and the next finance interventions that matter.",
-  },
-  coo: {
-    title: "Execution reliability, backlog recovery, and operating throughput",
-    detail: "Use this lens to run service, logistics, and recovery queues before they turn into customer-facing misses or revenue drag.",
-  },
-};
+import { EXEC_LENS_META, EXEC_TABS, type ExecutiveTab } from "../lib/lens-meta";
 
 const CONTROL_LINKS = [
   {
@@ -103,6 +76,7 @@ const CONTROL_LINKS = [
 export function CommandCenterPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<ExecutiveTab>("overview");
+  const lensTabs = EXEC_TABS.filter((entry) => entry.key !== "overview");
 
   // Resolve the calling user's active workspace. Threaded into the drill drawer
   // so its snapshot history + alerts queries can explicitly filter by
@@ -164,9 +138,9 @@ export function CommandCenterPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                {TABS.filter((entry) => entry.key !== "overview").map((entry) => {
+                {lensTabs.map((entry) => {
                   const active = tab === entry.key;
-                  const lens = LENS_SUMMARIES[entry.key as ExecRoleTab];
+                  const lens = EXEC_LENS_META[entry.key as ExecRoleTab];
                   return (
                     <button
                       key={entry.key}
@@ -241,7 +215,7 @@ export function CommandCenterPage() {
       <DashboardPivotToggle
         value={tab}
         onChange={(v) => setTab(v as ExecutiveTab)}
-        pivots={TABS}
+        pivots={EXEC_TABS}
       />
 
       {/* Lens content */}

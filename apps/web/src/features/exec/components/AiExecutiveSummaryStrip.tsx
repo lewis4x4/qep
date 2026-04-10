@@ -30,6 +30,9 @@ interface Props {
 
 export function AiExecutiveSummaryStrip({ role }: Props) {
   const { data: alerts = [] } = useExecAlerts(role);
+  const topAlert = alerts[0] ?? null;
+  const topAlertPlaybook = topAlert ? resolveExecAlertPlaybookLink(topAlert) : null;
+  const topAlertRecord = topAlert ? resolveExecAlertRecordLink(topAlert) : null;
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["exec", "summary", role],
     queryFn: async (): Promise<SummaryResponse> => {
@@ -70,32 +73,32 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
             </p>
           )}
 
-          {alerts.length > 0 && (
+          {topAlert && (
             <div className="mt-3 rounded-md border border-qep-orange/20 bg-black/10 p-3">
               <div className="flex items-center gap-2">
                 <AlertOctagon className="h-3.5 w-3.5 text-qep-orange" />
                 <p className="text-[10px] uppercase tracking-wider text-qep-orange">Top action from alerts</p>
               </div>
-              <p className="mt-1 text-[11px] font-semibold text-foreground">{alerts[0].title}</p>
-              {alerts[0].description && (
-                <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2">{alerts[0].description}</p>
+              <p className="mt-1 text-[11px] font-semibold text-foreground">{topAlert.title}</p>
+              {topAlert.description && (
+                <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2">{topAlert.description}</p>
               )}
               <div className="mt-2 flex flex-wrap gap-2">
-                {resolveExecAlertPlaybookLink(alerts[0]) && (
+                {topAlertPlaybook && (
                   <Link
-                    to={resolveExecAlertPlaybookLink(alerts[0])!.href}
+                    to={topAlertPlaybook.href}
                     className="inline-flex items-center gap-1 rounded-md border border-qep-orange/30 bg-qep-orange/10 px-3 py-1.5 text-[11px] font-medium text-qep-orange hover:bg-qep-orange/15"
                   >
-                    {resolveExecAlertPlaybookLink(alerts[0])!.label}
+                    {topAlertPlaybook.label}
                     <ArrowRight className="h-3 w-3" />
                   </Link>
                 )}
-                {resolveExecAlertRecordLink(alerts[0]) && (
+                {topAlertRecord && (
                   <Link
-                    to={resolveExecAlertRecordLink(alerts[0])!.href}
+                    to={topAlertRecord.href}
                     className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted/20"
                   >
-                    {resolveExecAlertRecordLink(alerts[0])!.label}
+                    {topAlertRecord.label}
                     <ArrowRight className="h-3 w-3" />
                   </Link>
                 )}

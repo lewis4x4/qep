@@ -4,12 +4,9 @@ import {
   AlertTriangle,
   ArrowRight,
   Brain,
-  Crown,
   Gauge,
   ShieldAlert,
   Sparkles,
-  Truck,
-  Wallet,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,9 +14,11 @@ import { StatusChipStack } from "@/components/primitives";
 import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinitions } from "../lib/useExecData";
 import { formatForMetric, formatKpiValue, relativeRefresh } from "../lib/formatters";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
+import { AiExecutiveSummaryStrip } from "../components/AiExecutiveSummaryStrip";
 import { ForecastScenarioLayer } from "../components/ForecastScenarioLayer";
 import { HandoffTrustPanel } from "../components/HandoffTrustPanel";
 import type { AnalyticsAlertRow, ExecRoleTab, KpiSnapshot, MetricDefinition } from "../lib/types";
+import { EXEC_LENS_META } from "../lib/lens-meta";
 
 interface ExecutiveOverviewViewProps {
   onOpenLens: (lens: ExecRoleTab) => void;
@@ -43,27 +42,6 @@ const SEVERITY_ORDER: Record<string, number> = {
   error: 3,
   warn: 2,
   info: 1,
-};
-
-const LENS_META: Record<ExecRoleTab, Omit<LensSummary, "metrics" | "alerts" | "criticalAlerts" | "staleMetrics" | "freshestAt" | "previews">> = {
-  ceo: {
-    role: "ceo",
-    label: "CEO",
-    icon: Crown,
-    tone: "border-qep-orange/30 bg-qep-orange/5",
-  },
-  cfo: {
-    role: "cfo",
-    label: "CFO",
-    icon: Wallet,
-    tone: "border-emerald-500/30 bg-emerald-500/5",
-  },
-  coo: {
-    role: "coo",
-    label: "COO",
-    icon: Truck,
-    tone: "border-sky-500/30 bg-sky-500/5",
-  },
 };
 
 function buildSnapshotMap(snapshots: KpiSnapshot[]) {
@@ -103,7 +81,7 @@ function buildLensSummary(
   });
 
   return {
-    ...LENS_META[role],
+    ...EXEC_LENS_META[role],
     metrics: definitions.length,
     alerts: alerts.length,
     criticalAlerts: alerts.filter((alert) => alert.severity === "critical" || alert.severity === "error").length,
@@ -152,9 +130,12 @@ export function ExecutiveOverviewView({ onOpenLens }: ExecutiveOverviewViewProps
   const staleMetrics = lensSummaries.reduce((sum, summary) => sum + summary.staleMetrics, 0);
   const criticalAlerts = allAlerts.filter((alert) => alert.severity === "critical" || alert.severity === "error").length;
   const totalImpact = allAlerts.reduce((sum, alert) => sum + Number(alert.business_impact_value ?? 0), 0);
+  const topAlerts = allAlerts.slice(0, 3);
 
   return (
     <div className="space-y-4">
+      <AiExecutiveSummaryStrip role="ceo" />
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.4fr_0.9fr]">
         <Card className="overflow-hidden border-qep-orange/25 bg-[radial-gradient(circle_at_top_left,_rgba(218,131,48,0.18),_transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -223,7 +204,7 @@ export function ExecutiveOverviewView({ onOpenLens }: ExecutiveOverviewViewProps
             <h3 className="text-sm font-bold text-foreground">What leadership should do next</h3>
           </div>
           <div className="mt-4 space-y-3">
-            {allAlerts.slice(0, 3).map((alert) => {
+            {topAlerts.map((alert) => {
               const playbookLink = resolveExecAlertPlaybookLink(alert);
               const recordLink = resolveExecAlertRecordLink(alert);
               return (
