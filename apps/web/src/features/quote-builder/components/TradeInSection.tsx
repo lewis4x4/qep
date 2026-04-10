@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { getTradeValuation } from "../lib/quote-api";
+import { Button } from "@/components/ui/button";
+import { buildTradeWalkaroundHref } from "@/features/qrm/lib/trade-walkaround";
 
 interface TradeInSectionProps {
   dealId: string;
@@ -27,6 +30,9 @@ export function TradeInSection({ dealId, onTradeValueChange }: TradeInSectionPro
     return (
       <Card className="border-dashed p-4">
         <p className="text-sm text-muted-foreground">No trade-in valuation on file. Create one from the deal detail page.</p>
+        <Button asChild size="sm" variant="outline" className="mt-3">
+          <Link to={buildTradeWalkaroundHref(dealId)}>Open trade walkaround</Link>
+        </Button>
       </Card>
     );
   }

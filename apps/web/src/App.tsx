@@ -184,6 +184,9 @@ const MobileFieldCommandPage = lazy(() =>
 const VisitIntelligencePage = lazy(() =>
   import("./features/qrm/pages/VisitIntelligencePage").then((m) => ({ default: m.VisitIntelligencePage }))
 );
+const TradeWalkaroundPage = lazy(() =>
+  import("./features/qrm/pages/TradeWalkaroundPage").then((m) => ({ default: m.TradeWalkaroundPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -982,6 +985,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <VisitIntelligencePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/deals/:dealId/trade-walkaround"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <TradeWalkaroundPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

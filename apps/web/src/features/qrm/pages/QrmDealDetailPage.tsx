@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, FileText, Plus } from "lucide-react";
+import { ArrowLeft, CalendarDays, FileText, GitCompare, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurre
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
 import { buildAccountCommandHref } from "../lib/account-command";
+import { buildTradeWalkaroundHref } from "../lib/trade-walkaround";
 import {
   createCrmActivity,
   listDealActivities,
@@ -235,6 +236,12 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
             >
               <FileText className="mr-2 h-4 w-4" />
               New Quote
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildTradeWalkaroundHref(dealId)}>
+              <GitCompare className="mr-2 h-4 w-4" />
+              Trade Walkaround
             </Link>
           </Button>
           <Button className="hidden sm:inline-flex" onClick={() => setComposerOpen(true)}>

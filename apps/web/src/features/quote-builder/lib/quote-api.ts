@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+export { getTradeValuation } from "@/features/qrm/lib/trade-walkaround-api";
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
 
@@ -94,16 +95,4 @@ export async function searchCatalog(query: string) {
     .limit(20);
   if (error) throw error;
   return data ?? [];
-}
-
-export async function getTradeValuation(dealId: string) {
-  const { data, error } = await supabase
-    .from("trade_valuations")
-    .select("*")
-    .eq("deal_id", dealId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }
