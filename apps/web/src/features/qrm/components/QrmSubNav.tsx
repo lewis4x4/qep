@@ -16,6 +16,7 @@ import {
   Swords,
   Mic2,
   HeartHandshake,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Compete", href: "/qrm/competitive-displacement", icon: Swords },
   { label: "Operators", href: "/qrm/operator-intelligence", icon: Mic2 },
   { label: "Post-Sale", href: "/qrm/post-sale-experience", icon: HeartHandshake },
+  { label: "Audit", href: "/qrm/workflow-audit", icon: Workflow },
 ];
 
 export function QrmSubNav() {

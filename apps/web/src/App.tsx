@@ -202,6 +202,9 @@ const OperatorIntelligencePage = lazy(() =>
 const PostSaleExperienceCenterPage = lazy(() =>
   import("./features/qrm/pages/PostSaleExperienceCenterPage").then((m) => ({ default: m.PostSaleExperienceCenterPage }))
 );
+const WorkflowAuditPage = lazy(() =>
+  import("./features/qrm/pages/WorkflowAuditPage").then((m) => ({ default: m.WorkflowAuditPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1753,6 +1756,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <PostSaleExperienceCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/workflow-audit"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <WorkflowAuditPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
