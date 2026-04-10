@@ -17,6 +17,7 @@ export interface Asset360Equipment {
   engine_hours: number | null;
   warranty_expires_on: string | null;
   next_service_due_at: string | null;
+  photo_urls: string[] | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }

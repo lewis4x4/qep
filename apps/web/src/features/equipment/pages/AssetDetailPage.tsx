@@ -16,6 +16,7 @@ import {
 import { fetchAsset360, type Asset360Response } from "../lib/asset-360-api";
 import { CommercialActionTab } from "../components/CommercialActionTab";
 import { MachineLifecycleCard } from "../components/MachineLifecycleCard";
+import { supabase } from "@/lib/supabase";
 
 type TabKey = "service" | "parts" | "deal" | "telematics" | "docs" | "photos" | "commercial";
 
@@ -96,7 +97,12 @@ export function AssetDetailPage() {
               <StatusChipStack chips={headerChips} />
             </div>
           </div>
-          <AskIronAdvisorButton contextType="equipment" contextId={equipment.id} variant="inline" />
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("commercial")}>
+              Recommend Trade-Up
+            </Button>
+            <AskIronAdvisorButton contextType="equipment" contextId={equipment.id} variant="inline" />
+          </div>
         </div>
       </div>
 
@@ -144,11 +150,11 @@ export function AssetDetailPage() {
         <div className="mt-4">
           {activeTab === "commercial" && <CommercialActionTab data={data} />}
           {activeTab === "service" && <ServiceTab data={data} />}
-          {activeTab === "parts" && <PlaceholderTab label="Parts spend history" detail="Lifetime parts orders for this asset will render here." />}
+          {activeTab === "parts" && <PartsTab equipmentId={equipment.id} lifetimeSpend={data.badges.lifetime_parts_spend} />}
           {activeTab === "deal" && <DealTab data={data} />}
-          {activeTab === "telematics" && <PlaceholderTab label="Telematics trend" detail="Run/idle hours, fault codes, and coolant trends from telematics_readings." />}
-          {activeTab === "docs" && <PlaceholderTab label="Documents" detail="Operator manuals, warranty certs, service records — see /portal/documents for the customer view." />}
-          {activeTab === "photos" && <PlaceholderTab label="Photos" detail="Equipment photos from the equipment_photos bucket." />}
+          {activeTab === "telematics" && <TelematicsTab equipmentId={equipment.id} />}
+          {activeTab === "docs" && <DocsTab equipmentId={equipment.id} />}
+          {activeTab === "photos" && <PhotosTab photoUrls={equipment.photo_urls ?? []} />}
         </div>
       </div>
     </div>
@@ -208,11 +214,215 @@ function DealTab({ data }: { data: Asset360Response }) {
   );
 }
 
-function PlaceholderTab({ label, detail }: { label: string; detail: string }) {
+interface PartsOrderRow {
+  id: string;
+  status: string;
+  total: number | null;
+  estimated_delivery: string | null;
+  tracking_number: string | null;
+  created_at: string;
+}
+
+function PartsTab({ equipmentId, lifetimeSpend }: { equipmentId: string; lifetimeSpend: number }) {
+  const fleetQuery = useQuery({
+    queryKey: ["asset", "fleet-link", equipmentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("customer_fleet")
+        .select("id")
+        .eq("equipment_id", equipmentId)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.id ?? null;
+    },
+    staleTime: 60_000,
+  });
+
+  const ordersQuery = useQuery({
+    queryKey: ["asset", "parts-orders", equipmentId, fleetQuery.data],
+    enabled: Boolean(fleetQuery.data),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("parts_orders")
+        .select("id, status, total, estimated_delivery, tracking_number, created_at")
+        .eq("fleet_id", fleetQuery.data!)
+        .order("created_at", { ascending: false })
+        .limit(8);
+      if (error) throw error;
+      return (data ?? []) as PartsOrderRow[];
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <Card className="p-4">
-      <p className="text-xs font-semibold text-foreground">{label}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-foreground">Parts history</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Lifetime parts spend {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(lifetimeSpend)}
+          </p>
+        </div>
+      </div>
+      {ordersQuery.isLoading ? (
+        <p className="mt-3 text-xs text-muted-foreground">Loading parts orders…</p>
+      ) : (ordersQuery.data?.length ?? 0) === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">No parts orders linked to this machine yet.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {ordersQuery.data?.map((order) => (
+            <div key={order.id} className="rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">{order.status.replace(/_/g, " ")}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(order.total ?? 0)}
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {new Date(order.created_at).toLocaleDateString()}
+                {order.estimated_delivery ? ` · ETA ${new Date(order.estimated_delivery).toLocaleDateString()}` : ""}
+                {order.tracking_number ? ` · Tracking ${order.tracking_number}` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+interface TelematicsRow {
+  provider: string;
+  device_serial: string | null;
+  last_hours: number | null;
+  last_lat: number | null;
+  last_lng: number | null;
+  last_reading_at: string | null;
+  is_active: boolean;
+}
+
+function TelematicsTab({ equipmentId }: { equipmentId: string }) {
+  const telematicsQuery = useQuery({
+    queryKey: ["asset", "telematics", equipmentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("telematics_feeds")
+        .select("provider, device_serial, last_hours, last_lat, last_lng, last_reading_at, is_active")
+        .eq("equipment_id", equipmentId)
+        .order("updated_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return (data ?? []) as TelematicsRow[];
+    },
+    staleTime: 60_000,
+  });
+
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-semibold text-foreground">Telematics</p>
+      {telematicsQuery.isLoading ? (
+        <p className="mt-3 text-xs text-muted-foreground">Loading telematics…</p>
+      ) : (telematicsQuery.data?.length ?? 0) === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">No telematics feed is linked to this machine yet.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {telematicsQuery.data?.map((row, index) => (
+            <div key={`${row.provider}-${index}`} className="rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">{row.provider}</p>
+                <span className={`text-xs ${row.is_active ? "text-emerald-400" : "text-muted-foreground"}`}>
+                  {row.is_active ? "active" : "inactive"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {row.device_serial ? `Device ${row.device_serial}` : "No device serial"}
+                {row.last_hours != null ? ` · ${row.last_hours.toLocaleString()}h` : ""}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {row.last_reading_at ? `Last reading ${new Date(row.last_reading_at).toLocaleString()}` : "No recent reading"}
+                {row.last_lat != null && row.last_lng != null ? ` · ${row.last_lat}, ${row.last_lng}` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+interface EquipmentDocumentRow {
+  id: string;
+  title: string;
+  document_type: string;
+  file_url: string;
+  customer_visible: boolean;
+  updated_at: string;
+}
+
+function DocsTab({ equipmentId }: { equipmentId: string }) {
+  const docsQuery = useQuery({
+    queryKey: ["asset", "docs", equipmentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("equipment_documents")
+        .select("id, title, document_type, file_url, customer_visible, updated_at")
+        .eq("crm_equipment_id", equipmentId)
+        .order("updated_at", { ascending: false })
+        .limit(12);
+      if (error) throw error;
+      return (data ?? []) as EquipmentDocumentRow[];
+    },
+    staleTime: 60_000,
+  });
+
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-semibold text-foreground">Documents</p>
+      {docsQuery.isLoading ? (
+        <p className="mt-3 text-xs text-muted-foreground">Loading documents…</p>
+      ) : (docsQuery.data?.length ?? 0) === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">No documents linked to this machine yet.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {docsQuery.data?.map((doc) => (
+            <a
+              key={doc.id}
+              href={doc.file_url}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-lg border border-border/60 bg-muted/10 p-3 hover:border-qep-orange/30"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium text-foreground">{doc.title}</p>
+                <span className="text-xs text-muted-foreground">{doc.document_type.replace(/_/g, " ")}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Updated {new Date(doc.updated_at).toLocaleDateString()} · {doc.customer_visible ? "customer visible" : "internal"}
+              </p>
+            </a>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function PhotosTab({ photoUrls }: { photoUrls: string[] }) {
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-semibold text-foreground">Photos</p>
+      {photoUrls.length === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">No equipment photos are linked to this machine yet.</p>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {photoUrls.map((url, index) => (
+            <a key={index} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border/60 bg-muted/10">
+              <img src={url} alt={`Equipment photo ${index + 1}`} className="h-32 w-full object-cover" />
+            </a>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
