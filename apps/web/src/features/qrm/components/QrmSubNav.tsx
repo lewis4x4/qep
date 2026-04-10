@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Truck,
   Warehouse,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Inventory", href: "/qrm/inventory-pressure", icon: AlertTriangle },
   { label: "Motion", href: "/qrm/iron-in-motion", icon: Truck },
   { label: "Rentals", href: "/qrm/rentals", icon: Warehouse },
+  { label: "Svc→Sales", href: "/qrm/service-to-sales", icon: Wrench },
 ];
 
 export function QrmSubNav() {

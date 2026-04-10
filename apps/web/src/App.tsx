@@ -178,6 +178,9 @@ const IronInMotionRegisterPage = lazy(() =>
 const RentalCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/RentalCommandCenterPage").then((m) => ({ default: m.RentalCommandCenterPage }))
 );
+const ServiceToSalesPage = lazy(() =>
+  import("./features/qrm/pages/ServiceToSalesPage").then((m) => ({ default: m.ServiceToSalesPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1619,6 +1622,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <RentalCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/service-to-sales"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceToSalesPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
