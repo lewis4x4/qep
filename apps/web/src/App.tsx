@@ -199,6 +199,9 @@ const CompetitiveDisplacementCenterPage = lazy(() =>
 const OperatorIntelligencePage = lazy(() =>
   import("./features/qrm/pages/OperatorIntelligencePage").then((m) => ({ default: m.OperatorIntelligencePage }))
 );
+const PostSaleExperienceCenterPage = lazy(() =>
+  import("./features/qrm/pages/PostSaleExperienceCenterPage").then((m) => ({ default: m.PostSaleExperienceCenterPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1740,6 +1743,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <OperatorIntelligencePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/post-sale-experience"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <PostSaleExperienceCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

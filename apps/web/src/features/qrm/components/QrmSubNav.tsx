@@ -15,6 +15,7 @@ import {
   LifeBuoy,
   Swords,
   Mic2,
+  HeartHandshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Rescue", href: "/qrm/revenue-rescue", icon: LifeBuoy },
   { label: "Compete", href: "/qrm/competitive-displacement", icon: Swords },
   { label: "Operators", href: "/qrm/operator-intelligence", icon: Mic2 },
+  { label: "Post-Sale", href: "/qrm/post-sale-experience", icon: HeartHandshake },
 ];
 
 export function QrmSubNav() {
