@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Building2, MapPin, Phone, Mail, Users, Clock, FileText, Plus, Pencil, Trash2, ChevronDown, ChevronRight, Shield, LocateFixed, Loader2 } from "lucide-react";
@@ -428,6 +429,9 @@ export function BranchManagementPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                        <Link to={`/qrm/branches/${b.slug}/command`}>Command</Link>
+                      </Button>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" aria-label={`Edit ${b.display_name}`} onClick={() => startEdit(b)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

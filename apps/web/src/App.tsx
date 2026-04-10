@@ -172,6 +172,9 @@ const TimeBankPage = lazy(() =>
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
+const BranchCommandCenterPage = lazy(() =>
+  import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -1464,6 +1467,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <AccountCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/branches/:branchId/command"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <BranchCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

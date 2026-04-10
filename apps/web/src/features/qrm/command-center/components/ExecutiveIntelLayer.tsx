@@ -9,6 +9,7 @@
  */
 
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { cn } from "@/lib/utils";
@@ -198,7 +199,9 @@ function BranchCard({ branches }: { branches: BranchHealthCard[] }) {
               variants={itemVariants}
               className="flex items-center justify-between rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2"
             >
-              <span className="text-sm font-medium text-white">{branch.branchName}</span>
+              <Link to={`/qrm/branches/${branch.branchId}/command`} className="text-sm font-medium text-white hover:text-qep-orange">
+                {branch.branchName}
+              </Link>
               <div className="flex items-center gap-3 text-[11px] tabular-nums">
                 {branch.pipelineValue > 0 && <span className="text-white/70">{formatCurrency(branch.pipelineValue)}</span>}
                 {branch.dealCount > 0 && <span className="text-slate-500">{branch.dealCount} deals</span>}

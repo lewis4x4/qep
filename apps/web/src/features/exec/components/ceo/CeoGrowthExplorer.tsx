@@ -132,7 +132,13 @@ export function CeoGrowthExplorer() {
             {branchQuery.data.map((row) => (
               <div key={row.branch_id ?? "unknown"} className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-foreground">{row.branch_id ?? "Unknown branch"}</p>
+                  {row.branch_id ? (
+                    <Link to={`/qrm/branches/${row.branch_id}/command`} className="text-sm font-semibold text-foreground hover:text-qep-orange">
+                      {row.branch_id}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-semibold text-foreground">Unknown branch</p>
+                  )}
                   <div className="flex gap-3 text-[11px] text-muted-foreground">
                     <span>{row.active ?? 0} active</span>
                     <span>{row.closed ?? 0} closed</span>
