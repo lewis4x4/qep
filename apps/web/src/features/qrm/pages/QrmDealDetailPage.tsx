@@ -22,6 +22,7 @@ import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryM
 import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { formatTimestamp, toDateTimeLocalValue, toIsoOrNull } from "../lib/deal-date";
+import { buildAccountCommandHref } from "../lib/account-command";
 import {
   createCrmActivity,
   listDealActivities,
@@ -298,7 +299,7 @@ export function QrmDealDetailPage({ userId, userRole }: QrmDealDetailPageProps) 
                 <dt className="text-muted-foreground">Company</dt>
                 <dd className="font-medium text-foreground">
                   {companyQueryData ? (
-                    <Link to={`/qrm/companies/${companyQueryData.id}`}>{companyQueryData.name}</Link>
+                    <Link to={buildAccountCommandHref(companyQueryData.id)}>{companyQueryData.name}</Link>
                   ) : (
                     "Not linked"
                   )}

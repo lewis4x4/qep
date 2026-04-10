@@ -10,6 +10,7 @@ import { HealthScorePill } from "../../nervous-system/components/HealthScorePill
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { buildAccountCommandHref } from "../lib/account-command";
 import { listCrmCompanies } from "../lib/qrm-api";
 
 export function QrmCompaniesPage() {
@@ -153,7 +154,7 @@ export function QrmCompaniesPage() {
             {companies.map((company) => (
               <Link
                 key={company.id}
-                to={`/crm/companies/${company.id}`}
+                to={buildAccountCommandHref(company.id)}
                 className="block min-h-[44px] rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">

@@ -169,6 +169,9 @@ const LifecyclePage = lazy(() =>
 const TimeBankPage = lazy(() =>
   import("./features/qrm/pages/TimeBankPage").then((m) => ({ default: m.TimeBankPage }))
 );
+const AccountCommandCenterPage = lazy(() =>
+  import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -366,6 +369,15 @@ function LegacyCrmRedirect() {
   const location = useLocation();
   const next = `/qrm${location.pathname.slice(4)}${location.search}`;
   return <Navigate to={next} replace />;
+}
+
+function LegacyCompanyCommandRedirect() {
+  const { pathname, search } = useLocation();
+  const match = pathname.match(/^\/qrm\/companies\/([^/]+)\/command$/);
+  const companyId = match?.[1];
+  return companyId
+    ? <Navigate to={`/qrm/accounts/${companyId}/command${search}`} replace />
+    : <Navigate to="/qrm/companies" replace />;
 }
 
 function AnimatedRoutes({ children }: { children: React.ReactNode }) {
@@ -1447,6 +1459,17 @@ function App() {
                   )
                 }
               />
+              <Route
+                path="/qrm/accounts/:accountId/command"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <AccountCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route path="/qrm/companies/:companyId/command" element={<LegacyCompanyCommandRedirect />} />
               <Route
                 path="/qrm/companies"
                 element={

@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { buildAccountCommandHref } from "../lib/account-command";
 import {
   aggregateTimeBankByAccount,
   aggregateTimeBankByRep,
@@ -71,8 +72,8 @@ export function TimeBankPage() {
               title="Account time balance"
               description="Which customer relationships are absorbing the most stage time right now."
               rows={accountRows}
-              linkBuilder={(row) => `/qrm/companies/${row.id}`}
-              actionLabel="Open company"
+              linkBuilder={(row) => buildAccountCommandHref(row.id)}
+              actionLabel="Open account"
             />
             <AggregateCard
               title="Rep time balance"

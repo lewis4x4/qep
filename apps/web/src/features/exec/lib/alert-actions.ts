@@ -3,6 +3,10 @@ export interface ExecAlertActionLink {
   href: string;
 }
 
+function buildAccountCommandHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/command`;
+}
+
 interface AlertActionInput {
   alert_type: string;
   metric_key: string | null;
@@ -16,7 +20,7 @@ export function resolveExecAlertRecordLink(alert: AlertActionInput): ExecAlertAc
     return { label: "Open deal", href: `/qrm/deals/${alert.entity_id}` };
   }
   if (alert.entity_type === "crm_company") {
-    return { label: "Open company", href: `/qrm/companies/${alert.entity_id}` };
+    return { label: "Open account command", href: buildAccountCommandHref(alert.entity_id) };
   }
   if (alert.entity_type === "crm_contact") {
     return { label: "Open contact", href: `/qrm/contacts/${alert.entity_id}` };
@@ -53,7 +57,7 @@ export function resolveExecAlertPlaybookLink(alert: AlertActionInput): ExecAlert
     return { label: "Open invoice playbook", href: "/service/invoice" };
   }
   if (alert.alert_type === "threshold_breach" && alert.entity_type === "crm_company" && alert.entity_id) {
-    return { label: "Open account 360", href: `/qrm/companies/${alert.entity_id}` };
+    return { label: "Open account command", href: buildAccountCommandHref(alert.entity_id) };
   }
   return null;
 }

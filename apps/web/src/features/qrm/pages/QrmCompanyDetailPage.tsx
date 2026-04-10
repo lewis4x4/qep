@@ -15,6 +15,7 @@ import { QrmCustomFieldsCard } from "../components/QrmCustomFieldsCard";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchAccount360 } from "../lib/account-360-api";
+import { buildAccountCommandHref } from "../lib/account-command";
 import {
   AccountNextBestActions,
   AccountCommercialTab,
@@ -269,6 +270,11 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
           </Link>
         </Button>
         <div className="flex items-center gap-2">
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountCommandHref(companyId)}>
+              Open Command Center
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
             Edit Company
           </Button>

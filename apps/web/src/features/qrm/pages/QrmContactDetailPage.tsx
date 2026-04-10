@@ -17,6 +17,7 @@ import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryM
 import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
 import { QrmTerritoryConflictBadge } from "../components/QrmTerritoryConflictBadge";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
+import { buildAccountCommandHref } from "../lib/account-command";
 import {
   createCrmActivity,
   getCrmCompany,
@@ -238,7 +239,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
               canResolve={canResolveConflict}
               onResolve={() => {
                 if (contactQuery.data?.primaryCompanyId) {
-                  navigate(`/qrm/companies/${contactQuery.data.primaryCompanyId}`);
+                  navigate(buildAccountCommandHref(contactQuery.data.primaryCompanyId));
                 }
               }}
             />
@@ -256,7 +257,13 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
               </div>
               <div>
                 <dt className="text-muted-foreground">Primary company</dt>
-                <dd className="font-medium text-foreground">{companyQuery.data?.name || "Not linked"}</dd>
+                <dd className="font-medium text-foreground">
+                  {companyQuery.data ? (
+                    <Link to={buildAccountCommandHref(companyQuery.data.id)}>{companyQuery.data.name}</Link>
+                  ) : (
+                    "Not linked"
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Last updated</dt>
