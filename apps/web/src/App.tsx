@@ -175,6 +175,9 @@ const AccountCommandCenterPage = lazy(() =>
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
+const TerritoryCommandCenterPage = lazy(() =>
+  import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -1477,6 +1480,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <BranchCommandCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/territories/:territoryId/command"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <TerritoryCommandCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

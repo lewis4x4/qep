@@ -262,12 +262,14 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/deals/") ? "Deal Detail" : undefined) ??
     (location.pathname.startsWith("/qrm/contacts/") ? "Contact Detail" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") ? "Account Command" : undefined) ??
+    (location.pathname.startsWith("/qrm/territories/") ? "Territory Command" : undefined) ??
     (location.pathname.startsWith("/qrm/companies/") ? "Company Detail" : undefined);
   const quickAction =
     QUICK_ACTION_MAP[location.pathname] ??
     (location.pathname.startsWith("/qrm/deals/") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.startsWith("/qrm/contacts/") ? { label: "Contacts", route: "/qrm/contacts" } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") ? { label: "Companies", route: "/qrm/companies" } : null) ??
+    (location.pathname.startsWith("/qrm/territories/") ? { label: "Contacts", route: "/qrm/contacts" } : null) ??
     (location.pathname.startsWith("/qrm/companies/") ? { label: "Companies", route: "/qrm/companies" } : null);
 
   // Clear search on route change

@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface QrmTerritoryConflictBadgeProps {
+  territoryId?: string | null;
   territoryName: string;
   territoryRepName: string | null;
   contactRepName: string | null;
@@ -16,6 +17,7 @@ interface QrmTerritoryConflictBadgeProps {
 }
 
 export function QrmTerritoryConflictBadge({
+  territoryId,
   territoryName,
   territoryRepName,
   contactRepName,
@@ -68,7 +70,7 @@ export function QrmTerritoryConflictBadge({
             className="shrink-0 border-amber-600/35 bg-background/60 text-foreground hover:bg-amber-500/10 dark:border-amber-400/30 dark:hover:bg-amber-400/10"
             onClick={onResolve}
           >
-            Open company
+            {territoryId ? "Open territory" : "Open company"}
           </Button>
         )}
       </div>

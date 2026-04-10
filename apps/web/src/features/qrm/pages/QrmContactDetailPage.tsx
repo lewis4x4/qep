@@ -18,6 +18,7 @@ import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurre
 import { QrmTerritoryConflictBadge } from "../components/QrmTerritoryConflictBadge";
 import { useCrmActivityTaskMutation } from "../hooks/useCrmActivityTaskMutation";
 import { buildAccountCommandHref } from "../lib/account-command";
+import { buildTerritoryCommandHref } from "../lib/territory-command";
 import {
   createCrmActivity,
   getCrmCompany,
@@ -233,14 +234,13 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
 
           {conflict && (
             <QrmTerritoryConflictBadge
+              territoryId={conflict.id}
               territoryName={conflict.name}
               territoryRepName={territoryRepNameQuery.data ?? null}
               contactRepName={contactRepNameQuery.data ?? null}
               canResolve={canResolveConflict}
               onResolve={() => {
-                if (contactQuery.data?.primaryCompanyId) {
-                  navigate(buildAccountCommandHref(contactQuery.data.primaryCompanyId));
-                }
+                navigate(buildTerritoryCommandHref(conflict.id));
               }}
             />
           )}
