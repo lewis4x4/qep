@@ -123,7 +123,7 @@ export function OpportunityMapPage() {
       if (row.kind === "rental") {
         navigate("/qrm/rentals");
       } else {
-        navigate(buildAccountCommandHref(row.id.replace("account:", "")));
+        navigate(buildAccountCommandHref(row.companyId ?? ""));
       }
     },
   })), [navigate, visibleRows]);
@@ -161,7 +161,7 @@ export function OpportunityMapPage() {
                 </p>
                 <div className="mt-1">
                   <Button asChild size="sm" variant="ghost" className="h-7 px-0 text-[10px]">
-                    <Link to={row.kind === "rental" ? "/qrm/rentals" : buildAccountCommandHref(row.id.replace("account:", ""))}>
+                    <Link to={row.kind === "rental" ? "/qrm/rentals" : buildAccountCommandHref(row.companyId ?? "")}>
                       Open <ArrowUpRight className="ml-1 h-3 w-3" />
                     </Link>
                   </Button>

@@ -83,15 +83,8 @@ export function buildPostSaleExperienceBoard(
     docsByFleet.set(key, bucket);
   }
 
-  const serviceByCompany = new Map<string, PostSaleServiceRow[]>();
-  for (const row of input.service) {
-    if (!row.companyId) continue;
-    const bucket = serviceByCompany.get(row.companyId) ?? [];
-    bucket.push(row);
-    serviceByCompany.set(row.companyId, bucket);
-  }
-
   const grouped = new Map<string, PostSaleAccountRow>();
+  const recentEquipmentByCompany = new Map<string, Set<string>>();
 
   for (const row of recentFleet) {
     const account = grouped.get(row.companyId) ?? {
@@ -116,10 +109,21 @@ export function buildPostSaleExperienceBoard(
     if (row.attachmentCount === 0) account.attachmentGapCount += 1;
 
     grouped.set(row.companyId, account);
+
+    if (row.equipmentId) {
+      const equipmentBucket = recentEquipmentByCompany.get(row.companyId) ?? new Set<string>();
+      equipmentBucket.add(row.equipmentId);
+      recentEquipmentByCompany.set(row.companyId, equipmentBucket);
+    }
   }
 
   for (const account of grouped.values()) {
-    const jobs = serviceByCompany.get(account.companyId) ?? [];
+    const recentEquipmentIds = recentEquipmentByCompany.get(account.companyId) ?? new Set<string>();
+    const jobs = input.service.filter((row) =>
+      row.companyId === account.companyId &&
+      row.machineId != null &&
+      recentEquipmentIds.has(row.machineId),
+    );
     account.serviceTouches = jobs.length;
     account.openServiceTouches = jobs.filter((row) => isOpenStage(row.currentStage)).length;
     account.frictionScore =

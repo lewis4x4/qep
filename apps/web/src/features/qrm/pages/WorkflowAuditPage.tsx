@@ -32,7 +32,7 @@ export function WorkflowAuditPage() {
         supabase
           .from("exception_queue")
           .select("id, source, status, title, created_at")
-          .in("source", ["workflow_dead_letter", "analytics_alert"])
+          .eq("source", "workflow_dead_letter")
           .in("status", ["open", "in_progress"])
           .limit(300),
         supabase

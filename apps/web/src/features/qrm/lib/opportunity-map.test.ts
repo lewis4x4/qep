@@ -16,6 +16,16 @@ describe("buildOpportunityMapBoard", () => {
           lng: -89.9,
         },
         {
+          id: "eq-1b",
+          companyId: "company-1",
+          companyName: "Acme",
+          ownership: "customer_owned",
+          availability: "available",
+          name: "CAT 320 backup",
+          lat: 35.3,
+          lng: -89.7,
+        },
+        {
           id: "eq-2",
           companyId: null,
           companyName: null,
@@ -31,12 +41,15 @@ describe("buildOpportunityMapBoard", () => {
       tradeSignals: [{ equipmentId: "eq-1" }],
     });
 
-    expect(board.summary.mappedAccounts).toBe(1);
+    expect(board.summary.mappedAccounts).toBe(2);
     expect(board.summary.openRevenue).toBe(125000);
     expect(board.summary.visitTargets).toBe(1);
     expect(board.summary.activeRentals).toBe(1);
     expect(board.summary.tradeSignals).toBe(1);
-    expect(board.rows[0]?.id).toBe("account:company-1");
-    expect(board.rows[1]?.id).toBe("rental:eq-2");
+    expect(board.rows[0]?.id).toBe("account:company-1:35.1:-89.9");
+    expect(board.rows[0]?.openRevenue).toBe(62500);
+    expect(board.rows[1]?.id).toBe("account:company-1:35.3:-89.7");
+    expect(board.rows[1]?.openRevenue).toBe(62500);
+    expect(board.rows[2]?.id).toBe("rental:eq-2");
   });
 });

@@ -28,6 +28,7 @@ describe("buildPostSaleExperienceBoard", () => {
       ],
       service: [
         { companyId: "company-1", machineId: "eq-1", currentStage: "in_progress", createdAt: "2026-04-01T00:00:00.000Z" },
+        { companyId: "company-1", machineId: "eq-old", currentStage: "in_progress", createdAt: "2026-04-02T00:00:00.000Z" },
       ],
       documents: [
         { companyId: "company-1", fleetId: "fleet-1", equipmentId: "eq-1", documentType: "operator_manual" },

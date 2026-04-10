@@ -65,21 +65,28 @@ export function PostSaleExperienceCenterPage() {
         attachmentCountByEquipment.set(row.id, attachments.length);
       }
 
+      const companyByFleet = new Map<string, { companyId: string; companyName: string | null }>();
+      const companyByEquipment = new Map<string, { companyId: string; companyName: string | null }>();
+
+      const fleetRows = (fleetResult.data ?? []).flatMap((row) => {
+        const company = companyByPortalCustomer.get(row.portal_customer_id);
+        if (!company) return [];
+        companyByFleet.set(row.id, company);
+        if (row.equipment_id) companyByEquipment.set(row.equipment_id, company);
+        return [{
+          companyId: company.companyId,
+          companyName: company.companyName ?? "Account",
+          fleetId: row.id,
+          equipmentId: row.equipment_id,
+          purchaseDate: row.purchase_date,
+          nextServiceDue: row.next_service_due,
+          warrantyExpiry: row.warranty_expiry,
+          attachmentCount: row.equipment_id ? (attachmentCountByEquipment.get(row.equipment_id) ?? 0) : 0,
+        }];
+      });
+
       return buildPostSaleExperienceBoard({
-        fleet: (fleetResult.data ?? []).flatMap((row) => {
-          const company = companyByPortalCustomer.get(row.portal_customer_id);
-          if (!company) return [];
-          return [{
-            companyId: company.companyId,
-            companyName: company.companyName ?? "Account",
-            fleetId: row.id,
-            equipmentId: row.equipment_id,
-            purchaseDate: row.purchase_date,
-            nextServiceDue: row.next_service_due,
-            warrantyExpiry: row.warranty_expiry,
-            attachmentCount: row.equipment_id ? (attachmentCountByEquipment.get(row.equipment_id) ?? 0) : 0,
-          }];
-        }),
+        fleet: fleetRows,
         service: (serviceResult.data ?? []).map((row) => ({
           companyId: row.customer_id,
           machineId: row.machine_id,
@@ -87,7 +94,13 @@ export function PostSaleExperienceCenterPage() {
           createdAt: row.created_at,
         })),
         documents: (docsResult.data ?? []).flatMap((row) => {
-          const company = row.portal_customer_id ? companyByPortalCustomer.get(row.portal_customer_id) : null;
+          const company = row.portal_customer_id
+            ? companyByPortalCustomer.get(row.portal_customer_id)
+            : row.fleet_id
+              ? companyByFleet.get(row.fleet_id)
+              : row.crm_equipment_id
+                ? companyByEquipment.get(row.crm_equipment_id)
+                : null;
           if (!company) return [];
           return [{
             companyId: company.companyId,

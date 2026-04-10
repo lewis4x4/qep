@@ -27,6 +27,7 @@ export interface OpportunityMapTradeSignal {
 
 export interface OpportunityMapMarkerRow {
   id: string;
+  companyId: string | null;
   label: string;
   lat: number;
   lng: number;
@@ -57,14 +58,16 @@ export function buildOpportunityMapBoard(input: {
 }): OpportunityMapBoard {
   const rows = new Map<string, OpportunityMapMarkerRow>();
   const equipmentById = new Map(input.equipment.map((row) => [row.id, row]));
+  const siteKeysByCompany = new Map<string, string[]>();
 
   for (const eq of input.equipment) {
     if (!Number.isFinite(eq.lat) || !Number.isFinite(eq.lng)) continue;
     if (eq.ownership === "customer_owned" && eq.companyId) {
-      const key = `account:${eq.companyId}`;
+      const key = `account:${eq.companyId}:${eq.lat}:${eq.lng}`;
       if (!rows.has(key)) {
         rows.set(key, {
           id: key,
+          companyId: eq.companyId,
           label: eq.companyName ?? eq.name,
           lat: eq.lat as number,
           lng: eq.lng as number,
@@ -74,11 +77,15 @@ export function buildOpportunityMapBoard(input: {
           tradeSignalCount: 0,
         });
       }
+      const siteKeys = siteKeysByCompany.get(eq.companyId) ?? [];
+      if (!siteKeys.includes(key)) siteKeys.push(key);
+      siteKeysByCompany.set(eq.companyId, siteKeys);
     }
     if (eq.ownership === "rental_fleet" && (eq.availability === "rented" || eq.availability === "reserved")) {
       const key = `rental:${eq.id}`;
       rows.set(key, {
         id: key,
+        companyId: eq.companyId,
         label: eq.name,
         lat: eq.lat as number,
         lng: eq.lng as number,
@@ -92,25 +99,34 @@ export function buildOpportunityMapBoard(input: {
 
   for (const deal of input.deals) {
     if (!deal.companyId) continue;
-    const row = rows.get(`account:${deal.companyId}`);
-    if (!row) continue;
-    row.openRevenue += Number(deal.amount ?? 0);
+    const siteKeys = siteKeysByCompany.get(deal.companyId) ?? [];
+    if (siteKeys.length === 0) continue;
+    const share = Number(deal.amount ?? 0) / siteKeys.length;
+    for (const key of siteKeys) {
+      const row = rows.get(key);
+      if (!row) continue;
+      row.openRevenue += share;
+    }
   }
 
   for (const rec of input.visitRecommendations) {
     if (!rec.companyId) continue;
-    const row = rows.get(`account:${rec.companyId}`);
-    if (!row) continue;
-    row.visitTargetCount += 1;
+    const siteKeys = siteKeysByCompany.get(rec.companyId) ?? [];
+    if (siteKeys.length === 0) continue;
+    const target = rows.get(siteKeys[0]);
+    if (!target) continue;
+    target.visitTargetCount += 1;
   }
 
   for (const signal of input.tradeSignals) {
     if (!signal.equipmentId) continue;
     const eq = equipmentById.get(signal.equipmentId);
     if (!eq?.companyId) continue;
-    const row = rows.get(`account:${eq.companyId}`);
-    if (!row) continue;
-    row.tradeSignalCount += 1;
+    const siteKeys = siteKeysByCompany.get(eq.companyId) ?? [];
+    if (siteKeys.length === 0) continue;
+    const target = rows.get(siteKeys[0]);
+    if (!target) continue;
+    target.tradeSignalCount += 1;
   }
 
   const list = [...rows.values()].sort((a, b) => {
