@@ -3,9 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { PartsReorderHistory } from "../components/PartsReorderHistory";
+import { normalizePortalOrderLines, portalCartSummary } from "../lib/portal-order-utils";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 
 type LineDraft = { part_number: string; quantity: number };
@@ -53,6 +56,8 @@ export function PortalPartsPage() {
   const initialFleetId = searchParams.get("fleet_id") ?? "";
   const [lines, setLines] = useState<LineDraft[]>([{ part_number: "", quantity: 1 }]);
   const [fleetId, setFleetId] = useState<string>(initialFleetId);
+  const [shippingAddress, setShippingAddress] = useState("");
+  const [notes, setNotes] = useState("");
   const [aiReason, setAiReason] = useState<string | null>(null);
   const [matchedJobLabel, setMatchedJobLabel] = useState<string | null>(null);
   /** When true, draft submit includes ai_suggested_pm_kit + ai_suggestion_reason. Cleared if user edits lines. */
@@ -83,6 +88,8 @@ export function PortalPartsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portal", "parts-orders"] });
       setLines([{ part_number: "", quantity: 1 }]);
+      setShippingAddress("");
+      setNotes("");
       setAiReason(null);
       setMatchedJobLabel(null);
       setAiKitSubmitEligible(false);
@@ -93,6 +100,26 @@ export function PortalPartsPage() {
     mutationFn: (orderId: string) => portalApi.submitPartsOrder(orderId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["portal", "parts-orders"] });
+    },
+  });
+
+  const createAndSubmitMutation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const created = await portalApi.createPartsOrder(body);
+      const orderId = (created.order as Record<string, unknown> | undefined)?.id as string | undefined;
+      if (!orderId) {
+        throw new Error("Draft order created without an id.");
+      }
+      return portalApi.submitPartsOrder(orderId);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portal", "parts-orders"] });
+      setLines([{ part_number: "", quantity: 1 }]);
+      setShippingAddress("");
+      setNotes("");
+      setAiReason(null);
+      setMatchedJobLabel(null);
+      setAiKitSubmitEligible(false);
     },
   });
 
@@ -130,23 +157,37 @@ export function PortalPartsPage() {
   };
 
   const submit = () => {
-    const line_items = lines
-      .map((l) => ({
-        part_number: l.part_number.trim(),
-        quantity: Math.max(1, Math.floor(Number(l.quantity)) || 1),
-      }))
-      .filter((l) => l.part_number.length > 0);
+    const line_items = normalizePortalOrderLines(lines);
     if (line_items.length === 0) return;
 
     const body: Record<string, unknown> = {
       line_items,
       fleet_id: fleetId || null,
+      shipping_address: shippingAddress.trim() || null,
+      notes: notes.trim() || null,
     };
     if (aiKitSubmitEligible && aiReason) {
       body.ai_suggested_pm_kit = true;
       body.ai_suggestion_reason = aiReason;
     }
     createMutation.mutate(body);
+  };
+
+  const submitNow = () => {
+    const line_items = normalizePortalOrderLines(lines);
+    if (line_items.length === 0) return;
+
+    const body: Record<string, unknown> = {
+      line_items,
+      fleet_id: fleetId || null,
+      shipping_address: shippingAddress.trim() || null,
+      notes: notes.trim() || null,
+    };
+    if (aiKitSubmitEligible && aiReason) {
+      body.ai_suggested_pm_kit = true;
+      body.ai_suggestion_reason = aiReason;
+    }
+    createAndSubmitMutation.mutate(body);
   };
 
   const clearAiSubmitMetadata = () => setAiKitSubmitEligible(false);
@@ -172,6 +213,8 @@ export function PortalPartsPage() {
       }
     }
   };
+
+  const cart = portalCartSummary(lines);
 
   return (
     <PortalLayout>
@@ -308,10 +351,42 @@ export function PortalPartsPage() {
           <Button size="sm" onClick={submit} disabled={createMutation.isPending}>
             {createMutation.isPending ? "Saving…" : "Save as draft"}
           </Button>
+          <Button size="sm" variant="outline" onClick={submitNow} disabled={createAndSubmitMutation.isPending}>
+            {createAndSubmitMutation.isPending ? "Submitting…" : "Save and submit"}
+          </Button>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="shipping-address">Shipping address</Label>
+            <Input
+              id="shipping-address"
+              value={shippingAddress}
+              onChange={(e) => setShippingAddress(e.target.value)}
+              placeholder="Optional delivery / shipping address"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="parts-notes">Order notes</Label>
+            <Input
+              id="parts-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Context for the parts desk"
+            />
+          </div>
+        </div>
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+          Cart summary: <span className="font-medium text-foreground">{cart.lineCount}</span> line item{cart.lineCount === 1 ? "" : "s"} ·{" "}
+          <span className="font-medium text-foreground">{cart.totalQuantity}</span> total units
         </div>
         {createMutation.isError && (
           <p className="text-sm text-destructive">
             {createMutation.error instanceof Error ? createMutation.error.message : "Could not create order"}
+          </p>
+        )}
+        {createAndSubmitMutation.isError && (
+          <p className="text-sm text-destructive">
+            {createAndSubmitMutation.error instanceof Error ? createAndSubmitMutation.error.message : "Could not submit order"}
           </p>
         )}
       </Card>

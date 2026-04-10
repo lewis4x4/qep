@@ -8,6 +8,7 @@ import { Plus, ImagePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const REQUEST_TYPES = ["repair", "maintenance", "warranty", "parts", "inspection", "emergency"];
+const DEPARTMENTS = ["service", "parts"] as const;
 
 const SHOP_TIMELINE_STAGE_LABEL: Record<string, string> = {
   request_received: "Request received",
@@ -125,6 +126,7 @@ export function PortalServicePage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [requestType, setRequestType] = useState("");
+  const [department, setDepartment] = useState<(typeof DEPARTMENTS)[number]>("service");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState("normal");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -158,6 +160,7 @@ export function PortalServicePage() {
       queryClient.invalidateQueries({ queryKey: ["portal", "service-requests"] });
       setShowForm(false);
       setRequestType("");
+      setDepartment("service");
       setDescription("");
       setPhotoUrls([]);
     },
@@ -199,6 +202,9 @@ export function PortalServicePage() {
             <option value="">Select type...</option>
             {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
+          <select value={department} onChange={(e) => setDepartment(e.target.value as (typeof DEPARTMENTS)[number])} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
+            {DEPARTMENTS.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue..." className="w-full rounded border border-input bg-card px-3 py-2 text-sm min-h-[80px]" />
           <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             <option value="low">Low</option>
@@ -234,6 +240,7 @@ export function PortalServicePage() {
             size="sm"
             onClick={() =>
               createMutation.mutate({
+                department,
                 request_type: requestType,
                 description,
                 urgency,

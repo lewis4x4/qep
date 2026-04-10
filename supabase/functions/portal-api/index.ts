@@ -564,6 +564,10 @@ Deno.serve(async (req) => {
         if (body.urgency && !validUrgencies.includes(String(body.urgency))) {
           return safeJsonError(`urgency must be one of: ${validUrgencies.join(", ")}`, 400, origin);
         }
+        const validDepartments = ["service", "parts"];
+        if (body.department && !validDepartments.includes(String(body.department))) {
+          return safeJsonError(`department must be one of: ${validDepartments.join(", ")}`, 400, origin);
+        }
 
         // Whitelist safe fields — block billing/status manipulation
         const safeBody = {
@@ -573,6 +577,7 @@ Deno.serve(async (req) => {
           request_type: body.request_type,
           description: body.description,
           urgency: (body.urgency as string) || "normal",
+          department: (body.department as string) || null,
           photos: Array.isArray(body.photos) ? body.photos : [],
           preferred_date: body.preferred_date ?? null,
           preferred_branch: body.preferred_branch ?? null,
@@ -858,6 +863,7 @@ Deno.serve(async (req) => {
           status: "draft", // Always start as draft
           line_items,
           shipping_address: body.shipping_address || null,
+          notes: body.notes || null,
         };
 
         if (body.ai_suggested_pm_kit === true) {
