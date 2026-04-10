@@ -9,6 +9,7 @@ import {
   Truck,
   Warehouse,
   Wrench,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Motion", href: "/qrm/iron-in-motion", icon: Truck },
   { label: "Rentals", href: "/qrm/rentals", icon: Warehouse },
   { label: "Svc→Sales", href: "/qrm/service-to-sales", icon: Wrench },
+  { label: "Parts Intel", href: "/qrm/parts-intelligence", icon: Package },
 ];
 
 export function QrmSubNav() {
