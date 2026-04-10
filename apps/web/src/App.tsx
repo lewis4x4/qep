@@ -193,6 +193,9 @@ const OpportunityMapPage = lazy(() =>
 const RevenueRescueCenterPage = lazy(() =>
   import("./features/qrm/pages/RevenueRescueCenterPage").then((m) => ({ default: m.RevenueRescueCenterPage }))
 );
+const CompetitiveDisplacementCenterPage = lazy(() =>
+  import("./features/qrm/pages/CompetitiveDisplacementCenterPage").then((m) => ({ default: m.CompetitiveDisplacementCenterPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1714,6 +1717,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <RevenueRescueCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/competitive-displacement"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CompetitiveDisplacementCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
