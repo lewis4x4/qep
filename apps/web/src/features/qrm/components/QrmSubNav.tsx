@@ -5,6 +5,7 @@ import {
   UsersRound,
   Building2,
   Timer,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Contacts", href: "/qrm/contacts", icon: UsersRound },
   { label: "Companies", href: "/qrm/companies", icon: Building2 },
   { label: "Time Bank", href: "/qrm/time-bank", icon: Timer },
+  { label: "Inventory", href: "/qrm/inventory-pressure", icon: AlertTriangle },
 ];
 
 export function QrmSubNav() {

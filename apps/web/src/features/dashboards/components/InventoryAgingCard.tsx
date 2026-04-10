@@ -45,6 +45,9 @@ export function InventoryAgingCard({ items }: InventoryAgingCardProps) {
       <div className="flex items-center gap-2 mb-3">
         <Package className="h-4 w-4 text-amber-400" />
         <h3 className="text-sm font-semibold text-foreground">Inventory aging ({items.length})</h3>
+        <Link to="/qrm/inventory-pressure" className="ml-auto text-[11px] text-qep-orange hover:underline">
+          Open board
+        </Link>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
         Equipment registry records older than 90 days — review wholesale, auction, or repricing plays.
@@ -55,7 +58,7 @@ export function InventoryAgingCard({ items }: InventoryAgingCardProps) {
           return (
             <Link
               key={row.id}
-              to={`/crm/companies/${row.company_id}`}
+              to={`/equipment/${row.id}`}
               className="flex items-center justify-between rounded-lg border border-border p-2.5 hover:border-foreground/20 transition"
             >
               <div className="min-w-0 flex-1">

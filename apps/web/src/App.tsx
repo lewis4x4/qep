@@ -169,6 +169,9 @@ const LifecyclePage = lazy(() =>
 const TimeBankPage = lazy(() =>
   import("./features/qrm/pages/TimeBankPage").then((m) => ({ default: m.TimeBankPage }))
 );
+const InventoryPressureBoardPage = lazy(() =>
+  import("./features/qrm/pages/InventoryPressureBoardPage").then((m) => ({ default: m.InventoryPressureBoardPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1580,6 +1583,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <TimeBankPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/inventory-pressure"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <InventoryPressureBoardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
