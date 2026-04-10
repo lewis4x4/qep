@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mic, MessageSquare, FileText, FileDown, ArrowRight, ArrowLeft, Save, MapPin, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Mic, MessageSquare, FileText, FileDown, ArrowRight, ArrowLeft, Save, MapPin, Loader2, PenTool } from "lucide-react";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
@@ -11,11 +12,18 @@ import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
 import { IncentiveStack } from "../components/IncentiveStack";
 import { SendQuoteSection } from "../components/SendQuoteSection";
-import { saveQuotePackage } from "../lib/quote-api";
+import { saveQuotePackage, saveQuoteSignature, searchCatalog, getAiEquipmentRecommendation } from "../lib/quote-api";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
+import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
+import {
+  PortalSignaturePad,
+  signatureDataUrlToRawBase64,
+  type PortalSignaturePadHandle,
+} from "@/features/portal/components/PortalSignaturePad";
 
 type EntryMode = "voice" | "ai_chat" | "manual";
 type Step = "entry" | "equipment" | "financing" | "review";
@@ -44,6 +52,9 @@ export function QuoteBuilderV2Page() {
   const [tradeAllowance, setTradeAllowance] = useState<number>(0);
   const [tradeValuationId, setTradeValuationId] = useState<string | null>(null);
   const [aiRecommendation, setAiRecommendation] = useState<{ machine: string; attachments: string[]; reasoning: string } | null>(null);
+  const [voiceSummary, setVoiceSummary] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState("");
+  const sigRef = useRef<PortalSignaturePadHandle>(null);
 
   const equipmentTotal = selectedEquipment.reduce((sum, e) => sum + (e.price || 0), 0);
   const attachmentTotal = selectedAttachments.reduce((sum, a) => sum + a.price, 0);
@@ -73,7 +84,53 @@ export function QuoteBuilderV2Page() {
       margin_pct: marginPct,
       ai_recommendation: aiRecommendation,
       entry_mode: entryMode,
+      status: "ready",
     }),
+  });
+
+  const voiceMutation = useMutation({
+    mutationFn: async (payload: { blob: Blob; fileName: string }) => {
+      const voiceResult = await submitVoiceToQrm({ audioBlob: payload.blob, fileName: payload.fileName, dealId: dealId || undefined });
+      if (!("transcript" in voiceResult) || !voiceResult.transcript) {
+        throw new Error("Voice note did not return a usable transcript.");
+      }
+      const recommendation = await getAiEquipmentRecommendation(voiceResult.transcript);
+      const catalogMatches = await searchCatalog(recommendation.machine || voiceResult.transcript);
+      return { voiceResult, recommendation, catalogMatches };
+    },
+    onSuccess: ({ voiceResult, recommendation, catalogMatches }) => {
+      setAiRecommendation(recommendation);
+      setVoiceSummary(voiceResult.transcript);
+      if (catalogMatches.length > 0) {
+        const first = catalogMatches[0] as SelectedEquipment & { attachments?: Array<{ name: string; price: number }> };
+        setSelectedEquipment([{
+          id: first.id,
+          make: first.make,
+          model: first.model,
+          year: first.year,
+          price: first.price ?? 0,
+          attachments: first.attachments ?? [],
+        }]);
+      }
+      setStep("equipment");
+    },
+  });
+
+  const signMutation = useMutation({
+    mutationFn: async () => {
+      const quotePackageId = (saveMutation.data as { quote?: { id?: string }; id?: string } | undefined)?.quote?.id
+        ?? (saveMutation.data as { id?: string } | undefined)?.id;
+      if (!quotePackageId) throw new Error("Save the quote before capturing signature.");
+      const dataUrl = sigRef.current?.toDataUrl();
+      const base64 = dataUrl ? signatureDataUrlToRawBase64(dataUrl) : "";
+      return saveQuoteSignature({
+        quote_package_id: quotePackageId,
+        deal_id: dealId || undefined,
+        signer_name: signerName,
+        signer_email: contactId || null,
+        signature_png_base64: base64.length > 100 ? base64 : null,
+      });
+    },
   });
 
   return (
@@ -149,6 +206,28 @@ export function QuoteBuilderV2Page() {
               </button>
             ))}
           </div>
+          {entryMode === "voice" && (
+            <Card className="p-4 space-y-3">
+              <p className="text-sm font-medium text-foreground">Voice intake</p>
+              <p className="text-xs text-muted-foreground">
+                Record the customer need. The note is processed through the existing voice-to-QRM pipeline and then used to prefill the quote recommendation.
+              </p>
+              <VoiceRecorder
+                onRecorded={(audioBlob, fileName) => {
+                  voiceMutation.mutate({ blob: audioBlob, fileName });
+                }}
+                disabled={voiceMutation.isPending}
+              />
+              {voiceMutation.isPending && (
+                <p className="text-xs text-muted-foreground">Processing voice note and equipment recommendation…</p>
+              )}
+              {voiceMutation.isError && (
+                <p className="text-xs text-red-400">
+                  {voiceMutation.error instanceof Error ? voiceMutation.error.message : "Voice processing failed"}
+                </p>
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -181,6 +260,9 @@ export function QuoteBuilderV2Page() {
                 <p className="text-xs text-muted-foreground">Attachments: {aiRecommendation.attachments.join(", ")}</p>
               )}
               <p className="mt-2 text-sm italic text-foreground/80">{aiRecommendation.reasoning}</p>
+              {voiceSummary && (
+                <p className="mt-2 text-xs text-muted-foreground">Voice transcript: {voiceSummary}</p>
+              )}
             </Card>
           )}
 
@@ -343,6 +425,35 @@ export function QuoteBuilderV2Page() {
                   <>
                     <IncentiveStack quotePackageId={savedId} />
                     <SendQuoteSection quotePackageId={savedId} />
+                    <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <PenTool className="h-4 w-4 text-qep-orange" />
+                        <p className="text-sm font-medium text-foreground">E-signature</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Capture signer name, IP, timestamp, and signature image for the quote package.
+                      </p>
+                      <Input
+                        value={signerName}
+                        onChange={(e) => setSignerName(e.target.value)}
+                        placeholder="Signer full name"
+                      />
+                      <PortalSignaturePad ref={sigRef} />
+                      <Button
+                        onClick={() => signMutation.mutate()}
+                        disabled={signMutation.isPending || !signerName.trim()}
+                      >
+                        {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
+                      </Button>
+                      {signMutation.isSuccess && (
+                        <p className="text-xs text-emerald-400">Signature captured successfully.</p>
+                      )}
+                      {signMutation.isError && (
+                        <p className="text-xs text-red-400">
+                          {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
+                        </p>
+                      )}
+                    </Card>
                   </>
                 ) : null;
               })()}

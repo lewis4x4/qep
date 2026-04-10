@@ -7,6 +7,7 @@
  * POST /recommend: AI equipment recommendation from job description
  * POST /calculate: Financing scenarios from financing_rate_matrix
  * POST /save: Save quote package
+ * POST /sign: Persist quote e-signature
  * GET ?deal_id=...: Load existing quote for deal
  *
  * Auth: rep/manager/owner
@@ -352,6 +353,7 @@ Deno.serve(async (req) => {
           margin_pct: body.margin_pct,
           ai_recommendation: body.ai_recommendation,
           entry_mode: body.entry_mode || "manual",
+          status: body.status || "draft",
           created_by: user.id,
         }, { onConflict: "deal_id" })
         .select()
@@ -363,6 +365,62 @@ Deno.serve(async (req) => {
       }
 
       return safeJsonOk({ quote: data }, origin, 201);
+    }
+
+    // ── POST /sign: Save quote signature ───────────────────────────────
+    if (action === "sign") {
+      if (!body.quote_package_id || !body.signer_name) {
+        return safeJsonError("quote_package_id and signer_name required", 400, origin);
+      }
+
+      const signerName = String(body.signer_name).replace(/<[^>]*>/g, "").trim().slice(0, 100);
+      if (!signerName) {
+        return safeJsonError("signer_name cannot be empty", 400, origin);
+      }
+
+      let signatureImageUrl: string | null = null;
+      if (body.signature_png_base64 && typeof body.signature_png_base64 === "string") {
+        const raw = String(body.signature_png_base64).replace(/\s/g, "");
+        if (raw.length > 400_000) {
+          return safeJsonError("signature image too large", 400, origin);
+        }
+        if (!/^[A-Za-z0-9+/=]+$/.test(raw)) {
+          return safeJsonError("signature must be base64 PNG", 400, origin);
+        }
+        signatureImageUrl = `data:image/png;base64,${raw}`;
+      }
+
+      const signerIp = req.headers.get("cf-connecting-ip")
+        || req.headers.get("x-real-ip")
+        || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+        || "unknown";
+      const signerUserAgent = req.headers.get("user-agent") ?? null;
+
+      const { data, error } = await supabase
+        .from("quote_signatures")
+        .insert({
+          quote_package_id: body.quote_package_id,
+          deal_id: body.deal_id ?? null,
+          signer_name: signerName,
+          signer_email: body.signer_email ?? null,
+          signer_ip: signerIp,
+          signer_user_agent: signerUserAgent,
+          signature_image_url: signatureImageUrl,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("quote signature save error:", error);
+        return safeJsonError("Failed to save signature", 500, origin);
+      }
+
+      await supabase
+        .from("quote_packages")
+        .update({ status: "accepted" })
+        .eq("id", body.quote_package_id);
+
+      return safeJsonOk({ signature: data }, origin, 201);
     }
 
     // ── POST /send-package: Send quote to customer via email ──────────
@@ -434,6 +492,7 @@ Deno.serve(async (req) => {
       await supabase
         .from("quote_packages")
         .update({
+          status: "sent",
           sent_at: new Date().toISOString(),
           sent_via: "email",
         })

@@ -719,31 +719,7 @@ function App() {
                 path="/quote"
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
-                    quoteBuilderAccess.loading ? (
-                      <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-6">
-                        <div
-                          className="text-center"
-                          role="status"
-                          aria-label="Checking Quote Builder availability"
-                        >
-                          <div
-                            className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                            aria-hidden="true"
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Checking Quote Builder availability...
-                          </p>
-                        </div>
-                      </div>
-                    ) : quoteBuilderAccess.connected ? (
-                      <QuoteBuilderPage
-                        userRole={profile.role}
-                        userEmail={profile.email}
-                        repName={profile.full_name}
-                      />
-                    ) : (
-                      <QuoteBuilderGate />
-                    )
+                    <Navigate to="/quote-v2" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

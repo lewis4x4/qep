@@ -61,6 +61,25 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
   return res.json() as Promise<{ sent: boolean; to_email: string }>;
 }
 
+export async function saveQuoteSignature(data: {
+  quote_package_id: string;
+  deal_id?: string;
+  signer_name: string;
+  signer_email?: string | null;
+  signature_png_base64?: string | null;
+}) {
+  const res = await fetch(`${QUOTE_API_URL}/sign`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to save signature" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to save signature");
+  }
+  return res.json();
+}
+
 export async function searchCatalog(query: string) {
   // Sanitize query: strip PostgREST filter metacharacters to prevent injection
   const sanitized = query.replace(/[%,().!]/g, "").trim().substring(0, 100);
