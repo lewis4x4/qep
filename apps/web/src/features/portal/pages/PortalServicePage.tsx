@@ -1,7 +1,9 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { Plus, ImagePlus } from "lucide-react";
@@ -124,13 +126,17 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
 export function PortalServicePage() {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [requestType, setRequestType] = useState("");
+  const [searchParams] = useSearchParams();
+  const [showForm, setShowForm] = useState(
+    Boolean(searchParams.get("request_type") || searchParams.get("fleet_id")),
+  );
+  const [requestType, setRequestType] = useState(searchParams.get("request_type") ?? "");
   const [department, setDepartment] = useState<(typeof DEPARTMENTS)[number]>("service");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState("normal");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [fleetId, setFleetId] = useState(searchParams.get("fleet_id") ?? "");
 
   const { data: portalRow } = useQuery({
     queryKey: ["portal", "customer-self"],
@@ -163,6 +169,7 @@ export function PortalServicePage() {
       setDepartment("service");
       setDescription("");
       setPhotoUrls([]);
+      setFleetId("");
     },
   });
 
@@ -205,6 +212,12 @@ export function PortalServicePage() {
           <select value={department} onChange={(e) => setDepartment(e.target.value as (typeof DEPARTMENTS)[number])} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             {DEPARTMENTS.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
+          <Input
+            value={fleetId}
+            onChange={(e) => setFleetId(e.target.value)}
+            placeholder="Fleet machine id"
+            className="text-sm"
+          />
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue..." className="w-full rounded border border-input bg-card px-3 py-2 text-sm min-h-[80px]" />
           <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             <option value="low">Low</option>
@@ -240,6 +253,7 @@ export function PortalServicePage() {
             size="sm"
             onClick={() =>
               createMutation.mutate({
+                fleet_id: fleetId || null,
                 department,
                 request_type: requestType,
                 description,
