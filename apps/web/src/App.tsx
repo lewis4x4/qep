@@ -184,6 +184,9 @@ const ServiceToSalesPage = lazy(() =>
 const PartsIntelligencePage = lazy(() =>
   import("./features/qrm/pages/PartsIntelligencePage").then((m) => ({ default: m.PartsIntelligencePage }))
 );
+const ExceptionHandlingPage = lazy(() =>
+  import("./features/qrm/pages/ExceptionHandlingPage").then((m) => ({ default: m.ExceptionHandlingPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1665,6 +1668,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <PartsIntelligencePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/exceptions"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ExceptionHandlingPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
