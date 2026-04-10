@@ -187,6 +187,9 @@ const PartsIntelligencePage = lazy(() =>
 const ExceptionHandlingPage = lazy(() =>
   import("./features/qrm/pages/ExceptionHandlingPage").then((m) => ({ default: m.ExceptionHandlingPage }))
 );
+const OpportunityMapPage = lazy(() =>
+  import("./features/qrm/pages/OpportunityMapPage").then((m) => ({ default: m.OpportunityMapPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1688,6 +1691,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <ExceptionHandlingPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/opportunity-map"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OpportunityMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
