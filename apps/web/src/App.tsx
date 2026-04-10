@@ -166,6 +166,9 @@ const FleetRadarPage = lazy(() =>
 const LifecyclePage = lazy(() =>
   import("./features/qrm/pages/LifecyclePage").then((m) => ({ default: m.LifecyclePage }))
 );
+const TimeBankPage = lazy(() =>
+  import("./features/qrm/pages/TimeBankPage").then((m) => ({ default: m.TimeBankPage }))
+);
 const IdeaBacklogPage = lazy(() =>
   import("./features/qrm/pages/IdeaBacklogPage").then((m) => ({ default: m.IdeaBacklogPage }))
 );
@@ -1348,6 +1351,7 @@ function App() {
                   )
                 }
               />
+              <Route path="/qrm/command/time-bank" element={<Navigate to="/qrm/time-bank" replace />} />
               {/* Slice 1.4 — Approval Center (manager-gated) */}
               <Route
                 path="/qrm/command/approvals"
@@ -1478,6 +1482,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <LifecyclePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/time-bank"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <TimeBankPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
