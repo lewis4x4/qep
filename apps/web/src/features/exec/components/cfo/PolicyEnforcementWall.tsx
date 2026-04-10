@@ -3,10 +3,13 @@
  * exception_queue scoped to finance sources (deposit, payment, refund).
  */
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ShieldAlert } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { resolvePolicyWallActions } from "../../lib/policy-wall-actions";
 
 interface ExceptionRow {
   id: string;
@@ -71,6 +74,18 @@ export function PolicyEnforcementWall() {
                 ]} />
               </div>
               {row.detail && <p className="text-[11px] text-muted-foreground line-clamp-2">{row.detail}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm" className="h-7 text-[10px]">
+                  <Link to={resolvePolicyWallActions(row.source).primary.href}>
+                    {resolvePolicyWallActions(row.source).primary.label}
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
+                  <Link to={resolvePolicyWallActions(row.source).secondary.href}>
+                    {resolvePolicyWallActions(row.source).secondary.label}
+                  </Link>
+                </Button>
+              </div>
             </div>
           ))}
         </div>

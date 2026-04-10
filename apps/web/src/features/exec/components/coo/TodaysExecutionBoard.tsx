@@ -4,8 +4,10 @@
  * the page and sees exactly what is in trouble right now.
  */
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
-import { Truck, Wrench, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, Truck, Wrench, RotateCcw } from "lucide-react";
 import { StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 
@@ -78,6 +80,13 @@ export function TodaysExecutionBoard() {
                     Promised: {promised.toLocaleString()}
                   </p>
                 )}
+                <div className="mt-2 flex justify-end">
+                  <Button asChild size="sm" variant="ghost" className="h-7 text-[10px]">
+                    <Link to="/ops/traffic">
+                      Open traffic queue <ArrowRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
             );
           })}
@@ -118,13 +127,27 @@ export function InventoryReadinessRail() {
         <p className="text-[11px] uppercase tracking-wider font-semibold text-foreground">Inventory readiness</p>
       </div>
       {!data ? (
-        <p className="text-xs text-muted-foreground">Materialized view empty. Once equipment readiness columns are populated and the snapshot runner refreshes, this rail comes alive.</p>
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Readiness data has not populated yet.</p>
+          <Button asChild size="sm" variant="outline" className="h-7 text-[10px]">
+            <Link to="/ops/intake">Open intake queue</Link>
+          </Button>
+        </div>
       ) : (
-        <div className="grid grid-cols-4 gap-2 text-center">
-          <ReadinessTile label="Ready" value={data.ready_units} tone="emerald" />
-          <ReadinessTile label="In prep" value={data.in_prep_units} tone="amber" />
-          <ReadinessTile label="Blocked" value={data.blocked_units} tone="red" />
-          <ReadinessTile label="Intake stalled" value={data.intake_stalled} tone="purple" />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+            <ReadinessTile label="Ready" value={data.ready_units} tone="emerald" />
+            <ReadinessTile label="In prep" value={data.in_prep_units} tone="amber" />
+            <ReadinessTile label="Blocked" value={data.blocked_units} tone="red" />
+            <ReadinessTile label="Intake stalled" value={data.intake_stalled} tone="purple" />
+          </div>
+          <div className="flex justify-end">
+            <Button asChild size="sm" variant="ghost" className="h-7 text-[10px]">
+              <Link to="/ops/intake">
+                Open intake queue <ArrowRight className="ml-1 h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
     </Card>
@@ -200,6 +223,13 @@ export function RecoveryQueuePanel() {
               {row.damage_description && (
                 <p className="mt-0.5 text-[10px] text-muted-foreground line-clamp-1">{row.damage_description}</p>
               )}
+              <div className="mt-2 flex justify-end">
+                <Button asChild size="sm" variant="ghost" className="h-7 text-[10px]">
+                  <Link to="/ops/returns">
+                    Open returns queue <ArrowRight className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           ))}
         </div>

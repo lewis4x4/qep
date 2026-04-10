@@ -1,11 +1,3 @@
-/**
- * CEO lens — top 8 KPIs + AI summary placeholder + alerts.
- *
- * Slice 1: Renders the 8 metric definitions seeded in migration 187.
- * Snapshots may not exist yet; the KPI tiles fall back to live source-view
- * queries via `useFallbackKpis`. AI summary strip is a placeholder for
- * Slice 5.
- */
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { ExecutiveKpiCard } from "../components/ExecutiveKpiCard";
@@ -37,10 +29,10 @@ export function CeoCommandCenterView({ onDrill }: Props) {
 
         {/* KPI grid */}
         {defsLoading ? (
-          <Card className="p-6 text-center text-xs text-muted-foreground">Loading metric registry…</Card>
+          <Card className="p-6 text-center text-xs text-muted-foreground">Loading leadership metrics…</Card>
         ) : definitions.length === 0 ? (
           <Card className="p-6 text-center text-xs text-muted-foreground">
-            No metric definitions found. Run migration 187.
+            Metric registry is not available yet.
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

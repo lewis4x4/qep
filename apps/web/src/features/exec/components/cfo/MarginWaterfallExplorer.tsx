@@ -1,12 +1,7 @@
-/**
- * Margin Waterfall Explorer — month-by-month gross → loaded margin breakdown.
- *
- * Reads from `mv_exec_margin_waterfall` (mig 190). Shows revenue, gross
- * margin $, load $, net contribution, and loaded margin % for each of the
- * last 6 months. Click a row to drill (Slice 5 wires the drawer).
- */
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { TrendingDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatKpiValue } from "../../lib/formatters";
@@ -20,7 +15,13 @@ interface WaterfallRow {
   loaded_margin_pct: number | null;
 }
 
-export function MarginWaterfallExplorer() {
+interface Props {
+  onDrill?: (metricKey: string) => void;
+}
+
+const DRILL_METRIC_KEY = "gross_margin_pct_mtd";
+
+export function MarginWaterfallExplorer({ onDrill }: Props) {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["cfo", "margin-waterfall"],
     queryFn: async (): Promise<WaterfallRow[]> => {
@@ -42,17 +43,24 @@ export function MarginWaterfallExplorer() {
 
   return (
     <Card className="p-4">
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <TrendingDown className="h-3.5 w-3.5 text-amber-400" />
         <p className="text-[11px] uppercase tracking-wider font-semibold text-foreground">Margin waterfall</p>
         <span className="ml-auto text-[10px] text-muted-foreground">last 6 months</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => onDrill?.(DRILL_METRIC_KEY)}>
+            Drill margin
+          </Button>
+          <Button asChild size="sm" variant="ghost" className="h-7 text-[10px]">
+            <Link to="/service/invoice">Recover payments</Link>
+          </Button>
+        </div>
       </div>
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading waterfall…</p>
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No closed-won data yet. Once deals close + the snapshot runner refreshes
-          the materialized view, the waterfall populates here.
+          Margin history has not populated yet. Closed deals and finance snapshots will appear here once enough activity is available.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -69,7 +77,20 @@ export function MarginWaterfallExplorer() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.month} className="border-b border-border/20 hover:bg-muted/20">
+                <tr
+                  key={r.month}
+                  className="cursor-pointer border-b border-border/20 hover:bg-muted/20 focus-within:bg-muted/20"
+                  onClick={() => onDrill?.(DRILL_METRIC_KEY)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onDrill?.(DRILL_METRIC_KEY);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Drill margin details for ${r.month.slice(0, 7)}`}
+                >
                   <td className="py-1.5 pr-2 font-mono">{r.month.slice(0, 7)}</td>
                   <td className="py-1.5 pr-2 text-right">{formatKpiValue(r.revenue, "currency_compact")}</td>
                   <td className="py-1.5 pr-2 text-right text-emerald-400">{formatKpiValue(r.gross_margin_dollars, "currency_compact")}</td>

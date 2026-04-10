@@ -55,7 +55,7 @@ export function CfoCommandCenterView({ onDrill }: Props) {
         )}
 
         <PolicyEnforcementWall />
-        <MarginWaterfallExplorer />
+        <MarginWaterfallExplorer onDrill={onDrill} />
       </div>
 
       <div className="space-y-4">
@@ -67,8 +67,7 @@ export function CfoCommandCenterView({ onDrill }: Props) {
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Receipt compliance</p>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Surfaced via the <code>receipt_compliance_rate</code> KPI tile.
-            Drill there for the daily trend and exception list.
+            Open the receipt compliance KPI for the daily trend and the related exception list.
           </p>
         </Card>
       </div>

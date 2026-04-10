@@ -107,7 +107,7 @@ export function CommandCenterPage() {
           <h1 className="text-4xl sm:text-5xl font-display font-medium tracking-tight text-white mt-2">Executive Command Center</h1>
           <p className="mt-3 max-w-3xl text-sm font-light text-slate-400">
             The leadership control surface for revenue, finance discipline, execution reliability, and intervention
-            flow. This is the live command layer, not the showcase.
+            flow. Leadership can review risk, open the right queue, and move directly into action from here.
           </p>
         </div>
         <div className="flex items-center gap-3">
