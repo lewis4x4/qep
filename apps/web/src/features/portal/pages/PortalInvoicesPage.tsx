@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { portalApi } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { PayInvoiceButton } from "../components/PayInvoiceButton";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { downloadInvoiceStatement, type PortalInvoicePaymentHistoryItem } from "../lib/invoice-statement";
+import { AlertCircle, CheckCircle2, Download, Loader2 } from "lucide-react";
 
 function formatCurrency(v: number | null): string {
   if (v == null) return "—";
@@ -37,6 +38,12 @@ type PortalPaymentStatus = {
   last_updated_at: string | null;
 };
 
+type InvoiceRecord = Record<string, unknown> & {
+  portal_payment_status?: PortalPaymentStatus | null;
+  portal_payment_history?: PortalInvoicePaymentHistoryItem[];
+  customer_invoice_line_items?: LineItem[];
+};
+
 function paymentToneStyles(tone: PortalPaymentStatus["tone"]): string {
   if (tone === "emerald") return "border-emerald-500/20 bg-emerald-500/5 text-emerald-400";
   if (tone === "red") return "border-red-500/20 bg-red-500/5 text-red-400";
@@ -48,6 +55,13 @@ function PaymentStatusIcon({ tone }: { tone: PortalPaymentStatus["tone"] }) {
   if (tone === "emerald") return <CheckCircle2 className="h-3.5 w-3.5" />;
   if (tone === "red") return <AlertCircle className="h-3.5 w-3.5" />;
   return <Loader2 className="h-3.5 w-3.5" />;
+}
+
+function formatHistoryDate(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Date unavailable";
+  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function PortalInvoicesPage() {
@@ -78,12 +92,14 @@ export function PortalInvoicesPage() {
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
 
       <div className="space-y-2">
-        {(data?.invoices ?? []).map((inv: Record<string, unknown>) => {
+        {(data?.invoices ?? []).map((inv) => {
+          const invoice = inv as InvoiceRecord;
           const balance = Number(inv.balance_due ?? 0);
-          const lines = (inv.customer_invoice_line_items as LineItem[] | undefined) ?? [];
+          const lines = invoice.customer_invoice_line_items ?? [];
           const invoiceId = String(inv.id);
           const companyId = typeof inv.crm_company_id === "string" ? inv.crm_company_id : "";
-          const paymentStatus = (inv.portal_payment_status as PortalPaymentStatus | null | undefined) ?? null;
+          const paymentStatus = invoice.portal_payment_status ?? null;
+          const paymentHistory = invoice.portal_payment_history ?? [];
           const offlineOpen = showOfflineForm[invoiceId] === true;
           return (
             <Card key={invoiceId} className="p-4 space-y-3">
@@ -100,6 +116,31 @@ export function PortalInvoicesPage() {
                   )}
                 </div>
               </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => downloadInvoiceStatement({
+                    invoice_number: String(inv.invoice_number ?? invoiceId),
+                    invoice_date: typeof inv.invoice_date === "string" ? inv.invoice_date : null,
+                    due_date: typeof inv.due_date === "string" ? inv.due_date : null,
+                    description: typeof inv.description === "string" ? inv.description : null,
+                    status: typeof inv.status === "string" ? inv.status : null,
+                    total: Number(inv.total ?? 0),
+                    amount_paid: Number(inv.amount_paid ?? 0),
+                    balance_due: balance,
+                    payment_method: typeof inv.payment_method === "string" ? inv.payment_method : null,
+                    payment_reference: typeof inv.payment_reference === "string" ? inv.payment_reference : null,
+                    customer_invoice_line_items: lines,
+                    portal_payment_history: paymentHistory,
+                  })}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download statement
+                </Button>
+              </div>
               {paymentStatus && (
                 <div className={`rounded-md border px-3 py-2 ${paymentToneStyles(paymentStatus.tone)}`}>
                   <div className="flex items-center gap-2 text-xs font-semibold">
@@ -112,6 +153,39 @@ export function PortalInvoicesPage() {
                       Last updated: {new Date(paymentStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                     </p>
                   )}
+                </div>
+              )}
+              {paymentHistory.length > 0 && (
+                <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Payment history</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Stripe attempts and dealership-recorded payments appear here.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {paymentHistory.map((entry) => (
+                      <div key={`${entry.label}-${entry.created_at}-${entry.reference ?? "none"}`} className="rounded-md border border-border/50 bg-background/60 px-3 py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">{entry.label}</p>
+                            <p className="text-[11px] text-muted-foreground">{entry.detail}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-semibold text-foreground">{formatCurrency(entry.amount)}</p>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{entry.status}</p>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                          <span>Started {formatHistoryDate(entry.created_at)}</span>
+                          {entry.resolved_at ? <span>Resolved {formatHistoryDate(entry.resolved_at)}</span> : null}
+                          {entry.reference ? <span>Ref {entry.reference}</span> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {lines.length > 0 && (

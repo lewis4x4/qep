@@ -97,13 +97,29 @@ interface PortalQuoteReviewRow {
 interface PortalPaymentIntentRow {
   id: string;
   invoice_id: string | null;
+  stripe_payment_intent_id: string;
+  amount_cents: number;
+  currency: string;
   status: string;
   webhook_signature_verified: boolean;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   succeeded_at: string | null;
   failed_at: string | null;
   failure_reason: string | null;
+}
+
+interface PortalPaymentHistoryItem {
+  id: string;
+  kind: "stripe" | "manual";
+  label: string;
+  detail: string;
+  amount: number;
+  status: "pending" | "processing" | "paid" | "failed";
+  created_at: string;
+  resolved_at: string | null;
+  reference: string | null;
 }
 
 interface DocumentVisibilityAuditRow {
@@ -357,6 +373,108 @@ function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
     detail: "A payment session was created, but the dealership has not received a verified success event yet.",
     last_updated_at: intent.updated_at ?? intent.created_at,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function buildPortalPaymentHistory(
+  invoice: Record<string, unknown>,
+  intents: PortalPaymentIntentRow[],
+): PortalPaymentHistoryItem[] {
+  const history: PortalPaymentHistoryItem[] = intents.map((intent) => {
+    const amount = Number(intent.amount_cents ?? 0) / 100;
+    const metadata = asRecord(intent.metadata);
+    const checkoutSessionId = typeof metadata.checkout_session_id === "string"
+      ? metadata.checkout_session_id
+      : null;
+
+    if (intent.status === "succeeded" && intent.webhook_signature_verified) {
+      return {
+        id: intent.id,
+        kind: "stripe",
+        label: "Card payment received",
+        detail: "Stripe verified the payment and the invoice was reconciled.",
+        amount,
+        status: "paid",
+        created_at: intent.created_at,
+        resolved_at: intent.succeeded_at ?? intent.updated_at,
+        reference: checkoutSessionId ?? intent.stripe_payment_intent_id,
+      };
+    }
+
+    if (intent.status === "failed") {
+      return {
+        id: intent.id,
+        kind: "stripe",
+        label: "Card payment failed",
+        detail: intent.failure_reason?.trim() || "The checkout attempt failed before the dealership could receive funds.",
+        amount,
+        status: "failed",
+        created_at: intent.created_at,
+        resolved_at: intent.failed_at ?? intent.updated_at,
+        reference: checkoutSessionId ?? intent.stripe_payment_intent_id,
+      };
+    }
+
+    if (intent.status === "processing") {
+      return {
+        id: intent.id,
+        kind: "stripe",
+        label: "Card payment processing",
+        detail: "Stripe is still processing this payment attempt.",
+        amount,
+        status: "processing",
+        created_at: intent.created_at,
+        resolved_at: intent.updated_at,
+        reference: checkoutSessionId ?? intent.stripe_payment_intent_id,
+      };
+    }
+
+    return {
+      id: intent.id,
+      kind: "stripe",
+      label: "Checkout started",
+      detail: "A secure payment session was created, but it has not completed yet.",
+      amount,
+      status: "pending",
+      created_at: intent.created_at,
+      resolved_at: intent.updated_at,
+      reference: checkoutSessionId ?? intent.stripe_payment_intent_id,
+    };
+  });
+
+  const invoiceAmountPaid = Number(invoice.amount_paid ?? 0);
+  const paymentMethod = typeof invoice.payment_method === "string" ? invoice.payment_method.trim() : "";
+  const paymentReference = typeof invoice.payment_reference === "string" ? invoice.payment_reference.trim() : "";
+  const paidAt = typeof invoice.paid_at === "string" ? invoice.paid_at : null;
+
+  const hasStripeSettlement = history.some((entry) =>
+    entry.kind === "stripe"
+    && entry.status === "paid"
+    && paymentReference.startsWith("stripe:")
+    && paymentReference.slice("stripe:".length) === entry.reference
+  );
+
+  if (invoiceAmountPaid > 0 && (!paymentReference.startsWith("stripe:") || !hasStripeSettlement)) {
+    history.push({
+      id: `manual-${String(invoice.id ?? "invoice")}`,
+      kind: "manual",
+      label: paymentMethod ? `${paymentMethod.toUpperCase()} payment recorded` : "Payment recorded",
+      detail: paymentReference
+        ? `Dealership recorded this payment with reference ${paymentReference}.`
+        : "Dealership recorded this payment on the invoice.",
+      amount: invoiceAmountPaid,
+      status: "paid",
+      created_at: paidAt ?? String(invoice.updated_at ?? invoice.created_at ?? new Date().toISOString()),
+      resolved_at: paidAt,
+      reference: paymentReference || null,
+    });
+  }
+
+  return history.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
 function normalizePortalDocumentVisibility(input: {
@@ -897,7 +1015,7 @@ Deno.serve(async (req) => {
           .map((row) => typeof row.id === "string" ? row.id : null)
           .filter((value): value is string => Boolean(value));
 
-        let intentsByInvoice = new Map<string, PortalPaymentIntentRow>();
+        let intentsByInvoice = new Map<string, PortalPaymentIntentRow[]>();
         const crmCompanyId = typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null;
         if (invoiceIds.length > 0 && crmCompanyId) {
           const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -905,24 +1023,26 @@ Deno.serve(async (req) => {
           });
           const { data: intentRows } = await admin
             .from("portal_payment_intents")
-            .select("id, invoice_id, status, webhook_signature_verified, created_at, updated_at, succeeded_at, failed_at, failure_reason")
+            .select("id, invoice_id, stripe_payment_intent_id, amount_cents, currency, status, webhook_signature_verified, metadata, created_at, updated_at, succeeded_at, failed_at, failure_reason")
             .eq("company_id", crmCompanyId)
             .in("invoice_id", invoiceIds)
             .order("created_at", { ascending: false });
 
           for (const row of ((intentRows ?? []) as PortalPaymentIntentRow[])) {
-            if (row.invoice_id && !intentsByInvoice.has(row.invoice_id)) {
-              intentsByInvoice.set(row.invoice_id, row);
+            if (row.invoice_id) {
+              intentsByInvoice.set(row.invoice_id, [...(intentsByInvoice.get(row.invoice_id) ?? []), row]);
             }
           }
         }
 
         const invoices = invoiceRows.map((invoice) => {
           const invoiceId = typeof invoice.id === "string" ? invoice.id : null;
-          const latestIntent = invoiceId ? intentsByInvoice.get(invoiceId) ?? null : null;
+          const invoiceIntents = invoiceId ? intentsByInvoice.get(invoiceId) ?? [] : [];
+          const latestIntent = invoiceIntents[0] ?? null;
           return {
             ...invoice,
             portal_payment_status: normalizePortalPaymentStatus(latestIntent),
+            portal_payment_history: buildPortalPaymentHistory(invoice, invoiceIntents),
           };
         });
 
