@@ -1,9 +1,8 @@
 /**
  * QRM Moonshot Command Center — page entry.
  *
- * Slice 1 ships behind the parallel route `/qrm/command` so the existing
- * `QrmHubPage` at `/qrm` is untouched. Slice 2 will flip the root route to
- * this page and delete the legacy hub.
+ * Canonical QRM command center served at `/qrm`.
+ * The legacy QRM hub has been retired from the live route.
  */
 
 import { useCallback, useState } from "react";

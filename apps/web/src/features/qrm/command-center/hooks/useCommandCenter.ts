@@ -1,8 +1,8 @@
 /**
  * React Query hook for the QRM Command Center payload.
  *
- * Cadence matches `QrmHubPage` (60s staleness, 2m refetch interval) so the
- * existing operator expectation about freshness is preserved. The query key
+ * Cadence remains 60s staleness with a 2m refetch interval so the existing
+ * operator expectation about freshness is preserved. The query key
  * MUST include `scope` so switching scopes does not return stale data from
  * another scope.
  */

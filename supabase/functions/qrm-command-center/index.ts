@@ -744,10 +744,12 @@ Deno.serve(async (req) => {
       nowTime,
     );
 
+    const generatedAt = observedAt;
+
     // Knowledge Gaps + Absence Engine (Slice 1.7) — manager-gated
     const callerRole = (profile as { role: string | null }).role;
     const isManagerView = ["admin", "manager", "owner"].includes(callerRole ?? "");
-    const knowledgeGaps = buildKnowledgeGapsPayload(
+    let knowledgeGaps = buildKnowledgeGapsPayload(
       knowledgeGapsRes.error ? null : (knowledgeGapsRes.data ?? []),
       // Reuse the already-fetched deal rows for absence scoring (avoid duplicate query)
       isManagerView ? dealRows.map((r: DealRow) => ({
@@ -761,6 +763,46 @@ Deno.serve(async (req) => {
       })) : null,
       isManagerView,
     );
+    let knowledgeGapsGeneratedAt = generatedAt;
+
+    if (isManagerView) {
+      const { data: absenceRun } = await adminClient
+        .from("qrm_absence_engine_runs")
+        .select("id, generated_at, worst_fields")
+        .eq("workspace_id", workspaceId)
+        .order("generated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (absenceRun?.id) {
+        const { data: repRows } = await adminClient
+          .from("qrm_absence_engine_rep_snapshots")
+          .select("rep_id, rep_name, iron_role, deal_count, missing_amount, missing_close_date, missing_contact, missing_company, absence_score")
+          .eq("run_id", absenceRun.id)
+          .order("absence_score", { ascending: true });
+
+        knowledgeGaps = {
+          ...knowledgeGaps,
+          repAbsence: ((repRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+            repId: String(row.rep_id),
+            repName: String(row.rep_name ?? "Unknown"),
+            ironRole: typeof row.iron_role === "string" ? row.iron_role : null,
+            dealCount: Number(row.deal_count ?? 0),
+            missingAmount: Number(row.missing_amount ?? 0),
+            missingCloseDate: Number(row.missing_close_date ?? 0),
+            missingContact: Number(row.missing_contact ?? 0),
+            missingCompany: Number(row.missing_company ?? 0),
+            absenceScore: Number(row.absence_score ?? 0),
+          })),
+          worstFields: Array.isArray(absenceRun.worst_fields)
+            ? absenceRun.worst_fields as Array<{ field: string; label: string; missingPct: number }>
+            : knowledgeGaps.worstFields,
+        };
+        knowledgeGapsGeneratedAt = typeof absenceRun.generated_at === "string"
+          ? absenceRun.generated_at
+          : generatedAt;
+      }
+    }
 
     const relationshipEngine = buildRelationshipEngine(
       healthProfilesRes.error ? null : (healthProfilesRes.data ?? []),
@@ -793,7 +835,6 @@ Deno.serve(async (req) => {
     // tracking a separate query result.
     const voiceRowCount = signalRows.filter((row) => row.signal_source === "voice").length;
 
-    const generatedAt = observedAt;
     const freshness: Record<SectionKey, SectionFreshness> = {
       commandStrip: { generatedAt, source: "live", latencyMs: dealsLatency },
       aiChiefOfStaff: {
@@ -807,7 +848,7 @@ Deno.serve(async (req) => {
       revenueRealityBoard: { generatedAt, source: "live", latencyMs: dealsLatency },
       dealerRealityGrid: { generatedAt, source: "live", latencyMs: signalsLatency },
       relationshipEngine: { generatedAt, source: "live", latencyMs: signalsLatency },
-      knowledgeGaps: { generatedAt, source: isManagerView ? "live" : "unavailable", latencyMs: dealsLatency, reason: isManagerView ? undefined : "Manager view only" },
+      knowledgeGaps: { generatedAt: knowledgeGapsGeneratedAt, source: isManagerView ? "live" : "unavailable", latencyMs: dealsLatency, reason: isManagerView ? undefined : "Manager view only" },
       executiveIntel: { generatedAt, source: isManagerView ? "live" : "unavailable", latencyMs: signalsLatency, reason: isManagerView ? undefined : "Elevated view only" },
     };
 

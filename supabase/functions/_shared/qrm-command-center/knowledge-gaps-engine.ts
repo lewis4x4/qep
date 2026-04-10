@@ -70,7 +70,7 @@ interface FieldGap {
   total: number;
 }
 
-function buildRepAbsence(
+export function buildRepAbsence(
   deals: DealAbsenceRow[] | null,
 ): { repAbsence: RepAbsenceRow[]; worstFields: Array<{ field: string; label: string; missingPct: number }> } {
   if (!deals || deals.length === 0) {
