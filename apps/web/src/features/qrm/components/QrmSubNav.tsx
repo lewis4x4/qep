@@ -18,13 +18,16 @@ import {
   HeartHandshake,
   Workflow,
   LibraryBig,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface SubNavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  roles?: Array<"rep" | "admin" | "manager" | "owner">;
 }
 
 const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
@@ -46,17 +49,24 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Post-Sale", href: "/qrm/post-sale-experience", icon: HeartHandshake },
   { label: "Audit", href: "/qrm/workflow-audit", icon: Workflow },
   { label: "SOP+Folk", href: "/qrm/sop-folk", icon: LibraryBig },
+  { label: "My Mirror", href: "/qrm/my/reality", icon: UserRound, roles: ["rep"] },
 ];
 
 export function QrmSubNav() {
+  const { profile } = useAuth();
   const { pathname } = useLocation();
+  const items = CRM_SUB_NAV_ITEMS.filter((item) => {
+    if (!item.roles) return true;
+    if (!profile?.role) return false;
+    return item.roles.includes(profile.role as "rep" | "admin" | "manager" | "owner");
+  });
 
   return (
     <nav
       aria-label="QRM sections"
       className="mb-5 flex gap-1 overflow-x-auto border-b border-border pb-px"
     >
-      {CRM_SUB_NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active =
           pathname === item.href || pathname.startsWith(item.href + "/");
 

@@ -208,6 +208,9 @@ const WorkflowAuditPage = lazy(() =>
 const SopFolkWorkflowPage = lazy(() =>
   import("./features/qrm/pages/SopFolkWorkflowPage").then((m) => ({ default: m.SopFolkWorkflowPage }))
 );
+const RepRealityReflectionPage = lazy(() =>
+  import("./features/qrm/pages/RepRealityReflectionPage").then((m) => ({ default: m.RepRealityReflectionPage }))
+);
 const AccountCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/AccountCommandCenterPage").then((m) => ({ default: m.AccountCommandCenterPage }))
 );
@@ -1779,6 +1782,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <SopFolkWorkflowPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/my/reality"
+                element={
+                  profile.role === "rep" ? (
+                    <RepRealityReflectionPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
