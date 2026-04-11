@@ -509,6 +509,7 @@ Entry condition: 7B shipped. Honesty Calibration has run for a full fiscal year.
 **Ethics review required before any slice opens.**
 
 **7C.1 — Trust Thermostat** (IDEA-075): Post-hoc receipt (not real-time gauge). Contrarian Bet #3.
+Ethics review note: `docs/operations/7c1-trust-thermostat-ethics-review.md` currently records this slice as `blocked` pending entry-check satisfaction.
 **7C.2 — Machine Fate Engine** (IDEA-076): Per-unit retail/rental/transfer/auction recommendation.
 **7C.3 — Silence Map** (IDEA-077): Absence of expected noise as signal.
 **7C.4 — Customer Gravity Field** (IDEA-078): With "Permission Slip" for formal deprioritization. Contrarian Bet #4.
