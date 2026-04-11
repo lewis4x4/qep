@@ -639,7 +639,7 @@ This document unifies and replaces:
 **Owner sign-off required on:** weight table, exclusions, anti-gaming guardrails, protected account override policy.
 
 ### Honesty Calibration Political Owner
-**Status:** Brian as owner; operator TBD. Default: Brian for both roles until Track 7A.
+**Status:** Brian as owner and default operator until a different operator is explicitly assigned in project materials.
 
 ### Mobile Field Command — Native or Web?
 **Status:** Deferred to Track 7A Slice 7A.6 planning. Default: Web PWA.
