@@ -232,6 +232,9 @@ const WhiteSpaceMapPage = lazy(() =>
 const RentalConversionEnginePage = lazy(() =>
   import("./features/qrm/pages/RentalConversionEnginePage").then((m) => ({ default: m.RentalConversionEnginePage }))
 );
+const DealCoachPage = lazy(() =>
+  import("./features/qrm/pages/DealCoachPage").then((m) => ({ default: m.DealCoachPage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1579,6 +1582,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <QrmDealDetailPage userId={profile.id} userRole={profile.role} mode="autopsy" />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/deals/:dealId/coach"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DealCoachPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

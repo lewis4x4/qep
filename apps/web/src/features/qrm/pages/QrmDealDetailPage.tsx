@@ -265,6 +265,9 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
               <Button asChild variant="outline" className="hidden sm:inline-flex">
                 <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
               </Button>
+              <Button asChild variant="outline" className="hidden sm:inline-flex">
+                <Link to={`/qrm/deals/${dealId}/coach`}>AI Deal Coach</Link>
+              </Button>
               {isClosedLost && (
                 <Button asChild variant="outline" className="hidden sm:inline-flex">
                   <Link to={`/qrm/deals/${dealId}/autopsy`}>Deal Autopsy</Link>
