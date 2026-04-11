@@ -173,6 +173,22 @@ export function CompetitiveDisplacementCenterPage() {
               </div>
             </Card>
           </div>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Competitive Threat Map to see the same pressure rolled up by account, rep, and branch.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/qrm/competitive-threat-map">
+                  Threat map <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </Card>
         </>
       )}
     </div>

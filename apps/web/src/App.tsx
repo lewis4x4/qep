@@ -250,6 +250,9 @@ const OperationsCopilotPage = lazy(() =>
 const ReplacementPredictionPage = lazy(() =>
   import("./features/qrm/pages/ReplacementPredictionPage").then((m) => ({ default: m.ReplacementPredictionPage }))
 );
+const CompetitiveThreatMapPage = lazy(() =>
+  import("./features/qrm/pages/CompetitiveThreatMapPage").then((m) => ({ default: m.CompetitiveThreatMapPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1717,6 +1720,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <ReplacementPredictionPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/competitive-threat-map"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CompetitiveThreatMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
