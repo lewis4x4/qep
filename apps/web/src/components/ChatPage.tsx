@@ -134,6 +134,11 @@ async function dbLoadConversationMessages(conversationId: string): Promise<Messa
 
 export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const location = useLocation();
+  const locationState = location.state as {
+    initialQuery?: string;
+    newChat?: number;
+    askIronContext?: { contextType?: string; contextId?: string | null };
+  } | null;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -174,10 +179,11 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const chatContext = useMemo(
     () => {
+      const askIronContext = locationState?.askIronContext;
       // AskIronAdvisorButton uses context_type / context_id query params.
       // Map them onto the existing context shape so the chat fn picks them up.
-      const ctxType = searchParams.get("context_type");
-      const ctxId = searchParams.get("context_id");
+      const ctxType = searchParams.get("context_type") ?? askIronContext?.contextType ?? null;
+      const ctxId = searchParams.get("context_id") ?? askIronContext?.contextId ?? null;
       const fromAskAdvisor: Record<string, string> = {};
       if (ctxId) {
         if (ctxType === "company") fromAskAdvisor.companyId = ctxId;
@@ -205,7 +211,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
         flowRunId: fromAskAdvisor.flowRunId,
       };
     },
-    [searchParams]
+    [searchParams, locationState]
   );
   const hasChatContext = Boolean(
     chatContext.customerProfileId || chatContext.contactId || chatContext.companyId || chatContext.dealId
@@ -242,19 +248,19 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
 
   // Handle global search handoff: initialQuery from TopBar
   useEffect(() => {
-    const state = location.state as { initialQuery?: string } | null;
+    const state = locationState;
     if (state?.initialQuery && typeof state.initialQuery === "string" && !initialQueryFiredRef.current) {
       initialQueryFiredRef.current = true;
       window.history.replaceState({}, "");
       void sendMessage(state.initialQuery);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [locationState]);
 
   // Handle "New Chat" trigger from TopBar (same-route navigation)
   const lastNewChatRef = useRef<number | null>(null);
   useEffect(() => {
-    const state = location.state as { newChat?: number } | null;
+    const state = locationState;
     const ts = state?.newChat;
     if (ts && ts !== lastNewChatRef.current) {
       lastNewChatRef.current = ts;
@@ -262,7 +268,7 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
       startNewChat();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+  }, [locationState]);
 
   // Close history panel on outside click
   useEffect(() => {

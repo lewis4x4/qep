@@ -33,6 +33,43 @@ interface InvokeError {
   context?: Response;
 }
 
+async function requireFreshAccessToken(): Promise<string> {
+  const supa = supabase as unknown as {
+    auth: {
+      getSession: () => Promise<{
+        data: { session: { access_token?: string | null; expires_at?: number | null } | null };
+        error: { message?: string } | null;
+      }>;
+      refreshSession: () => Promise<{
+        data: { session: { access_token?: string | null } | null };
+        error: { message?: string } | null;
+      }>;
+    };
+  };
+
+  const { data, error } = await supa.auth.getSession();
+  if (error) {
+    throw new Error(error.message ?? "session lookup failed");
+  }
+
+  const session = data.session;
+  if (!session?.access_token) {
+    throw new Error("Executive briefing requires a signed-in session.");
+  }
+
+  const expiresAt = session.expires_at ?? null;
+  const expiresSoon = typeof expiresAt === "number" && expiresAt * 1000 <= Date.now() + 30_000;
+  if (!expiresSoon) {
+    return session.access_token;
+  }
+
+  const refresh = await supa.auth.refreshSession();
+  if (refresh.error || !refresh.data.session?.access_token) {
+    throw new Error(refresh.error?.message ?? "Your session expired. Sign in again and retry.");
+  }
+  return refresh.data.session.access_token;
+}
+
 async function explainInvokeError(error: InvokeError, fallback: string): Promise<string> {
   const response = error.context;
   if (response && typeof response.text === "function") {
@@ -63,12 +100,6 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
     queryKey: ["exec", "summary", role],
     queryFn: async (): Promise<SummaryResponse> => {
       const supa = supabase as unknown as {
-        auth: {
-          getSession: () => Promise<{
-            data: { session: { access_token?: string | null } | null };
-            error: { message?: string } | null;
-          }>;
-        };
         functions: {
           invoke: (
             name: string,
@@ -76,14 +107,7 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
           ) => Promise<{ data: SummaryResponse | null; error: InvokeError | null }>;
         };
       };
-      const { data: sessionData, error: sessionError } = await supa.auth.getSession();
-      if (sessionError) {
-        throw new Error(sessionError.message ?? "session lookup failed");
-      }
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) {
-        throw new Error("Executive briefing requires a signed-in session.");
-      }
+      const accessToken = await requireFreshAccessToken();
 
       const res = await supa.functions.invoke("exec-summary-generator", {
         body: { role },

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 
@@ -8,6 +8,7 @@ interface AskIronAdvisorButtonProps {
   /** Floating bottom-right pill (default) or inline button. */
   variant?: "floating" | "inline";
   className?: string;
+  label?: string;
 }
 
 /**
@@ -18,33 +19,42 @@ interface AskIronAdvisorButtonProps {
  * system prompt.
  */
 export function AskIronAdvisorButton({
-  contextType, contextId, variant = "floating", className = "",
+  contextType, contextId, variant = "floating", className = "", label = "Ask Iron Advisor",
 }: AskIronAdvisorButtonProps) {
+  const navigate = useNavigate();
   const href = contextId
     ? `/chat?context_type=${encodeURIComponent(contextType)}&context_id=${encodeURIComponent(contextId)}`
     : `/chat?context_type=${encodeURIComponent(contextType)}`;
+  const askIronState = {
+    askIronContext: {
+      contextType,
+      contextId: contextId ?? null,
+      href,
+    },
+  };
+
+  function openChat() {
+    navigate(href, { state: askIronState });
+  }
 
   if (variant === "inline") {
     return (
-      <Button asChild size="sm" variant="outline" className={className}>
-        <Link to={href}>
-          <Sparkles className="mr-1 h-3 w-3" aria-hidden />
-          Ask Iron Advisor
-        </Link>
+      <Button type="button" size="sm" variant="outline" className={className} onClick={openChat}>
+        <Sparkles className="mr-1 h-3 w-3" aria-hidden />
+        {label}
       </Button>
     );
   }
 
   return (
     <Button
-      asChild
       size="sm"
+      type="button"
+      onClick={openChat}
       className={`fixed bottom-6 right-6 z-40 h-11 rounded-full bg-qep-orange shadow-lg hover:bg-qep-orange/90 ${className}`}
     >
-      <Link to={href} aria-label="Ask Iron Advisor about this record">
-        <Sparkles className="mr-1 h-4 w-4" aria-hidden />
-        Ask Iron Advisor
-      </Link>
+      <Sparkles className="mr-1 h-4 w-4" aria-hidden />
+      {label}
     </Button>
   );
 }
