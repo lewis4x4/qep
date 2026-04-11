@@ -5,25 +5,22 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowUpRight,
-  CloudRain,
-  ReceiptText,
-  TimerReset,
-  Wallet,
+  CalendarSync,
+  Clock3,
+  RefreshCcw,
+  Waves,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/format";
-import { supabase } from "@/lib/supabase";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
+import { supabase } from "@/lib/supabase";
 import {
-  buildAccountCashflowWeatherHref,
   buildAccountCommandHref,
   buildAccountDecisionCycleHref,
-  buildAccountOperatingProfileHref,
   buildAccountStrategistHref,
 } from "../lib/account-command";
-import { buildCashflowWeatherBoard } from "../lib/cashflow-weather";
+import { buildDecisionCycleBoard } from "../lib/decision-cycle";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 
@@ -38,18 +35,18 @@ function confidenceTone(confidence: "high" | "medium" | "low"): string {
   }
 }
 
-export function CashflowWeatherMapPage() {
+export function DecisionCycleSynchronizerPage() {
   const { accountId } = useParams<{ accountId: string }>();
 
   const accountQuery = useQuery({
-    queryKey: ["cashflow-weather", accountId, "account"],
+    queryKey: ["decision-cycle", accountId, "account"],
     queryFn: () => fetchAccount360(accountId!),
     enabled: Boolean(accountId),
     staleTime: 30_000,
   });
 
   const profileQuery = useQuery({
-    queryKey: ["cashflow-weather", accountId, "profile"],
+    queryKey: ["decision-cycle", accountId, "profile"],
     enabled: Boolean(accountQuery.data?.profile?.id),
     queryFn: () =>
       fetchCustomerProfile({
@@ -59,19 +56,61 @@ export function CashflowWeatherMapPage() {
     staleTime: 30_000,
   });
 
-  const invoicesQuery = useQuery({
-    queryKey: ["cashflow-weather", accountId, "invoices"],
+  const signalsQuery = useQuery({
+    queryKey: ["decision-cycle", accountId, "signals"],
     enabled: Boolean(accountId),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("customer_invoices")
-        .select("id, invoice_number, invoice_date, due_date, paid_at, total, amount_paid, balance_due, status, payment_method")
-        .eq("crm_company_id", accountId!)
-        .order("invoice_date", { ascending: false })
-        .limit(250);
+      const [{ data: deals, error: dealsError }, { data: stages, error: stagesError }] = await Promise.all([
+        supabase
+          .from("crm_deals")
+          .select("id, name, created_at, closed_at, expected_close_on, next_follow_up_at, stage_id")
+          .eq("company_id", accountId!)
+          .is("deleted_at", null)
+          .limit(300),
+        supabase
+          .from("crm_deal_stages")
+          .select("id, is_closed_won")
+          .limit(100),
+      ]);
+      if (dealsError) throw new Error(dealsError.message);
+      if (stagesError) throw new Error(stagesError.message);
 
-      if (error) throw new Error(error.message);
-      return data ?? [];
+      const dealRows = deals ?? [];
+      const closedWonStageIds = new Set((stages ?? []).filter((row) => row.is_closed_won).map((row) => row.id));
+      const closedDeals = dealRows.filter((row) => closedWonStageIds.has(row.stage_id));
+      const openDeals = dealRows.filter((row) => !closedDeals.some((closed) => closed.id === row.id));
+      const dealIds = dealRows.map((row) => row.id);
+
+      const [signaturesResult, cadencesResult] = dealIds.length > 0
+        ? await Promise.all([
+            supabase
+              .from("quote_signatures")
+              .select("deal_id, signed_at")
+              .in("deal_id", dealIds)
+              .limit(300),
+            supabase
+              .from("follow_up_cadences")
+              .select(`
+                deal_id, status, started_at,
+                follow_up_touchpoints(status)
+              `)
+              .in("deal_id", dealIds)
+              .limit(300),
+          ])
+        : await Promise.all([
+            Promise.resolve({ data: [], error: null }),
+            Promise.resolve({ data: [], error: null }),
+          ]);
+
+      if (signaturesResult.error) throw new Error(signaturesResult.error.message);
+      if (cadencesResult.error) throw new Error(cadencesResult.error.message);
+
+      return {
+        closedDeals,
+        openDeals,
+        signatures: signaturesResult.data ?? [],
+        cadences: cadencesResult.data ?? [],
+      };
     },
     staleTime: 30_000,
   });
@@ -94,7 +133,7 @@ export function CashflowWeatherMapPage() {
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <Card className="border-border bg-card p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            This cashflow weather map surface isn&apos;t available right now.
+            This decision cycle synchronizer surface isn&apos;t available right now.
           </p>
         </Card>
       </div>
@@ -104,26 +143,42 @@ export function CashflowWeatherMapPage() {
   const account = accountQuery.data;
 
   const board = useMemo(() => {
-    if (!invoicesQuery.data) return null;
-    return buildCashflowWeatherBoard({
+    if (!signalsQuery.data) return null;
+    return buildDecisionCycleBoard({
       accountId,
-      invoices: invoicesQuery.data.map((row) => ({
+      closedDeals: signalsQuery.data.closedDeals
+        .filter((row) => row.closed_at)
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          createdAt: row.created_at,
+          closedAt: row.closed_at!,
+        })),
+      openDeals: signalsQuery.data.openDeals.map((row) => ({
         id: row.id,
-        invoiceNumber: row.invoice_number,
-        invoiceDate: row.invoice_date,
-        dueDate: row.due_date,
-        paidAt: row.paid_at,
-        total: row.total,
-        amountPaid: row.amount_paid,
-        balanceDue: row.balance_due,
-        status: row.status,
-        paymentMethod: row.payment_method,
+        name: row.name,
+        createdAt: row.created_at,
+        expectedCloseOn: row.expected_close_on,
+        nextFollowUpAt: row.next_follow_up_at,
       })),
-      arBlock: account.ar_block,
+      signatures: signalsQuery.data.signatures.map((row) => ({
+        dealId: row.deal_id,
+        signedAt: row.signed_at,
+      })),
+      cadences: signalsQuery.data.cadences.map((row) => {
+        const touchpoints = Array.isArray(row.follow_up_touchpoints) ? row.follow_up_touchpoints : [];
+        return {
+          dealId: row.deal_id,
+          status: row.status,
+          startedAt: row.started_at,
+          overdueTouchpoints: touchpoints.filter((tp) => tp.status === "overdue").length,
+          pendingTouchpoints: touchpoints.filter((tp) => tp.status === "pending").length,
+        };
+      }),
       budgetCycleMonth: profileQuery.data?.budget_cycle_month ?? account.profile?.budget_cycle_month,
       seasonalPattern: profileQuery.data?.behavioral_signals?.seasonal_pattern ?? null,
     });
-  }, [account.ar_block, account.profile?.budget_cycle_month, accountId, invoicesQuery.data, profileQuery.data]);
+  }, [account.profile?.budget_cycle_month, accountId, profileQuery.data, signalsQuery.data]);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -138,69 +193,63 @@ export function CashflowWeatherMapPage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountStrategistHref(accountId)}>Customer Strategist</Link>
           </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountDecisionCycleHref(accountId)}>Decision Cycle</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
         </div>
       </div>
 
       <QrmPageHeader
-        title={`${account.company.name} — Cashflow Weather Map`}
-        subtitle="Customer float, payment cadence, and seasonal cash timing translated into an account-level weather surface."
+        title={`${account.company.name} — Decision Cycle Synchronizer`}
+        subtitle="Per-customer purchasing rhythm from closed deals, signatures, cadence drift, budget windows, and seasonality."
       />
       <QrmSubNav />
 
-      {profileQuery.isLoading || invoicesQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading cashflow weather map…</Card>
-      ) : profileQuery.isError || invoicesQuery.isError || !board ? (
+      {profileQuery.isLoading || signalsQuery.isLoading ? (
+        <Card className="p-6 text-sm text-muted-foreground">Loading decision cycle synchronizer…</Card>
+      ) : profileQuery.isError || signalsQuery.isError || !board ? (
         <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           {profileQuery.error instanceof Error
             ? profileQuery.error.message
-            : invoicesQuery.error instanceof Error
-              ? invoicesQuery.error.message
-              : "Cashflow weather map is unavailable right now."}
+            : signalsQuery.error instanceof Error
+              ? signalsQuery.error.message
+              : "Decision cycle synchronizer is unavailable right now."}
         </Card>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={Wallet} label="Open Balance" value={formatCurrency(board.summary.openBalance)} />
-            <SummaryCard icon={CloudRain} label="Overdue" value={formatCurrency(board.summary.overdueBalance)} />
-            <SummaryCard icon={TimerReset} label="Avg Days To Pay" value={board.summary.avgDaysToPay != null ? String(board.summary.avgDaysToPay) : "—"} />
-            <SummaryCard icon={ReceiptText} label="Risk Score" value={String(board.summary.riskScore)} />
+            <SummaryCard icon={CalendarSync} label="Learned Cycle" value={board.summary.learnedCycleDays != null ? `${board.summary.learnedCycleDays}d` : "—"} />
+            <SummaryCard icon={RefreshCcw} label="Sign To Close" value={board.summary.signatureToCloseDays != null ? `${board.summary.signatureToCloseDays}d` : "—"} />
+            <SummaryCard icon={Clock3} label="Active Deals" value={String(board.summary.activeDeals)} />
+            <SummaryCard icon={Waves} label="Drift" value={String(board.summary.driftCount)} tone={board.summary.driftCount > 0 ? "warn" : "default"} />
           </div>
 
           <Card className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Mirror framing</h2>
+                <h2 className="text-sm font-semibold text-foreground">Synchronizer framing</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Cashflow Weather Map is the account-level cash surface. It reads payment rhythm, float pressure, and seasonal timing from live invoice and profile evidence.
+                  Decision Cycle Synchronizer measures whether today&apos;s deals and cadence are moving with this customer&apos;s actual buying rhythm, not just our desired close dates.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link to={buildAccountCashflowWeatherHref(accountId)}>Refresh weather</Link>
+                <Link to={buildAccountDecisionCycleHref(accountId)}>Refresh synchronizer</Link>
               </Button>
             </div>
           </Card>
 
           <div className="grid gap-4 xl:grid-cols-3">
-            <WeatherColumn
-              title="Current Weather"
-              rows={board.currentWeather}
-              emptyText="No current payment pressure is visible."
+            <DecisionCycleColumn
+              title="Learned Rhythm"
+              rows={board.rhythm}
+              emptyText="No rhythm model is available yet."
             />
-            <WeatherColumn
-              title="Cadence Pattern"
-              rows={board.cadencePattern}
-              emptyText="No payment cadence history is available yet."
+            <DecisionCycleColumn
+              title="Live Sync Gaps"
+              rows={board.syncGaps}
+              emptyText="No open deal drift is visible right now."
             />
-            <WeatherColumn
-              title="Seasonal Cash"
-              rows={board.seasonalCash}
-              emptyText="No seasonal cash timing signal is elevated right now."
+            <DecisionCycleColumn
+              title="Next Window"
+              rows={board.nextWindow}
+              emptyText="No next window is visible right now."
             />
           </div>
         </>
@@ -213,15 +262,17 @@ function SummaryCard({
   icon: Icon,
   label,
   value,
+  tone = "default",
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
+  tone?: "default" | "warn";
 }) {
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
+        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       </div>
       <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
@@ -229,7 +280,7 @@ function SummaryCard({
   );
 }
 
-function WeatherColumn({
+function DecisionCycleColumn({
   title,
   rows,
   emptyText,

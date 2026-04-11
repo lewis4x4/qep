@@ -268,6 +268,9 @@ const CashflowWeatherMapPage = lazy(() =>
 const DecisionRoomSimulatorPage = lazy(() =>
   import("./features/qrm/pages/DecisionRoomSimulatorPage").then((m) => ({ default: m.DecisionRoomSimulatorPage }))
 );
+const DecisionCycleSynchronizerPage = lazy(() =>
+  import("./features/qrm/pages/DecisionCycleSynchronizerPage").then((m) => ({ default: m.DecisionCycleSynchronizerPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1745,6 +1748,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CashflowWeatherMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/decision-cycle"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DecisionCycleSynchronizerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

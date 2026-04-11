@@ -41,3 +41,7 @@ export function buildAccountCrossDealerMirrorHref(companyId: string): string {
 export function buildAccountCashflowWeatherHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/cashflow-weather`;
 }
+
+export function buildAccountDecisionCycleHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/decision-cycle`;
+}
