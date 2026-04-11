@@ -268,6 +268,9 @@ const PrimitivesPlaygroundPage = lazy(() =>
 const CommandCenterPage = lazy(() =>
   import("./features/exec/pages/CommandCenterPage").then((m) => ({ default: m.CommandCenterPage }))
 );
+const OwnerBriefingPage = lazy(() =>
+  import("./features/exec/pages/OwnerBriefingPage").then((m) => ({ default: m.OwnerBriefingPage }))
+);
 const HandoffTrustLedgerPage = lazy(() =>
   import("./features/exec/pages/HandoffTrustLedgerPage").then((m) => ({ default: m.HandoffTrustLedgerPage }))
 );
@@ -1431,6 +1434,16 @@ function App() {
                 element={
                   ["manager", "owner"].includes(profile.role) ? (
                     <HandoffTrustLedgerPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive/owner-briefing"
+                element={
+                  ["owner"].includes(profile.role) ? (
+                    <OwnerBriefingPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
