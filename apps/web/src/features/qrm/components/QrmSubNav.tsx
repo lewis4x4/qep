@@ -25,6 +25,7 @@ import {
   LibraryBig,
   UserRound,
   PackageSearch,
+  DoorClosed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,6 +62,7 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Audit", href: "/qrm/workflow-audit", icon: Workflow },
   { label: "SOP+Folk", href: "/qrm/sop-folk", icon: LibraryBig },
   { label: "Rep SKU", href: "/qrm/rep-sku", icon: PackageSearch, roles: ["admin", "manager", "owner"] },
+  { label: "Exit Reg", href: "/qrm/exit-register", icon: DoorClosed, roles: ["admin", "manager", "owner"] },
   { label: "My Mirror", href: "/qrm/my/reality", icon: UserRound, roles: ["rep"] },
 ];
 

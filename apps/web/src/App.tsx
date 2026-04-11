@@ -280,6 +280,9 @@ const ReputationSurfacePage = lazy(() =>
 const RepSkuPage = lazy(() =>
   import("./features/qrm/pages/RepSkuPage").then((m) => ({ default: m.RepSkuPage }))
 );
+const ExitRegisterPage = lazy(() =>
+  import("./features/qrm/pages/ExitRegisterPage").then((m) => ({ default: m.ExitRegisterPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1797,6 +1800,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <RepSkuPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/exit-register"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <ExitRegisterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
