@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { createClient } from "@supabase/supabase-js";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadLocalEnv } from "../_shared/local-env.mjs";
@@ -11,7 +12,7 @@ loadLocalEnv(repoRoot);
 
 function usage() {
   console.log(`Usage:
-  bun scripts/verify/7c-entry-check.mjs [--workspace=default] [--days=365] [--as-of=YYYY-MM-DD] [--json]
+  bun scripts/verify/7c-entry-check.mjs [--workspace=default] [--days=365] [--as-of=YYYY-MM-DD] [--json] [--write-note[=PATH]]
 
 Checks whether the Honesty Calibration rollup history is strong enough to open 7C.
 
@@ -45,6 +46,7 @@ if (!supabaseUrl || !serviceRoleKey) {
 const workspaceId = args.get("workspace") ?? "default";
 const requiredDays = Number(args.get("days") ?? "365");
 const asOfRaw = args.get("as-of");
+const writeNoteArg = args.get("write-note");
 const asOfDate = asOfRaw ? new Date(`${asOfRaw}T00:00:00.000Z`) : new Date();
 if (Number.isNaN(asOfDate.getTime())) {
   console.error(`Invalid --as-of date: ${asOfRaw}`);
@@ -116,6 +118,62 @@ const result = {
   full_fiscal_year_evidenced: fullFiscalYearEvidenced,
 };
 
+function buildNoteMarkdown(summary) {
+  const ownerDecision = summary.full_fiscal_year_evidenced ? "open_7c" : "blocked";
+  const continuityJudgment = summary.continuity_satisfied
+    ? "sufficient continuity"
+    : "insufficient history";
+
+  return [
+    `# 7C Entry Check Result — ${summary.as_of_date}`,
+    "",
+    `- date checked: \`${summary.as_of_date}\``,
+    `- environment checked: \`${summary.workspace_id} workspace via configured Supabase environment\``,
+    `- first rollup date: \`${summary.first_rollup_date ?? "none"}\``,
+    `- latest rollup date: \`${summary.latest_rollup_date ?? "none"}\``,
+    `- observed days: \`${summary.observed_days}\``,
+    `- continuity judgment: \`${continuityJudgment}\``,
+    `- owner decision: \`${ownerDecision}\``,
+    "",
+    "## Command",
+    "",
+    "```bash",
+    `bun scripts/verify/7c-entry-check.mjs --workspace=${summary.workspace_id} --days=${summary.required_days} --as-of=${summary.as_of_date} --json`,
+    "```",
+    "",
+    "## Result",
+    "",
+    "```json",
+    JSON.stringify(summary, null, 2),
+    "```",
+    "",
+    "## Decision",
+    "",
+    summary.full_fiscal_year_evidenced
+      ? "`7C` may open, subject to the slice-specific ethics note being updated from blocked to pilot_only or approved."
+      : "`7C` remains blocked.",
+    "",
+    summary.full_fiscal_year_evidenced
+      ? "The fiscal-year Honesty Calibration requirement is evidenced by the current rollup history."
+      : "The roadmap requirement says Honesty Calibration must have run for a full fiscal year before any `7C` slice opens. The current environment does not yet satisfy that threshold.",
+    "",
+  ].join("\n");
+}
+
+function resolveNotePath() {
+  if (!writeNoteArg) return null;
+  if (writeNoteArg === "true") {
+    return join(repoRoot, "docs", "operations", `7c-entry-check-${result.as_of_date}.md`);
+  }
+  return writeNoteArg;
+}
+
+const notePath = resolveNotePath();
+if (notePath) {
+  mkdirSync(dirname(notePath), { recursive: true });
+  writeFileSync(notePath, buildNoteMarkdown(result));
+}
+
 if (args.has("json")) {
   console.log(JSON.stringify(result, null, 2));
 } else {
@@ -129,6 +187,9 @@ if (args.has("json")) {
   console.log(`first-date satisfied: ${result.first_date_satisfied ? "yes" : "no"}`);
   console.log(`continuity satisfied: ${result.continuity_satisfied ? "yes" : "no"}`);
   console.log(`full fiscal year evidenced: ${result.full_fiscal_year_evidenced ? "yes" : "no"}`);
+  if (notePath) {
+    console.log(`note written: ${notePath}`);
+  }
 }
 
 process.exit(result.full_fiscal_year_evidenced ? 0 : 2);

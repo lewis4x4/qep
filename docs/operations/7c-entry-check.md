@@ -29,6 +29,18 @@ Run this repo command against the target environment before opening `7C`:
 bun scripts/verify/7c-entry-check.mjs --workspace=default --days=365
 ```
 
+To emit the required result note automatically:
+
+```bash
+bun scripts/verify/7c-entry-check.mjs --workspace=default --days=365 --write-note
+```
+
+To write to an explicit path:
+
+```bash
+bun scripts/verify/7c-entry-check.mjs --workspace=default --days=365 --write-note=docs/operations/7c-entry-check-YYYY-MM-DD.md
+```
+
 For manual verification or spot-checking, use these SQL queries against the
 target database:
 
