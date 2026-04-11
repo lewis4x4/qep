@@ -2,7 +2,6 @@
  * Wave 7 Iron Companion — top-level shell.
  *
  * Mounts (once, in App.tsx, inside the auth-gated tree):
- *   • IronStoreProvider
  *   • IronCorner — draggable, corner-snapping wrapper around IronAvatar
  *   • IronBar    — Cmd+I command palette + streaming chat
  *   • FlowEngineUI — slot-fill walkthrough when a flow is active
@@ -18,7 +17,7 @@
  * lets ANY part of the app push state (long mutations, captured errors,
  * workspace switches, etc.) — not just Iron's own classify/think/speak loop.
  */
-import { IronStoreProvider, useIronStore } from "./store";
+import { useIronStore } from "./store";
 import { IronCorner } from "./IronCorner";
 import { IronBar } from "./IronBar";
 import { IronContextualAssistantSheet } from "./IronContextualAssistant";
@@ -48,9 +47,5 @@ function IronShellInner() {
 }
 
 export function IronShell() {
-  return (
-    <IronStoreProvider>
-      <IronShellInner />
-    </IronStoreProvider>
-  );
+  return <IronShellInner />;
 }

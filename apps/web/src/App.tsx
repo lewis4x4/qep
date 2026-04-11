@@ -13,6 +13,7 @@ import { NoProfileShell } from "./components/NoProfileShell";
 import { Toaster } from "@/components/ui/toaster";
 import { FlareProvider } from "@/lib/flare/FlareProvider";
 import { IronShell } from "@/lib/iron/IronShell";
+import { IronStoreProvider } from "@/lib/iron/store";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
@@ -762,22 +763,23 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppErrorBoundary>
-          <FlareProvider>
-          <OfflineBanner />
-          <SessionExpiredModal
-            open={showSessionExpiredModal}
-            onSignIn={() => {
-              setSessionExpired(false);
-              void supabase.auth.signOut();
-            }}
-          />
-          <AppLayout
-            profile={profile}
-            onLogout={handleLogout}
-            quoteBuilderEnabled={quoteBuilderAccess.connected}
-            quoteBuilderLoading={quoteBuilderAccess.loading}
-          >
-            <AnimatedRoutes>
+          <IronStoreProvider>
+            <FlareProvider>
+            <OfflineBanner />
+            <SessionExpiredModal
+              open={showSessionExpiredModal}
+              onSignIn={() => {
+                setSessionExpired(false);
+                void supabase.auth.signOut();
+              }}
+            />
+            <AppLayout
+              profile={profile}
+              onLogout={handleLogout}
+              quoteBuilderEnabled={quoteBuilderAccess.connected}
+              quoteBuilderLoading={quoteBuilderAccess.loading}
+            >
+              <AnimatedRoutes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route
                 path="/dashboard"
@@ -2225,10 +2227,11 @@ function App() {
               {portalRouteElements()}
 
               <Route path="*" element={<NotFoundPage />} />
-            </AnimatedRoutes>
-          </AppLayout>
-          <IronShell />
-          </FlareProvider>
+              </AnimatedRoutes>
+            </AppLayout>
+            <IronShell />
+            </FlareProvider>
+          </IronStoreProvider>
         </AppErrorBoundary>
         <Toaster />
       </BrowserRouter>
