@@ -77,6 +77,10 @@ Before any `7C` slice opens, add a short entry-check note that records:
 - continuity judgment
 - owner decision: `open_7c` or `blocked`
 
+Latest recorded result:
+
+- `docs/operations/7c-entry-check-2026-04-11.md`
+
 ## Next Allowed Step
 
 Once the fiscal-year condition is evidenced, update:
