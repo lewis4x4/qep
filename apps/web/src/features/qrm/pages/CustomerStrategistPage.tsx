@@ -17,6 +17,7 @@ import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
+  buildAccountCrossDealerMirrorHref,
   buildAccountOperatingProfileHref,
   buildAccountRelationshipMapHref,
   buildAccountRentalConversionHref,
@@ -314,6 +315,9 @@ export function CustomerStrategistPage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
           </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountCrossDealerMirrorHref(accountId)}>Cross-Dealer Mirror</Link>
+          </Button>
         </div>
       </div>
 
@@ -392,6 +396,22 @@ export function CustomerStrategistPage() {
               </Card>
             ))}
           </div>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Companion 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Cross-Dealer Mirror shows what this same account likely looks like inside a competitor CRM so the plan can be pressure-tested before field execution.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountCrossDealerMirrorHref(accountId)}>
+                  Cross-dealer mirror <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </Card>
         </>
       )}
     </div>

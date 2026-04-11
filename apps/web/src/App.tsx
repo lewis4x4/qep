@@ -259,6 +259,9 @@ const SeasonalOpportunityMapPage = lazy(() =>
 const LearningLayerPage = lazy(() =>
   import("./features/qrm/pages/LearningLayerPage").then((m) => ({ default: m.LearningLayerPage }))
 );
+const CrossDealerMirrorPage = lazy(() =>
+  import("./features/qrm/pages/CrossDealerMirrorPage").then((m) => ({ default: m.CrossDealerMirrorPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1706,6 +1709,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CustomerStrategistPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/cross-dealer-mirror"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CrossDealerMirrorPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

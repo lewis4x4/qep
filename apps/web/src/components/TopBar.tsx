@@ -302,6 +302,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? "AI Branch Chief" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? "Deal Room" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? "AI Deal Coach" : undefined) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? "Cross-Dealer Mirror" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/strategist") ? "AI Customer Strategist" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? "Deal Autopsy" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/rental-conversion") ? "Rental Conversion Engine" : undefined) ??
@@ -324,6 +325,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? { label: "Branch command", route: location.pathname.replace(/\/chief$/, "/command") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? { label: "Deal detail", route: location.pathname.replace(/\/coach$/, "") } : null) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? { label: "Strategist", route: location.pathname.replace(/\/cross-dealer-mirror$/, "/strategist") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/strategist") ? { label: "Account Command", route: location.pathname.replace(/\/strategist$/, "/command") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/rental-conversion") ? { label: "Account Command", route: location.pathname.replace(/\/rental-conversion$/, "/command") } : null) ??

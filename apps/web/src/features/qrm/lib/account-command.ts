@@ -33,3 +33,7 @@ export function buildAccountRentalConversionHref(companyId: string): string {
 export function buildAccountStrategistHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/strategist`;
 }
+
+export function buildAccountCrossDealerMirrorHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/cross-dealer-mirror`;
+}
