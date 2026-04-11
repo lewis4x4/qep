@@ -220,6 +220,9 @@ const CustomerGenomePage = lazy(() =>
 const CustomerOperatingProfilePage = lazy(() =>
   import("./features/qrm/pages/CustomerOperatingProfilePage").then((m) => ({ default: m.CustomerOperatingProfilePage }))
 );
+const FleetIntelligencePage = lazy(() =>
+  import("./features/qrm/pages/FleetIntelligencePage").then((m) => ({ default: m.FleetIntelligencePage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1597,6 +1600,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CustomerOperatingProfilePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/fleet-intelligence"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <FleetIntelligencePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

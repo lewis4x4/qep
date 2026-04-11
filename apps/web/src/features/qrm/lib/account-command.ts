@@ -13,3 +13,7 @@ export function buildAccountGenomeHref(companyId: string): string {
 export function buildAccountOperatingProfileHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/operating-profile`;
 }
+
+export function buildAccountFleetIntelligenceHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/fleet-intelligence`;
+}

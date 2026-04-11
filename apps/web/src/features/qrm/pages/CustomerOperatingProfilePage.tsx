@@ -18,6 +18,7 @@ import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
   buildAccountCommandHref,
+  buildAccountFleetIntelligenceHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
   buildAccountTimelineHref,
@@ -167,6 +168,9 @@ export function CustomerOperatingProfilePage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountCommandHref(accountId)}>Account Command</Link>
           </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountFleetIntelligenceHref(accountId)}>Fleet Intelligence</Link>
+          </Button>
         </div>
       </div>
 
@@ -288,6 +292,22 @@ export function CustomerOperatingProfilePage() {
                   </div>
                 ))
               )}
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Fleet Intelligence to see owned machines, attachment gaps, and replacement windows for this account.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountFleetIntelligenceHref(accountId)}>
+                  Fleet intelligence <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
             </div>
           </Card>
         </>
