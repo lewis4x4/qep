@@ -87,6 +87,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/qrm/post-sale-experience": "Post-Sale Experience",
   "/qrm/workflow-audit": "Workflow Audit",
   "/qrm/sop-folk": "SOP + Folk Workflow",
+  "/qrm/rep-sku": "Rep as SKU",
   "/qrm/my/reality": "Rep Reality Reflection",
   "/nervous-system": "Nervous System",
   "/price-intelligence": "Price Intelligence",
@@ -133,6 +134,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/qrm/post-sale-experience": { label: "Open portal", route: "/portal" },
   "/qrm/workflow-audit": { label: "Open flow admin", route: "/admin/flow" },
   "/qrm/sop-folk": { label: "Open SOP dashboard", route: "/ops/sop-compliance" },
+  "/qrm/rep-sku": { label: "Open deals", route: "/qrm/deals" },
   "/qrm/my/reality": { label: "Open deals", route: "/qrm/deals" },
   "/nervous-system": { label: "Open OS Hub", route: "/os" },
   "/price-intelligence": { label: "Open OS Hub", route: "/os" },
@@ -304,6 +306,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/decision-room") ? "Decision Room Simulator" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? "AI Deal Coach" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/decision-cycle") ? "Decision Cycle Synchronizer" : undefined) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/ecosystem") ? "Ecosystem Layer" : undefined) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/reputation") ? "Reputation Surface" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cashflow-weather") ? "Cashflow Weather Map" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? "Cross-Dealer Mirror" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/strategist") ? "AI Customer Strategist" : undefined) ??
@@ -330,6 +334,8 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/decision-room") ? { label: "Deal Room", route: location.pathname.replace(/\/decision-room$/, "/room") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? { label: "Deal detail", route: location.pathname.replace(/\/coach$/, "") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/decision-cycle") ? { label: "Strategist", route: location.pathname.replace(/\/decision-cycle$/, "/strategist") } : null) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/ecosystem") ? { label: "Strategist", route: location.pathname.replace(/\/ecosystem$/, "/strategist") } : null) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/reputation") ? { label: "Strategist", route: location.pathname.replace(/\/reputation$/, "/strategist") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cashflow-weather") ? { label: "Strategist", route: location.pathname.replace(/\/cashflow-weather$/, "/strategist") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? { label: "Strategist", route: location.pathname.replace(/\/cross-dealer-mirror$/, "/strategist") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/strategist") ? { label: "Account Command", route: location.pathname.replace(/\/strategist$/, "/command") } : null) ??

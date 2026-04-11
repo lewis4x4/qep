@@ -271,6 +271,15 @@ const DecisionRoomSimulatorPage = lazy(() =>
 const DecisionCycleSynchronizerPage = lazy(() =>
   import("./features/qrm/pages/DecisionCycleSynchronizerPage").then((m) => ({ default: m.DecisionCycleSynchronizerPage }))
 );
+const EcosystemLayerPage = lazy(() =>
+  import("./features/qrm/pages/EcosystemLayerPage").then((m) => ({ default: m.EcosystemLayerPage }))
+);
+const ReputationSurfacePage = lazy(() =>
+  import("./features/qrm/pages/ReputationSurfacePage").then((m) => ({ default: m.ReputationSurfacePage }))
+);
+const RepSkuPage = lazy(() =>
+  import("./features/qrm/pages/RepSkuPage").then((m) => ({ default: m.RepSkuPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1758,6 +1767,36 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <DecisionCycleSynchronizerPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/ecosystem"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <EcosystemLayerPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/reputation"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ReputationSurfacePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/rep-sku"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <RepSkuPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

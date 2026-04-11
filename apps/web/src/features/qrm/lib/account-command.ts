@@ -45,3 +45,11 @@ export function buildAccountCashflowWeatherHref(companyId: string): string {
 export function buildAccountDecisionCycleHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/decision-cycle`;
 }
+
+export function buildAccountEcosystemHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/ecosystem`;
+}
+
+export function buildAccountReputationHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/reputation`;
+}

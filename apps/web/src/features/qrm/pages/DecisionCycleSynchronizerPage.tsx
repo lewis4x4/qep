@@ -18,6 +18,8 @@ import { supabase } from "@/lib/supabase";
 import {
   buildAccountCommandHref,
   buildAccountDecisionCycleHref,
+  buildAccountEcosystemHref,
+  buildAccountReputationHref,
   buildAccountStrategistHref,
 } from "../lib/account-command";
 import { buildDecisionCycleBoard } from "../lib/decision-cycle";
@@ -192,6 +194,12 @@ export function DecisionCycleSynchronizerPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountStrategistHref(accountId)}>Customer Strategist</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountEcosystemHref(accountId)}>Ecosystem Layer</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountReputationHref(accountId)}>Reputation Surface</Link>
           </Button>
         </div>
       </div>
