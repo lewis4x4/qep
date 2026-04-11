@@ -99,6 +99,11 @@ export function RevenueRescueCenterPage() {
                   </Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
+                  <Link to="/qrm/operations-copilot">
+                    Ops Copilot <ArrowUpRight className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
                   <Link to="/qrm/command/quotes">
                     Quotes <ArrowUpRight className="ml-1 h-3 w-3" />
                   </Link>

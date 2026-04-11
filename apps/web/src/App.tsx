@@ -244,6 +244,9 @@ const BranchChiefPage = lazy(() =>
 const CustomerStrategistPage = lazy(() =>
   import("./features/qrm/pages/CustomerStrategistPage").then((m) => ({ default: m.CustomerStrategistPage }))
 );
+const OperationsCopilotPage = lazy(() =>
+  import("./features/qrm/pages/OperationsCopilotPage").then((m) => ({ default: m.OperationsCopilotPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1678,6 +1681,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CustomerStrategistPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/operations-copilot"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OperationsCopilotPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
