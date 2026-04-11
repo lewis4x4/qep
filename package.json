@@ -28,6 +28,7 @@
     "kb:eval": "node ./scripts/kb-eval/run-eval.mjs",
     "kb:eval:report": "node ./scripts/kb-eval/eval-report.mjs",
     "kb:workspace-isolation": "node ./scripts/kb-eval/workspace-isolation.mjs",
+    "kb:reindex:tier1": "bun ./scripts/kb-reindex-tier1.ts",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "service:cron:path-check": "bun ./scripts/service-cron-path-guard.mjs",
     "edge:deno-check": "bun ./scripts/deno-check-edge-functions.mjs",

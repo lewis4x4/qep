@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { loadLocalEnv } from "../_shared/local-env.mjs";
+import { bootstrapLiveCorpus } from "./bootstrap-live-corpus.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..");
@@ -79,6 +80,92 @@ function scoreQuery(query, rows) {
   };
 }
 
+const QUERY_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "can",
+  "do",
+  "does",
+  "for",
+  "how",
+  "i",
+  "in",
+  "is",
+  "it",
+  "me",
+  "of",
+  "on",
+  "or",
+  "our",
+  "please",
+  "qep",
+  "say",
+  "show",
+  "tell",
+  "the",
+  "to",
+  "us",
+  "we",
+  "what",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+]);
+
+function normalizeSearchText(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function simplifyQuestion(message) {
+  return message
+    .trim()
+    .replace(/^[^a-z0-9]+/i, "")
+    .replace(/\?+$/g, "")
+    .replace(
+      /^(what|where|which|who|why|how)\s+(is|are|was|were|do|does|did|can|could|should|would|were)\s+/i,
+      "",
+    )
+    .replace(/^(tell me about|show me|explain|summarize|describe|find|give me)\s+/i, "")
+    .replace(/^(the|our)\s+/i, "")
+    .trim();
+}
+
+function extractSearchTokens(message) {
+  const normalized = normalizeSearchText(message);
+  const seen = new Set();
+  const tokens = [];
+  for (const token of normalized.split(" ")) {
+    if (token.length < 3 || QUERY_STOP_WORDS.has(token) || seen.has(token)) continue;
+    seen.add(token);
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+function buildKeywordCandidates(message) {
+  const candidates = [];
+  const raw = message.trim();
+  const simplified = simplifyQuestion(raw);
+  const tokenPhrase = extractSearchTokens(raw).slice(0, 6).join(" ");
+  const identifierCandidates = raw.match(/\b[a-z0-9]{2,}(?:[-/][a-z0-9]{2,})+\b/gi) ?? [];
+
+  for (const candidate of [raw, simplified, tokenPhrase, ...identifierCandidates]) {
+    const normalized = candidate?.trim();
+    if (!normalized || candidates.includes(normalized)) continue;
+    candidates.push(normalized);
+  }
+
+  return candidates;
+}
+
 const url = requiredEnv("SUPABASE_URL") || requiredEnv("VITE_SUPABASE_URL");
 const serviceKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 if (!url || !serviceKey) {
@@ -98,32 +185,45 @@ const supabase = createClient(url, serviceKey, {
 
 mkdirSync(outputDir, { recursive: true });
 
+await bootstrapLiveCorpus();
+
 const startedAt = Date.now();
 const results = [];
 
 for (const query of queries) {
   const embedding = await embedQuery(query.message);
-  const { data, error } = await supabase.rpc("retrieve_document_evidence", {
-    query_embedding: embedding ? `[${embedding.join(",")}]` : null,
-    keyword_query: query.message,
-    user_role: query.user_role ?? "manager",
-    match_count: 8,
-    semantic_match_threshold: 0.45,
-    p_workspace_id: query.workspace_id ?? "default",
-  });
+  let rows = [];
+  let lastError = null;
+  for (const keywordQuery of buildKeywordCandidates(query.message)) {
+    const { data, error } = await supabase.rpc("retrieve_document_evidence", {
+      query_embedding: embedding ? `[${embedding.join(",")}]` : null,
+      keyword_query: keywordQuery,
+      user_role: query.user_role ?? "manager",
+      match_count: 8,
+      semantic_match_threshold: 0.45,
+      p_workspace_id: query.workspace_id ?? "default",
+    });
 
-  if (error) {
+    if (error) {
+      lastError = error;
+      continue;
+    }
+
+    rows = data ?? [];
+    if (rows.length > 0) break;
+  }
+
+  if (lastError && rows.length === 0) {
     results.push({
       id: query.id,
       message: query.message,
-      error: error.message,
+      error: lastError.message,
       pass: false,
       rows: [],
     });
     continue;
   }
 
-  const rows = data ?? [];
   const score = scoreQuery(query, rows);
   results.push({
     id: query.id,

@@ -26,12 +26,15 @@ import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMyWorkspaceId } from "@/hooks/useMyWorkspaceId";
+import type { UserRole } from "@/lib/database.types";
 import { CeoCommandCenterView } from "../views/CeoCommandCenterView";
 import { CfoCommandCenterView } from "../views/CfoCommandCenterView";
 import { CooCommandCenterView } from "../views/CooCommandCenterView";
 import { ExecutiveOverviewView } from "../views/ExecutiveOverviewView";
 import { MetricDrillDrawer } from "../components/MetricDrillDrawer";
 import { CommandCenterExportMenu } from "../components/CommandCenterExportMenu";
+import { ExecutiveDepartmentDeck } from "../components/ExecutiveDepartmentDeck";
+import { canAccessExecutiveDepartmentDeck } from "../lib/department-view-deck";
 import type { ExecRoleTab } from "../lib/types";
 import { EXEC_LENS_META, EXEC_TABS, type ExecutiveTab } from "../lib/lens-meta";
 
@@ -73,10 +76,19 @@ const CONTROL_LINKS = [
   },
 ] as const;
 
-export function CommandCenterPage() {
+interface CommandCenterPageProps {
+  viewerRole: UserRole;
+  viewerName?: string | null;
+}
+
+export function CommandCenterPage({
+  viewerRole,
+  viewerName,
+}: CommandCenterPageProps) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<ExecutiveTab>("overview");
   const lensTabs = EXEC_TABS.filter((entry) => entry.key !== "overview");
+  const showDepartmentDeck = canAccessExecutiveDepartmentDeck(viewerRole);
 
   // Resolve the calling user's active workspace. Threaded into the drill drawer
   // so its snapshot history + alerts queries can explicitly filter by
@@ -228,6 +240,9 @@ export function CommandCenterPage() {
       {tab === "ceo" && <CeoCommandCenterView onDrill={handleDrill} />}
       {tab === "cfo" && <CfoCommandCenterView onDrill={handleDrill} />}
       {tab === "coo" && <CooCommandCenterView onDrill={handleDrill} />}
+      {tab === "overview" && showDepartmentDeck && (
+        <ExecutiveDepartmentDeck viewerName={viewerName} />
+      )}
 
       {/* Universal drill drawer (Slice 5) */}
       <MetricDrillDrawer metricKey={drillMetric} workspaceId={workspaceId} onClose={() => setDrillMetric(null)} />

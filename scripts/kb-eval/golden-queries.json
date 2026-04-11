@@ -17,6 +17,24 @@
     "expected_source_types": []
   },
   {
+    "id": "identifier-shutdown-manual",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "rep",
+    "message": "What does HX-77-ALPHA require before shutdown?",
+    "min_results": 1,
+    "expected_source_types": ["document"]
+  },
+  {
+    "id": "section-context-manual",
+    "enabled": true,
+    "workspace_id": "default",
+    "user_role": "rep",
+    "message": "What does the shutdown pressure release procedure say?",
+    "min_results": 1,
+    "expected_source_types": ["document"]
+  },
+  {
     "id": "deal-follow-up",
     "enabled": true,
     "workspace_id": "default",

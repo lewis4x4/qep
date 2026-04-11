@@ -163,7 +163,7 @@ async function detectActivityGaps(db: AdminClient): Promise<Alert[]> {
 
   const { data: reps } = await db
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, active_workspace_id")
     .in("role", ["rep"]);
 
   if (!reps || reps.length === 0) return alerts;
@@ -192,7 +192,7 @@ async function detectActivityGaps(db: AdminClient): Promise<Alert[]> {
     if (activeReps.has(rep.id as string)) continue;
 
     alerts.push({
-      workspace_id: "default",
+      workspace_id: (rep.active_workspace_id as string | null) ?? "default",
       alert_type: "activity_gap",
       severity: "medium",
       title: `No activity from ${rep.full_name ?? "rep"} in 3+ days`,

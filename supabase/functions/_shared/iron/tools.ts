@@ -27,6 +27,11 @@
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { embedText, formatVectorLiteral } from "../openai-embeddings.ts";
+import {
+  buildEvidenceExcerpt,
+  rerankKbEvidence,
+  type KbEvidenceRow,
+} from "../kb-retrieval.ts";
 
 /* ─── Anthropic tool definitions ────────────────────────────────────────── */
 
@@ -178,13 +183,27 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "semantic_kb_search",
     description:
-      "Semantic search over uploaded documents, manuals, SOPs, machine knowledge notes, and CRM embeddings. Use for unstructured knowledge questions like 'what's our return policy', 'how do I service a hydraulic pump', or 'what does our SOP say about trade-ins'. NOT for inventory or transactional data — use the dedicated tools for those.",
+      "Semantic search over uploaded documents, manuals, SOPs, machine knowledge notes, and CRM embeddings. Use for unstructured knowledge questions like 'what's our return policy', 'how do I service a hydraulic pump', or 'what does our SOP say about trade-ins'. NOT for inventory or transactional data — use the dedicated tools for those. This tool runs a multi-tier retrieval cascade: identifier matching, semantic + keyword search, and lexical fallback — so it will find answers even if embeddings are weak.",
     input_schema: {
       type: "object",
       properties: {
         query: { type: "string", description: "Natural-language query" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "search_service_knowledge",
+    description:
+      "Search the verified service knowledge base — recurring field fixes, fault codes, symptoms, and technician institutional memory. Use when the user asks about a repair procedure, fault code, recurring machine problem, or field fix. Pass equipment make/model and/or fault code if known. Returns verified and unverified solutions with parts used.",
+    input_schema: {
+      type: "object",
+      properties: {
+        make: { type: "string", description: "Equipment manufacturer (e.g. 'Bandit', 'Yanmar', 'CAT')" },
+        model: { type: "string", description: "Equipment model" },
+        fault_code: { type: "string", description: "Fault/error code (e.g. 'E-350', 'SPN-3251')" },
+        symptom: { type: "string", description: "Symptom description (used for fuzzy match if no fault code)" },
+      },
     },
   },
   {
@@ -208,6 +227,8 @@ export interface ToolContext {
   workspaceId: string;
   userRole: string;
   tavilyApiKey: string;
+  /** Stashed by the dispatcher for KB hydration — not part of the public contract */
+  _lastQuery?: string;
 }
 
 /* ─── Tool dispatcher ───────────────────────────────────────────────────── */
@@ -277,7 +298,16 @@ export async function executeIronTool(
           ctx,
         );
       case "semantic_kb_search":
-        return await toolSemanticKbSearch(String(input.query ?? ""), ctx);
+        ctx._lastQuery = String(input.query ?? "");
+        return await toolSemanticKbSearch(ctx._lastQuery, ctx);
+      case "search_service_knowledge":
+        return await toolSearchServiceKnowledge(
+          input.make as string | undefined,
+          input.model as string | undefined,
+          input.fault_code as string | undefined,
+          input.symptom as string | undefined,
+          ctx,
+        );
       case "web_search":
         return await toolWebSearch(String(input.query ?? ""), ctx);
       default:
@@ -624,35 +654,385 @@ async function toolListServiceJobs(
   };
 }
 
+/* ─── KB retrieval helpers (ported from chat/index.ts) ──────────────── */
+
+const QUERY_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "can", "do", "does", "for", "how", "i",
+  "in", "is", "it", "me", "of", "on", "or", "our", "please", "qep",
+  "show", "tell", "the", "to", "us", "we", "what", "where", "which",
+  "who", "why", "with",
+]);
+
+function truncateKbText(text: string, maxLength: number): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function simplifyQuestion(message: string): string {
+  return message
+    .trim()
+    .replace(/^[^a-z0-9]+/i, "")
+    .replace(/\?+$/g, "")
+    .replace(
+      /^(what|where|which|who|why|how)\s+(is|are|was|were|do|does|did|can|could|should|would|were)\s+/i,
+      "",
+    )
+    .replace(/^(tell me about|show me|explain|summarize|describe|find|give me)\s+/i, "")
+    .replace(/^(the|our)\s+/i, "")
+    .trim();
+}
+
+function extractSearchTokens(message: string): string[] {
+  const normalized = normalizeSearchText(message);
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const token of normalized.split(" ")) {
+    if (token.length < 3 || QUERY_STOP_WORDS.has(token) || seen.has(token)) continue;
+    seen.add(token);
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+function buildKeywordCandidates(message: string): string[] {
+  const candidates: string[] = [];
+  const raw = message.trim();
+  const simplified = simplifyQuestion(raw);
+  const tokenPhrase = extractSearchTokens(raw).slice(0, 6).join(" ");
+  for (const candidate of [raw, simplified, tokenPhrase]) {
+    if (!candidate) continue;
+    const normalized = candidate.trim();
+    if (!normalized || candidates.includes(normalized)) continue;
+    candidates.push(normalized);
+  }
+  return candidates;
+}
+
+function normalizeIdentifier(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function extractIdentifierCandidates(message: string): string[] {
+  const seen = new Set<string>();
+  const matches = message.match(/\b[a-z0-9]{2,}(?:[-/][a-z0-9]{2,})+\b/gi) ?? [];
+  const identifiers: string[] = [];
+  for (const match of matches) {
+    const trimmed = match.trim();
+    const normalized = normalizeIdentifier(trimmed);
+    if (normalized.length < 5 || seen.has(normalized)) continue;
+    seen.add(normalized);
+    identifiers.push(trimmed);
+  }
+  return identifiers;
+}
+
+function excerptAroundToken(text: string, token: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const lower = normalized.toLowerCase();
+  const index = lower.indexOf(token.toLowerCase());
+  if (index < 0) return truncateKbText(normalized, 800);
+  const start = Math.max(0, index - 200);
+  return truncateKbText(normalized.slice(start, start + 800), 800);
+}
+
+function excerptAroundIdentifier(text: string, identifier: string): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  if (lines.length === 0) return "";
+  const target = normalizeIdentifier(identifier);
+  const matchingIndex = lines.findIndex((l) => normalizeIdentifier(l).includes(target));
+  if (matchingIndex < 0) return excerptAroundToken(text, identifier);
+  const start = Math.max(0, matchingIndex - 1);
+  const end = Math.min(lines.length, matchingIndex + 3);
+  return truncateKbText(lines.slice(start, end).join("\n"), 1200);
+}
+
+type DocumentAudience = "company_wide" | "finance" | "leadership" | "admin_owner" | "owner_only";
+
+function allowedAudiencesForRole(role: string): DocumentAudience[] {
+  if (role === "owner") return ["company_wide", "finance", "leadership", "admin_owner", "owner_only"];
+  if (role === "manager") return ["company_wide", "finance", "leadership"];
+  if (role === "admin") return ["company_wide", "finance", "admin_owner"];
+  return ["company_wide"];
+}
+
+/* ─── toolSemanticKbSearch — multi-tier retrieval cascade ──────────── */
+
 async function toolSemanticKbSearch(query: string, ctx: ToolContext) {
   if (!query) return { error: "query is required" };
-  let embedding: number[];
+
+  // ── Tier 0: Identifier matching (part numbers, model codes) ────────
+  const identifierCandidates = extractIdentifierCandidates(query);
+  if (identifierCandidates.length > 0) {
+    const identifierResults = await tryIdentifierMatch(identifierCandidates, ctx);
+    if (identifierResults && identifierResults.length > 0) {
+      return { count: identifierResults.length, retrieval_tier: "identifier", results: identifierResults };
+    }
+  }
+
+  // ── Tier 1: Semantic + keyword with candidate retry ────────────────
+  let embedding: number[] | null = null;
   try {
     embedding = await embedText(query);
   } catch (err) {
-    return { error: `embedding failed: ${(err as Error).message}` };
+    console.warn(`[iron.tools.semantic_kb_search] embedding failed, continuing with keyword-only: ${(err as Error).message}`);
   }
 
-  const { data, error } = await ctx.admin.rpc("retrieve_document_evidence", {
-    query_embedding: formatVectorLiteral(embedding),
-    keyword_query: query.slice(0, 200),
-    user_role: ctx.userRole,
-    match_count: 8,
-    semantic_match_threshold: 0.45,
-    p_workspace_id: ctx.workspaceId,
-  });
+  const keywordCandidates = buildKeywordCandidates(query);
+  for (const keywordQuery of keywordCandidates) {
+    const { data, error } = await ctx.admin.rpc("retrieve_document_evidence", {
+      query_embedding: embedding ? formatVectorLiteral(embedding) : null,
+      keyword_query: keywordQuery.slice(0, 200),
+      user_role: ctx.userRole,
+      match_count: 12,
+      semantic_match_threshold: 0.45,
+      p_workspace_id: ctx.workspaceId,
+    });
 
-  if (error) return { error: error.message };
-  if (!Array.isArray(data) || data.length === 0) return { count: 0, results: [] };
+    if (error) {
+      console.warn(`[iron.tools.semantic_kb_search] rpc failed for keyword="${keywordQuery}": ${error.message}`);
+      continue;
+    }
 
-  return {
-    count: data.length,
-    results: (data as Array<Record<string, unknown>>).map((row) => ({
+    if (!Array.isArray(data) || data.length === 0) continue;
+
+    const ranked = await rerankKbEvidence(
+      keywordQuery,
+      data as KbEvidenceRow[],
+      { loggerTag: "iron.tools.semantic_kb_search" },
+    );
+
+    if (ranked.length === 0) continue;
+
+    // Hydrate full document text for single-hit results
+    const hydratedResults = await hydrateKbResults(ranked, ctx);
+    return { count: hydratedResults.length, retrieval_tier: "semantic", results: hydratedResults };
+  }
+
+  // ── Tier 2: Lexical fallback (token scoring against raw documents) ─
+  const lexicalResults = await tryLexicalFallback(query, ctx);
+  if (lexicalResults && lexicalResults.length > 0) {
+    return { count: lexicalResults.length, retrieval_tier: "lexical", results: lexicalResults };
+  }
+
+  return { count: 0, retrieval_tier: "none", results: [] };
+}
+
+/** Tier 0: Direct string matching against document titles and raw_text */
+async function tryIdentifierMatch(
+  identifierCandidates: string[],
+  ctx: ToolContext,
+): Promise<Array<Record<string, unknown>> | null> {
+  const { data: docs, error } = await ctx.admin
+    .from("documents")
+    .select("id, title, raw_text, audience, updated_at")
+    .eq("status", "published")
+    .in("audience", allowedAudiencesForRole(ctx.userRole))
+    .eq("workspace_id", ctx.workspaceId)
+    .order("updated_at", { ascending: false })
+    .limit(500);
+
+  if (error || !docs || docs.length === 0) return null;
+
+  type DocRow = { id: string; title: string; raw_text: string | null; audience: string; updated_at: string };
+  const scored = (docs as DocRow[])
+    .map((doc) => {
+      const normalizedTitle = normalizeIdentifier(doc.title ?? "");
+      const normalizedRaw = normalizeIdentifier(doc.raw_text ?? "");
+      let matchedIdentifier: string | null = null;
+      let score = 0;
+      for (const identifier of identifierCandidates) {
+        const normalized = normalizeIdentifier(identifier);
+        if (normalizedTitle.includes(normalized)) { matchedIdentifier = identifier; score = Math.max(score, 7); }
+        if (normalizedRaw.includes(normalized)) { matchedIdentifier = identifier; score = Math.max(score, 10); }
+      }
+      if (!matchedIdentifier || score === 0) return null;
+      return { doc, matchedIdentifier, score, excerpt: excerptAroundIdentifier(doc.raw_text || doc.title, matchedIdentifier) };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.score - a.score || b.doc.updated_at.localeCompare(a.doc.updated_at))
+    .slice(0, 3);
+
+  if (scored.length === 0) return null;
+
+  return scored.map(({ doc, score, excerpt }) => ({
+    kind: "document",
+    id: doc.id,
+    title: doc.title,
+    excerpt,
+    confidence: Math.min(0.99, 0.84 + score * 0.012),
+  }));
+}
+
+/** Hydrate full document text for single-hit results, expand excerpts for multi-hit */
+async function hydrateKbResults(
+  ranked: KbEvidenceRow[],
+  ctx: ToolContext,
+): Promise<Array<Record<string, unknown>>> {
+  const hitDocIds = ranked.map((r) => r.source_id).filter(Boolean);
+  const { data: hitDocs } = await ctx.admin
+    .from("documents")
+    .select("id, title, raw_text, audience, updated_at")
+    .in("id", hitDocIds)
+    .eq("workspace_id", ctx.workspaceId);
+
+  type DocRow = { id: string; title: string; raw_text: string | null; audience: string; updated_at: string };
+  const hydratedById = new Map<string, DocRow>();
+  for (const doc of (hitDocs ?? []) as DocRow[]) {
+    hydratedById.set(doc.id, doc);
+  }
+
+  const isSingleHit = ranked.length === 1;
+  const searchTokens = extractSearchTokens(ctx._lastQuery ?? "");
+
+  return ranked.map((row) => {
+    const doc = hydratedById.get(row.source_id);
+    let excerpt = buildEvidenceExcerpt(row);
+
+    // Single-hit: inject full document text so the model has the complete answer
+    if (isSingleHit && doc?.raw_text?.trim() && !row.context_excerpt && !row.section_title) {
+      excerpt = truncateKbText(doc.raw_text, 12000);
+    }
+    // Multi-hit: if the chunk excerpt is sparse, try to find a better excerpt using search tokens
+    else if (doc?.raw_text && !row.context_excerpt && !row.section_title) {
+      const matchingToken = searchTokens.find((t) => doc.raw_text?.toLowerCase().includes(t));
+      if (matchingToken) {
+        excerpt = excerptAroundToken(doc.raw_text, matchingToken);
+      }
+    }
+
+    return {
       kind: row.source_type ?? "document",
       id: row.source_id ?? null,
       title: row.source_title ?? "Untitled",
-      excerpt: String(row.excerpt ?? "").slice(0, 600),
+      excerpt: excerpt.slice(0, isSingleHit ? 12000 : 2400),
       confidence: Number(row.confidence ?? 0),
+      chunk_kind: row.chunk_kind ?? null,
+      section_title: row.section_title ?? null,
+      page_number: typeof row.page_number === "number" ? row.page_number : null,
+      context_excerpt: row.context_excerpt ?? null,
+    };
+  });
+}
+
+/** Tier 2: Full-text token scoring when semantic search returns nothing */
+async function tryLexicalFallback(
+  query: string,
+  ctx: ToolContext,
+): Promise<Array<Record<string, unknown>> | null> {
+  const searchTokens = extractSearchTokens(query);
+  if (searchTokens.length === 0) return null;
+
+  const { data: docs, error } = await ctx.admin
+    .from("documents")
+    .select("id, title, raw_text, audience, updated_at")
+    .eq("status", "published")
+    .in("audience", allowedAudiencesForRole(ctx.userRole))
+    .eq("workspace_id", ctx.workspaceId)
+    .order("updated_at", { ascending: false })
+    .limit(150);
+
+  if (error || !docs || docs.length === 0) return null;
+
+  type DocRow = { id: string; title: string; raw_text: string | null; audience: string; updated_at: string };
+  const scored = (docs as DocRow[])
+    .map((doc) => {
+      const titleLower = (doc.title ?? "").toLowerCase();
+      const rawLower = (doc.raw_text ?? "").toLowerCase();
+      let score = 0;
+      let matched = 0;
+      for (const token of searchTokens) {
+        if (titleLower.includes(token)) { score += 3; matched += 1; }
+        else if (rawLower.includes(token)) { score += 1; matched += 1; }
+      }
+      if (matched === 0) return null;
+      const excerptSource = doc.raw_text || doc.title;
+      const excerptToken = searchTokens.find((t) => rawLower.includes(t) || titleLower.includes(t)) ?? searchTokens[0];
+      return { doc, matched, score, excerpt: excerptAroundToken(excerptSource, excerptToken) };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.score - a.score || b.matched - a.matched || b.doc.updated_at.localeCompare(a.doc.updated_at))
+    .slice(0, 3);
+
+  if (scored.length === 0) return null;
+
+  // For single-hit lexical match, hydrate full document text
+  const isSingleHit = scored.length === 1;
+
+  return scored.map(({ doc, matched, score, excerpt }) => ({
+    kind: "document",
+    id: doc.id,
+    title: doc.title,
+    excerpt: isSingleHit && doc.raw_text?.trim()
+      ? truncateKbText(doc.raw_text, 12000)
+      : excerpt,
+    confidence: Math.min(0.92, 0.62 + matched * 0.08 + Math.min(score, 6) * 0.02),
+  }));
+}
+
+/* ─── toolSearchServiceKnowledge ──────────────────────────────────── */
+
+async function toolSearchServiceKnowledge(
+  make: string | undefined,
+  model: string | undefined,
+  faultCode: string | undefined,
+  symptom: string | undefined,
+  ctx: ToolContext,
+) {
+  // Extract fault code from symptom text if not provided directly
+  let resolvedFaultCode = faultCode?.trim() || null;
+  if (!resolvedFaultCode && symptom) {
+    const match = symptom.match(/\b[A-Z]{1,4}[- ]?\d{2,5}\b/);
+    resolvedFaultCode = match?.[0]?.replace(/\s+/g, "-") ?? null;
+  }
+
+  if (!resolvedFaultCode && !make && !model) {
+    return { error: "At least one of make, model, or fault_code is required" };
+  }
+
+  const { data, error } = await ctx.admin.rpc("match_service_knowledge", {
+    p_make: make?.trim() || null,
+    p_model: model?.trim() || null,
+    p_fault_code: resolvedFaultCode,
+    p_limit: 8,
+  });
+
+  if (error) return { error: error.message };
+  if (!Array.isArray(data) || data.length === 0) {
+    return { count: 0, results: [], message: "No matching service knowledge found." };
+  }
+
+  type ServiceKbRow = {
+    id: string;
+    make: string | null;
+    model: string | null;
+    fault_code: string | null;
+    symptom: string;
+    solution: string;
+    parts_used: unknown[] | null;
+    verified: boolean;
+    use_count: number;
+  };
+
+  return {
+    count: data.length,
+    results: (data as ServiceKbRow[]).map((row) => ({
+      id: row.id,
+      equipment: [row.make, row.model].filter(Boolean).join(" ") || null,
+      fault_code: row.fault_code,
+      symptom: row.symptom,
+      solution: row.solution,
+      parts_used: Array.isArray(row.parts_used) && row.parts_used.length > 0
+        ? row.parts_used
+        : null,
+      verified: row.verified,
+      use_count: row.use_count,
+      confidence: row.verified ? "verified_fix" : "unverified_field_knowledge",
     })),
   };
 }

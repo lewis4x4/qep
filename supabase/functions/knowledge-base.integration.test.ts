@@ -87,7 +87,16 @@ type UploadedDocument = {
 
 type ChatResult = {
   text: string;
-  sources: Array<{ id: string; title: string; confidence: number; kind: string; excerpt?: string }>;
+  sources: Array<{
+    id: string;
+    title: string;
+    confidence: number;
+    kind: string;
+    excerpt?: string;
+    sectionTitle?: string;
+    pageNumber?: number;
+    contextExcerpt?: string;
+  }>;
 };
 
 async function uploadTextDocument(
@@ -164,6 +173,20 @@ async function chat(token: string, message: string): Promise<ChatResult> {
   }
 
   return { text, sources };
+}
+
+async function supportsTier1ChunkSchema(token: string): Promise<boolean> {
+  const response = await fetch(
+    `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/chunks?select=chunk_kind,parent_chunk_id&limit=1`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    },
+  );
+
+  return response.ok;
 }
 
 function liveTest(name: string, fn: () => Promise<void>) {
@@ -257,3 +280,100 @@ liveTest("finance audience document does not leak to rep chat", async () => {
     await Promise.all(uploaded.map((doc) => deleteDocument(ADMIN_TOKEN, doc.documentId)));
   }
 });
+
+liveTest("structured uploads surface section context for paragraph hits", async () => {
+  if (!await supportsTier1ChunkSchema(REP_TOKEN)) {
+    return;
+  }
+
+  const uniquePhrase = `maple relief shutdown sequence ${crypto.randomUUID().slice(0, 8)}`;
+  const title = `kb-structured-${crypto.randomUUID().slice(0, 8)}`;
+  const uploaded: UploadedDocument[] = [];
+
+  try {
+    const uploadResponse = await uploadTextDocument(ADMIN_TOKEN, {
+      title,
+      content: [
+        "# Startup Procedure",
+        "",
+        "Always verify the service board before energizing the machine.",
+        "",
+        "## Shutdown Procedure",
+        "",
+        `Before shutdown, follow the ${uniquePhrase}, release hydraulic pressure, and inspect the valve block for trapped heat.`,
+      ].join("\n"),
+      audience: "company_wide",
+      status: "published",
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed with ${uploadResponse.status}`);
+    }
+
+    const payload = await uploadResponse.json();
+    uploaded.push({ documentId: payload.documentId, title });
+
+    const result = await chat(REP_TOKEN, `What does the ${uniquePhrase} say?`);
+    const source = result.sources.find((item) => item.title.includes(title));
+    if (!source) {
+      throw new Error(`Expected source list to include ${title}`);
+    }
+    if (source.sectionTitle !== "Shutdown Procedure") {
+      throw new Error(`Expected Shutdown Procedure section, got ${source.sectionTitle ?? "missing"}`);
+    }
+    if (!source.contextExcerpt?.includes("release hydraulic pressure")) {
+      throw new Error("Expected context excerpt to include the parent section content");
+    }
+  } finally {
+    await Promise.all(uploaded.map((doc) => deleteDocument(ADMIN_TOKEN, doc.documentId)));
+  }
+});
+
+Deno.test("rerank fallback preserves SQL order when model output is invalid", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = Deno.env.get("OPENAI_API_KEY");
+  Deno.env.set("OPENAI_API_KEY", "test-key");
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "{bad-json" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )) as typeof fetch;
+
+  try {
+    const ranked = await rerankKbEvidence(
+      "shutdown procedure",
+      [
+        {
+          source_type: "document",
+          source_id: "doc-1",
+          source_title: "Hydraulic Shutdown",
+          excerpt: "release hydraulic pressure",
+          confidence: 0.93,
+          access_class: "company_wide",
+        },
+        {
+          source_type: "document",
+          source_id: "doc-2",
+          source_title: "Startup Notes",
+          excerpt: "power on",
+          confidence: 0.62,
+          access_class: "company_wide",
+        },
+      ] satisfies KbEvidenceRow[],
+      { loggerTag: "kb.integration" },
+    );
+
+    assertEquals(ranked.map((row) => row.source_id), ["doc-1", "doc-2"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey == null) Deno.env.delete("OPENAI_API_KEY");
+    else Deno.env.set("OPENAI_API_KEY", originalKey);
+  }
+});
+import { assertEquals } from "jsr:@std/assert@1";
+
+import { rerankKbEvidence, type KbEvidenceRow } from "./_shared/kb-retrieval.ts";

@@ -15,7 +15,7 @@
 --     from_stage_id = NULL and at = crm_deals.updated_at.
 --   - Append-only table (no updated_at column, no updates).
 --
--- Dependencies: crm_deals (021), crm_deal_stages (021)
+-- Dependencies: qrm_deals/qrm_deal_stages post-migration 170 rename
 -- ============================================================================
 
 -- ── Table: qrm_stage_transitions ──────────────────────────────────────────────
@@ -23,9 +23,9 @@
 create table public.qrm_stage_transitions (
   id uuid primary key default gen_random_uuid(),
   workspace_id text not null default 'default',
-  deal_id uuid not null references public.crm_deals(id) on delete cascade,
+  deal_id uuid not null references public.qrm_deals(id) on delete cascade,
   from_stage_id uuid,  -- NULL for cold-start backfill rows (no "from" stage)
-  to_stage_id uuid not null references public.crm_deal_stages(id),
+  to_stage_id uuid not null references public.qrm_deal_stages(id),
   at timestamptz not null default now(),
   source text not null default 'trigger'
     check (source in ('trigger', 'cold_start_backfill_2026_04_09', 'manual')),
@@ -84,7 +84,7 @@ end;
 $$;
 
 create trigger crm_deals_log_stage_transition
-  after update of stage_id on public.crm_deals
+  after update of stage_id on public.qrm_deals
   for each row
   when (OLD.stage_id is distinct from NEW.stage_id)
   execute function public.crm_deals_log_stage_transition();
@@ -117,7 +117,7 @@ begin
 
   -- Fallback: no transition row (deal created before migration)
   select updated_at into v_at
-  from public.crm_deals
+  from public.qrm_deals
   where id = p_deal_id;
 
   if v_at is not null then
@@ -156,8 +156,8 @@ begin
     s.name as stage_name,
     public.qrm_stage_age(d.id) as days_in_stage,
     public.qrm_stage_age(d.id) as stage_age_days
-  from public.crm_deals d
-  join public.crm_deal_stages s on s.id = d.stage_id
+  from public.qrm_deals d
+  join public.qrm_deal_stages s on s.id = d.stage_id
   where d.workspace_id = p_workspace_id
     and d.deleted_at is null
     and d.closed_at is null;
@@ -185,6 +185,6 @@ select
   d.stage_id,
   d.updated_at,
   'cold_start_backfill_2026_04_09'
-from public.crm_deals d
+from public.qrm_deals d
 where d.deleted_at is null
   and d.closed_at is null;

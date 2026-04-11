@@ -4,11 +4,12 @@ import {
   Search,
   Bell,
   LogOut,
-  ChevronRight,
+  ChevronDown,
   Moon,
   Sun,
+  PanelTopOpen,
 } from "lucide-react";
-import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
+import { BRAND_NAME } from "@/components/BrandLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +34,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
-import { getInitials, resolveNavItems } from "@/lib/nav-config";
+import {
+  getInitials,
+  isUtilityRoute,
+  resolveActivePrimaryHeader,
+  resolvePrimaryNavGroups,
+  resolveUtilityNavSections,
+} from "@/lib/nav-config";
 import { supabase } from "@/lib/supabase";
 import { QrmGlobalSearchCommand } from "@/features/qrm/components/QrmGlobalSearchCommand";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
@@ -283,12 +290,18 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
   const { preference, resolvedDark } = useTheme();
   const showCrmSearch = location.pathname.startsWith("/qrm");
 
-  // Nav Items
-  const navItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading)
-    .filter((item) => item.roles.includes(profile.role));
-
-  const topLevelNavItems = navItems.filter(item => ["/dashboard", "/qrm", "/service", "/chat", "/os"].includes(item.href));
-  const moreNavItems = navItems.filter(item => !["/dashboard", "/qrm", "/service", "/chat", "/os"].includes(item.href));
+  const primaryNavGroups = resolvePrimaryNavGroups(
+    quoteBuilderEnabled,
+    quoteBuilderLoading,
+    profile.role
+  );
+  const utilitySections = resolveUtilityNavSections(
+    quoteBuilderEnabled,
+    quoteBuilderLoading,
+    profile.role
+  );
+  const activePrimaryHeader = resolveActivePrimaryHeader(location.pathname);
+  const utilityRouteActive = isUtilityRoute(location.pathname);
 
   const themeAriaLabel =
     preference === "system"
@@ -378,6 +391,25 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     }
   }
 
+  function isNavHrefActive(href: string) {
+    if (
+      href === "/dashboard" ||
+      href === "/qrm" ||
+      href === "/parts" ||
+      href === "/service" ||
+      href === "/rentals" ||
+      href === "/chat" ||
+      href === "/voice" ||
+      href === "/quote-v2" ||
+      href === "/os" ||
+      href === "/admin" ||
+      href === "/executive"
+    ) {
+      return location.pathname === href;
+    }
+    return location.pathname === href || location.pathname.startsWith(`${href}/`);
+  }
+
   return (
     <>
       <div className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 sm:px-6 lg:px-8 pointer-events-none">
@@ -385,65 +417,84 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
           className="w-full max-w-7xl flex items-center px-6 py-3.5 gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl pointer-events-auto"
           role="banner"
         >
-          {/* Left: Logo */}
-          <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to="/dashboard"
-            className="flex min-w-0 items-center gap-2"
-            aria-label={`${BRAND_NAME} — dashboard`}
-          >
-            <div className="w-2 h-2 rounded-full bg-qep-orange shadow-[0_0_10px_rgba(249,115,22,0.8)]" />
-            <span
-              className="hidden font-display tracking-tight font-medium text-sm leading-tight text-white sm:inline"
-              title={BRAND_NAME}
-              aria-hidden
-            >
-              {BRAND_NAME}
-            </span>
-          </Link>
-        </div>
-
-        {/* Center Nav Items */}
-        <nav className="hidden lg:flex items-center justify-center flex-1 gap-6 text-[11px] font-bold tracking-[0.1em] uppercase text-slate-300">
-           {topLevelNavItems.map((item) => {
-             const isActive = location.pathname.startsWith(item.href) && (item.href !== "/dashboard" || location.pathname === "/dashboard" || location.pathname === "/");
-             return (
-               <Link
-                 key={item.href}
-                 to={item.href}
-                 className={cn(
-                   "flex items-center gap-2 hover:text-white transition-colors cursor-pointer",
-                   isActive ? "text-qep-orange" : ""
-                 )}
-               >
-                 <item.icon className="w-4 h-4" />
-                 {item.label}
-               </Link>
-             )
-           })}
-
-           {moreNavItems.length > 0 && (
-             <DropdownMenu>
-               <DropdownMenuTrigger className="flex items-center gap-2 hover:text-white transition-colors outline-none cursor-pointer">
-                 More
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="center" className="w-56 p-2 rounded-2xl bg-slate-900/90 backdrop-blur-xl border-white/10">
-                 {moreNavItems.map(item => (
-                   <DropdownMenuItem key={item.href} asChild className="rounded-xl focus:bg-white/10 focus:text-white cursor-pointer py-3 px-3">
-                     <Link to={item.href} className="flex items-center gap-3 w-full">
-                       <item.icon className="w-4 h-4 text-slate-400" />
-                       <span className="font-medium text-sm capitalize tracking-normal">{item.label}</span>
-                     </Link>
-                   </DropdownMenuItem>
-                 ))}
-               </DropdownMenuContent>
-             </DropdownMenu>
-           )}
-        </nav>
+          <nav className="hidden lg:flex min-w-0 flex-1 items-center justify-center gap-1.5 text-[11px] font-bold tracking-[0.12em] uppercase text-slate-300">
+            {primaryNavGroups.map((group) => {
+              const isActive = activePrimaryHeader === group.id;
+              return (
+                <DropdownMenu key={group.id}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-2 transition-colors outline-none",
+                        isActive
+                          ? "bg-qep-orange/10 text-qep-orange"
+                          : "text-slate-300 hover:bg-white/5 hover:text-white"
+                      )}
+                      aria-label={`${group.label} navigation`}
+                    >
+                      <span>{group.label}</span>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="center"
+                    className="w-[20rem] max-h-[70vh] overflow-y-auto rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl"
+                  >
+                    {group.sections.map((section) => (
+                      <div key={`${group.id}-${section.label}`}>
+                        <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                          {section.label}
+                        </DropdownMenuLabel>
+                        {section.items.map((item) => (
+                          <DropdownMenuItem
+                            key={item.href}
+                            asChild
+                            className={cn(
+                              "rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white",
+                              item.gated && "opacity-60"
+                            )}
+                          >
+                            {item.gated ? (
+                              <div className="flex w-full cursor-not-allowed items-center gap-3">
+                                <item.icon className="h-4 w-4 text-slate-400" />
+                                <span className="flex-1 text-sm font-medium tracking-normal">
+                                  {item.label}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                                  Locked
+                                </span>
+                              </div>
+                            ) : (
+                              <Link to={item.href} className="flex w-full items-center gap-3">
+                                <item.icon
+                                  className={cn(
+                                    "h-4 w-4",
+                                    isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400"
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    "flex-1 text-sm font-medium tracking-normal",
+                                    isNavHrefActive(item.href) && "text-qep-orange"
+                                  )}
+                                >
+                                  {item.label}
+                                </span>
+                              </Link>
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            })}
+          </nav>
 
         {/* Right: Search + Bell + Workspace + Avatar */}
         <div className="flex items-center gap-3 ml-auto shrink-0">
-          <div className="hidden lg:block w-48 transition-all focus-within:w-64">
+          <div className="hidden lg:block w-40 transition-all focus-within:w-52">
             {showCrmSearch ? (
               <QrmGlobalSearchCommand />
             ) : (
@@ -461,6 +512,62 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
               </form>
             )}
           </div>
+
+          {utilitySections.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={cn(
+                    "hidden lg:inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] outline-none transition-colors",
+                    utilityRouteActive
+                      ? "bg-qep-orange/10 text-qep-orange"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"
+                  )}
+                  aria-label="System navigation"
+                >
+                  <PanelTopOpen className="h-3.5 w-3.5" />
+                  <span>System</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-64 rounded-2xl border-white/10 bg-slate-900/95 p-2 text-white backdrop-blur-xl"
+              >
+                {utilitySections.map((section) => (
+                  <div key={`utility-${section.label}`}>
+                    <DropdownMenuLabel className="px-3 pt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      {section.label}
+                    </DropdownMenuLabel>
+                    {section.items.map((item) => (
+                      <DropdownMenuItem
+                        key={item.href}
+                        asChild
+                        className="rounded-xl px-3 py-3 focus:bg-white/10 focus:text-white"
+                      >
+                        <Link to={item.href} className="flex w-full items-center gap-3">
+                          <item.icon
+                            className={cn(
+                              "h-4 w-4",
+                              isNavHrefActive(item.href) ? "text-qep-orange" : "text-slate-400"
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "flex-1 text-sm font-medium tracking-normal",
+                              isNavHrefActive(item.href) && "text-qep-orange"
+                            )}
+                          >
+                            {item.label}
+                          </span>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           
           <WorkspaceSwitcher activeWorkspaceId={profile.active_workspace_id} />
           {/* Quick action pill */}
@@ -468,7 +575,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             <Button
               size="sm"
               onClick={handleQuickAction}
-              className="hidden lg:flex rounded-full bg-qep-orange hover:bg-qep-orange-hover text-white text-xs px-3 h-8 font-medium"
+              className="hidden xl:flex rounded-full bg-qep-orange hover:bg-qep-orange-hover text-white text-xs px-3 h-8 font-medium"
             >
               {quickAction.label}
             </Button>

@@ -3,10 +3,10 @@ import { logKbJobRunFinish, logKbJobRunStart } from "../_shared/kb-observability
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   embedText,
-  embedTexts,
   formatVectorLiteral,
   OPENAI_EMBEDDING_DIMENSIONS,
 } from "../_shared/openai-embeddings.ts";
+import { buildDocumentChunks, type UploadKind } from "../ingest/chunking.ts";
 
 const ALLOWED_ORIGINS = [
   "https://qualityequipmentparts.netlify.app",
@@ -22,40 +22,22 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-const CHUNK_SIZE = 512;
-const CHUNK_OVERLAP = 50;
+function inferUploadKind(mimeType: string | null | undefined, title: string): UploadKind {
+  const normalizedMime = (mimeType ?? "").toLowerCase();
+  if (normalizedMime === "application/pdf") return "pdf";
+  if (normalizedMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
+  if (
+    normalizedMime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    normalizedMime === "application/vnd.ms-excel" ||
+    normalizedMime === "text/csv" ||
+    normalizedMime === "application/csv"
+  ) return "spreadsheet";
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-function chunkText(text: string): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
-  let start = 0;
-
-  while (start < words.length) {
-    let end = start;
-    let tokenCount = 0;
-
-    while (end < words.length && tokenCount < CHUNK_SIZE) {
-      tokenCount += estimateTokens(words[end]);
-      end += 1;
-    }
-
-    const chunk = words.slice(start, end).join(" ").trim();
-    if (chunk) chunks.push(chunk);
-
-    let overlapTokens = 0;
-    let overlapStart = end;
-    while (overlapStart > start && overlapTokens < CHUNK_OVERLAP) {
-      overlapStart -= 1;
-      overlapTokens += estimateTokens(words[overlapStart]);
-    }
-    start = overlapStart === start ? end : overlapStart;
-  }
-
-  return chunks;
+  const lowerTitle = title.toLowerCase();
+  if (lowerTitle.endsWith(".pdf")) return "pdf";
+  if (lowerTitle.endsWith(".docx")) return "docx";
+  if (lowerTitle.endsWith(".xlsx") || lowerTitle.endsWith(".xls") || lowerTitle.endsWith(".csv")) return "spreadsheet";
+  return "text";
 }
 
 function parseVectorDimensions(value: unknown): number | null {
@@ -82,7 +64,7 @@ async function reembedDocuments(
 ): Promise<{ processed: number; chunks: number }> {
   let query = adminClient
     .from("documents")
-    .select("id, title, raw_text")
+    .select("id, title, raw_text, mime_type")
     .eq("status", "published")
     .order("updated_at", { ascending: false })
     .limit(100);
@@ -101,33 +83,52 @@ async function reembedDocuments(
     const rawText = String(document.raw_text ?? "").trim();
     if (!rawText) continue;
 
-    const textChunks = chunkText(rawText);
+    const uploadKind = inferUploadKind(document.mime_type ?? null, document.title);
+    const built = buildDocumentChunks({
+      rawText,
+      uploadKind,
+      title: document.title,
+    });
     const rows: Array<{
+      id: string;
       document_id: string;
       chunk_index: number;
       content: string;
       token_count: number;
+      chunk_kind: "paragraph" | "section";
+      parent_chunk_id: string | null;
+      metadata: Record<string, unknown>;
       embedding: string;
     }> = [];
 
-    for (let i = 0; i < textChunks.length; i += 10) {
-      const batch = textChunks.slice(i, i + 10);
-      const embeddings = await embedTexts(batch);
-      batch.forEach((content, index) => {
+    for (let i = 0; i < built.chunks.length; i += 10) {
+      const batch = built.chunks.slice(i, i + 10);
+      const embeddings = await (await import("../_shared/openai-embeddings.ts")).embedTexts(
+        batch.map((chunk) => chunk.content),
+      );
+      batch.forEach((chunk, index) => {
         rows.push({
+          id: chunk.id,
           document_id: document.id,
-          chunk_index: i + index,
-          content,
-          token_count: estimateTokens(content),
+          chunk_index: chunk.chunk_index,
+          content: chunk.content,
+          token_count: chunk.token_count,
+          chunk_kind: chunk.chunk_kind,
+          parent_chunk_id: chunk.parent_chunk_id,
+          metadata: chunk.metadata,
           embedding: formatVectorLiteral(embeddings[index]),
         });
       });
     }
 
     await adminClient.from("chunks").delete().eq("document_id", document.id);
-    for (let i = 0; i < rows.length; i += 25) {
-      const { error: insertError } = await adminClient.from("chunks").insert(rows.slice(i, i + 25));
-      if (insertError) throw insertError;
+    const sectionRows = rows.filter((row) => row.chunk_kind === "section");
+    const paragraphRows = rows.filter((row) => row.chunk_kind === "paragraph");
+    for (const insertRows of [sectionRows, paragraphRows]) {
+      for (let i = 0; i < insertRows.length; i += 25) {
+        const { error: insertError } = await adminClient.from("chunks").insert(insertRows.slice(i, i + 25));
+        if (insertError) throw insertError;
+      }
     }
 
     await adminClient.from("document_audit_events").insert({
@@ -137,6 +138,7 @@ async function reembedDocuments(
       metadata: {
         source: "kb-maintenance",
         chunk_count: rows.length,
+        chunking_strategy: built.strategy,
       },
     });
 

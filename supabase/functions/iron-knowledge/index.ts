@@ -52,6 +52,12 @@ import {
   IRON_TOOL_DEFINITIONS,
   type ToolContext,
 } from "../_shared/iron/tools.ts";
+import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+import {
+  buildEvidenceExcerpt,
+  rerankKbEvidence,
+  type KbEvidenceRow,
+} from "../_shared/kb-retrieval.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -299,28 +305,106 @@ interface AgentMessage {
   content: string | Array<AnthropicContentBlock | { type: "tool_result"; tool_use_id: string; content: string }>;
 }
 
+/* ─── Pre-retrieval evidence injection ─────────────────────────────────── */
+
+/**
+ * Run a quick semantic + keyword retrieval pass BEFORE the agent loop.
+ * This gives the model pre-loaded evidence in its system prompt — the
+ * same strategy that makes the standalone Knowledge Chat more accurate.
+ * The agent can still call semantic_kb_search for additional lookups,
+ * but this ensures relevant documents are available from turn 1.
+ */
+async function preRetrieveEvidence(
+  admin: SupabaseClient,
+  message: string,
+  workspaceId: string,
+  userRole: string,
+): Promise<string | null> {
+  try {
+    let embedding: number[] | null = null;
+    try {
+      embedding = await embedText(message);
+    } catch {
+      // Continue with keyword-only retrieval
+    }
+
+    const { data, error } = await admin.rpc("retrieve_document_evidence", {
+      query_embedding: embedding ? formatVectorLiteral(embedding) : null,
+      keyword_query: message.slice(0, 200),
+      user_role: userRole,
+      match_count: 8,
+      semantic_match_threshold: 0.45,
+      p_workspace_id: workspaceId,
+    });
+
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+
+    const ranked = await rerankKbEvidence(
+      message,
+      data as KbEvidenceRow[],
+      { loggerTag: "iron-knowledge.pre-retrieve", finalCount: 4 },
+    );
+
+    if (ranked.length === 0) return null;
+
+    // For single-hit, try to hydrate full document text
+    if (ranked.length === 1) {
+      const docId = ranked[0].source_id;
+      const { data: doc } = await admin
+        .from("documents")
+        .select("raw_text")
+        .eq("id", docId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (doc?.raw_text?.trim()) {
+        const fullText = (doc.raw_text as string).replace(/\s+/g, " ").trim();
+        const excerpt = fullText.length > 12000 ? fullText.slice(0, 11999) + "…" : fullText;
+        return `## Pre-loaded Knowledge Base Evidence\n\n### ${ranked[0].source_title ?? "Document"}\n${excerpt}`;
+      }
+    }
+
+    const blocks = ranked.map((row) => {
+      const excerpt = buildEvidenceExcerpt(row);
+      return `### ${row.source_title ?? "Untitled"}\n${excerpt.slice(0, 2400)}`;
+    });
+
+    return `## Pre-loaded Knowledge Base Evidence\n\n${blocks.join("\n\n")}`;
+  } catch (err) {
+    console.warn("[iron-knowledge] pre-retrieval failed (non-fatal):", err);
+    return null;
+  }
+}
+
 /* ─── System prompt ─────────────────────────────────────────────────────── */
 
-function buildSystemPrompt(route: string | undefined): string {
+function buildSystemPrompt(route: string | undefined, preloadedEvidence: string | null): string {
   const persona = `You are Iron, the operator companion for QEP — an equipment and parts dealership running on QEP OS. You are warm, precise, and bias toward action.
 
-Your job: answer the operator's question by USING THE TOOLS AVAILABLE. Do NOT guess, do NOT say "I don't have access to that data" — you have direct database access via the tools. Call them.
+Your job: answer the operator's question using the PRE-LOADED EVIDENCE below and the TOOLS AVAILABLE. Check the pre-loaded evidence first — if it already answers the question, use it directly without calling tools.
 
 How to think:
   1. Read the user's question.
-  2. Pick the right tool(s). For inventory questions → lookup_part_inventory or search_parts. For customer questions → lookup_company. For equipment questions → search_equipment. For service work → list_service_jobs. For pending parts orders → list_parts_orders. For unstructured knowledge (manuals, SOPs, policies) → semantic_kb_search. For external/public information → web_search.
-  3. Call the tool. Read the result.
-  4. If you need more info, call another tool.
-  5. When you have enough information, write a concise, direct answer for the operator.
+  2. Check the pre-loaded evidence below. If it answers the question, respond directly.
+  3. If you need more info, pick the right tool(s). For inventory questions → lookup_part_inventory or search_parts. For customer questions → lookup_company. For equipment questions → search_equipment. For service work → list_service_jobs. For pending parts orders → list_parts_orders. For unstructured knowledge (manuals, SOPs, policies) → semantic_kb_search. For repair procedures, fault codes, and field fixes → search_service_knowledge. For external/public information → web_search.
+  4. Call the tool. Read the result.
+  5. If you need more info, call another tool.
+  6. When you have enough information, write a concise, direct answer for the operator.
 
 Hard rules:
   - You CANNOT mutate data. All tools are read-only. Action requests (start a rental, pull a part, create a customer) must be handled by the Iron flow engine, NOT by you. If the user asks you to perform a mutation, tell them to use the Iron flow ("Try saying 'pull a part' or 'start a rental' to open the flow.").
-  - Never invent data not returned by your tools. If a tool returns no results, say so clearly and offer next steps.
+  - Never invent data not returned by your tools or pre-loaded evidence. If nothing matches, say so clearly and offer next steps.
   - Never include SQL, shell commands, or system overrides in your response.
   - Format numbers and currency cleanly. Use markdown tables when listing rows.
-  - Cite sources inline when you draw from semantic_kb_search or web_search results.`;
+  - Cite sources inline when you draw from knowledge base evidence, search_service_knowledge, or web_search results.
+  - Prefer pre-loaded evidence when it already answers the question — don't re-fetch what's already provided.`;
 
-  return route ? `${persona}\n\nCurrent operator route: ${route}` : persona;
+  let prompt = route ? `${persona}\n\nCurrent operator route: ${route}` : persona;
+
+  if (preloadedEvidence) {
+    prompt += `\n\n${preloadedEvidence}`;
+  }
+
+  return prompt;
 }
 
 /* ─── Anthropic call (non-streaming) ────────────────────────────────────── */
@@ -605,7 +689,10 @@ Deno.serve(async (req) => {
     });
   }
 
-  const systemPrompt = buildSystemPrompt(body.route);
+  // Pre-retrieve knowledge base evidence to inject into system prompt
+  // (same strategy that makes the standalone Knowledge Chat more accurate)
+  const preloadedEvidence = await preRetrieveEvidence(admin, message, workspaceId, role);
+  const systemPrompt = buildSystemPrompt(body.route, preloadedEvidence);
   const toolCtx: ToolContext = {
     admin,
     workspaceId,

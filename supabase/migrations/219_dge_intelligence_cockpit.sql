@@ -10,7 +10,7 @@
 
 -- ── 1. Add deal_id to deal_scenarios ─────────────────────────────────────────
 alter table public.deal_scenarios
-  add column if not exists deal_id uuid references public.crm_deals(id) on delete cascade;
+  add column if not exists deal_id uuid references public.qrm_deals(id) on delete cascade;
 
 create index if not exists idx_deal_scenarios_deal_id
   on public.deal_scenarios(deal_id);
@@ -22,7 +22,7 @@ create index if not exists idx_deal_scenarios_deal_id
 create table if not exists public.dge_learning_events (
   id uuid primary key default gen_random_uuid(),
   workspace_id text not null default 'default',
-  deal_id uuid not null references public.crm_deals(id) on delete cascade,
+  deal_id uuid not null references public.qrm_deals(id) on delete cascade,
   scenario_type public.scenario_type not null,
   selected_by uuid references public.profiles(id) on delete set null,
   selected_at timestamptz not null default now(),
@@ -81,9 +81,9 @@ create policy "dge_breakdown_service" on public.dge_variable_breakdown
 create index if not exists idx_dge_breakdown_scenario
   on public.dge_variable_breakdown(deal_scenario_id);
 
--- ── 4. Add selected_scenario column to crm_deals ────────────────────────────
-alter table public.crm_deals
+-- ── 4. Add selected_scenario column to qrm_deals ────────────────────────────
+alter table public.qrm_deals
   add column if not exists selected_scenario public.scenario_type;
 
-comment on column public.crm_deals.selected_scenario is
+comment on column public.qrm_deals.selected_scenario is
   'The DGE scenario type the advisor selected for this deal.';

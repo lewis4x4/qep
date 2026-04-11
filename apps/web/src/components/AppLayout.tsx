@@ -5,7 +5,14 @@ import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
-import { resolveNavItems, BOTTOM_TAB_HREFS } from "@/lib/nav-config";
+import {
+  BOTTOM_TAB_HREFS,
+  isUtilityRoute,
+  resolveActivePrimaryHeader,
+  resolveNavItems,
+  resolvePrimaryNavGroups,
+  resolveUtilityNavSections,
+} from "@/lib/nav-config";
 import { TopBar } from "@/components/TopBar";
 import { AmbientMatrix } from "@/components/primitives/AmbientMatrix";
 
@@ -141,9 +148,84 @@ function MobileNavContent({
   quoteBuilderLoading: boolean;
 }) {
   const location = useLocation();
-  const visibleItems = resolveNavItems(quoteBuilderEnabled, quoteBuilderLoading).filter(
-    (item) => item.roles.includes(profile.role)
+  const primaryGroups = resolvePrimaryNavGroups(
+    quoteBuilderEnabled,
+    quoteBuilderLoading,
+    profile.role
   );
+  const utilitySections = resolveUtilityNavSections(
+    quoteBuilderEnabled,
+    quoteBuilderLoading,
+    profile.role
+  );
+  const activePrimaryHeader = resolveActivePrimaryHeader(location.pathname);
+  const utilityRouteActive = isUtilityRoute(location.pathname);
+
+  function isNavHrefActive(href: string) {
+    if (
+      href === "/dashboard" ||
+      href === "/qrm" ||
+      href === "/parts" ||
+      href === "/service" ||
+      href === "/rentals" ||
+      href === "/chat" ||
+      href === "/voice" ||
+      href === "/quote-v2" ||
+      href === "/os" ||
+      href === "/admin" ||
+      href === "/executive"
+    ) {
+      return location.pathname === href;
+    }
+    return location.pathname === href || location.pathname.startsWith(`${href}/`);
+  }
+
+  function renderNavItem(item: ReturnType<typeof resolveNavItems>[number]) {
+    const isActive = isNavHrefActive(item.href);
+
+    const itemContent = (
+      <div
+        className={cn(
+          "relative flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150",
+          isActive
+            ? "bg-[rgba(232,119,34,0.1)] text-white"
+            : item.gated
+            ? "text-[#94A3B8] opacity-60 cursor-not-allowed"
+            : "text-[#94A3B8] hover:bg-[rgba(255,255,255,0.05)]"
+        )}
+      >
+        {isActive && (
+          <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-qep-orange rounded-r-sm" />
+        )}
+        <item.icon
+          className={cn("w-4 h-4 shrink-0", isActive ? "text-white" : "")}
+          aria-hidden="true"
+        />
+        <span className="flex-1">{item.label}</span>
+        {item.gated && <Lock className="w-3.5 h-3.5 shrink-0" />}
+      </div>
+    );
+
+    if (item.gated) {
+      return (
+        <div key={item.href} className="block">
+          {itemContent}
+        </div>
+      );
+    }
+
+    return (
+      <NavLink
+        key={item.href}
+        to={item.href}
+        onClick={onNavClick}
+        className="block"
+        aria-current={isActive ? "page" : undefined}
+      >
+        {itemContent}
+      </NavLink>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-qep-dark">
@@ -153,61 +235,54 @@ function MobileNavContent({
         </div>
         <div className="min-w-0">
           <p className="font-bold text-sm leading-tight text-white">{BRAND_NAME}</p>
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[#94A3B8]">
+            Division navigation
+          </p>
         </div>
       </div>
 
       <div className="border-t border-white/10" />
 
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {visibleItems.map((item) => {
-          const isActive =
-            item.href === "/dashboard"
-              ? location.pathname === "/" || location.pathname === "/dashboard"
-              : location.pathname.startsWith(item.href);
-
-          const itemContent = (
-            <div
-              className={cn(
-                "relative flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150",
-                isActive
-                  ? "bg-[rgba(232,119,34,0.1)] text-white"
-                  : item.gated
-                  ? "text-[#94A3B8] opacity-60 cursor-not-allowed"
-                  : "text-[#94A3B8] hover:bg-[rgba(255,255,255,0.05)]"
-              )}
-            >
-              {isActive && (
-                <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-qep-orange rounded-r-sm" />
-              )}
-              <item.icon
-                className={cn("w-4 h-4 shrink-0", isActive ? "text-white" : "")}
-                aria-hidden="true"
-              />
-              <span className="flex-1">{item.label}</span>
-              {item.gated && <Lock className="w-3.5 h-3.5 shrink-0" />}
-            </div>
-          );
-
-          if (item.gated) {
-            return (
-              <div key={item.href} className="block">
-                {itemContent}
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
+        {primaryGroups.map((group) => (
+          <section key={group.id} className="mb-4">
+            <div className="mb-1 px-3">
+              <div
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-[0.16em]",
+                  activePrimaryHeader === group.id ? "text-qep-orange" : "text-[#64748B]"
+                )}
+              >
+                {group.label}
               </div>
-            );
-          }
+            </div>
+            <div className="space-y-0.5">
+              {group.sections.flatMap((section) =>
+                section.items.map((item) => renderNavItem(item))
+              )}
+            </div>
+          </section>
+        ))}
 
-          return (
-            <NavLink
-              key={item.href}
-              to={item.href}
-              onClick={onNavClick}
-              className="block"
-              aria-current={isActive ? "page" : undefined}
-            >
-              {itemContent}
-            </NavLink>
-          );
-        })}
+        {utilitySections.length > 0 && (
+          <section className="border-t border-white/10 pt-4">
+            <div className="mb-1 px-3">
+              <div
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-[0.16em]",
+                  utilityRouteActive ? "text-qep-orange" : "text-[#64748B]"
+                )}
+              >
+                System
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              {utilitySections.flatMap((section) =>
+                section.items.map((item) => renderNavItem(item))
+              )}
+            </div>
+          </section>
+        )}
       </nav>
     </div>
   );
@@ -220,7 +295,17 @@ export function AppLayout({
   quoteBuilderLoading,
   children,
 }: AppLayoutProps) {
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const embeddedMode = new URLSearchParams(location.search).get("embedded") === "1";
+
+  if (embeddedMode) {
+    return (
+      <div className="min-h-screen bg-transparent">
+        <main className="min-h-screen">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-transparent relative z-0">

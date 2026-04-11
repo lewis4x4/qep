@@ -9,6 +9,11 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
+  buildEvidenceExcerpt,
+  rerankKbEvidence,
+  type KbEvidenceRow,
+} from "../_shared/kb-retrieval.ts";
+import {
   CHAT_TOOLS,
   executeToolCalls,
   type ToolCall,
@@ -56,6 +61,11 @@ interface EvidenceItem {
   excerpt: string;
   confidence: number;
   accessClass: string | null;
+  chunkKind?: string | null;
+  parentChunkId?: string | null;
+  sectionTitle?: string | null;
+  pageNumber?: number | null;
+  contextExcerpt?: string | null;
 }
 
 interface SourcePayload {
@@ -64,6 +74,9 @@ interface SourcePayload {
   confidence: number;
   kind: "document" | "crm";
   excerpt?: string;
+  sectionTitle?: string;
+  pageNumber?: number;
+  contextExcerpt?: string;
 }
 
 type DocumentAudience =
@@ -415,7 +428,14 @@ function formatEvidenceBlock(evidence: EvidenceItem[]): string {
   const sections: string[] = [];
   if (grouped.document.length > 0) {
     sections.push(
-      `Document evidence:\n${grouped.document.map((item) => `[${item.sourceTitle}]\n${item.excerpt}`).join("\n\n---\n\n")}`,
+      `Document evidence:\n${
+        grouped.document.map((item) => `[${item.sourceTitle}]\n${buildEvidenceExcerpt({
+          excerpt: item.excerpt,
+          context_excerpt: item.contextExcerpt ?? null,
+          section_title: item.sectionTitle ?? null,
+          page_number: item.pageNumber ?? null,
+        })}`).join("\n\n---\n\n")
+      }`,
     );
   }
   if (grouped.crm.length > 0) {
@@ -445,6 +465,9 @@ function buildSourcePayload(evidence: EvidenceItem[]): SourcePayload[] {
       confidence: Math.max(1, Math.round(item.confidence * 100)),
       kind: item.sourceType === "crm" ? "crm" : "document",
       excerpt: excerptSnippet,
+      ...(item.sectionTitle ? { sectionTitle: item.sectionTitle } : {}),
+      ...(typeof item.pageNumber === "number" ? { pageNumber: item.pageNumber } : {}),
+      ...(item.contextExcerpt ? { contextExcerpt: item.contextExcerpt.slice(0, 240) } : {}),
     };
     if (!existing || next.confidence > existing.confidence) {
       byKey.set(key, next);
@@ -587,14 +610,7 @@ async function retrieveDocumentEvidence(
     embedding: number[] | null;
   },
 ): Promise<EvidenceItem[]> {
-  const mapEvidence = (rows: Array<{
-    source_type: string;
-    source_id: string;
-    source_title: string;
-    excerpt: string;
-    confidence: number;
-    access_class: string | null;
-  }>) =>
+  const mapEvidence = (rows: KbEvidenceRow[]) =>
     rows.map((item) => ({
       sourceType: (
         item.source_type === "document"
@@ -608,6 +624,11 @@ async function retrieveDocumentEvidence(
       excerpt: truncateText(item.excerpt ?? "", 500),
       confidence: Math.max(0, Math.min(1, item.confidence ?? 0)),
       accessClass: item.access_class,
+      chunkKind: item.chunk_kind ?? null,
+      parentChunkId: item.parent_chunk_id ?? null,
+      sectionTitle: item.section_title ?? null,
+      pageNumber: typeof item.page_number === "number" ? item.page_number : null,
+      contextExcerpt: item.context_excerpt ? truncateText(item.context_excerpt, 700) : null,
     }));
 
   const identifierCandidates = extractIdentifierCandidates(input.message);
@@ -684,7 +705,7 @@ async function retrieveDocumentEvidence(
       query_embedding: input.embedding ? `[${input.embedding.join(",")}]` : null,
       keyword_query: keywordQuery,
       user_role: input.role,
-      match_count: 8,
+      match_count: 12,
       semantic_match_threshold: 0.45,
       p_workspace_id: input.workspaceId,
     });
@@ -697,14 +718,12 @@ async function retrieveDocumentEvidence(
       throw new Error("DOCUMENT_RETRIEVAL_FAILED");
     }
 
-    const mapped = mapEvidence((data ?? []) as Array<{
-      source_type: string;
-      source_id: string;
-      source_title: string;
-      excerpt: string;
-      confidence: number;
-      access_class: string | null;
-    }>);
+    const ranked = await rerankKbEvidence(
+      keywordQuery,
+      (data ?? []) as KbEvidenceRow[],
+      { loggerTag: `chat:${input.traceId}` },
+    );
+    const mapped = mapEvidence(ranked);
     if (mapped.length > 0) {
       const hitDocIds = mapped.map((item) => item.sourceId);
       const { data: hitDocs, error: hitDocsError } = await adminClient
@@ -722,9 +741,13 @@ async function retrieveDocumentEvidence(
         for (const item of mapped) {
           const doc = hydratedById.get(item.sourceId);
           if (!doc?.raw_text?.trim()) continue;
-          if (useFullDocForSingleHit) {
+          if (useFullDocForSingleHit && !item.contextExcerpt && !item.sectionTitle) {
             item.excerpt = truncateText(doc.raw_text, 50000);
             item.confidence = Math.max(item.confidence, 0.8);
+            item.accessClass = doc.audience;
+            continue;
+          }
+          if (item.contextExcerpt || item.sectionTitle) {
             item.accessClass = doc.audience;
             continue;
           }

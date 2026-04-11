@@ -130,10 +130,10 @@ begin
 end;
 $$;
 
-drop trigger if exists health_score_recompute_crm_deals_trg on public.crm_deals;
+drop trigger if exists health_score_recompute_crm_deals_trg on public.qrm_deals;
 create trigger health_score_recompute_crm_deals_trg
   after insert or delete or update of company_id, stage_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, deposit_status, margin_check_status, dge_score
-  on public.crm_deals
+  on public.qrm_deals
   for each row
   execute function public.health_score_recompute_from_crm_deals();
 

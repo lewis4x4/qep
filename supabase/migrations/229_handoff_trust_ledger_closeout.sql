@@ -390,9 +390,9 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_crm_deals_handoff_event on public.crm_deals;
+drop trigger if exists trg_crm_deals_handoff_event on public.qrm_deals;
 create trigger trg_crm_deals_handoff_event
-  after update of assigned_rep_id on public.crm_deals
+  after update of assigned_rep_id on public.qrm_deals
   for each row
   execute function public.log_deal_reassignment_handoff_event();
 

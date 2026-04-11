@@ -9,6 +9,8 @@ import mammoth from "npm:mammoth@1.8.0";
 import pdfParse from "npm:pdf-parse@1.1.1";
 import XLSX from "npm:xlsx@0.18.5";
 import { decryptOneDriveToken } from "../_shared/integration-crypto.ts";
+import { embedTexts, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+import { buildDocumentChunks, estimateTokens, type UploadKind } from "./chunking.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 const ALLOWED_ORIGINS = [
@@ -24,11 +26,8 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-const CHUNK_SIZE = 512;      // target tokens per chunk
-const CHUNK_OVERLAP = 50;    // overlap tokens between chunks
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-type UploadKind = "pdf" | "docx" | "spreadsheet" | "text";
 type UserRole = "rep" | "admin" | "manager" | "owner";
 type DocumentAudience =
   | "company_wide"
@@ -62,41 +61,6 @@ const MIME_TO_UPLOAD_KIND: Record<string, UploadKind> = {
   "text/csv": "text",
   "application/csv": "text",
 };
-
-// Naive tokenization estimate: 1 token ≈ 4 chars
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-function chunkText(text: string): string[] {
-  const words = text.split(/\s+/);
-  const chunks: string[] = [];
-  let start = 0;
-
-  while (start < words.length) {
-    let end = start;
-    let tokenCount = 0;
-
-    while (end < words.length && tokenCount < CHUNK_SIZE) {
-      tokenCount += estimateTokens(words[end]);
-      end++;
-    }
-
-    const chunk = words.slice(start, end).join(" ").trim();
-    if (chunk) chunks.push(chunk);
-
-    // Overlap: step back by CHUNK_OVERLAP tokens
-    let overlapTokens = 0;
-    let overlapStart = end;
-    while (overlapStart > start && overlapTokens < CHUNK_OVERLAP) {
-      overlapStart--;
-      overlapTokens += estimateTokens(words[overlapStart]);
-    }
-    start = overlapStart === start ? end : overlapStart;
-  }
-
-  return chunks;
-}
 
 async function extractPdfText(fileBuffer: ArrayBuffer): Promise<string> {
   const parsed = await pdfParse(Buffer.from(fileBuffer));
@@ -224,65 +188,59 @@ async function logDocumentAuditEvent(
   });
 }
 
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("OPENAI_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text,
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(`Embedding API error: ${JSON.stringify(data)}`);
-  return data.data[0].embedding;
-}
-
 async function ingestDocument(
   supabase: ReturnType<typeof createClient<any>>,
   documentId: string,
   rawText: string,
-  title: string
+  title: string,
+  uploadKind: UploadKind,
 ) {
-  const textChunks = chunkText(rawText);
-  console.log(`Ingesting "${title}": ${textChunks.length} chunks`);
+  const built = buildDocumentChunks({ rawText, uploadKind, title });
+  console.log(
+    `Ingesting "${title}": ${built.chunks.length} chunks (${built.strategy})`,
+  );
 
   // Build all new rows first before deleting old chunks — prevents data loss
   // if embedding generation or insert fails partway through.
   const allRows: Array<{
+    id: string;
     document_id: string;
     chunk_index: number;
     content: string;
     token_count: number;
+    chunk_kind: "paragraph" | "section";
+    parent_chunk_id: string | null;
     embedding: string;
+    metadata: Record<string, unknown>;
   }>  = [];
   const batchSize = 10;
-  for (let i = 0; i < textChunks.length; i += batchSize) {
-    const batch = textChunks.slice(i, i + batchSize);
-    const rows = await Promise.all(
-      batch.map(async (content, j) => {
-        const embedding = await generateEmbedding(content);
-        return {
-          document_id: documentId,
-          chunk_index: i + j,
-          content,
-          token_count: estimateTokens(content),
-          embedding: `[${embedding.join(",")}]`,
-        };
-      })
-    );
+  for (let i = 0; i < built.chunks.length; i += batchSize) {
+    const batch = built.chunks.slice(i, i + batchSize);
+    const embeddings = await embedTexts(batch.map((chunk) => chunk.content));
+    const rows = batch.map((chunk, index) => ({
+      id: chunk.id,
+      document_id: documentId,
+      chunk_index: chunk.chunk_index,
+      content: chunk.content,
+      token_count: chunk.token_count,
+      chunk_kind: chunk.chunk_kind,
+      parent_chunk_id: chunk.parent_chunk_id,
+      embedding: formatVectorLiteral(embeddings[index]),
+      metadata: chunk.metadata,
+    }));
     allRows.push(...rows);
   }
 
   // All embeddings generated successfully — safe to swap old for new
   await supabase.from("chunks").delete().eq("document_id", documentId);
-  for (let i = 0; i < allRows.length; i += batchSize) {
-    const { error } = await supabase.from("chunks").insert(allRows.slice(i, i + batchSize));
-    if (error) throw new Error(`Chunk insert error: ${error.message}`);
+  const sectionRows = allRows.filter((row) => row.chunk_kind === "section");
+  const paragraphRows = allRows.filter((row) => row.chunk_kind === "paragraph");
+
+  for (const rows of [sectionRows, paragraphRows]) {
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const { error } = await supabase.from("chunks").insert(rows.slice(i, i + batchSize));
+      if (error) throw new Error(`Chunk insert error: ${error.message}`);
+    }
   }
 
   // Generate AI summary of the document
@@ -327,7 +285,7 @@ async function ingestDocument(
     })
     .eq("id", documentId);
 
-  return textChunks.length;
+  return built.chunks.length;
 }
 
 function jsonResponse(
@@ -598,7 +556,7 @@ Deno.serve(async (req) => {
 
       let chunkCount = 0;
       try {
-        chunkCount = await ingestDocument(supabaseAdmin, doc.id, rawText, title);
+        chunkCount = await ingestDocument(supabaseAdmin, doc.id, rawText, title, uploadKind);
       } catch (ingestErr) {
         console.error("Document ingest error:", ingestErr);
         await supabaseAdmin
@@ -643,7 +601,7 @@ Deno.serve(async (req) => {
     if (typeof body.document_id === "string" && body.document_id.trim().length > 0) {
       const { data: document, error: documentError } = await supabaseAdmin
         .from("documents")
-        .select("id, title, raw_text, uploaded_by")
+        .select("id, title, raw_text, uploaded_by, mime_type")
         .eq("id", body.document_id)
         .single();
 
@@ -667,7 +625,8 @@ Deno.serve(async (req) => {
         supabaseAdmin,
         document.id,
         document.raw_text,
-        document.title
+        document.title,
+        inferUploadKind(document.mime_type ?? null, document.title) ?? "text",
       );
 
       await logDocumentAuditEvent(supabaseAdmin, {
@@ -804,7 +763,7 @@ Deno.serve(async (req) => {
           .single();
 
         if (doc) {
-          await ingestDocument(supabaseAdmin, doc.id, rawText, item.name);
+          await ingestDocument(supabaseAdmin, doc.id, rawText, item.name, uploadKind);
           processed.push(item.name);
         }
       }

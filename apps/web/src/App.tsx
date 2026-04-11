@@ -1438,8 +1438,8 @@ function App() {
               <Route
                 path="/executive"
                 element={
-                  ["manager", "owner"].includes(profile.role) ? (
-                    <CommandCenterPage />
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <CommandCenterPage viewerRole={profile.role} viewerName={profile.full_name} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1448,7 +1448,7 @@ function App() {
               <Route
                 path="/executive/summary"
                 element={
-                  ["manager", "owner"].includes(profile.role) ? (
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
                     <Navigate to="/executive" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1458,7 +1458,7 @@ function App() {
               <Route
                 path="/executive/vision"
                 element={
-                  ["manager", "owner"].includes(profile.role) ? (
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
                     <ExecutiveIntelligenceShowcase />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -1468,7 +1468,7 @@ function App() {
               <Route
                 path="/executive/handoffs"
                 element={
-                  ["manager", "owner"].includes(profile.role) ? (
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
                     <HandoffTrustLedgerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
@@ -2119,7 +2119,7 @@ function App() {
               <Route
                 path="/executive/live"
                 element={
-                  ["manager", "owner"].includes(profile.role) ? (
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
                     <Navigate to="/executive" replace />
                   ) : (
                     <Navigate to="/dashboard" replace />
