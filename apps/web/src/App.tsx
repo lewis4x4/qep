@@ -256,6 +256,9 @@ const CompetitiveThreatMapPage = lazy(() =>
 const SeasonalOpportunityMapPage = lazy(() =>
   import("./features/qrm/pages/SeasonalOpportunityMapPage").then((m) => ({ default: m.SeasonalOpportunityMapPage }))
 );
+const LearningLayerPage = lazy(() =>
+  import("./features/qrm/pages/LearningLayerPage").then((m) => ({ default: m.LearningLayerPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1743,6 +1746,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <SeasonalOpportunityMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/learning-layer"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <LearningLayerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

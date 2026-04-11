@@ -203,6 +203,22 @@ export function SeasonalOpportunityMapPage() {
         overlays={overlays}
         onOverlayToggle={(key, enabled) => setOverlays((current) => current.map((overlay) => overlay.key === key ? { ...overlay, enabled } : overlay))}
       />
+
+      <Card className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Open Learning Layer to turn wins, losses, workflows, and repeated operating patterns into dealership memory.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/qrm/learning-layer">
+              Learning layer <ArrowUpRight className="ml-1 h-3 w-3" />
+            </Link>
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }
