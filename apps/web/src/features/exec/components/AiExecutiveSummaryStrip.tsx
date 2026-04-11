@@ -12,7 +12,8 @@ import { Sparkles, RefreshCcw, Loader2, ArrowRight, AlertOctagon } from "lucide-
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import type { ExecRoleTab } from "../lib/types";
-import { useExecAlerts } from "../lib/useExecData";
+import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinitions } from "../lib/useExecData";
+import { formatForMetric, formatKpiValue } from "../lib/formatters";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
 
 interface SummaryResponse {
@@ -26,6 +27,17 @@ interface SummaryResponse {
 
 interface Props {
   role: ExecRoleTab;
+}
+
+interface LocalDefinition {
+  metric_key: string;
+  label: string;
+  threshold_config?: Record<string, unknown> | null;
+}
+
+interface LocalSnapshot {
+  metric_key: string;
+  metric_value: number | null;
 }
 
 interface InvokeError {
@@ -131,11 +143,103 @@ async function fetchExecutiveBriefing(
   return parsed ?? { ok: false, role, generated_at: "", markdown: "", stats: { definitions: 0, snapshots: 0, alerts: 0 } };
 }
 
+function evaluateBand(value: number | null, config: Record<string, unknown> | null | undefined): "good" | "warn" | "critical" | "neutral" {
+  if (value == null || !config) return "neutral";
+  if (typeof config.critical_above === "number" && value >= config.critical_above) return "critical";
+  if (typeof config.warn_above === "number" && value >= config.warn_above) return "warn";
+  if (typeof config.critical_below === "number" && value <= config.critical_below) return "critical";
+  if (typeof config.warn_below === "number" && value <= config.warn_below) return "warn";
+  return "good";
+}
+
+function buildLocalExecutiveBriefing(
+  role: ExecRoleTab,
+  definitions: LocalDefinition[],
+  snapshots: LocalSnapshot[],
+  alerts: Array<{ severity: string; title: string; description?: string | null }>
+): SummaryResponse {
+  const snapByKey = new Map(snapshots.map((snapshot) => [snapshot.metric_key, snapshot]));
+  const roleLabel = role.toUpperCase();
+  const lines: string[] = [
+    `# ${roleLabel} Briefing`,
+    "",
+    "## Headline numbers",
+  ];
+
+  for (const definition of definitions.slice(0, 4)) {
+    const snapshot = snapByKey.get(definition.metric_key);
+    const value = snapshot?.metric_value ?? null;
+    const icon = evaluateBand(value, definition.threshold_config) === "critical"
+      ? "🔴"
+      : evaluateBand(value, definition.threshold_config) === "warn"
+      ? "🟡"
+      : "🟢";
+    lines.push(
+      `- ${icon} **${definition.label}** — ${formatKpiValue(value, formatForMetric(definition.metric_key))}`
+    );
+  }
+
+  const criticalAlerts = alerts.filter((alert) => alert.severity === "critical" || alert.severity === "error");
+  const watchAlerts = alerts.filter((alert) => alert.severity === "warn" || alert.severity === "info");
+
+  if (criticalAlerts.length > 0) {
+    lines.push("", "## Needs attention now");
+    for (const alert of criticalAlerts.slice(0, 4)) {
+      lines.push(`- **${alert.title}**${alert.description ? ` — ${alert.description}` : ""}`);
+    }
+  }
+
+  if (watchAlerts.length > 0) {
+    lines.push("", "## Watch list");
+    for (const alert of watchAlerts.slice(0, 4)) {
+      lines.push(`- ${alert.title}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "## Health rollup",
+    `- ${definitions.length} executive metrics in scope`,
+    `- ${snapshots.length} live snapshots available`,
+    `- ${alerts.length} open alerts influencing this lens`,
+    "",
+    `_Generated locally from the live executive data already on screen._`
+  );
+
+  return {
+    ok: true,
+    role,
+    generated_at: new Date().toISOString(),
+    markdown: lines.join("\n"),
+    stats: {
+      definitions: definitions.length,
+      snapshots: snapshots.length,
+      alerts: alerts.length,
+    },
+  };
+}
+
 export function AiExecutiveSummaryStrip({ role }: Props) {
   const { data: alerts = [] } = useExecAlerts(role);
+  const { data: definitions = [] } = useMetricDefinitions(role);
+  const metricKeys = definitions.map((definition) => definition.metric_key);
+  const { data: snapshots = [] } = useLatestSnapshots(metricKeys);
+  const { data: fallbackKpis = {} } = useFallbackKpis(role);
   const topAlert = alerts[0] ?? null;
   const topAlertPlaybook = topAlert ? resolveExecAlertPlaybookLink(topAlert) : null;
   const topAlertRecord = topAlert ? resolveExecAlertRecordLink(topAlert) : null;
+  const localSummary = buildLocalExecutiveBriefing(
+    role,
+    definitions,
+    definitions.map((definition) => {
+      const snapshot = snapshots.find((candidate) => candidate.metric_key === definition.metric_key);
+      return {
+        metric_key: definition.metric_key,
+        metric_value: snapshot?.metric_value ?? fallbackKpis[definition.metric_key]?.value ?? null,
+      };
+    }),
+    alerts,
+  );
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["exec", "summary", role],
     queryFn: async (): Promise<SummaryResponse> => {
@@ -171,16 +275,21 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
           {isLoading ? (
             <p className="mt-2 text-xs text-muted-foreground">Generating briefing…</p>
           ) : error ? (
-            <p className="mt-2 text-xs text-red-400">{(error as Error).message}</p>
+            <>
+              <SummaryMarkdown markdown={localSummary.markdown} />
+              <p className="mt-2 text-[10px] text-amber-300">
+                Edge function unavailable: {(error as Error).message}. Showing local synthesis from live executive data.
+              </p>
+            </>
           ) : data?.markdown ? (
             <SummaryMarkdown markdown={data.markdown} />
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">No briefing yet.</p>
           )}
-          {data && (
+          {(data ?? localSummary) && (
             <p className="mt-2 text-[10px] text-muted-foreground">
-              {data.stats.definitions} metrics · {data.stats.snapshots} snapshots · {data.stats.alerts} alerts ·
-              generated {new Date(data.generated_at).toLocaleTimeString()}
+              {(data ?? localSummary).stats.definitions} metrics · {(data ?? localSummary).stats.snapshots} snapshots · {(data ?? localSummary).stats.alerts} alerts ·
+              generated {new Date((data ?? localSummary).generated_at).toLocaleTimeString()}
             </p>
           )}
 
