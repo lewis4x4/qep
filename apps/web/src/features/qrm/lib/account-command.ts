@@ -25,3 +25,7 @@ export function buildAccountRelationshipMapHref(companyId: string): string {
 export function buildAccountWhiteSpaceHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/white-space`;
 }
+
+export function buildAccountRentalConversionHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/rental-conversion`;
+}

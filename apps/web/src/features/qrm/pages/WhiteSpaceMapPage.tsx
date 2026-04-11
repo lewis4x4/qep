@@ -21,6 +21,7 @@ import {
   buildAccountFleetIntelligenceHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
+  buildAccountRentalConversionHref,
   buildAccountRelationshipMapHref,
   buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
@@ -163,6 +164,9 @@ export function WhiteSpaceMapPage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
           </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
+          </Button>
         </div>
       </div>
 
@@ -252,6 +256,22 @@ export function WhiteSpaceMapPage() {
                   );
                 })
               )}
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Rental Conversion Engine to translate repeat rental behavior into purchase motion.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountRentalConversionHref(accountId)}>
+                  Rental conversion <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
             </div>
           </Card>
         </>

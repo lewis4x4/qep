@@ -229,6 +229,9 @@ const RelationshipMapPage = lazy(() =>
 const WhiteSpaceMapPage = lazy(() =>
   import("./features/qrm/pages/WhiteSpaceMapPage").then((m) => ({ default: m.WhiteSpaceMapPage }))
 );
+const RentalConversionEnginePage = lazy(() =>
+  import("./features/qrm/pages/RentalConversionEnginePage").then((m) => ({ default: m.RentalConversionEnginePage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1636,6 +1639,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <WhiteSpaceMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/rental-conversion"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <RentalConversionEnginePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
