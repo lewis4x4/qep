@@ -247,6 +247,9 @@ const CustomerStrategistPage = lazy(() =>
 const OperationsCopilotPage = lazy(() =>
   import("./features/qrm/pages/OperationsCopilotPage").then((m) => ({ default: m.OperationsCopilotPage }))
 );
+const ReplacementPredictionPage = lazy(() =>
+  import("./features/qrm/pages/ReplacementPredictionPage").then((m) => ({ default: m.ReplacementPredictionPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1704,6 +1707,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <OperationsCopilotPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/replacement-prediction"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ReplacementPredictionPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
