@@ -867,7 +867,7 @@ Deno.serve(async (req) => {
       executiveIntel,
     };
 
-    console.log(
+    console.info(
       `[${FN_NAME}] ${ironRole} ${scope} ${deals.length} deals in ${Date.now() - overallStart}ms ` +
         `(signals=${signalsLatency}ms ledger=${ledgerLatency}ms blend=${roleBlend.length})`,
     );

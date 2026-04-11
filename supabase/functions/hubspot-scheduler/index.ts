@@ -256,7 +256,11 @@ Deno.serve(async (req) => {
     }
     results.stalledAlerts = stalledCount;
 
-    console.log("Scheduler run complete:", results);
+    console.info("[hubspot-scheduler] completed", {
+      processed: results.processed,
+      stalledAlerts: results.stalledAlerts,
+      errors: results.errors,
+    });
     return new Response(JSON.stringify(results), {
       headers: { "Content-Type": "application/json" },
     });
@@ -346,8 +350,8 @@ async function processEnrollmentStep(
     case "task":
       if (shouldSkipHubSpotSequenceTaskForNativeFollowUp(qepNextFollowUp)) {
         skippedForNativeFollowUp = true;
-        console.log(
-          "[hubspot-scheduler] skipping HubSpot task — native next_follow_up_at within dedupe window",
+        console.info(
+          "[hubspot-scheduler] skipping task for native next_follow_up_at",
           { enrollmentId: enrollment.id, hubspotDealId: enrollment.deal_id },
         );
       } else {

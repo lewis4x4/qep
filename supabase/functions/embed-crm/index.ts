@@ -429,7 +429,11 @@ Deno.serve(async (req) => {
     const totalProcessed = Object.values(results).reduce((sum, r) => sum + r.processed, 0);
     const totalErrors = Object.values(results).reduce((sum, r) => sum + r.errors, 0);
 
-    console.log(`[embed-crm] complete: ${totalProcessed} embedded, ${totalErrors} errors`, results);
+    console.info("[embed-crm] completed", {
+      totalProcessed,
+      totalErrors,
+      byEntityType: results,
+    });
 
     await logKbJobRunFinish(adminClient, {
       runId,

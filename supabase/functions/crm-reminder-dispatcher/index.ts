@@ -49,7 +49,11 @@ Deno.serve(async (req) => {
     }
 
     const payload = data as Record<string, unknown> | null;
-    console.log("[crm-reminder-dispatcher] ok", payload);
+    console.info("[crm-reminder-dispatcher] ok", {
+      dispatched: payload?.dispatched_count ?? null,
+      skipped: payload?.skipped_count ?? null,
+      limit: pLimit,
+    });
     return new Response(JSON.stringify(payload ?? {}), {
       headers: { "Content-Type": "application/json" },
     });

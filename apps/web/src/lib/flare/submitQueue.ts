@@ -187,7 +187,9 @@ export async function drainPendingSubmissions<T>(
     }
   }
 
-  // eslint-disable-next-line no-console
-  console.log(`[flare] drain complete: ${succeeded} succeeded, ${stillFailing} still failing`);
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug(`[flare] drain complete: ${succeeded} succeeded, ${stillFailing} still failing`);
+  }
   return { retried: pending.length, succeeded, stillFailing };
 }

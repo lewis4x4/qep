@@ -335,7 +335,10 @@ Deno.serve(async (req) => {
   }
 
   const generated = results.filter((r) => r.status === "generated").length;
-  console.log(`[morning-briefing] done: ${generated}/${targetUserIds.length} generated`);
+  console.info("[morning-briefing] completed", {
+    generated,
+    requested: targetUserIds.length,
+  });
 
   // If single user, return the briefing content directly
   if (targetUserIds.length === 1 && !isServiceRole) {

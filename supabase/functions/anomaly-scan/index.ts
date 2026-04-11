@@ -649,7 +649,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(
+    console.info(
       `[anomaly-scan] detected=${allAlerts.length} new=${newAlerts.length} scored=${dealsScored} ` +
       `bus_published=${busPublished} bus_failed=${busFailed} ` +
       `(stalling=${stallingDeals.length} overdue=${overdueFollowUps.length} ` +

@@ -36,7 +36,7 @@ class FlareErrorBoundary extends Component<{ children: ReactNode }, { crashed: b
     // if the crash itself originated in the ring buffer layer.
     try {
       // eslint-disable-next-line no-console
-      console.log("[flare:crashed]", error?.message, info?.componentStack);
+      console.error("[flare:crashed]", error?.message, info?.componentStack);
     } catch { /* swallow */ }
   }
   render() {
