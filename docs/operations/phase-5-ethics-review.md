@@ -42,6 +42,14 @@ Before a `7C` slice opens, confirm all of the following:
 
 If any item is false, the slice stays closed.
 
+Operationally, item 2 must be checked with:
+
+```bash
+bun scripts/verify/7c-entry-check.mjs --workspace=default --days=365 --write-note
+```
+
+Use the resulting note as the source of truth for whether `7C` may open.
+
 ## Review Questions
 
 For each proposed `7C` slice, answer these questions in writing:
@@ -73,6 +81,10 @@ Each ethics review must produce one short approval note with:
 
 Store that note beside the build work for the slice before implementation
 starts.
+
+For `7C.1`, the current note is:
+
+- `docs/operations/7c1-trust-thermostat-ethics-review.md`
 
 ## Approval Rules
 
