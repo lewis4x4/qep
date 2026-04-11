@@ -86,6 +86,10 @@ For `7C.1`, the current note is:
 
 - `docs/operations/7c1-trust-thermostat-ethics-review.md`
 
+Use this template for new `7C` slice reviews:
+
+- `docs/operations/7c-ethics-review-template.md`
+
 ## Approval Rules
 
 - `approved`: slice may open for implementation
