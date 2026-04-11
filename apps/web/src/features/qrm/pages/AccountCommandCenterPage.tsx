@@ -15,6 +15,7 @@ import {
   buildAccountOperatingProfileHref,
   buildAccountRentalConversionHref,
   buildAccountRelationshipMapHref,
+  buildAccountStrategistHref,
   buildAccountTimelineHref,
   buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
@@ -113,6 +114,9 @@ export function AccountCommandCenterPage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountStrategistHref(accountId)}>AI Strategist</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>

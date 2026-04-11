@@ -29,3 +29,7 @@ export function buildAccountWhiteSpaceHref(companyId: string): string {
 export function buildAccountRentalConversionHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/rental-conversion`;
 }
+
+export function buildAccountStrategistHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/strategist`;
+}

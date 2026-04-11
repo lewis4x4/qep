@@ -19,6 +19,7 @@ import {
   buildAccountCommandHref,
   buildAccountRentalConversionHref,
   buildAccountRelationshipMapHref,
+  buildAccountStrategistHref,
   buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import { buildRentalConversionBoard } from "../lib/rental-conversion";
@@ -151,6 +152,9 @@ export function RentalConversionEnginePage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
           </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountStrategistHref(accountId)}>AI Strategist</Link>
+          </Button>
         </div>
       </div>
 
@@ -241,6 +245,22 @@ export function RentalConversionEnginePage() {
                   </div>
                 ))
               )}
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open AI Customer Strategist to turn whitespace, relationship, and conversion signals into a 30/60/90 account plan.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountStrategistHref(accountId)}>
+                  AI strategist <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
             </div>
           </Card>
         </>

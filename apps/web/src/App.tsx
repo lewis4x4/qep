@@ -241,6 +241,9 @@ const BranchCommandCenterPage = lazy(() =>
 const BranchChiefPage = lazy(() =>
   import("./features/qrm/pages/BranchChiefPage").then((m) => ({ default: m.BranchChiefPage }))
 );
+const CustomerStrategistPage = lazy(() =>
+  import("./features/qrm/pages/CustomerStrategistPage").then((m) => ({ default: m.CustomerStrategistPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1665,6 +1668,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <RentalConversionEnginePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/strategist"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CustomerStrategistPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
