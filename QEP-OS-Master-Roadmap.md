@@ -643,7 +643,7 @@ This document unifies and replaces:
 **Status:** Deferred to Track 7A Slice 7A.6 planning. Default: Web PWA.
 
 ### Phase 5 Ethics Review
-**Status:** Deferred to 7B exit gate. Process owner + documented process required before any 7C slice opens.
+**Status:** Process owner set to Brian Lewis. Documented in `docs/operations/phase-5-ethics-review.md`. Required before any 7C slice opens.
 
 ---
 
