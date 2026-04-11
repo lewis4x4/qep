@@ -33,7 +33,7 @@ interface InvokeError {
   context?: Response;
 }
 
-async function requireFreshAccessToken(): Promise<string> {
+async function requireFreshAccessToken(forceRefresh = false): Promise<string> {
   const supa = supabase as unknown as {
     auth: {
       getSession: () => Promise<{
@@ -55,6 +55,14 @@ async function requireFreshAccessToken(): Promise<string> {
   const session = data.session;
   if (!session?.access_token) {
     throw new Error("Executive briefing requires a signed-in session.");
+  }
+
+  if (forceRefresh) {
+    const refresh = await supa.auth.refreshSession();
+    if (refresh.error || !refresh.data.session?.access_token) {
+      throw new Error(refresh.error?.message ?? "Your session expired. Sign in again and retry.");
+    }
+    return refresh.data.session.access_token;
   }
 
   const expiresAt = session.expires_at ?? null;
@@ -91,6 +99,38 @@ async function explainInvokeError(error: InvokeError, fallback: string): Promise
   return error.message ?? fallback;
 }
 
+async function fetchExecutiveBriefing(
+  role: ExecRoleTab,
+  accessToken: string
+): Promise<SummaryResponse> {
+  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/exec-summary-generator`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ role }),
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    let errorMessage = bodyText || `HTTP ${response.status}`;
+    try {
+      const parsed = JSON.parse(bodyText) as { error?: string; message?: string };
+      errorMessage = parsed.error ?? parsed.message ?? errorMessage;
+    } catch {
+      // keep raw body text
+    }
+    const error = new Error(`${errorMessage} (HTTP ${response.status})`);
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
+  }
+
+  const parsed = (await response.json()) as SummaryResponse;
+  return parsed ?? { ok: false, role, generated_at: "", markdown: "", stats: { definitions: 0, snapshots: 0, alerts: 0 } };
+}
+
 export function AiExecutiveSummaryStrip({ role }: Props) {
   const { data: alerts = [] } = useExecAlerts(role);
   const topAlert = alerts[0] ?? null;
@@ -99,26 +139,20 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["exec", "summary", role],
     queryFn: async (): Promise<SummaryResponse> => {
-      const supa = supabase as unknown as {
-        functions: {
-          invoke: (
-            name: string,
-            opts: { body: Record<string, unknown>; headers?: Record<string, string> }
-          ) => Promise<{ data: SummaryResponse | null; error: InvokeError | null }>;
-        };
-      };
-      const accessToken = await requireFreshAccessToken();
+      try {
+        const accessToken = await requireFreshAccessToken();
+        return await fetchExecutiveBriefing(role, accessToken);
+      } catch (error) {
+        const status = (error as Error & { status?: number }).status;
+        const message = error instanceof Error ? error.message : "summary failed";
+        const authFailure = status === 401 || /invalid jwt|jwt|unauthorized/i.test(message);
+        if (!authFailure) {
+          throw error instanceof Error ? error : new Error("summary failed");
+        }
 
-      const res = await supa.functions.invoke("exec-summary-generator", {
-        body: { role },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      if (res.error) {
-        throw new Error(await explainInvokeError(res.error, "summary failed"));
+        const refreshedToken = await requireFreshAccessToken(true);
+        return await fetchExecutiveBriefing(role, refreshedToken);
       }
-      return res.data ?? { ok: false, role, generated_at: "", markdown: "", stats: { definitions: 0, snapshots: 0, alerts: 0 } };
     },
     staleTime: 5 * 60_000,
   });
