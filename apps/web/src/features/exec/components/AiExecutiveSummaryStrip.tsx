@@ -16,6 +16,7 @@ import type { ExecRoleTab } from "../lib/types";
 import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinitions } from "../lib/useExecData";
 import { formatForMetric, formatKpiValue } from "../lib/formatters";
 import { resolveExecAlertPlaybookLink, resolveExecAlertRecordLink } from "../lib/alert-actions";
+import { AssistantResponseRenderer } from "@/components/assistant/AssistantResponseRenderer";
 
 interface SummaryResponse {
   ok: boolean;
@@ -157,7 +158,7 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
               <RefreshCcw className="h-3 w-3" />
             </Button>
           </div>
-          <SummaryMarkdown markdown={localSummary.markdown} />
+          <AssistantResponseRenderer content={localSummary.markdown} variant="exec_briefing" />
           {localSummary && (
             <p className="mt-2 text-[10px] text-muted-foreground">
               {localSummary.stats.definitions} metrics · {localSummary.stats.snapshots} snapshots · {localSummary.stats.alerts} alerts ·
@@ -201,44 +202,4 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
       </div>
     </Card>
   );
-}
-
-/**
- * Lightweight markdown renderer — just enough for headings + bullets +
- * bold + emoji. Avoids pulling react-markdown into the bundle.
- */
-function SummaryMarkdown({ markdown }: { markdown: string }) {
-  const lines = markdown.split("\n");
-  const out: React.ReactNode[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith("# ")) {
-      out.push(<h2 key={i} className="mt-2 text-sm font-bold text-foreground">{line.slice(2)}</h2>);
-    } else if (line.startsWith("## ")) {
-      out.push(<h3 key={i} className="mt-2 text-[11px] uppercase tracking-wider text-muted-foreground">{line.slice(3)}</h3>);
-    } else if (line.startsWith("- ")) {
-      out.push(
-        <p key={i} className="text-[11px] text-foreground">
-          {renderInlineMarkdown(line.slice(2))}
-        </p>
-      );
-    } else if (line.startsWith("_") && line.endsWith("_")) {
-      out.push(<p key={i} className="mt-2 text-[10px] italic text-muted-foreground">{line.slice(1, -1)}</p>);
-    } else if (line.trim() === "") {
-      out.push(<div key={i} className="h-1" />);
-    } else {
-      out.push(<p key={i} className="text-[11px] text-foreground">{line}</p>);
-    }
-  }
-  return <div className="mt-1 space-y-0.5">{out}</div>;
-}
-
-function renderInlineMarkdown(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*.*?\*\*)/g).filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
-    }
-    return <span key={`${part}-${index}`}>{part}</span>;
-  });
 }

@@ -28,6 +28,7 @@ import {
   useIronStore,
   type IronChatMessage,
 } from "./store";
+import { AssistantResponseRenderer } from "@/components/assistant/AssistantResponseRenderer";
 
 function citationFromSource(source: IronKnowledgeSource): NonNullable<IronChatMessage["citations"]>[number] {
   return {
@@ -52,8 +53,21 @@ function ContextualChatBubble({ message }: { message: IronChatMessage }) {
             : "border border-white/10 bg-white/[0.04] text-slate-100"
         )}
       >
-        {message.content || (message.pending ? <InlinePendingIndicator /> : null)}
-        {message.pending && message.content && <InlinePendingIndicator className="ml-2" />}
+        {isUser ? (
+          <>
+            {message.content || (message.pending ? <InlinePendingIndicator /> : null)}
+            {message.pending && message.content && <InlinePendingIndicator className="ml-2" />}
+          </>
+        ) : (
+          <>
+            {message.content ? (
+              <AssistantResponseRenderer content={message.content} variant="sidecar" />
+            ) : (
+              message.pending ? <InlinePendingIndicator /> : null
+            )}
+            {message.pending && message.content && <InlinePendingIndicator className="ml-2" />}
+          </>
+        )}
         {message.citations && message.citations.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {message.citations.map((citation) => (
@@ -118,7 +132,6 @@ export function IronContextualAssistantPanel({
   const {
     state,
     closeContextualAssistant,
-    openBar,
     chatAppend,
     chatPatchLast,
     chatReset,

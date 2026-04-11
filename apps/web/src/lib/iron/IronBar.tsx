@@ -56,6 +56,7 @@ import {
   filterAndRankTemplates,
   type IronTemplate,
 } from "./templates";
+import { AssistantResponseRenderer } from "@/components/assistant/AssistantResponseRenderer";
 import { pushPresence } from "./presence";
 
 interface SendOptions {
@@ -659,8 +660,21 @@ function ChatBubble({ message }: { message: IronChatMessage }) {
             : "border border-border/60 bg-muted/20 text-foreground"
         }`}
       >
-        {message.content || (message.pending ? <PendingIndicator /> : null)}
-        {message.pending && message.content && <PendingIndicator inline />}
+        {isUser ? (
+          <>
+            {message.content || (message.pending ? <PendingIndicator /> : null)}
+            {message.pending && message.content && <PendingIndicator inline />}
+          </>
+        ) : (
+          <>
+            {message.content ? (
+              <AssistantResponseRenderer content={message.content} variant="iron_compact" />
+            ) : (
+              message.pending ? <PendingIndicator /> : null
+            )}
+            {message.pending && message.content && <PendingIndicator inline />}
+          </>
+        )}
         {message.citations && message.citations.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
             {message.citations.map((cite) => (
@@ -746,4 +760,3 @@ function EmptyState({
     </div>
   );
 }
-
