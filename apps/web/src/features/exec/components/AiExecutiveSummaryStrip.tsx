@@ -1,16 +1,17 @@
 /**
- * AI Executive Summary Strip — calls the exec-summary-generator edge fn,
- * renders the returned markdown, with a refresh button + freshness chip.
+ * AI Executive Summary Strip
  *
- * v1: deterministic template-driven generation. v2 will allow LLM rewrite
- * via a "mode=ai" flag without changing the UI.
+ * The executive command center already loads the metric definitions,
+ * snapshots, fallback KPI values, and open alerts needed to synthesize
+ * a briefing locally. This strip renders that live synthesis directly
+ * so the leadership surface stays reliable even if auxiliary briefing
+ * infrastructure is unavailable.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
-import { Sparkles, RefreshCcw, Loader2, ArrowRight, AlertOctagon } from "lucide-react";
+import { Sparkles, RefreshCcw, ArrowRight, AlertOctagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
 import type { ExecRoleTab } from "../lib/types";
 import { useExecAlerts, useFallbackKpis, useLatestSnapshots, useMetricDefinitions } from "../lib/useExecData";
 import { formatForMetric, formatKpiValue } from "../lib/formatters";
@@ -38,109 +39,6 @@ interface LocalDefinition {
 interface LocalSnapshot {
   metric_key: string;
   metric_value: number | null;
-}
-
-interface InvokeError {
-  message?: string;
-  context?: Response;
-}
-
-async function requireFreshAccessToken(forceRefresh = false): Promise<string> {
-  const supa = supabase as unknown as {
-    auth: {
-      getSession: () => Promise<{
-        data: { session: { access_token?: string | null; expires_at?: number | null } | null };
-        error: { message?: string } | null;
-      }>;
-      refreshSession: () => Promise<{
-        data: { session: { access_token?: string | null } | null };
-        error: { message?: string } | null;
-      }>;
-    };
-  };
-
-  const { data, error } = await supa.auth.getSession();
-  if (error) {
-    throw new Error(error.message ?? "session lookup failed");
-  }
-
-  const session = data.session;
-  if (!session?.access_token) {
-    throw new Error("Executive briefing requires a signed-in session.");
-  }
-
-  if (forceRefresh) {
-    const refresh = await supa.auth.refreshSession();
-    if (refresh.error || !refresh.data.session?.access_token) {
-      throw new Error(refresh.error?.message ?? "Your session expired. Sign in again and retry.");
-    }
-    return refresh.data.session.access_token;
-  }
-
-  const expiresAt = session.expires_at ?? null;
-  const expiresSoon = typeof expiresAt === "number" && expiresAt * 1000 <= Date.now() + 30_000;
-  if (!expiresSoon) {
-    return session.access_token;
-  }
-
-  const refresh = await supa.auth.refreshSession();
-  if (refresh.error || !refresh.data.session?.access_token) {
-    throw new Error(refresh.error?.message ?? "Your session expired. Sign in again and retry.");
-  }
-  return refresh.data.session.access_token;
-}
-
-async function explainInvokeError(error: InvokeError, fallback: string): Promise<string> {
-  const response = error.context;
-  if (response && typeof response.text === "function") {
-    try {
-      const body = await response.text();
-      if (body) {
-        try {
-          const parsed = JSON.parse(body) as { error?: string; message?: string };
-          return `${parsed.error ?? parsed.message ?? body} (HTTP ${response.status})`;
-        } catch {
-          return `${body.slice(0, 200)} (HTTP ${response.status})`;
-        }
-      }
-      return `HTTP ${response.status}`;
-    } catch {
-      return `HTTP ${response.status}`;
-    }
-  }
-  return error.message ?? fallback;
-}
-
-async function fetchExecutiveBriefing(
-  role: ExecRoleTab,
-  accessToken: string
-): Promise<SummaryResponse> {
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/exec-summary-generator`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ role }),
-  });
-
-  if (!response.ok) {
-    const bodyText = await response.text().catch(() => "");
-    let errorMessage = bodyText || `HTTP ${response.status}`;
-    try {
-      const parsed = JSON.parse(bodyText) as { error?: string; message?: string };
-      errorMessage = parsed.error ?? parsed.message ?? errorMessage;
-    } catch {
-      // keep raw body text
-    }
-    const error = new Error(`${errorMessage} (HTTP ${response.status})`);
-    (error as Error & { status?: number }).status = response.status;
-    throw error;
-  }
-
-  const parsed = (await response.json()) as SummaryResponse;
-  return parsed ?? { ok: false, role, generated_at: "", markdown: "", stats: { definitions: 0, snapshots: 0, alerts: 0 } };
 }
 
 function evaluateBand(value: number | null, config: Record<string, unknown> | null | undefined): "good" | "warn" | "critical" | "neutral" {
@@ -220,6 +118,7 @@ function buildLocalExecutiveBriefing(
 }
 
 export function AiExecutiveSummaryStrip({ role }: Props) {
+  const queryClient = useQueryClient();
   const { data: alerts = [] } = useExecAlerts(role);
   const { data: definitions = [] } = useMetricDefinitions(role);
   const metricKeys = definitions.map((definition) => definition.metric_key);
@@ -240,26 +139,6 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
     }),
     alerts,
   );
-  const { data, isLoading, isFetching, refetch, error } = useQuery({
-    queryKey: ["exec", "summary", role],
-    queryFn: async (): Promise<SummaryResponse> => {
-      try {
-        const accessToken = await requireFreshAccessToken();
-        return await fetchExecutiveBriefing(role, accessToken);
-      } catch (error) {
-        const status = (error as Error & { status?: number }).status;
-        const message = error instanceof Error ? error.message : "summary failed";
-        const authFailure = status === 401 || /invalid jwt|jwt|unauthorized/i.test(message);
-        if (!authFailure) {
-          throw error instanceof Error ? error : new Error("summary failed");
-        }
-
-        const refreshedToken = await requireFreshAccessToken(true);
-        return await fetchExecutiveBriefing(role, refreshedToken);
-      }
-    },
-    staleTime: 5 * 60_000,
-  });
 
   return (
     <Card className="border-qep-orange/20 bg-gradient-to-r from-qep-orange/5 to-transparent p-4">
@@ -268,28 +147,21 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] uppercase tracking-wider text-qep-orange">Executive briefing</p>
-            <Button size="sm" variant="ghost" disabled={isFetching} onClick={() => refetch()}>
-              {isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ["exec"] });
+              }}
+            >
+              <RefreshCcw className="h-3 w-3" />
             </Button>
           </div>
-          {isLoading ? (
-            <p className="mt-2 text-xs text-muted-foreground">Generating briefing…</p>
-          ) : error ? (
-            <>
-              <SummaryMarkdown markdown={localSummary.markdown} />
-              <p className="mt-2 text-[10px] text-amber-300">
-                Edge function unavailable: {(error as Error).message}. Showing local synthesis from live executive data.
-              </p>
-            </>
-          ) : data?.markdown ? (
-            <SummaryMarkdown markdown={data.markdown} />
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">No briefing yet.</p>
-          )}
-          {(data ?? localSummary) && (
+          <SummaryMarkdown markdown={localSummary.markdown} />
+          {localSummary && (
             <p className="mt-2 text-[10px] text-muted-foreground">
-              {(data ?? localSummary).stats.definitions} metrics · {(data ?? localSummary).stats.snapshots} snapshots · {(data ?? localSummary).stats.alerts} alerts ·
-              generated {new Date((data ?? localSummary).generated_at).toLocaleTimeString()}
+              {localSummary.stats.definitions} metrics · {localSummary.stats.snapshots} snapshots · {localSummary.stats.alerts} alerts ·
+              generated {new Date(localSummary.generated_at).toLocaleTimeString()}
             </p>
           )}
 
