@@ -19,9 +19,12 @@ import { Card } from "@/components/ui/card";
 import { Activity, AlertOctagon, History, MessageCircle, ExternalLink, ArrowRight } from "lucide-react";
 import { AskIronAdvisorButton, StatusChipStack } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import { formatKpiValue, formatForMetric, relativeRefresh } from "../lib/formatters";
 import type { KpiSnapshot, MetricDefinition, AnalyticsAlertRow } from "../lib/types";
 import { resolveMetricPlaybook, resolveMetricRecordLink } from "../lib/metric-actions";
+import { IronContextualAssistantPanel } from "@/lib/iron/IronContextualAssistant";
+import { useIronStore } from "@/lib/iron/store";
 
 interface Props {
   metricKey: string | null;
@@ -37,6 +40,11 @@ interface SnapshotHistoryRow {
 }
 
 export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
+  const {
+    state: ironState,
+    setActiveContext,
+    closeContextualAssistant,
+  } = useIronStore();
   const open = metricKey != null;
 
   const { data: definition } = useQuery({
@@ -115,6 +123,42 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
   const format = useMemo(() => metricKey ? formatForMetric(metricKey) : "number" as const, [metricKey]);
   const playbookLink = useMemo(() => resolveMetricPlaybook(metricKey), [metricKey]);
   const recordLink = useMemo(() => resolveMetricRecordLink(metricKey), [metricKey]);
+  const metricTitle = definition?.label ?? metricKey ?? "Metric";
+  const metricEvidence = useMemo(() => {
+    if (!metricKey) return "";
+    const lines = [
+      `Metric: ${metricTitle}`,
+      definition?.description ? `Description: ${definition.description}` : null,
+      latest ? `Current value: ${formatKpiValue(latest.metric_value, format)}` : "Current value: unavailable",
+      prior?.metric_value != null ? `Prior value: ${formatKpiValue(prior.metric_value, format)}` : null,
+      latest ? `Refresh state: ${latest.refresh_state} (${relativeRefresh(latest.calculated_at)})` : null,
+      definition?.formula_text ? `Formula: ${definition.formula_text}` : null,
+      Array.isArray(definition?.source_tables) && definition.source_tables.length > 0
+        ? `Source tables: ${definition.source_tables.join(", ")}`
+        : null,
+      alerts.length > 0 ? `Open alerts: ${alerts.map((alert) => alert.title).join(" | ")}` : "Open alerts: none",
+    ].filter(Boolean);
+    return lines.join("\n");
+  }, [alerts, definition, format, latest, metricKey, metricTitle, prior]);
+  const contextualMetricActive =
+    ironState.contextualOpen &&
+    ironState.activeContext?.preferredSurface === "metric_drawer" &&
+    ironState.activeContext?.kind === "metric" &&
+    ironState.activeContext?.entityId === metricKey;
+
+  useEffect(() => {
+    if (!contextualMetricActive || !metricKey) return;
+    setActiveContext({
+      kind: "metric",
+      entityId: metricKey,
+      title: metricTitle,
+      route: `/executive?metric=${encodeURIComponent(metricKey)}`,
+      draftPrompt: `Explain ${metricTitle} for me right now. What is driving it, what changed, and what should I do next?`,
+      evidence: metricEvidence,
+      replaceActiveContext: true,
+      preferredSurface: "metric_drawer",
+    });
+  }, [contextualMetricActive, metricEvidence, metricKey, metricTitle, setActiveContext]);
 
   const sparkline = useMemo(() => {
     if (snapshots.length < 2) return null;
@@ -131,13 +175,32 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
   }, [snapshots]);
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          if (contextualMetricActive) {
+            closeContextualAssistant();
+          }
+          onClose();
+        }
+      }}
+    >
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-6xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             {definition?.label ?? metricKey ?? "Metric drill"}
             {metricKey && (
-              <AskIronAdvisorButton contextType="metric" contextId={metricKey} variant="inline" />
+              <AskIronAdvisorButton
+                contextType="metric"
+                contextId={metricKey}
+                contextTitle={metricTitle}
+                draftPrompt={`Explain ${metricTitle} for me right now. What is driving it, what changed, and what should I do next?`}
+                evidence={metricEvidence}
+                preferredSurface="metric_drawer"
+                variant="inline"
+                label="Ask Iron"
+              />
             )}
           </SheetTitle>
           <SheetDescription>
@@ -145,7 +208,8 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 space-y-4">
+        <div className={cn("mt-4", contextualMetricActive ? "grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]" : "block")}>
+          <div className="space-y-4">
           {/* Latest value + delta */}
           <Card className="p-4">
             <div className="flex items-baseline justify-between">
@@ -300,13 +364,26 @@ export function MetricDrillDrawer({ metricKey, workspaceId, onClose }: Props) {
                 </p>
                 {metricKey && (
                   <div className="mt-2 inline-flex items-center gap-1 text-[10px] text-qep-orange">
-                    <AskIronAdvisorButton contextType="metric" contextId={metricKey} variant="inline" />
-                    <ExternalLink className="h-2.5 w-2.5" />
+                    <AskIronAdvisorButton
+                      contextType="metric"
+                      contextId={metricKey}
+                      contextTitle={metricTitle}
+                      draftPrompt={`Explain ${metricTitle} for me right now. What is driving it, what changed, and what should I do next?`}
+                      evidence={metricEvidence}
+                      preferredSurface="metric_drawer"
+                      variant="inline"
+                      label="Ask Iron"
+                    />
                   </div>
                 )}
               </div>
             </div>
           </Card>
+          </div>
+
+          {contextualMetricActive && (
+            <IronContextualAssistantPanel embedded className="min-h-[720px]" />
+          )}
         </div>
       </SheetContent>
     </Sheet>

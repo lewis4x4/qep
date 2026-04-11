@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { pushPresence } from "./presence";
+import type { IronLaunchContext } from "./types";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -47,7 +48,7 @@ export interface IronKnowledgeStreamApi {
   meta: IronKnowledgeMeta | null;
   sources: IronKnowledgeSource[];
   error: string | null;
-  start: (input: { message: string; conversationId?: string; route?: string; enableWeb?: boolean }) => Promise<void>;
+  start: (input: { message: string; conversationId?: string; route?: string; enableWeb?: boolean; context?: IronLaunchContext | null }) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -86,7 +87,7 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
   }, [cancel]);
 
   const start = useCallback(
-    async (input: { message: string; conversationId?: string; route?: string; enableWeb?: boolean }) => {
+    async (input: { message: string; conversationId?: string; route?: string; enableWeb?: boolean; context?: IronLaunchContext | null }) => {
       cancel();
       setText("");
       setSources([]);
@@ -143,6 +144,15 @@ export function useIronKnowledgeStream(): IronKnowledgeStreamApi {
             conversation_id: input.conversationId,
             route: input.route,
             enable_web: input.enableWeb !== false,
+            context: input.context
+              ? {
+                  kind: input.context.kind,
+                  entity_id: input.context.entityId ?? null,
+                  title: input.context.title,
+                  route: input.context.route,
+                  evidence: input.context.evidence ?? null,
+                }
+              : undefined,
           }),
           signal: controller.signal,
         });

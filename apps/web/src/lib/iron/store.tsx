@@ -19,6 +19,7 @@ import {
 import type {
   IronAvatarState,
   IronFlowDefinitionLite,
+  IronLaunchContext,
 } from "./types";
 import type { SpeakerFingerprint } from "./voice/voiceFingerprint";
 
@@ -44,6 +45,7 @@ export interface IronActiveFlow {
 
 interface IronState {
   barOpen: boolean;
+  contextualOpen: boolean;
   conversationId: string | null;
   avatarState: IronAvatarState;
   activeFlow: IronActiveFlow | null;
@@ -61,6 +63,9 @@ interface IronState {
   collapsed: boolean;
   /** v7.1: streaming chat message thread for the active conversation. */
   chatMessages: IronChatMessage[];
+  activeContext: IronLaunchContext | null;
+  draftPrompt: string;
+  contextNonce: number;
 }
 
 /**
@@ -127,6 +132,7 @@ function saveCollapsedPref(collapsed: boolean): void {
 
 const initialState: IronState = {
   barOpen: false,
+  contextualOpen: false,
   conversationId: null,
   avatarState: "idle",
   activeFlow: null,
@@ -138,11 +144,18 @@ const initialState: IronState = {
   multiVoiceWarning: false,
   collapsed: loadCollapsedPref(),
   chatMessages: [],
+  activeContext: null,
+  draftPrompt: "",
+  contextNonce: 0,
 };
 
 type Action =
   | { type: "OPEN_BAR" }
   | { type: "CLOSE_BAR" }
+  | { type: "OPEN_CONTEXTUAL_ASSISTANT"; context: IronLaunchContext }
+  | { type: "CLOSE_CONTEXTUAL_ASSISTANT" }
+  | { type: "SET_ACTIVE_CONTEXT"; context: IronLaunchContext }
+  | { type: "SEED_DRAFT_PROMPT"; text: string }
   | { type: "SET_AVATAR"; state: IronAvatarState }
   | { type: "SET_CONVERSATION"; id: string }
   | { type: "START_FLOW"; flow: IronFlowDefinitionLite; conversationId: string; idempotencyKey: string; prefilled: Record<string, unknown> }
@@ -169,7 +182,7 @@ type Action =
 function reducer(state: IronState, action: Action): IronState {
   switch (action.type) {
     case "OPEN_BAR":
-      return { ...state, barOpen: true };
+      return { ...state, barOpen: true, contextualOpen: false };
     case "CLOSE_BAR":
       // v1.4: closing the bar ends the speaker session — reset the canonical
       // fingerprint and clear any standing multi-voice warning so the next
@@ -179,6 +192,33 @@ function reducer(state: IronState, action: Action): IronState {
         barOpen: false,
         canonicalFingerprint: null,
         multiVoiceWarning: false,
+      };
+    case "OPEN_CONTEXTUAL_ASSISTANT":
+      return {
+        ...state,
+        barOpen: false,
+        contextualOpen: true,
+        activeContext: action.context,
+        draftPrompt: action.context.draftPrompt,
+        contextNonce: Date.now(),
+      };
+    case "CLOSE_CONTEXTUAL_ASSISTANT":
+      return {
+        ...state,
+        contextualOpen: false,
+      };
+    case "SET_ACTIVE_CONTEXT":
+      return {
+        ...state,
+        activeContext: action.context,
+        draftPrompt: action.context.draftPrompt,
+        contextNonce: Date.now(),
+      };
+    case "SEED_DRAFT_PROMPT":
+      return {
+        ...state,
+        draftPrompt: action.text,
+        contextNonce: Date.now(),
       };
     case "SET_AVATAR":
       return { ...state, avatarState: action.state };
@@ -299,6 +339,10 @@ interface IronStoreApi {
   state: IronState;
   openBar: () => void;
   closeBar: () => void;
+  openContextualAssistant: (context: IronLaunchContext) => void;
+  closeContextualAssistant: () => void;
+  setActiveContext: (context: IronLaunchContext) => void;
+  seedDraftPrompt: (text: string) => void;
   setAvatar: (state: IronAvatarState) => void;
   setConversationId: (id: string) => void;
   startFlow: (input: { flow: IronFlowDefinitionLite; conversationId: string; prefilled?: Record<string, unknown> }) => void;
@@ -342,6 +386,10 @@ export function IronStoreProvider({ children }: { children: ReactNode }) {
     callbacksRef.current = {
       openBar: () => d({ type: "OPEN_BAR" }),
       closeBar: () => d({ type: "CLOSE_BAR" }),
+      openContextualAssistant: (context) => d({ type: "OPEN_CONTEXTUAL_ASSISTANT", context }),
+      closeContextualAssistant: () => d({ type: "CLOSE_CONTEXTUAL_ASSISTANT" }),
+      setActiveContext: (context) => d({ type: "SET_ACTIVE_CONTEXT", context }),
+      seedDraftPrompt: (text) => d({ type: "SEED_DRAFT_PROMPT", text }),
       setAvatar: (s) => d({ type: "SET_AVATAR", state: s }),
       setConversationId: (id) => d({ type: "SET_CONVERSATION", id }),
       startFlow: ({ flow, conversationId, prefilled }) =>

@@ -16,6 +16,19 @@ export type IronAvatarState =
   | "flow_active"
   | "success";
 
+export type IronContextSurface = "sheet" | "metric_drawer";
+
+export interface IronLaunchContext {
+  kind: string;
+  entityId?: string | null;
+  title: string;
+  route: string;
+  draftPrompt: string;
+  evidence?: string | null;
+  replaceActiveContext?: boolean;
+  preferredSurface?: IronContextSurface;
+}
+
 export type IronSlotType =
   | "text"
   | "longtext"

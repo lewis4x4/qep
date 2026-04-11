@@ -21,6 +21,7 @@
 import { IronStoreProvider, useIronStore } from "./store";
 import { IronCorner } from "./IronCorner";
 import { IronBar } from "./IronBar";
+import { IronContextualAssistantSheet } from "./IronContextualAssistant";
 import { FlowEngineUI } from "./FlowEngineUI";
 import { IronUndoToast } from "./IronUndoToast";
 import { useIronPresenceState } from "./presence";
@@ -38,6 +39,7 @@ function IronShellInner() {
         collapsed={state.collapsed}
         onToggleCollapsed={toggleCollapsed}
       />
+      <IronContextualAssistantSheet />
       <IronBar />
       {state.activeFlow && <FlowEngineUI />}
       <IronUndoToast />

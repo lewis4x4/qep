@@ -76,6 +76,13 @@ interface RequestBody {
   message: string;
   route?: string;
   enable_web?: boolean;
+  context?: {
+    kind?: string;
+    entity_id?: string | null;
+    title?: string | null;
+    route?: string | null;
+    evidence?: string | null;
+  };
 }
 
 /* ─── Conversation persistence ──────────────────────────────────────────── */
@@ -377,7 +384,19 @@ async function preRetrieveEvidence(
 
 /* ─── System prompt ─────────────────────────────────────────────────────── */
 
-function buildSystemPrompt(route: string | undefined, preloadedEvidence: string | null): string {
+function buildSystemPrompt(
+  route: string | undefined,
+  preloadedEvidence: string | null,
+  context:
+    | {
+        kind?: string;
+        entity_id?: string | null;
+        title?: string | null;
+        route?: string | null;
+        evidence?: string | null;
+      }
+    | undefined,
+): string {
   const persona = `You are Iron, the operator companion for QEP — an equipment and parts dealership running on QEP OS. You are warm, precise, and bias toward action.
 
 Your job: answer the operator's question using the PRE-LOADED EVIDENCE below and the TOOLS AVAILABLE. Check the pre-loaded evidence first — if it already answers the question, use it directly without calling tools.
@@ -399,6 +418,25 @@ Hard rules:
   - Prefer pre-loaded evidence when it already answers the question — don't re-fetch what's already provided.`;
 
   let prompt = route ? `${persona}\n\nCurrent operator route: ${route}` : persona;
+
+  if (context && (context.title || context.kind || context.evidence)) {
+    prompt += "\n\n## Current Operator Context";
+    if (context.title) {
+      prompt += `\nPinned context: ${context.title}`;
+    }
+    if (context.kind) {
+      prompt += `\nContext kind: ${context.kind}`;
+    }
+    if (context.entity_id) {
+      prompt += `\nContext entity id: ${context.entity_id}`;
+    }
+    if (context.route && context.route !== route) {
+      prompt += `\nContext route: ${context.route}`;
+    }
+    if (context.evidence) {
+      prompt += `\n\n### Operator-visible evidence\n${context.evidence}`;
+    }
+  }
 
   if (preloadedEvidence) {
     prompt += `\n\n${preloadedEvidence}`;
@@ -692,7 +730,7 @@ Deno.serve(async (req) => {
   // Pre-retrieve knowledge base evidence to inject into system prompt
   // (same strategy that makes the standalone Knowledge Chat more accurate)
   const preloadedEvidence = await preRetrieveEvidence(admin, message, workspaceId, role);
-  const systemPrompt = buildSystemPrompt(body.route, preloadedEvidence);
+  const systemPrompt = buildSystemPrompt(body.route, preloadedEvidence, body.context);
   const toolCtx: ToolContext = {
     admin,
     workspaceId,

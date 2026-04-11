@@ -1,10 +1,18 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { useIronStore } from "@/lib/iron/store";
+import type { IronContextSurface } from "@/lib/iron/types";
 
 interface AskIronAdvisorButtonProps {
   contextType: string;
   contextId?: string;
+  contextTitle?: string;
+  draftPrompt?: string;
+  evidence?: string;
+  replaceActiveContext?: boolean;
+  preferredSurface?: IronContextSurface;
+  onBeforeOpen?: () => void;
   /** Floating bottom-right pill (default) or inline button. */
   variant?: "floating" | "inline";
   className?: string;
@@ -19,22 +27,55 @@ interface AskIronAdvisorButtonProps {
  * system prompt.
  */
 export function AskIronAdvisorButton({
-  contextType, contextId, variant = "floating", className = "", label = "Ask Iron Advisor",
+  contextType,
+  contextId,
+  contextTitle,
+  draftPrompt,
+  evidence,
+  replaceActiveContext = true,
+  preferredSurface = "sheet",
+  onBeforeOpen,
+  variant = "floating",
+  className = "",
+  label = "Ask Iron Advisor",
 }: AskIronAdvisorButtonProps) {
-  const navigate = useNavigate();
-  const href = contextId
-    ? `/chat?context_type=${encodeURIComponent(contextType)}&context_id=${encodeURIComponent(contextId)}`
-    : `/chat?context_type=${encodeURIComponent(contextType)}`;
-  const askIronState = {
-    askIronContext: {
-      contextType,
-      contextId: contextId ?? null,
-      href,
-    },
-  };
+  const location = useLocation();
+  const { openContextualAssistant } = useIronStore();
+
+  function titleize(text: string): string {
+    return text
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function defaultTitle() {
+    if (contextTitle) return contextTitle;
+    if (contextType === "metric" && contextId) return titleize(contextId);
+    if (contextId) return `${titleize(contextType)} ${contextId}`;
+    return titleize(contextType);
+  }
+
+  function defaultPrompt(title: string) {
+    if (draftPrompt) return draftPrompt;
+    if (contextType === "metric") {
+      return `Explain ${title} for me right now. What is driving it, what changed, and what should I do next?`;
+    }
+    return `I’m working in ${title}. Walk me through what matters here right now, what I should notice, and what to do next.`;
+  }
 
   function openChat() {
-    navigate(href, { state: askIronState });
+    const title = defaultTitle();
+    onBeforeOpen?.();
+    openContextualAssistant({
+      kind: contextType,
+      entityId: contextId ?? null,
+      title,
+      route: location.pathname,
+      draftPrompt: defaultPrompt(title),
+      evidence,
+      replaceActiveContext,
+      preferredSurface,
+    });
   }
 
   if (variant === "inline") {

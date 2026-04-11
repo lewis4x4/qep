@@ -43,6 +43,15 @@ export function ExecutiveKpiCard({ definition, snapshot, fallbackValue, fallback
     deltaPct == null ? "text-muted-foreground" : deltaPct >= 0 ? "text-emerald-300" : "text-rose-300";
   const DeltaIcon = deltaPct == null ? Waves : deltaPct >= 0 ? TrendingUp : TrendingDown;
   const stateBadge = noSnapshot ? "Live" : isStale ? "Stale" : "Live";
+  const metricEvidence = [
+    `Metric: ${definition.label}`,
+    definition.description ? `Description: ${definition.description}` : null,
+    `Current value: ${formatted}`,
+    target != null ? `Target: ${formatKpiValue(target, format)}` : null,
+    comparison != null ? `Prior value: ${formatKpiValue(comparison, format)}` : null,
+    `Refresh: ${refreshLabel}`,
+    definition.formula_text ? `Formula: ${definition.formula_text}` : null,
+  ].filter(Boolean).join("\n");
 
   return (
     <Card className="group relative flex min-h-[220px] flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.88))] p-5 shadow-[0_20px_40px_rgba(2,6,23,0.18)] transition duration-200 hover:border-qep-orange/35 hover:shadow-[0_24px_60px_rgba(2,6,23,0.28)]">
@@ -123,6 +132,11 @@ export function ExecutiveKpiCard({ definition, snapshot, fallbackValue, fallback
         <AskIronAdvisorButton
           contextType="metric"
           contextId={definition.metric_key}
+          contextTitle={definition.label}
+          draftPrompt={`Explain ${definition.label} for me right now. What is driving it, what changed, and what should I do next?`}
+          evidence={metricEvidence}
+          preferredSurface="metric_drawer"
+          onBeforeOpen={() => onDrill?.(definition.metric_key)}
           variant="inline"
           label="Ask Iron"
           className="min-h-[40px] rounded-full border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"
