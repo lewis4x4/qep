@@ -21,6 +21,7 @@ import {
   buildAccountFleetIntelligenceHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
+  buildAccountRelationshipMapHref,
 } from "../lib/account-command";
 import { buildFleetIntelligenceBoard } from "../lib/fleet-intelligence";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -157,6 +158,9 @@ export function FleetIntelligencePage() {
             <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Legacy Fleet Radar</Link>
           </Button>
         </div>
@@ -206,6 +210,22 @@ export function FleetIntelligencePage() {
               tone={board.summary.replacementWindowMachines > 0 ? "warn" : "default"}
             />
           </div>
+
+          <Card className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Relationship Map to see who signs, influences, operates, blocks, and decides around this fleet.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountRelationshipMapHref(accountId)}>
+                  Relationship map <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </Card>
 
           <Card className="p-4">
             <div className="flex items-start justify-between gap-3">

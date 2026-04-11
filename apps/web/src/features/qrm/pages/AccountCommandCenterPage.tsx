@@ -13,6 +13,7 @@ import {
   buildAccountFleetIntelligenceHref,
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
+  buildAccountRelationshipMapHref,
   buildAccountTimelineHref,
 } from "../lib/account-command";
 import {
@@ -101,6 +102,9 @@ export function AccountCommandCenterPage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountFleetIntelligenceHref(accountId)}>Fleet Intelligence</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>

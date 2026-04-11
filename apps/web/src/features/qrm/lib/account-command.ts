@@ -17,3 +17,7 @@ export function buildAccountOperatingProfileHref(companyId: string): string {
 export function buildAccountFleetIntelligenceHref(companyId: string): string {
   return `/qrm/accounts/${companyId}/fleet-intelligence`;
 }
+
+export function buildAccountRelationshipMapHref(companyId: string): string {
+  return `/qrm/accounts/${companyId}/relationship-map`;
+}
