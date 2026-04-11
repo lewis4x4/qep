@@ -287,6 +287,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     BREADCRUMB_LABELS[location.pathname] ??
     (location.pathname.startsWith("/m/qrm") ? "Mobile Field Command" : undefined) ??
     (location.pathname.startsWith("/qrm/visit-intelligence") ? "Visit Intelligence" : undefined) ??
+    (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? "AI Branch Chief" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? "Deal Room" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? "AI Deal Coach" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? "Deal Autopsy" : undefined) ??
@@ -307,6 +308,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     QUICK_ACTION_MAP[location.pathname] ??
     (location.pathname.startsWith("/m/qrm") ? { label: "QRM", route: "/qrm" } : null) ??
     (location.pathname.startsWith("/qrm/visit-intelligence") ? { label: "QRM", route: "/qrm" } : null) ??
+    (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? { label: "Branch command", route: location.pathname.replace(/\/chief$/, "/command") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? { label: "Deal detail", route: location.pathname.replace(/\/coach$/, "") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? { label: "Deals", route: "/qrm/deals" } : null) ??

@@ -162,6 +162,9 @@ export function BranchCommandCenterPage() {
         </Button>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={`/qrm/branches/${branchId}/chief`}>AI Branch Chief</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to="/service/dashboard">Service Dashboard</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
