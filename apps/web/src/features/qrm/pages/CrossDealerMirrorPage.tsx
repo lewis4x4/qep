@@ -17,6 +17,7 @@ import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { fetchAccount360 } from "../lib/account-360-api";
 import {
+  buildAccountCashflowWeatherHref,
   buildAccountCommandHref,
   buildAccountCrossDealerMirrorHref,
   buildAccountOperatingProfileHref,
@@ -414,6 +415,11 @@ export function CrossDealerMirrorPage() {
                 <Button asChild size="sm" variant="outline">
                   <Link to={buildAccountOperatingProfileHref(accountId)}>
                     Operating profile <ArrowUpRight className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link to={buildAccountCashflowWeatherHref(accountId)}>
+                    Cashflow weather <ArrowUpRight className="ml-1 h-3 w-3" />
                   </Link>
                 </Button>
               </div>

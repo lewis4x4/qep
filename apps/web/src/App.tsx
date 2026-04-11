@@ -262,6 +262,9 @@ const LearningLayerPage = lazy(() =>
 const CrossDealerMirrorPage = lazy(() =>
   import("./features/qrm/pages/CrossDealerMirrorPage").then((m) => ({ default: m.CrossDealerMirrorPage }))
 );
+const CashflowWeatherMapPage = lazy(() =>
+  import("./features/qrm/pages/CashflowWeatherMapPage").then((m) => ({ default: m.CashflowWeatherMapPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1719,6 +1722,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <CrossDealerMirrorPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/cashflow-weather"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <CashflowWeatherMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
