@@ -506,6 +506,7 @@ Entry condition: 7A complete. P0.3 Prediction Ledger has ≥90 days of accrued d
 ### Sub-Phase 7C — Hidden Forces
 
 Entry condition: 7B shipped. Honesty Calibration has run for a full fiscal year.
+Operational check: see `docs/operations/7c-entry-check.md`.
 **Ethics review required before any slice opens.**
 
 **7C.1 — Trust Thermostat** (IDEA-075): Post-hoc receipt (not real-time gauge). Contrarian Bet #3.
