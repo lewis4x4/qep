@@ -28,6 +28,32 @@ interface Props {
   role: ExecRoleTab;
 }
 
+interface InvokeError {
+  message?: string;
+  context?: Response;
+}
+
+async function explainInvokeError(error: InvokeError, fallback: string): Promise<string> {
+  const response = error.context;
+  if (response && typeof response.text === "function") {
+    try {
+      const body = await response.text();
+      if (body) {
+        try {
+          const parsed = JSON.parse(body) as { error?: string; message?: string };
+          return `${parsed.error ?? parsed.message ?? body} (HTTP ${response.status})`;
+        } catch {
+          return `${body.slice(0, 200)} (HTTP ${response.status})`;
+        }
+      }
+      return `HTTP ${response.status}`;
+    } catch {
+      return `HTTP ${response.status}`;
+    }
+  }
+  return error.message ?? fallback;
+}
+
 export function AiExecutiveSummaryStrip({ role }: Props) {
   const { data: alerts = [] } = useExecAlerts(role);
   const topAlert = alerts[0] ?? null;
@@ -37,10 +63,37 @@ export function AiExecutiveSummaryStrip({ role }: Props) {
     queryKey: ["exec", "summary", role],
     queryFn: async (): Promise<SummaryResponse> => {
       const supa = supabase as unknown as {
-        functions: { invoke: (name: string, opts: { body: Record<string, unknown> }) => Promise<{ data: SummaryResponse | null; error: { message?: string } | null }> };
+        auth: {
+          getSession: () => Promise<{
+            data: { session: { access_token?: string | null } | null };
+            error: { message?: string } | null;
+          }>;
+        };
+        functions: {
+          invoke: (
+            name: string,
+            opts: { body: Record<string, unknown>; headers?: Record<string, string> }
+          ) => Promise<{ data: SummaryResponse | null; error: InvokeError | null }>;
+        };
       };
-      const res = await supa.functions.invoke("exec-summary-generator", { body: { role } });
-      if (res.error) throw new Error(res.error.message ?? "summary failed");
+      const { data: sessionData, error: sessionError } = await supa.auth.getSession();
+      if (sessionError) {
+        throw new Error(sessionError.message ?? "session lookup failed");
+      }
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Executive briefing requires a signed-in session.");
+      }
+
+      const res = await supa.functions.invoke("exec-summary-generator", {
+        body: { role },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (res.error) {
+        throw new Error(await explainInvokeError(res.error, "summary failed"));
+      }
       return res.data ?? { ok: false, role, generated_at: "", markdown: "", stats: { definitions: 0, snapshots: 0, alerts: 0 } };
     },
     staleTime: 5 * 60_000,

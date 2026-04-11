@@ -124,11 +124,13 @@ export function CommandCenterPage({
         </div>
         <div className="flex items-center gap-3">
           <CommandCenterExportMenu role={exportRole} />
-          <Button asChild size="sm" variant="outline" className="rounded-full border-white/10 hover:bg-white/5 text-white">
-            <Link to="/executive/owner-briefing">
-              <Sparkles className="mr-2 h-4 w-4" /> Owner Briefing
-            </Link>
-          </Button>
+          {viewerRole === "owner" && (
+            <Button asChild size="sm" variant="outline" className="rounded-full border-white/10 hover:bg-white/5 text-white">
+              <Link to="/executive/owner-briefing">
+                <Sparkles className="mr-2 h-4 w-4" /> Owner Briefing
+              </Link>
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={handleRefresh} className="rounded-full border-white/10 hover:bg-white/5 text-white">
             <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
           </Button>

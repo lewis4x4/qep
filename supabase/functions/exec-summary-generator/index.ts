@@ -12,7 +12,7 @@
  * v2: optional LLM rewrite gated on a `mode=ai` query param.
  *
  * Auth:
- *   - JWT must belong to a profile with role='owner'
+ *   - JWT must belong to a profile with role in ('admin', 'manager', 'owner')
  *   - Cron callers may pre-warm via x-internal-service-secret
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
@@ -52,7 +52,9 @@ async function isAuthorizedCaller(req: Request, admin: SupabaseClient): Promise<
     const userId = userRes?.user?.id;
     if (!userId) return { ok: false };
     const { data: profile } = await admin.from("profiles").select("role, active_workspace_id").eq("id", userId).maybeSingle();
-    if (profile?.role !== "owner") return { ok: false };
+    if (!profile?.role || !["admin", "manager", "owner"].includes(profile.role)) {
+      return { ok: false };
+    }
     return { ok: true, userId, workspace: profile.active_workspace_id };
   } catch {
     return { ok: false };
