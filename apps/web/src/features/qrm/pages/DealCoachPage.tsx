@@ -120,6 +120,9 @@ export function DealCoachPage() {
             <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/deals/${dealId}`}>
               Open detail <ArrowUpRight className="ml-1 h-3 w-3" />
             </Link>

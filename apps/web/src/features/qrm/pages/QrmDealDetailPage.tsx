@@ -266,6 +266,9 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                 <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
               </Button>
               <Button asChild variant="outline" className="hidden sm:inline-flex">
+                <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
+              </Button>
+              <Button asChild variant="outline" className="hidden sm:inline-flex">
                 <Link to={`/qrm/deals/${dealId}/coach`}>AI Deal Coach</Link>
               </Button>
               {isClosedLost && (
@@ -355,6 +358,9 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link to="/qrm/command/approvals">Approval Center</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link to={`/quote?crm_deal_id=${dealId}${dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""}`}>

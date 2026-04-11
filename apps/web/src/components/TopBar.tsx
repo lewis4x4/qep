@@ -301,6 +301,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? "Visit Intelligence" : undefined) ??
     (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? "AI Branch Chief" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? "Deal Room" : undefined) ??
+    (location.pathname.includes("/deals/") && location.pathname.endsWith("/decision-room") ? "Decision Room Simulator" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? "AI Deal Coach" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cashflow-weather") ? "Cashflow Weather Map" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? "Cross-Dealer Mirror" : undefined) ??
@@ -325,6 +326,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? { label: "QRM", route: "/qrm" } : null) ??
     (location.pathname.startsWith("/qrm/branches/") && location.pathname.endsWith("/chief") ? { label: "Branch command", route: location.pathname.replace(/\/chief$/, "/command") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
+    (location.pathname.includes("/deals/") && location.pathname.endsWith("/decision-room") ? { label: "Deal Room", route: location.pathname.replace(/\/decision-room$/, "/room") } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/coach") ? { label: "Deal detail", route: location.pathname.replace(/\/coach$/, "") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cashflow-weather") ? { label: "Strategist", route: location.pathname.replace(/\/cashflow-weather$/, "/strategist") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/cross-dealer-mirror") ? { label: "Strategist", route: location.pathname.replace(/\/cross-dealer-mirror$/, "/strategist") } : null) ??

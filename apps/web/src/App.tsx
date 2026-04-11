@@ -265,6 +265,9 @@ const CrossDealerMirrorPage = lazy(() =>
 const CashflowWeatherMapPage = lazy(() =>
   import("./features/qrm/pages/CashflowWeatherMapPage").then((m) => ({ default: m.CashflowWeatherMapPage }))
 );
+const DecisionRoomSimulatorPage = lazy(() =>
+  import("./features/qrm/pages/DecisionRoomSimulatorPage").then((m) => ({ default: m.DecisionRoomSimulatorPage }))
+);
 const TerritoryCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/TerritoryCommandCenterPage").then((m) => ({ default: m.TerritoryCommandCenterPage }))
 );
@@ -1632,6 +1635,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <DealCoachPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/deals/:dealId/decision-room"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DecisionRoomSimulatorPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
