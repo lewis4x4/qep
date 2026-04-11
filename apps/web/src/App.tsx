@@ -226,6 +226,9 @@ const FleetIntelligencePage = lazy(() =>
 const RelationshipMapPage = lazy(() =>
   import("./features/qrm/pages/RelationshipMapPage").then((m) => ({ default: m.RelationshipMapPage }))
 );
+const WhiteSpaceMapPage = lazy(() =>
+  import("./features/qrm/pages/WhiteSpaceMapPage").then((m) => ({ default: m.WhiteSpaceMapPage }))
+);
 const BranchCommandCenterPage = lazy(() =>
   import("./features/qrm/pages/BranchCommandCenterPage").then((m) => ({ default: m.BranchCommandCenterPage }))
 );
@@ -1623,6 +1626,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <RelationshipMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/qrm/accounts/:accountId/white-space"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <WhiteSpaceMapPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

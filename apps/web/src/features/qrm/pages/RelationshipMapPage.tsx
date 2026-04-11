@@ -23,6 +23,7 @@ import {
   buildAccountGenomeHref,
   buildAccountOperatingProfileHref,
   buildAccountRelationshipMapHref,
+  buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import { buildRelationshipMapBoard, type RelationshipRole } from "../lib/relationship-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -198,6 +199,9 @@ export function RelationshipMapPage() {
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountFleetIntelligenceHref(accountId)}>Fleet Intelligence</Link>
           </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
+          </Button>
         </div>
       </div>
 
@@ -321,6 +325,22 @@ export function RelationshipMapPage() {
                       </div>
                     ))
                   )}
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Open White-Space Map to see the revenue lanes this account is still leaving uncaptured.
+                    </p>
+                  </div>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={buildAccountWhiteSpaceHref(accountId)}>
+                      White-space map <ArrowUpRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
                 </div>
               </Card>
             </div>

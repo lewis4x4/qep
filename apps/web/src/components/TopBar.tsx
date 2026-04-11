@@ -289,6 +289,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? "Visit Intelligence" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? "Deal Room" : undefined) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? "Deal Autopsy" : undefined) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/white-space") ? "White-Space Map" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/relationship-map") ? "Relationship Map" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/fleet-intelligence") ? "Fleet Intelligence" : undefined) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/operating-profile") ? "Customer Operating Profile" : undefined) ??
@@ -306,6 +307,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
     (location.pathname.startsWith("/qrm/visit-intelligence") ? { label: "QRM", route: "/qrm" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/room") ? { label: "Deals", route: "/qrm/deals" } : null) ??
     (location.pathname.includes("/deals/") && location.pathname.endsWith("/autopsy") ? { label: "Deals", route: "/qrm/deals" } : null) ??
+    (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/white-space") ? { label: "Account Command", route: location.pathname.replace(/\/white-space$/, "/command") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/relationship-map") ? { label: "Account Command", route: location.pathname.replace(/\/relationship-map$/, "/command") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/fleet-intelligence") ? { label: "Account Command", route: location.pathname.replace(/\/fleet-intelligence$/, "/command") } : null) ??
     (location.pathname.startsWith("/qrm/accounts/") && location.pathname.endsWith("/operating-profile") ? { label: "Account Command", route: location.pathname.replace(/\/operating-profile$/, "/command") } : null) ??

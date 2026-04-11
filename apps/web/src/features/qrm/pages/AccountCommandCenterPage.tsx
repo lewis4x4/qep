@@ -15,6 +15,7 @@ import {
   buildAccountOperatingProfileHref,
   buildAccountRelationshipMapHref,
   buildAccountTimelineHref,
+  buildAccountWhiteSpaceHref,
 } from "../lib/account-command";
 import {
   AccountARTab,
@@ -105,6 +106,9 @@ export function AccountCommandCenterPage() {
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Fleet Radar</Link>
