@@ -520,6 +520,18 @@ export function QrmActivitiesPage() {
     return { openTasks, overdueTasks, failedDeliveries, todayTouches };
   }, [activities]);
 
+  const activitiesWhatMattersNow = activitiesQuery.isLoading
+    ? "Activity pressure is loading."
+    : `${summary.openTasks} open task${summary.openTasks === 1 ? "" : "s"}, ${summary.overdueTasks} overdue, and ${summary.failedDeliveries} delivery issue${summary.failedDeliveries === 1 ? "" : "s"} need operator attention.`;
+  const activitiesNextMove = summary.failedDeliveries > 0
+    ? `Clear ${summary.failedDeliveries} failed delivery${summary.failedDeliveries === 1 ? "" : "ies"} first so follow-up does not silently stall.`
+    : summary.overdueTasks > 0
+      ? `Work the ${summary.overdueTasks} overdue task${summary.overdueTasks === 1 ? "" : "s"} before adding more outbound.`
+      : `Use today's ${summary.todayTouches} touch${summary.todayTouches === 1 ? "" : "es"} to decide the next send-now or archive action.`;
+  const activitiesRiskIfIgnored = summary.failedDeliveries > 0 || summary.overdueTasks > 0
+    ? "Missed sends and overdue tasks turn the activity lane into noise instead of control."
+    : "Without active inbox discipline, important touches blend into the feed and next moves get buried.";
+
   const selectedCommunicationHasPendingWork = useMemo(
     () =>
       selectedCommunications.some(
