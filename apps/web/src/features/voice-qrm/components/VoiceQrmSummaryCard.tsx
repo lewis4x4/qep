@@ -86,6 +86,16 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
     entities.scheduled_follow_ups.count +
     (entities.needs_assessment.id ? 1 : 0) +
     (entities.cadence.id ? 1 : 0);
+  const urgencySignal = entities.deal.id
+    ? "Deal-linked signal is live and should shape the next pipeline touch."
+    : followUpSuggestions.length > 0
+      ? "Signal captured, but follow-through still depends on the next action being taken."
+      : "Voice signal was captured, but pipeline pressure is still unclear.";
+  const nextMove = entities.scheduled_follow_ups.count > 0
+    ? "Execute the scheduled follow-up and keep the deal moving."
+    : entities.deal.id
+      ? "Open the QRM deal and turn this signal into a concrete next step."
+      : "Attach this note to the right QRM record before it becomes orphaned context.";
 
   return (
     <div className="space-y-3">
@@ -122,6 +132,17 @@ export function VoiceQrmSummaryCard({ result }: VoiceQrmSummaryCardProps) {
             Created <strong className="text-foreground">{entitiesCreatedCount}</strong>{" "}
             record{entitiesCreatedCount === 1 ? "" : "s"} across the QRM
           </span>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Urgency signal</p>
+            <p className="mt-1 text-sm text-foreground">{urgencySignal}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Next move</p>
+            <p className="mt-1 text-sm text-foreground">{nextMove}</p>
+          </div>
         </div>
 
         {result.qrm_narrative && (
