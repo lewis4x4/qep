@@ -428,6 +428,21 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     [customer.email, userRole]
   );
   const reviewStepActive = step === "review";
+  const customerDetailsComplete = Boolean(
+    customer.name.trim() && customer.company.trim() && customer.phone.trim() && customer.email.trim()
+  );
+  const quoteReady = customerDetailsComplete && Boolean(selectedMachine);
+  const quoteBlocker = !customerDetailsComplete
+    ? "Customer details are incomplete."
+    : !selectedMachine
+      ? "Equipment selection is incomplete."
+      : null;
+  const quoteNextMove = quoteReady
+    ? "Review pricing, confirm context, and save the proposal into QRM."
+    : "Clear the blocker before pushing this quote into proposal mode.";
+  const quoteTimingRisk = quoteReady
+    ? "If follow-up is not queued after save, proposal momentum can cool immediately."
+    : "If sent too early, the quote creates churn instead of confidence.";
   const {
     data: marketValuation,
     loading: marketValuationLoading,
@@ -440,6 +455,13 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
     error: customerProfileError,
     refresh: refreshCustomerProfile,
   } = useCustomerProfile(customerLookup, reviewStepActive && Boolean(customerLookup.email));
+  const quoteOperatingSummary = [
+    crmContextSummary ? `Linked QRM context: ${crmContextSummary}` : null,
+    customerProfile?.company_name ? `Customer profile matched: ${customerProfile.company_name}` : null,
+    marketValuation
+      ? `Market read: ${formatCurrency(marketValuation.low_estimate)} to ${formatCurrency(marketValuation.high_estimate)}`
+      : null,
+  ].filter(Boolean) as string[];
 
   async function handleSaveQuote(): Promise<void> {
     if (!selectedMachine) {
@@ -521,11 +543,62 @@ export function QuoteBuilderPage({ userRole, userEmail, repName }: QuoteBuilderP
         <main className="flex-1 px-6 py-6">
 
         {/* Page header */}
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold text-foreground">Quote Builder</h1>
-          <p className="text-sm text-muted-foreground">
-            Build and print equipment proposals for customers
-          </p>
+        <div className="mb-6 space-y-4">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">QRM Quote Builder</h1>
+            <p className="text-sm text-muted-foreground">
+              Build a proposal, preserve QRM context, and keep follow-up ready for the next move.
+            </p>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
+            <Card className="border-border bg-card xl:col-start-2">
+              <CardContent className="pt-4 pb-3 space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next action</p>
+                <p className="text-sm text-foreground">
+                  {quoteReady
+                    ? "This quote is ready to be saved and reviewed against the live QRM context."
+                    : "Finish the missing inputs so the quote can move into proposal review."}
+                </p>
+                {quoteOperatingSummary.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                    {quoteOperatingSummary.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No QRM context attached yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card className="border-border bg-card">
+              <CardContent className="pt-4 pb-3 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Readiness</p>
+                <p className="text-sm text-foreground">{quoteReady ? "Proposal-ready now." : "Not proposal-ready yet."}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="pt-4 pb-3 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Blocker</p>
+                <p className="text-sm text-foreground">{quoteBlocker ?? "No core blocker is visible."}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="pt-4 pb-3 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+                <p className="text-sm text-foreground">{quoteNextMove}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="pt-4 pb-3 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Timing risk</p>
+                <p className="text-sm text-foreground">{quoteTimingRisk}</p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Step wizard */}
