@@ -297,14 +297,47 @@ export function QuoteBuilderV2Page() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
-          <p className="text-sm text-muted-foreground">
-            Build quotes with voice, AI chat, or manual entry. Zero-blocking and commercial-grade.
-          </p>
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">QRM Quote Builder</h1>
+            <p className="text-sm text-muted-foreground">
+              Build quotes with voice, AI chat, or manual entry, then carry the signal straight into QRM follow-through.
+            </p>
+          </div>
+          <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
         </div>
-        <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
+
+        <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Urgency signal</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {draft.voiceSummary
+                  ? "Fresh field signal captured and ready to steer the quote workspace."
+                  : draft.entryMode === "voice"
+                    ? "Waiting on the field note that should shape the quote."
+                    : "No voice signal attached yet."}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Next move</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {draft.voiceSummary
+                  ? "Confirm the recommendation, tighten the equipment mix, and move toward pricing."
+                  : "Capture the customer need clearly so QRM can seed the workspace correctly."}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Pipeline carry-through</p>
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {draft.dealId
+                  ? "This quote is already anchored to a QRM deal."
+                  : "Deal linkage should happen before this opportunity goes cold."}
+              </p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <div className="flex gap-2">
@@ -371,8 +404,18 @@ export function QuoteBuilderV2Page() {
             <Card className="p-4 space-y-3">
               <p className="text-sm font-medium text-foreground">Voice intake</p>
               <p className="text-xs text-muted-foreground">
-                Record the customer need and let the voice-to-QRM pipeline seed the commercial workspace.
+                Record the customer need and let the voice-to-QRM pipeline seed the commercial workspace with usable field intelligence.
               </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">What to listen for</p>
+                  <p className="mt-1 text-sm text-foreground">Decision timing, equipment intent, budget friction, and the next promised follow-up.</p>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Why it matters</p>
+                  <p className="mt-1 text-sm text-foreground">A strong voice note should reduce manual entry and sharpen the next pipeline move.</p>
+                </div>
+              </div>
               <VoiceRecorder
                 onRecorded={(audioBlob, fileName) => {
                   voiceMutation.mutate({ blob: audioBlob, fileName });
