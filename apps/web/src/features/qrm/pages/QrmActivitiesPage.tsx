@@ -1191,6 +1191,21 @@ export function QrmActivitiesPage() {
       />
       <QrmSubNav />
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+          <p className="mt-2 text-sm text-foreground">{activitiesWhatMattersNow}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+          <p className="mt-2 text-sm text-foreground">{activitiesNextMove}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+          <p className="mt-2 text-sm text-foreground">{activitiesRiskIfIgnored}</p>
+        </Card>
+      </div>
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Activity summary">
         {[
           {
