@@ -257,6 +257,21 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
   }, [companyQuery.data]);
 
   const companyName = companyQuery.data?.name ?? "company";
+  const companyWhatMattersNow = !companyQuery.data
+    ? "Account context is loading."
+    : account360Query.data?.health?.current_score != null
+      ? `Health score is ${Number(account360Query.data.health.current_score).toFixed(0)} and should guide the operating posture.`
+      : "No health read is available yet for this account."
+  const companyNextMove = !companyQuery.data
+    ? "Wait for the account to load."
+    : account360Query.data?.ar_block
+      ? "Resolve the AR block or protect the next commercial move accordingly."
+      : "Use next-best actions and fresh activity to move the account forward now."
+  const companyRiskIfIgnored = !companyQuery.data
+    ? "No risk available yet."
+    : account360Query.data?.ar_block
+      ? "Commercial momentum can stall behind unresolved AR pressure."
+      : "Without a visible next move, the account becomes a passive record instead of an operating surface."
   const canManageDefinitions = userRole === "admin" || userRole === "owner";
   const canManageHierarchy = userRole === "admin" || userRole === "manager" || userRole === "owner";
 

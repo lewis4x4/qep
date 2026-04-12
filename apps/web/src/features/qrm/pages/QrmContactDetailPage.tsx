@@ -157,6 +157,21 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
     }
     return `${contactQuery.data.firstName} ${contactQuery.data.lastName}`;
   }, [contactQuery.data]);
+  const contactWhatMattersNow = !contactQuery.data
+    ? "Contact context is loading."
+    : (dealsQuery.data?.length ?? 0) > 0
+      ? `${dealsQuery.data?.length ?? 0} live deal signal${(dealsQuery.data?.length ?? 0) === 1 ? "" : "s"} linked to this contact.`
+      : "No active deal signal is linked to this contact yet."
+  const contactNextMove = !contactQuery.data
+    ? "Wait for the contact to load."
+    : (dealsQuery.data?.length ?? 0) > 0
+      ? "Open the active deal and make sure the next follow-up is real, not implied."
+      : "Create or link the next commercial motion before this relationship goes cold."
+  const contactRiskIfIgnored = !contactQuery.data
+    ? "No risk available yet."
+    : companyQuery.data
+      ? "The relationship can drift inside the account if there is no clear next action."
+      : "Without company or deal linkage, this contact can become orphaned context."
 
   if (!contactId) {
     return <Navigate to="/qrm/contacts" replace />;
@@ -214,6 +229,21 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
               subtitle={contactQuery.data.title || "QRM Contact"}
             />
             <AskIronAdvisorButton contextType="contact" contextId={contactId} variant="inline" />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+              <p className="mt-2 text-sm text-foreground">{contactWhatMattersNow}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+              <p className="mt-2 text-sm text-foreground">{contactNextMove}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+              <p className="mt-2 text-sm text-foreground">{contactRiskIfIgnored}</p>
+            </Card>
           </div>
 
           {contactQuery.data.dgeCustomerProfileId && (
