@@ -4,6 +4,7 @@ import { BarChart3, Download, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
@@ -157,6 +158,20 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
 
   const showWeightedMetrics = isElevated && !weightedDealsQuery.isLoading;
   const showStageDistribution = isElevated && stageSummary.length > 0;
+  const attentionCount = urgencyEvaluation.counts.attention;
+  const overdueCount = urgencyEvaluation.counts.overdue_follow_up;
+  const staleCount = urgencyEvaluation.counts.stalled;
+  const pipelineWhatMattersNow = isLoading
+    ? "Pipeline pressure is loading."
+    : `${filteredDeals.length} visible deal${filteredDeals.length === 1 ? "" : "s"}, ${attentionCount} needing attention, ${overdueCount} overdue, ${staleCount} stale.`;
+  const pipelineNextMove = overdueCount > 0
+    ? `Pull the ${overdueCount} overdue deal${overdueCount === 1 ? "" : "s"} forward before touching lower-pressure stages.`
+    : attentionCount > 0
+      ? `Work the ${attentionCount} attention item${attentionCount === 1 ? "" : "s"} so the board reflects real motion, not latent risk.`
+      : "Use the board to tighten the next stage move and keep follow-up timing honest.";
+  const pipelineRiskIfIgnored = overdueCount > 0 || staleCount > 0
+    ? "If pipeline pressure is buried below filters, deals age quietly and operator trust drops."
+    : "Without a clear top brief, the board becomes informative but not decisive.";
 
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -165,6 +180,21 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
         subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
       />
       <QrmSubNav />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineWhatMattersNow}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineNextMove}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineRiskIfIgnored}</p>
+        </Card>
+      </div>
 
       <div className="flex justify-end gap-2">
         {viewMode === "board" && (
