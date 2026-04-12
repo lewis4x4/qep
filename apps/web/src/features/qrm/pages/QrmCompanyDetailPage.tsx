@@ -272,6 +272,14 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
     : account360Query.data?.ar_block
       ? "Commercial momentum can stall behind unresolved AR pressure."
       : "Without a visible next move, the account becomes a passive record instead of an operating surface."
+  const companyActivitySummary = activitiesQuery.isLoading
+    ? "Activity is loading."
+    : (activitiesQuery.data?.length ?? 0) > 0
+      ? `${activitiesQuery.data?.length ?? 0} recent activity item${(activitiesQuery.data?.length ?? 0) === 1 ? "" : "s"} are already on the record.`
+      : "No recent activity is logged on this account."
+  const companyActionPrompt = (activitiesQuery.data?.length ?? 0) > 0
+    ? "Use the latest activity thread to decide the next owner touch before opening lower panels."
+    : "Log the next meaningful touch now so the account has visible momentum."
   const canManageDefinitions = userRole === "admin" || userRole === "owner";
   const canManageHierarchy = userRole === "admin" || userRole === "manager" || userRole === "owner";
 

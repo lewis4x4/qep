@@ -172,6 +172,14 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
     : companyQuery.data
       ? "The relationship can drift inside the account if there is no clear next action."
       : "Without company or deal linkage, this contact can become orphaned context."
+  const contactActivitySummary = activitiesQuery.isLoading
+    ? "Activity is loading."
+    : (activitiesQuery.data?.length ?? 0) > 0
+      ? `${activitiesQuery.data?.length ?? 0} recent activity item${(activitiesQuery.data?.length ?? 0) === 1 ? "" : "s"} already anchor this relationship.`
+      : "No recent activity is logged for this contact."
+  const contactActionPrompt = (activitiesQuery.data?.length ?? 0) > 0
+    ? "Use the latest touch to choose the next outreach, instead of scanning the full timeline first."
+    : "Log or schedule the next touch now so this relationship does not go quiet."
 
   if (!contactId) {
     return <Navigate to="/qrm/contacts" replace />;
@@ -245,6 +253,16 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
               <p className="mt-2 text-sm text-foreground">{contactRiskIfIgnored}</p>
             </Card>
           </div>
+
+          <Card className="p-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Activity and follow-up</p>
+                <p className="mt-2 text-sm text-foreground">{contactActivitySummary}</p>
+              </div>
+              <p className="max-w-md text-sm text-muted-foreground">{contactActionPrompt}</p>
+            </div>
+          </Card>
 
           {contactQuery.data.dgeCustomerProfileId && (
             <Card className="p-3">

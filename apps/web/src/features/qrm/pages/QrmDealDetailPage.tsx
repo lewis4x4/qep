@@ -239,6 +239,14 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
     : dealQueryData.nextFollowUpAt
       ? "A dated follow-up still fails if nobody acts on it."
       : "Without a next follow-up, this deal can stall silently."
+  const dealActivitySummary = activitiesQuery.isLoading
+    ? "Activity is loading."
+    : activitiesData.length > 0
+      ? `${activitiesData.length} recent activity item${activitiesData.length === 1 ? "" : "s"} are already tied to this deal.`
+      : "No recent activity is logged on this deal."
+  const dealActionPrompt = activitiesData.length > 0
+    ? "Use the freshest activity signal to confirm the next move before digging through the full timeline."
+    : "Log the next seller move now so this deal has visible forward pressure."
   const isLoading = compositeQuery.isLoading;
   const hasError = compositeQuery.isError;
   const hasDeal = Boolean(dealQueryData);
