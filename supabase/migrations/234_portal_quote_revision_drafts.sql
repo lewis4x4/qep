@@ -10,7 +10,7 @@ create table if not exists public.portal_quote_revision_drafts (
   workspace_id text not null default 'default',
   portal_quote_review_id uuid not null references public.portal_quote_reviews(id) on delete cascade,
   quote_package_id uuid not null references public.quote_packages(id) on delete cascade,
-  deal_id uuid not null references public.crm_deals(id) on delete cascade,
+  deal_id uuid not null references public.qrm_deals(id) on delete cascade,
   prepared_by uuid references public.profiles(id) on delete set null,
   approved_by uuid references public.profiles(id) on delete set null,
   status text not null default 'draft'
