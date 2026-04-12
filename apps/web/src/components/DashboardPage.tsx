@@ -222,36 +222,31 @@ export function DashboardPage({ userId, userRole, userEmail, userName }: Dashboa
         <p className="text-muted-foreground mt-1">QRM home for attention, signal, and the next move.</p>
       </div>
 
-      <div className="mb-8 grid gap-4 lg:grid-cols-3">
-        <Card className="border-border bg-card lg:col-span-2">
-          <CardContent className="pt-5 pb-4 space-y-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Attention</p>
-              <p className="mt-1 text-sm text-foreground">
-                {showCommandCenter
-                  ? "Use the command surface to spot pressured deals, fresh field notes, and stalled follow-up."
-                  : "Check fresh uploads, team activity, and voice capture volume before diving deeper."}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Signal</p>
-              <p className="mt-1 text-sm text-foreground">
-                Voice captures and quote work should feed the same operating rhythm, not live in separate silos.
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
-              <p className="mt-1 text-sm text-foreground">
-                Start with the surface that reduces uncertainty fastest, then move the deal or task forward immediately.
-              </p>
-            </div>
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        <Card className="border-border bg-card">
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+            <p className="mt-2 text-sm text-foreground">
+              {showCommandCenter
+                ? "Use the command surface to spot pressured deals, fresh field notes, and stalled follow-up."
+                : "Check fresh uploads, team activity, and voice capture volume before diving deeper."}
+            </p>
           </CardContent>
         </Card>
         <Card className="border-border bg-card">
-          <CardContent className="pt-5 pb-4 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Operating focus</p>
-            <p className="text-sm text-foreground">QRM should stay calm on the surface and sharp underneath.</p>
-            <p className="text-xs text-muted-foreground">Keep field signal, quote readiness, and action surfaces moving as one system.</p>
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+            <p className="mt-2 text-sm text-foreground">
+              Start with the surface that reduces uncertainty fastest, then move the deal or task forward immediately.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="pt-5 pb-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+            <p className="mt-2 text-sm text-foreground">
+              If home becomes a list of surfaces instead of an operating brief, field signal and quote pressure drift apart again.
+            </p>
           </CardContent>
         </Card>
       </div>
