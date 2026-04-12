@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { portalApi } from "../lib/portal-api";
+import { portalApi, type PortalFleetAssetView } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { Wrench, Shield, Activity, FileText, Package } from "lucide-react";
 
@@ -27,36 +27,6 @@ const JOB_STAGE_LABEL: Record<string, string> = {
   paid_closed: "Completed",
 };
 
-interface ServiceJobSummary {
-  service_job_id: string;
-  current_stage: string;
-  estimated_completion: string | null;
-  status: string;
-  last_updated_at: string;
-}
-
-interface PortalStatusSummary {
-  label: string;
-  source: "service_job" | "portal_request" | "default";
-  source_label: string;
-  eta: string | null;
-  last_updated_at: string | null;
-}
-
-interface FleetItem {
-  id: string;
-  make: string;
-  model: string;
-  year: number | null;
-  serial_number: string | null;
-  current_hours: number | null;
-  warranty_expiry: string | null;
-  next_service_due: string | null;
-  trade_in_interest?: boolean;
-  active_service_job?: ServiceJobSummary | null;
-  portal_status?: PortalStatusSummary | null;
-}
-
 function statusColor(stage: string): { bg: string; text: string } {
   if (stage === "ready_for_pickup" || stage === "paid_closed") return { bg: "bg-emerald-500/10", text: "text-emerald-400" };
   if (stage === "blocked_waiting" || stage === "parts_pending") return { bg: "bg-red-500/10", text: "text-red-400" };
@@ -79,7 +49,7 @@ export function PortalFleetPage() {
     refetchInterval: 60_000,
   });
 
-  const fleet = (data?.fleet ?? []) as unknown as FleetItem[];
+  const fleet = data?.fleet ?? [];
 
   return (
     <PortalLayout>
@@ -104,10 +74,10 @@ export function PortalFleetPage() {
 
       <div className="space-y-3">
         {fleet.map((item) => {
-          const job = item.active_service_job;
+          const job = item.activeServiceJob;
           const inShop = !!job;
-          const portalStatus = item.portal_status ?? null;
-          const stageInfo = inShop && job ? statusColor(job.current_stage) : null;
+          const portalStatus = item.portalStatus ?? null;
+          const stageInfo = inShop && job ? statusColor(job.currentStage) : null;
           const etaLabel = portalStatus?.eta ? formatETA(portalStatus.eta) : null;
 
           return (
@@ -118,22 +88,22 @@ export function PortalFleetPage() {
                     {item.make} {item.model}{item.year ? ` (${item.year})` : ""}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                    {item.serial_number && <span>S/N: {item.serial_number}</span>}
-                    {item.current_hours && <span>{item.current_hours.toLocaleString()} hrs</span>}
+                    {item.serialNumber && <span>S/N: {item.serialNumber}</span>}
+                    {item.currentHours && <span>{item.currentHours.toLocaleString()} hrs</span>}
                   </div>
                 </div>
 
                 <div className="shrink-0 text-right space-y-1">
-                  {item.warranty_expiry && (
+                  {item.warrantyExpiry && (
                     <div className="flex items-center justify-end gap-1 text-[11px]">
-                      <Shield className={`h-3 w-3 ${new Date(item.warranty_expiry) > new Date() ? "text-emerald-400" : "text-red-400"}`} aria-hidden />
-                      <span className="text-muted-foreground">{item.warranty_expiry}</span>
+                      <Shield className={`h-3 w-3 ${new Date(item.warrantyExpiry) > new Date() ? "text-emerald-400" : "text-red-400"}`} aria-hidden />
+                      <span className="text-muted-foreground">{item.warrantyExpiry}</span>
                     </div>
                   )}
-                  {item.next_service_due && (
+                  {item.nextServiceDue && (
                     <div className="flex items-center justify-end gap-1 text-[11px]">
                       <Wrench className="h-3 w-3 text-amber-400" aria-hidden />
-                      <span className="text-muted-foreground">Next: {item.next_service_due}</span>
+                      <span className="text-muted-foreground">Next: {item.nextServiceDue}</span>
                     </div>
                   )}
                 </div>
@@ -163,10 +133,10 @@ export function PortalFleetPage() {
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
-                    <span>Source: {portalStatus.source_label}</span>
-                    {portalStatus.last_updated_at && (
+                    <span>Source: {portalStatus.sourceLabel}</span>
+                    {portalStatus.lastUpdatedAt && (
                       <span>
-                        Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        Last updated: {new Date(portalStatus.lastUpdatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                       </span>
                     )}
                   </div>
@@ -189,7 +159,7 @@ export function PortalFleetPage() {
                     </Link>
                   </Button>
                 </div>
-                {item.trade_in_interest && (
+                {item.tradeInInterest && (
                   <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[9px] font-semibold text-qep-orange">
                     Trade-in interest flagged
                   </span>

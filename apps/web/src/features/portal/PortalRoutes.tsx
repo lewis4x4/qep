@@ -18,6 +18,9 @@ const PortalInvoicesPage = lazy(() =>
 const PortalQuotesPage = lazy(() =>
   import("./pages/PortalQuotesPage").then((m) => ({ default: m.PortalQuotesPage })),
 );
+const PortalQuoteRoomPage = lazy(() =>
+  import("./pages/PortalQuoteRoomPage").then((m) => ({ default: m.PortalQuoteRoomPage })),
+);
 const PortalPartsPage = lazy(() =>
   import("./pages/PortalPartsPage").then((m) => ({ default: m.PortalPartsPage })),
 );
@@ -29,6 +32,12 @@ const PortalDocumentsPage = lazy(() =>
 );
 const PortalFleetMapPage = lazy(() =>
   import("./pages/PortalFleetMapPage").then((m) => ({ default: m.PortalFleetMapPage })),
+);
+const PortalSubscriptionsPage = lazy(() =>
+  import("./pages/PortalSubscriptionsPage").then((m) => ({ default: m.PortalSubscriptionsPage })),
+);
+const PortalRentalsPage = lazy(() =>
+  import("./pages/PortalRentalsPage").then((m) => ({ default: m.PortalRentalsPage })),
 );
 const PortalEquipmentDetailPage = lazy(() =>
   import("./pages/PortalEquipmentDetailPage").then((m) => ({ default: m.PortalEquipmentDetailPage })),
@@ -49,6 +58,9 @@ export function portalRouteElements(): ReactElement[] {
     <Route key="portal-parts" path="/portal/parts" element={wrap(<PortalPartsPage />)} />,
     <Route key="portal-invoices" path="/portal/invoices" element={wrap(<PortalInvoicesPage />)} />,
     <Route key="portal-quotes" path="/portal/quotes" element={wrap(<PortalQuotesPage />)} />,
+    <Route key="portal-quote-room" path="/portal/quotes/:quoteId" element={wrap(<PortalQuoteRoomPage />)} />,
+    <Route key="portal-subscriptions" path="/portal/subscriptions" element={wrap(<PortalSubscriptionsPage />)} />,
+    <Route key="portal-rentals" path="/portal/rentals" element={wrap(<PortalRentalsPage />)} />,
     <Route key="portal-settings" path="/portal/settings" element={wrap(<PortalSettingsPage />)} />,
     <Route key="portal-documents" path="/portal/documents" element={wrap(<PortalDocumentsPage />)} />,
     <Route key="portal-fleet-map" path="/portal/fleet" element={wrap(<PortalFleetMapPage />)} />,

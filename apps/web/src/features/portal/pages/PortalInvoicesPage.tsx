@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { portalApi } from "../lib/portal-api";
+import { portalApi, type PortalBillingSummary, type PortalInvoiceTimelineItem, type PortalSubscriptionBillingDetail } from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { PayInvoiceButton } from "../components/PayInvoiceButton";
 import { downloadInvoiceStatement, type PortalInvoicePaymentHistoryItem } from "../lib/invoice-statement";
@@ -41,6 +41,8 @@ type PortalPaymentStatus = {
 type InvoiceRecord = Record<string, unknown> & {
   portal_payment_status?: PortalPaymentStatus | null;
   portal_payment_history?: PortalInvoicePaymentHistoryItem[];
+  portal_invoice_timeline?: PortalInvoiceTimelineItem[];
+  portal_subscription_billing?: PortalSubscriptionBillingDetail | null;
   customer_invoice_line_items?: LineItem[];
 };
 
@@ -82,12 +84,35 @@ export function PortalInvoicesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["portal", "invoices"] }),
   });
 
+  const billingSummary = data?.billing_summary as PortalBillingSummary | undefined;
+
   return (
     <PortalLayout>
       <h1 className="text-xl font-bold text-foreground mb-4">Invoices & Payments</h1>
       <p className="text-sm text-muted-foreground mb-4">
         Pay open invoices online when Stripe is available. If you already paid by check, ACH, or another offline method, record that below so the dealership can reconcile it.
       </p>
+
+      {billingSummary && (
+        <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Open balance</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(billingSummary.open_balance)}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Overdue balance</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(billingSummary.overdue_balance)}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Subscription charges</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{billingSummary.subscription_invoices}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Payments in flight</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{billingSummary.payments_in_flight}</p>
+          </Card>
+        </div>
+      )}
 
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
 
@@ -100,6 +125,8 @@ export function PortalInvoicesPage() {
           const companyId = typeof inv.crm_company_id === "string" ? inv.crm_company_id : "";
           const paymentStatus = invoice.portal_payment_status ?? null;
           const paymentHistory = invoice.portal_payment_history ?? [];
+          const billingTimeline = invoice.portal_invoice_timeline ?? [];
+          const subscriptionBilling = invoice.portal_subscription_billing ?? null;
           const offlineOpen = showOfflineForm[invoiceId] === true;
           return (
             <Card key={invoiceId} className="p-4 space-y-3">
@@ -116,6 +143,20 @@ export function PortalInvoicesPage() {
                   )}
                 </div>
               </div>
+              {subscriptionBilling && (
+                <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+                  <p className="text-xs font-semibold text-blue-400">{subscriptionBilling.plan_name}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Billing period {new Date(subscriptionBilling.billing_period_start).toLocaleDateString()} to {new Date(subscriptionBilling.billing_period_end).toLocaleDateString()}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Usage {subscriptionBilling.used_hours ?? "—"} hrs
+                    {subscriptionBilling.included_hours != null ? ` / included ${subscriptionBilling.included_hours} hrs` : ""}
+                    {subscriptionBilling.overage_hours != null ? ` · overage ${subscriptionBilling.overage_hours} hrs` : ""}
+                    {subscriptionBilling.overage_charge != null ? ` · ${formatCurrency(subscriptionBilling.overage_charge)} overage` : ""}
+                  </p>
+                </div>
+              )}
               <div className="flex justify-end">
                 <Button
                   type="button"
@@ -182,6 +223,27 @@ export function PortalInvoicesPage() {
                           <span>Started {formatHistoryDate(entry.created_at)}</span>
                           {entry.resolved_at ? <span>Resolved {formatHistoryDate(entry.resolved_at)}</span> : null}
                           {entry.reference ? <span>Ref {entry.reference}</span> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {billingTimeline.length > 0 && (
+                <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                  <p className="text-xs font-semibold text-foreground">Billing timeline</p>
+                  <div className="mt-3 space-y-2">
+                    {billingTimeline.map((entry, index) => (
+                      <div key={`${entry.label}-${index}`} className="flex items-start gap-3">
+                        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                          entry.tone === "emerald" ? "bg-emerald-400" :
+                          entry.tone === "red" ? "bg-red-400" :
+                          entry.tone === "amber" ? "bg-amber-400" : "bg-blue-400"
+                        }`} />
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{entry.label}</p>
+                          <p className="text-[11px] text-muted-foreground">{entry.detail}</p>
+                          {entry.at ? <p className="text-[10px] text-muted-foreground">{formatHistoryDate(entry.at)}</p> : null}
                         </div>
                       </div>
                     ))}

@@ -29,14 +29,15 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 });
 
 const FIXTURE_IDS = {
-  serviceMemoryActivity: "7f9dcd4a-9bc6-4bf6-97dc-a54cf2cb57ad",
-  competitorActivity: "07a68902-2e0d-49b1-a062-1e0c859ecf42",
   publicDoc: "188a47aa-cd13-4a0d-9489-51546c4b6510",
   publicDocSection: "55c65cf1-3f41-4381-b2c2-b283bd52d2f8",
   publicDocParagraph: "395d8709-56dd-4338-bb27-bf4880f2c707",
   financeDoc: "c812d1e1-4f5d-4053-9ccd-fbf176792d78",
   financeDocParagraph: "8895b859-5d48-43ea-b402-36d40404f10d",
 };
+
+const QRM_DEALS_TABLE = "qrm_deals";
+const QRM_EMBEDDINGS_TABLE = "qrm_embeddings";
 
 async function supportsTier1ChunkSchema() {
   const { error } = await supabase
@@ -66,7 +67,7 @@ async function getOperatorProfile() {
 async function getOverdueDeal() {
   const nowIso = new Date().toISOString();
   const { data, error } = await supabase
-    .from("crm_deals")
+    .from(QRM_DEALS_TABLE)
     .select("id, workspace_id, name, next_follow_up_at, expected_close_on, company_id")
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
@@ -89,36 +90,11 @@ function buildDealEmbeddingContent(deal) {
     `This deal is overdue for follow-up and needs manager attention now.`,
     `Next follow-up due: ${deal.next_follow_up_at ?? "missing"}`,
     `Expected close: ${deal.expected_close_on ?? "unknown"}`,
+    "Similar machine memory: last time this issue on a similar machine was solved by replacing the feed wheel pressure solenoid and recalibrating the valve block before swapping the hydraulic pump.",
+    "Voice note intelligence about competitor mentions: Fecon dealer network is being used against us on faster delivery slots and lower monthly payment framing, so leadership needs a response plan by tomorrow morning.",
   ].join("\n");
 }
-
-function buildServiceMemoryActivityFixture(deal, operatorId) {
-  return {
-    id: FIXTURE_IDS.serviceMemoryActivity,
-    workspace_id: workspaceId,
-    activity_type: "note",
-    body:
-      "Similar machine memory: last time this issue on a similar machine was solved by replacing the feed wheel pressure solenoid and recalibrating the valve block before swapping the hydraulic pump.",
-    occurred_at: new Date().toISOString(),
-    deal_id: deal.id,
-    created_by: operatorId,
-  };
-}
-
-function buildCompetitorActivityFixture(deal, operatorId) {
-  return {
-    id: FIXTURE_IDS.competitorActivity,
-    workspace_id: workspaceId,
-    activity_type: "note",
-    body:
-      "Show me voice-note intelligence about competitor mentions. Voice note intelligence about competitor mentions: Fecon dealer network is being used against us on faster delivery slots and lower monthly payment framing, so leadership needs a response plan by tomorrow morning.",
-    occurred_at: new Date().toISOString(),
-    deal_id: deal.id,
-    created_by: operatorId,
-  };
-}
-
-function buildEmbeddingRows(deal, serviceMemoryActivity, competitorActivity) {
+function buildEmbeddingRows(deal) {
   return [
     {
       entity_type: "deal",
@@ -128,26 +104,6 @@ function buildEmbeddingRows(deal, serviceMemoryActivity, competitorActivity) {
         workspace_id: workspaceId,
         fixture: "kb-eval",
         purpose: "deal-follow-up",
-      },
-    },
-    {
-      entity_type: "activity",
-      entity_id: serviceMemoryActivity.id,
-      content: `QRM Activity\n${serviceMemoryActivity.body}`,
-      metadata: {
-        workspace_id: workspaceId,
-        fixture: "kb-eval",
-        purpose: "service-memory",
-      },
-    },
-    {
-      entity_type: "activity",
-      entity_id: competitorActivity.id,
-      content: `QRM Activity\n${competitorActivity.body}`,
-      metadata: {
-        workspace_id: workspaceId,
-        fixture: "kb-eval",
-        purpose: "voice-intelligence",
       },
     },
   ];
@@ -274,20 +230,10 @@ export async function bootstrapLiveCorpus() {
   const supportsTier1Schema = await supportsTier1ChunkSchema();
   const operator = await getOperatorProfile();
   const overdueDeal = await getOverdueDeal();
-  const serviceMemoryActivity = buildServiceMemoryActivityFixture(overdueDeal, operator.id);
-  const competitorActivity = buildCompetitorActivityFixture(overdueDeal, operator.id);
   const docFixtures = buildDocumentFixtures(operator.id, supportsTier1Schema);
-
-  const { error: activityError } = await supabase
-    .from("crm_activities")
-    .upsert([serviceMemoryActivity, competitorActivity], { onConflict: "id", ignoreDuplicates: false });
-  if (activityError) {
-    throw new Error(`Failed to upsert KB eval activity fixtures: ${activityError.message}`);
-  }
-
-  const embeddingRows = buildEmbeddingRows(overdueDeal, serviceMemoryActivity, competitorActivity);
+  const embeddingRows = buildEmbeddingRows(overdueDeal);
   const { error: embeddingsError } = await supabase
-    .from("crm_embeddings")
+    .from(QRM_EMBEDDINGS_TABLE)
     .upsert(embeddingRows, { onConflict: "entity_type,entity_id", ignoreDuplicates: false });
   if (embeddingsError) {
     throw new Error(`Failed to upsert KB eval embeddings: ${embeddingsError.message}`);
@@ -322,8 +268,6 @@ export async function bootstrapLiveCorpus() {
         workspace_id: workspaceId,
         supports_tier1_schema: supportsTier1Schema,
         overdue_deal_id: overdueDeal.id,
-        service_memory_activity_fixture_id: serviceMemoryActivity.id,
-        competitor_activity_fixture_id: competitorActivity.id,
         document_fixture_ids: docFixtures.documents.map((doc) => doc.id),
         embedded_entities: embeddingRows.map((row) => ({
           entity_type: row.entity_type,

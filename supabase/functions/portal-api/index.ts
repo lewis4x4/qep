@@ -88,11 +88,27 @@ interface PortalQuoteReviewRow {
   id: string;
   deal_id: string | null;
   status: string;
+  counter_notes: string | null;
+  quote_data: Record<string, unknown> | null;
+  quote_pdf_url: string | null;
   viewed_at: string | null;
   signed_at: string | null;
   expires_at: string | null;
   updated_at: string;
   signer_name: string | null;
+}
+
+interface PortalQuoteRevisionRow {
+  id: string;
+  portal_quote_review_id: string;
+  version_number: number;
+  quote_data: Record<string, unknown> | null;
+  quote_pdf_url: string | null;
+  dealer_message: string | null;
+  revision_summary: string | null;
+  customer_request_snapshot: string | null;
+  published_at: string;
+  is_current: boolean;
 }
 
 interface PortalPaymentIntentRow {
@@ -342,6 +358,154 @@ function normalizePortalDealStatus(input: {
   };
 }
 
+function quoteDataText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
+  const raw = (typeof value?.[keyA] === "string" ? value[keyA] : typeof value?.[keyB] === "string" ? value[keyB] : null) as string | null;
+  const trimmed = raw?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function quoteDataLines(value: Record<string, unknown> | null, keyA: string, keyB: string): string[] {
+  const source = value?.[keyA] ?? value?.[keyB];
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      if (typeof record.description === "string" && record.description.trim()) return record.description.trim();
+      if (typeof record.name === "string" && record.name.trim()) return record.name.trim();
+      if (typeof record.label === "string" && record.label.trim()) return record.label.trim();
+      const combined = [record.make, record.model, record.year].filter(Boolean).join(" ").trim();
+      return combined || null;
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function quoteDataFinancing(value: Record<string, unknown> | null): string[] {
+  const source = value?.financing;
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const parts = [
+        typeof record.type === "string" ? record.type.toUpperCase() : null,
+        Number.isFinite(Number(record.monthlyPayment)) ? `$${Math.round(Number(record.monthlyPayment)).toLocaleString()}/mo` : null,
+        Number.isFinite(Number(record.termMonths)) ? `${Math.round(Number(record.termMonths))} mo` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : null;
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function quoteDataTerms(value: Record<string, unknown> | null): string[] {
+  const source = value?.terms ?? value?.legal_terms;
+  if (typeof source === "string" && source.trim()) return [source.trim()];
+  if (!Array.isArray(source)) return [];
+  return source.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim());
+}
+
+function compareStringLists(label: string, previous: string[], current: string[]): string[] {
+  if (JSON.stringify(previous) === JSON.stringify(current)) return [];
+  return [`${label}: ${previous.join(", ") || "none"} → ${current.join(", ") || "none"}`];
+}
+
+function buildPortalQuoteCompare(
+  currentVersion: PortalQuoteRevisionRow | null,
+  previousVersion: PortalQuoteRevisionRow | null,
+): Record<string, unknown> | null {
+  if (!currentVersion || !previousVersion) return null;
+
+  const currentQuoteData = currentVersion.quote_data ?? {};
+  const previousQuoteData = previousVersion.quote_data ?? {};
+  const currentPrice = Number(currentQuoteData.net_total ?? currentQuoteData.netTotal ?? 0);
+  const previousPrice = Number(previousQuoteData.net_total ?? previousQuoteData.netTotal ?? 0);
+  const priceChanges = Number.isFinite(currentPrice) && Number.isFinite(previousPrice) && currentPrice !== previousPrice
+    ? [`Net total: $${previousPrice.toLocaleString()} → $${currentPrice.toLocaleString()}`]
+    : [];
+
+  const equipmentChanges = compareStringLists(
+    "Equipment",
+    quoteDataLines(previousQuoteData, "equipment", "equipment"),
+    quoteDataLines(currentQuoteData, "equipment", "equipment"),
+  );
+  const financingChanges = compareStringLists(
+    "Financing",
+    quoteDataFinancing(previousQuoteData),
+    quoteDataFinancing(currentQuoteData),
+  );
+  const termsChanges = compareStringLists(
+    "Terms",
+    quoteDataTerms(previousQuoteData),
+    quoteDataTerms(currentQuoteData),
+  );
+
+  const previousDealerMessage = previousVersion.dealer_message ?? quoteDataText(previousQuoteData, "dealer_message", "dealerMessage");
+  const currentDealerMessage = currentVersion.dealer_message ?? quoteDataText(currentQuoteData, "dealer_message", "dealerMessage");
+
+  return {
+    has_changes: priceChanges.length > 0 || equipmentChanges.length > 0 || financingChanges.length > 0 || termsChanges.length > 0 || previousDealerMessage !== currentDealerMessage,
+    price_changes: priceChanges,
+    equipment_changes: equipmentChanges,
+    financing_changes: financingChanges,
+    terms_changes: termsChanges,
+    dealer_message_change:
+      previousDealerMessage !== currentDealerMessage
+        ? `${previousDealerMessage ?? "No prior dealer message"} → ${currentDealerMessage ?? "No current dealer message"}`
+        : null,
+  };
+}
+
+function buildPortalInvoiceTimeline(input: {
+  invoiceDate: string | null;
+  status: string | null;
+  paidAt: string | null;
+  updatedAt: string | null;
+  paymentHistory: PortalPaymentHistoryItem[];
+}): Array<{ label: string; detail: string; at: string | null; tone: "blue" | "amber" | "emerald" | "red" }> {
+  const timeline: Array<{ label: string; detail: string; at: string | null; tone: "blue" | "amber" | "emerald" | "red" }> = [
+    {
+      label: "Invoice issued",
+      detail: "The dealership published this invoice to the customer billing center.",
+      at: input.invoiceDate,
+      tone: "blue",
+    },
+  ];
+
+  for (const payment of input.paymentHistory) {
+    timeline.push({
+      label: payment.label,
+      detail: payment.detail,
+      at: payment.resolved_at ?? payment.created_at,
+      tone:
+        payment.status === "paid" ? "emerald" : payment.status === "failed" ? "red" : payment.status === "processing" ? "blue" : "amber",
+    });
+  }
+
+  if (input.status === "paid") {
+    timeline.push({
+      label: "Balance resolved",
+      detail: "The invoice balance is fully resolved.",
+      at: input.paidAt ?? input.updatedAt,
+      tone: "emerald",
+    });
+  }
+
+  return timeline;
+}
+
+function serviceWorkspaceSummaryLine(statusLabel: string, requestType: string): string {
+  if (/completed/i.test(statusLabel)) {
+    return `Your ${requestType} request is complete and the final status is available in the portal timeline.`;
+  }
+  if (/waiting/i.test(statusLabel) || /parts/i.test(statusLabel)) {
+    return `Your ${requestType} request is active, but the dealership is waiting on a dependency before closing it.`;
+  }
+  if (/review|triag/i.test(statusLabel)) {
+    return `Your ${requestType} request is being reviewed by the dealership team.`;
+  }
+  return `Your ${requestType} request is active and moving through the dealership workflow.`;
+}
+
 function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
   label: string;
   tone: "blue" | "amber" | "emerald" | "red";
@@ -526,6 +690,15 @@ function notificationLabel(notificationType: string): string {
   }
 }
 
+function equipmentDisplayLabel(input: {
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+}): string {
+  const label = [input.make, input.model].filter(Boolean).join(" ").trim();
+  return input.year ? `${label} (${input.year})` : label || "Equipment";
+}
+
 function normalizePortalPartsOrderStatus(input: {
   orderStatus: string | null;
   estimatedDelivery: string | null;
@@ -671,6 +844,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !supabaseAnon) {
       return safeJsonError("Service misconfigured", 503, origin);
     }
@@ -685,6 +859,11 @@ Deno.serve(async (req) => {
       supabaseAnon,
       { global: { headers: { Authorization: authHeader } } },
     );
+    const admin = serviceKey
+      ? createClient(supabaseUrl, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      : null;
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -756,7 +935,11 @@ Deno.serve(async (req) => {
       }
 
       if (req.method === "GET") {
-        const { data, error } = await supabase
+        if (!admin) {
+          return safeJsonError("Service workspace is not configured on this environment.", 503, origin);
+        }
+
+        const { data, error } = await admin
           .from("service_requests")
           .select(`
             *,
@@ -766,12 +949,37 @@ Deno.serve(async (req) => {
               priority,
               updated_at,
               closed_at,
-              scheduled_end_at
+              scheduled_end_at,
+              branch_id,
+              status_flags
             )
           `)
+          .eq("portal_customer_id", portalCustomer.id)
+          .eq("workspace_id", portalWorkspaceId)
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load requests", 500, origin);
+
+        const branchIds = [...new Set(
+          ((data ?? []) as Array<Record<string, unknown>>)
+            .map((request) => {
+              const internalJobRaw = request.internal_job;
+              const internalJob = Array.isArray(internalJobRaw)
+                ? (internalJobRaw[0] as Record<string, unknown> | undefined)
+                : (internalJobRaw as Record<string, unknown> | null);
+              return typeof internalJob?.branch_id === "string" ? internalJob.branch_id : null;
+            })
+            .filter((value): value is string => Boolean(value)),
+        )];
+
+        const { data: branchRows } = branchIds.length > 0
+          ? await admin.from("branches").select("id, display_name").in("id", branchIds)
+          : { data: [] };
+        const branchById = new Map(((branchRows ?? []) as Array<Record<string, unknown>>).map((row) => [
+          String(row.id),
+          typeof row.display_name === "string" ? row.display_name : "Assigned branch",
+        ]));
+
         const requests = ((data ?? []) as Array<Record<string, unknown>>).map((request) => {
           const internalJobRaw = request.internal_job;
           const internalJob = Array.isArray(internalJobRaw)
@@ -787,13 +995,44 @@ Deno.serve(async (req) => {
             jobUpdatedAt: typeof internalJob?.updated_at === "string" ? internalJob.updated_at : null,
           });
 
+          const statusLabel = portalStatus.label;
+          const branchLabel = typeof internalJob?.branch_id === "string"
+            ? branchById.get(internalJob.branch_id) ?? null
+            : null;
+          const nextStep = portalStatus.source === "service_job"
+            ? `The ${branchLabel ?? "shop"} is progressing this request through ${statusLabel.toLowerCase()}.`
+            : `Your dealership will acknowledge and route this ${String(request.request_type)} request.`;
+
           return {
             ...request,
             portal_status: portalStatus,
+            photo_count: Array.isArray(request.photos) ? request.photos.length : 0,
+            workspace_timeline: {
+              branch_label: branchLabel,
+              next_step: nextStep,
+              customer_summary: serviceWorkspaceSummaryLine(statusLabel, String(request.request_type ?? "service")),
+            },
           };
         });
 
-        return safeJsonOk({ requests }, origin);
+        const typedRequests = requests as Array<Record<string, unknown> & { status?: string; portal_status?: { label?: string } }>;
+        const openRequests = typedRequests.filter((request) => !["completed", "cancelled"].includes(String(request.status)));
+        const completedRequests = typedRequests.filter((request) => ["completed", "cancelled"].includes(String(request.status)));
+        const blockedRequests = requests.filter((request) =>
+          /waiting|parts/i.test(String(request.portal_status?.label ?? "")),
+        );
+
+        return safeJsonOk({
+          requests,
+          open_requests: openRequests,
+          completed_requests: completedRequests.slice(0, 10),
+          blocked_requests: blockedRequests,
+          workspace_summary: {
+            open_count: openRequests.length,
+            completed_count: completedRequests.length,
+            blocked_count: blockedRequests.length,
+          },
+        }, origin);
       }
 
       if (req.method === "POST") {
@@ -1174,18 +1413,74 @@ Deno.serve(async (req) => {
           }
         }
 
+        let subscriptionBillingByInvoice = new Map<string, Record<string, unknown>>();
+        if (invoiceIds.length > 0 && crmCompanyId) {
+          const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data: usageRows } = await admin
+            .from("eaas_usage_records")
+            .select("invoice_id, period_start, period_end, hours_included, hours_used, overage_hours, overage_charge, subscription_id, eaas_subscriptions!inner(plan_name, includes_maintenance)")
+            .in("invoice_id", invoiceIds);
+
+          for (const row of ((usageRows ?? []) as Array<Record<string, unknown>>)) {
+            const invoiceId = typeof row.invoice_id === "string" ? row.invoice_id : null;
+            if (!invoiceId || subscriptionBillingByInvoice.has(invoiceId)) continue;
+            const subscription = row.eaas_subscriptions as Record<string, unknown> | null;
+            subscriptionBillingByInvoice.set(invoiceId, {
+              subscription_id: typeof row.subscription_id === "string" ? row.subscription_id : "",
+              plan_name: typeof subscription?.plan_name === "string" ? subscription.plan_name : "Subscription plan",
+              billing_period_start: typeof row.period_start === "string" ? row.period_start : "",
+              billing_period_end: typeof row.period_end === "string" ? row.period_end : "",
+              included_hours: typeof row.hours_included === "number" ? row.hours_included : null,
+              used_hours: typeof row.hours_used === "number" ? row.hours_used : null,
+              overage_hours: typeof row.overage_hours === "number" ? row.overage_hours : null,
+              overage_charge: typeof row.overage_charge === "number" ? row.overage_charge : null,
+              maintenance_included: subscription?.includes_maintenance !== false,
+            });
+          }
+        }
+
         const invoices = invoiceRows.map((invoice) => {
           const invoiceId = typeof invoice.id === "string" ? invoice.id : null;
           const invoiceIntents = invoiceId ? intentsByInvoice.get(invoiceId) ?? [] : [];
           const latestIntent = invoiceIntents[0] ?? null;
+          const portalPaymentHistory = buildPortalPaymentHistory(invoice, invoiceIntents);
           return {
             ...invoice,
             portal_payment_status: normalizePortalPaymentStatus(latestIntent),
-            portal_payment_history: buildPortalPaymentHistory(invoice, invoiceIntents),
+            portal_payment_history: portalPaymentHistory,
+            portal_subscription_billing: invoiceId ? subscriptionBillingByInvoice.get(invoiceId) ?? null : null,
+            portal_invoice_timeline: buildPortalInvoiceTimeline({
+              invoiceDate: typeof invoice.invoice_date === "string" ? invoice.invoice_date : null,
+              status: typeof invoice.status === "string" ? invoice.status : null,
+              paidAt: typeof invoice.paid_at === "string" ? invoice.paid_at : null,
+              updatedAt: typeof invoice.updated_at === "string" ? invoice.updated_at : null,
+              paymentHistory: portalPaymentHistory,
+            }),
           };
         });
 
-        return safeJsonOk({ invoices }, origin);
+        const typedInvoices = invoices as Array<Record<string, unknown> & {
+          balance_due?: number | null;
+          status?: string | null;
+          portal_payment_history?: PortalPaymentHistoryItem[];
+          portal_subscription_billing?: Record<string, unknown> | null;
+        }>;
+
+        const billingSummary = {
+          open_balance: typedInvoices.reduce((sum, invoice) => sum + Number(invoice.balance_due ?? 0), 0),
+          overdue_balance: typedInvoices
+            .filter((invoice) => String(invoice.status) === "overdue")
+            .reduce((sum, invoice) => sum + Number(invoice.balance_due ?? 0), 0),
+          subscription_invoices: typedInvoices.filter((invoice) => Boolean(invoice.portal_subscription_billing)).length,
+          payments_in_flight: typedInvoices.filter((invoice) =>
+            Array.isArray(invoice.portal_payment_history)
+              && invoice.portal_payment_history.some((entry) => entry.status === "processing" || entry.status === "pending")
+          ).length,
+        };
+
+        return safeJsonOk({ invoices, billing_summary: billingSummary }, origin);
       }
 
       if (req.method === "POST" && subRoute === "pay") {
@@ -1244,6 +1539,7 @@ Deno.serve(async (req) => {
         if (error) return safeJsonError("Failed to load quotes", 500, origin);
 
         const quoteRows = (data ?? []) as PortalQuoteReviewRow[];
+        const quoteIds = quoteRows.map((row) => row.id);
         const dealIds = [...new Set(quoteRows.map((row) => row.deal_id).filter((value): value is string => Boolean(value)))];
 
         let dealsById = new Map<string, PortalDealRow>();
@@ -1269,9 +1565,27 @@ Deno.serve(async (req) => {
           }
         }
 
+        let revisionsByQuoteId = new Map<string, PortalQuoteRevisionRow[]>();
+        if (quoteIds.length > 0) {
+          const { data: revisionRows } = await admin
+            .from("portal_quote_review_versions")
+            .select("id, portal_quote_review_id, version_number, quote_data, quote_pdf_url, dealer_message, revision_summary, customer_request_snapshot, published_at, is_current")
+            .in("portal_quote_review_id", quoteIds)
+            .order("version_number", { ascending: false });
+
+          for (const row of ((revisionRows ?? []) as PortalQuoteRevisionRow[])) {
+            const existing = revisionsByQuoteId.get(row.portal_quote_review_id) ?? [];
+            existing.push(row);
+            revisionsByQuoteId.set(row.portal_quote_review_id, existing);
+          }
+        }
+
         const quotes = quoteRows.map((quote) => {
           const deal = quote.deal_id ? dealsById.get(quote.deal_id) ?? null : null;
           const stage = deal?.stage_id ? stagesById.get(deal.stage_id) ?? null : null;
+          const revisions = revisionsByQuoteId.get(quote.id) ?? [];
+          const currentRevision = revisions.find((revision) => revision.is_current) ?? revisions[0] ?? null;
+          const previousRevision = revisions.length > 1 ? revisions[1] : null;
           const portalStatus = normalizePortalDealStatus({
             dealStageName: stage?.name ?? null,
             isClosedWon: stage?.is_closed_won ?? false,
@@ -1290,7 +1604,32 @@ Deno.serve(async (req) => {
             ...quote,
             deal_name: deal?.name ?? null,
             amount: deal?.amount ?? null,
+            quote_pdf_url: currentRevision?.quote_pdf_url ?? quote.quote_pdf_url ?? null,
+            quote_data: currentRevision?.quote_data ?? quote.quote_data ?? null,
             portal_status: portalStatus,
+            current_revision: currentRevision
+              ? {
+                id: currentRevision.id,
+                version_number: currentRevision.version_number,
+                published_at: currentRevision.published_at,
+                is_current: currentRevision.is_current,
+                dealer_message: currentRevision.dealer_message,
+                revision_summary: currentRevision.revision_summary,
+                customer_request_snapshot: currentRevision.customer_request_snapshot,
+                quote_pdf_url: currentRevision.quote_pdf_url,
+                quote_data: currentRevision.quote_data,
+              }
+              : null,
+            revision_history: revisions.map((revision) => ({
+              id: revision.id,
+              version_number: revision.version_number,
+              published_at: revision.published_at,
+              is_current: revision.is_current,
+              dealer_message: revision.dealer_message,
+              revision_summary: revision.revision_summary,
+              customer_request_snapshot: revision.customer_request_snapshot,
+            })),
+            compare_to_previous: buildPortalQuoteCompare(currentRevision, previousRevision),
           };
         });
 
@@ -1345,8 +1684,15 @@ Deno.serve(async (req) => {
         } else if (body.status === "rejected") {
           safeUpdates.status = "rejected";
         } else if (body.status === "countered") {
+          if (!body.counter_notes || typeof body.counter_notes !== "string") {
+            return safeJsonError("counter_notes required when requesting changes", 400, origin);
+          }
+          const cleanNotes = body.counter_notes.replace(/<[^>]*>/g, "").trim().substring(0, 2000);
+          if (!cleanNotes) {
+            return safeJsonError("counter_notes cannot be empty", 400, origin);
+          }
           safeUpdates.status = "countered";
-          safeUpdates.counter_notes = body.counter_notes || null;
+          safeUpdates.counter_notes = cleanNotes;
         }
 
         if (Object.keys(safeUpdates).length === 0) {
@@ -1471,13 +1817,197 @@ Deno.serve(async (req) => {
     // ── /subscriptions — EaaS subscriptions ────────────────────────────
     if (route === "subscriptions") {
       if (req.method === "GET") {
-        const { data, error } = await supabase
+        if (!admin) {
+          return safeJsonError("Subscriptions are not configured on this environment.", 503, origin);
+        }
+
+        const { data, error } = await admin
           .from("eaas_subscriptions")
-          .select("*, eaas_usage_records(*)")
+          .select("id, equipment_id, plan_name, plan_type, status, billing_cycle, base_monthly_rate, usage_cap_hours, overage_rate, next_billing_date, next_rotation_date, includes_maintenance")
+          .eq("portal_customer_id", portalCustomer.id)
+          .eq("workspace_id", portalWorkspaceId)
           .order("created_at", { ascending: false });
 
         if (error) return safeJsonError("Failed to load subscriptions", 500, origin);
-        return safeJsonOk({ subscriptions: data }, origin);
+        const subscriptions = (data ?? []) as Array<{
+          id: string;
+          equipment_id: string | null;
+          plan_name: string;
+          plan_type: string;
+          status: string;
+          billing_cycle: string | null;
+          base_monthly_rate: number;
+          usage_cap_hours: number | null;
+          overage_rate: number | null;
+          next_billing_date: string | null;
+          next_rotation_date: string | null;
+          includes_maintenance: boolean | null;
+        }>;
+
+        if (subscriptions.length === 0) {
+          return safeJsonOk({ subscriptions: [] }, origin);
+        }
+
+        const subscriptionIds = subscriptions.map((subscription) => subscription.id);
+        const equipmentIds = subscriptions
+          .map((subscription) => subscription.equipment_id)
+          .filter((value): value is string => Boolean(value));
+
+        const { data: usageRows } = await admin
+          .from("eaas_usage_records")
+          .select("subscription_id, hours_used, overage_hours, period_end")
+          .in("subscription_id", subscriptionIds)
+          .order("period_end", { ascending: false });
+
+        const { data: maintenanceRows } = await admin
+          .from("maintenance_schedules")
+          .select("subscription_id, scheduled_date, status")
+          .in("subscription_id", subscriptionIds)
+          .in("status", ["scheduled", "due", "in_progress", "overdue"])
+          .order("scheduled_date", { ascending: true });
+
+        const { data: equipmentRows } = equipmentIds.length > 0
+          ? await admin
+            .from("crm_equipment")
+            .select("id, make, model, serial_number, year")
+            .in("id", equipmentIds)
+          : { data: [] };
+
+        const latestUsageBySubscription = new Map<string, { hours_used: number | null; overage_hours: number | null }>();
+        for (const row of ((usageRows ?? []) as Array<Record<string, unknown>>)) {
+          const subscriptionId = typeof row.subscription_id === "string" ? row.subscription_id : null;
+          if (!subscriptionId || latestUsageBySubscription.has(subscriptionId)) continue;
+          latestUsageBySubscription.set(subscriptionId, {
+            hours_used: typeof row.hours_used === "number" ? row.hours_used : null,
+            overage_hours: typeof row.overage_hours === "number" ? row.overage_hours : null,
+          });
+        }
+
+        const maintenanceBySubscription = new Map<string, { openCount: number; nextScheduledDate: string | null }>();
+        for (const row of ((maintenanceRows ?? []) as Array<Record<string, unknown>>)) {
+          const subscriptionId = typeof row.subscription_id === "string" ? row.subscription_id : null;
+          if (!subscriptionId) continue;
+          const current = maintenanceBySubscription.get(subscriptionId) ?? { openCount: 0, nextScheduledDate: null };
+          current.openCount += 1;
+          if (!current.nextScheduledDate && typeof row.scheduled_date === "string") {
+            current.nextScheduledDate = row.scheduled_date;
+          }
+          maintenanceBySubscription.set(subscriptionId, current);
+        }
+
+        const equipmentById = new Map(
+          ((equipmentRows ?? []) as Array<Record<string, unknown>>).map((row) => [
+            String(row.id),
+            {
+              id: String(row.id),
+              label: equipmentDisplayLabel({
+                make: typeof row.make === "string" ? row.make : null,
+                model: typeof row.model === "string" ? row.model : null,
+                year: typeof row.year === "number" ? row.year : null,
+              }),
+              serialNumber: typeof row.serial_number === "string" ? row.serial_number : null,
+            },
+          ]),
+        );
+
+        return safeJsonOk({
+          subscriptions: subscriptions.map((subscription) => ({
+            id: subscription.id,
+            planName: subscription.plan_name,
+            planType: subscription.plan_type,
+            status: subscription.status,
+            billingCycle: subscription.billing_cycle,
+            baseMonthlyRate: subscription.base_monthly_rate,
+            usageCapHours: subscription.usage_cap_hours,
+            overageRate: subscription.overage_rate,
+            usageHours: latestUsageBySubscription.get(subscription.id)?.hours_used ?? null,
+            overageHours: latestUsageBySubscription.get(subscription.id)?.overage_hours ?? null,
+            nextBillingDate: subscription.next_billing_date,
+            nextRotationDate: subscription.next_rotation_date,
+            includesMaintenance: subscription.includes_maintenance !== false,
+            maintenanceStatus: maintenanceBySubscription.get(subscription.id) ?? {
+              openCount: 0,
+              nextScheduledDate: null,
+            },
+            equipment: subscription.equipment_id
+              ? equipmentById.get(subscription.equipment_id) ?? {
+                id: subscription.equipment_id,
+                label: "Assigned equipment",
+                serialNumber: null,
+              }
+              : null,
+          })),
+        }, origin);
+      }
+    }
+
+    // ── /rentals — Rental returns and closeout state ──────────────────
+    if (route === "rentals") {
+      if (req.method === "GET") {
+        if (!admin) {
+          return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        }
+
+        const { data: fleetRows, error: fleetError } = await admin
+          .from("customer_fleet")
+          .select("equipment_id, make, model, serial_number, year")
+          .eq("portal_customer_id", portalCustomer.id)
+          .eq("workspace_id", portalWorkspaceId)
+          .not("equipment_id", "is", null);
+
+        if (fleetError) return safeJsonError("Failed to load rental fleet", 500, origin);
+
+        const fleet = (fleetRows ?? []) as Array<{
+          equipment_id: string;
+          make: string | null;
+          model: string | null;
+          serial_number: string | null;
+          year: number | null;
+        }>;
+        const equipmentIds = fleet.map((row) => row.equipment_id).filter(Boolean);
+        if (equipmentIds.length === 0) {
+          return safeJsonOk({ rentals: [] }, origin);
+        }
+
+        const { data: rentalRows, error: rentalError } = await admin
+          .from("rental_returns")
+          .select("id, equipment_id, status, rental_contract_reference, inspection_date, decision_at, refund_status, balance_due, charge_amount, deposit_amount, has_charges")
+          .eq("workspace_id", portalWorkspaceId)
+          .in("equipment_id", equipmentIds)
+          .order("created_at", { ascending: false });
+
+        if (rentalError) return safeJsonError("Failed to load rental returns", 500, origin);
+
+        const equipmentById = new Map(
+          fleet.map((row) => [
+            row.equipment_id,
+            {
+              id: row.equipment_id,
+              label: equipmentDisplayLabel({
+                make: row.make,
+                model: row.model,
+                year: row.year,
+              }),
+              serialNumber: row.serial_number,
+            },
+          ]),
+        );
+
+        return safeJsonOk({
+          rentals: ((rentalRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+            id: String(row.id),
+            status: typeof row.status === "string" ? row.status : "inspection_pending",
+            rentalContractReference: typeof row.rental_contract_reference === "string" ? row.rental_contract_reference : null,
+            inspectionDate: typeof row.inspection_date === "string" ? row.inspection_date : null,
+            decisionAt: typeof row.decision_at === "string" ? row.decision_at : null,
+            refundStatus: typeof row.refund_status === "string" ? row.refund_status : null,
+            balanceDue: typeof row.balance_due === "number" ? row.balance_due : null,
+            chargeAmount: typeof row.charge_amount === "number" ? row.charge_amount : null,
+            depositAmount: typeof row.deposit_amount === "number" ? row.deposit_amount : null,
+            hasCharges: typeof row.has_charges === "boolean" ? row.has_charges : null,
+            equipment: typeof row.equipment_id === "string" ? equipmentById.get(row.equipment_id) ?? null : null,
+          })),
+        }, origin);
       }
     }
 

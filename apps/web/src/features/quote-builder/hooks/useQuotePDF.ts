@@ -11,9 +11,11 @@ import type { QuotePDFData } from "../components/QuotePDFDocument";
 
 export function useQuotePDF() {
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const generateAndDownload = useCallback(async (data: QuotePDFData) => {
     setGenerating(true);
+    setError(null);
     try {
       // Dynamic imports for tree-shaking — these are heavy libs
       const [{ pdf }, { QuotePDFDocument }] = await Promise.all([
@@ -33,10 +35,11 @@ export function useQuotePDF() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("[useQuotePDF] PDF generation failed:", err);
+      setError("Failed to generate the quote PDF. Try again.");
     } finally {
       setGenerating(false);
     }
   }, []);
 
-  return { generateAndDownload, generating };
+  return { generateAndDownload, generating, error };
 }

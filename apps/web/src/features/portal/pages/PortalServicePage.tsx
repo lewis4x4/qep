@@ -1,10 +1,15 @@
-import { useState, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { portalApi } from "../lib/portal-api";
+import {
+  portalApi,
+  type PortalFleetAssetView,
+  type PortalServiceRequestCard,
+  type PortalServiceRequestsResponse,
+} from "../lib/portal-api";
 import { PortalLayout } from "../components/PortalLayout";
 import { Plus, ImagePlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -40,7 +45,20 @@ interface PortalStatusSummary {
   last_updated_at: string | null;
 }
 
-/** Linked-job timeline (P1-D) — same underlying events as staff, customer-safe labels only. */
+function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function statusTone(label: string, source: PortalStatusSummary["source"] | undefined): string {
+  if (source === "service_job") return "bg-blue-500/10 text-blue-400";
+  if (/completed/i.test(label)) return "bg-emerald-500/10 text-emerald-400";
+  if (/waiting/i.test(label)) return "bg-red-500/10 text-red-400";
+  return "bg-amber-500/10 text-amber-400";
+}
+
 function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["portal", "service-timeline", requestId],
@@ -49,14 +67,10 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
   });
 
   if (isLoading) {
-    return (
-      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">Loading shop updates…</p>
-    );
+    return <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">Loading shop updates…</p>;
   }
   if (error) {
-    return (
-      <p className="text-xs text-destructive mt-2 border-t pt-2">Could not load shop updates.</p>
-    );
+    return <p className="mt-2 border-t pt-2 text-xs text-destructive">Could not load shop updates.</p>;
   }
 
   const payload = data as {
@@ -66,17 +80,15 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
       id: string;
       event_type: string;
       created_at: string;
-      old_stage?: string | null;
       new_stage?: string | null;
       customer_label: string;
     }>;
   };
 
   if (!payload?.ok) return null;
-
   if (!payload.service_job_id) {
     return (
-      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+      <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
         Shop updates will appear here once your request is linked to the service team.
       </p>
     );
@@ -85,30 +97,22 @@ function PortalRequestShopTimeline({ requestId }: { requestId: string }) {
   const events = Array.isArray(payload.events) ? payload.events : [];
   if (events.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+      <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
         No milestone updates yet. Current status is shown above when available.
       </p>
     );
   }
 
   return (
-    <div className="mt-2 border-t pt-2 space-y-1.5">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-        Shop updates
-      </p>
-      <ul className="space-y-2 max-h-52 overflow-y-auto pr-1">
+    <div className="mt-2 space-y-1.5 border-t pt-2">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Shop updates</p>
+      <ul className="max-h-52 space-y-2 overflow-y-auto pr-1">
         {events.map((ev) => (
-          <li key={ev.id} className="text-xs flex flex-col gap-0.5">
+          <li key={ev.id} className="flex flex-col gap-0.5 text-xs">
             <div className="flex justify-between gap-2">
               <span className="text-foreground">{ev.customer_label}</span>
-              <time
-                className="text-muted-foreground shrink-0 text-[10px]"
-                dateTime={ev.created_at}
-              >
-                {new Date(ev.created_at).toLocaleString(undefined, {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
+              <time className="shrink-0 text-[10px] text-muted-foreground" dateTime={ev.created_at}>
+                {new Date(ev.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
               </time>
             </div>
             {ev.new_stage && ev.event_type === "stage_transition" && (
@@ -127,15 +131,14 @@ export function PortalServicePage() {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [searchParams] = useSearchParams();
-  const [showForm, setShowForm] = useState(
-    Boolean(searchParams.get("request_type") || searchParams.get("fleet_id")),
-  );
+  const [showForm, setShowForm] = useState(Boolean(searchParams.get("request_type") || searchParams.get("fleet_id")));
   const [requestType, setRequestType] = useState(searchParams.get("request_type") ?? "");
   const [department, setDepartment] = useState<(typeof DEPARTMENTS)[number]>("service");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState("normal");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [fleetId, setFleetId] = useState(searchParams.get("fleet_id") ?? "");
 
   const { data: portalRow } = useQuery({
@@ -160,6 +163,12 @@ export function PortalServicePage() {
     staleTime: 15_000,
   });
 
+  const fleetQuery = useQuery({
+    queryKey: ["portal", "fleet-with-status"],
+    queryFn: portalApi.getFleetWithStatus,
+    staleTime: 60_000,
+  });
+
   const createMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) => portalApi.createServiceRequest(body),
     onSuccess: () => {
@@ -169,6 +178,7 @@ export function PortalServicePage() {
       setDepartment("service");
       setDescription("");
       setPhotoUrls([]);
+      setUploadError(null);
       setFleetId("");
     },
   });
@@ -176,6 +186,7 @@ export function PortalServicePage() {
   const onPickFiles = async (files: FileList | null) => {
     if (!files?.length || !portalRow?.id) return;
     setUploadBusy(true);
+    setUploadError(null);
     try {
       const next: string[] = [...photoUrls];
       for (const file of Array.from(files).slice(0, 6)) {
@@ -191,66 +202,92 @@ export function PortalServicePage() {
       setPhotoUrls(next);
     } catch (e) {
       console.error(e);
+      setUploadError("Photo upload failed. Try again with a smaller image or retry in a moment.");
     } finally {
       setUploadBusy(false);
     }
   };
 
+  const serviceData = data as PortalServiceRequestsResponse | undefined;
+  const openRequests = serviceData?.open_requests ?? [];
+  const completedRequests = serviceData?.completed_requests ?? [];
+
   return (
     <PortalLayout>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">Service Requests</h1>
-        <Button size="sm" onClick={() => setShowForm(!showForm)}><Plus className="mr-1 h-4 w-4" /> New Request</Button>
+        <Button size="sm" onClick={() => setShowForm((value) => !value)}>
+          <Plus className="mr-1 h-4 w-4" />
+          New Request
+        </Button>
       </div>
 
+      {serviceData?.workspace_summary && (
+        <div className="mb-4 grid gap-4 sm:grid-cols-3">
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Open work</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{serviceData.workspace_summary.open_count}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Completed recently</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{serviceData.workspace_summary.completed_count}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Blocked / waiting</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{serviceData.workspace_summary.blocked_count}</p>
+          </Card>
+        </div>
+      )}
+
       {showForm && (
-        <Card className="p-4 mb-4 space-y-3">
-          <select value={requestType} onChange={(e) => setRequestType(e.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
+        <Card className="mb-4 space-y-3 p-4">
+          {(fleetQuery.data?.fleet ?? []).length > 0 && (
+            <select
+              value={fleetId}
+              onChange={(event) => setFleetId(event.target.value)}
+              className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+            >
+              <option value="">Select machine…</option>
+              {(fleetQuery.data?.fleet as PortalFleetAssetView[]).map((fleet) => (
+                <option key={fleet.id} value={fleet.id}>
+                  {[fleet.make, fleet.model, fleet.year].filter(Boolean).join(" ")}
+                </option>
+              ))}
+            </select>
+          )}
+          <select value={requestType} onChange={(event) => setRequestType(event.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             <option value="">Select type...</option>
-            {REQUEST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {REQUEST_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
-          <select value={department} onChange={(e) => setDepartment(e.target.value as (typeof DEPARTMENTS)[number])} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
+          <select value={department} onChange={(event) => setDepartment(event.target.value as (typeof DEPARTMENTS)[number])} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             {DEPARTMENTS.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
-          <Input
-            value={fleetId}
-            onChange={(e) => setFleetId(e.target.value)}
-            placeholder="Fleet machine id"
-            className="text-sm"
+          <Input value={fleetId} onChange={(event) => setFleetId(event.target.value)} placeholder="Fleet machine id" className="text-sm" />
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Describe the issue..."
+            className="min-h-[100px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
           />
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the issue..." className="w-full rounded border border-input bg-card px-3 py-2 text-sm min-h-[80px]" />
-          <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
+          <select value={urgency} onChange={(event) => setUrgency(event.target.value)} className="w-full rounded border border-input bg-card px-3 py-2 text-sm">
             <option value="low">Low</option>
             <option value="normal">Normal</option>
             <option value="high">High</option>
             <option value="emergency">Emergency</option>
           </select>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => onPickFiles(e.target.files)}
-          />
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => onPickFiles(event.target.files)} />
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!portalRow?.id || uploadBusy}
-              onClick={() => fileRef.current?.click()}
-            >
+            <Button type="button" variant="outline" size="sm" disabled={!portalRow?.id || uploadBusy} onClick={() => fileRef.current?.click()}>
               <ImagePlus className="mr-1 h-4 w-4" />
               {uploadBusy ? "Uploading…" : "Add photos"}
             </Button>
-            {photoUrls.length > 0 && (
-              <span className="text-xs text-muted-foreground">{photoUrls.length} photo(s)</span>
-            )}
+            {photoUrls.length > 0 && <span className="text-xs text-muted-foreground">{photoUrls.length} photo(s)</span>}
           </div>
+          {uploadError && <p className="text-xs text-red-400">{uploadError}</p>}
           {createMutation.isError && <p className="text-xs text-red-400">Failed to submit. Try again.</p>}
           <Button
             size="sm"
+            disabled={!requestType || !description.trim() || createMutation.isPending}
             onClick={() =>
               createMutation.mutate({
                 fleet_id: fleetId || null,
@@ -260,70 +297,97 @@ export function PortalServicePage() {
                 urgency,
                 photos: photoUrls.map((url) => ({ url })),
               })}
-            disabled={!requestType || !description || createMutation.isPending}
           >
             {createMutation.isPending ? "Submitting..." : "Submit Request"}
           </Button>
         </Card>
       )}
 
-      {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
+      {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, index) => <Card key={index} className="h-16 animate-pulse" />)}</div>}
 
-      <div className="space-y-2">
-        {(data?.requests ?? []).map((raw) => {
-          const req = raw as {
-            id: string;
-            request_type: string;
-            description: string;
-            status: string;
-            portal_status?: PortalStatusSummary | null;
-            internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
-          };
-          const ij = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
-          const portalStatus = req.portal_status ?? null;
-          const etaLabel = portalStatus?.eta
-            ? new Date(portalStatus.eta).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-            : null;
-          return (
-            <Card key={req.id} className="p-3 space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground mr-2">{req.request_type}</span>
-                  <span className="text-sm font-medium text-foreground">{req.description?.substring(0, 60)}{req.description && req.description.length > 60 ? "..." : ""}</span>
+      {[
+        { label: "Open work", rows: openRequests },
+        { label: "Completed recently", rows: completedRequests },
+      ].map((section) => (
+        <div key={section.label} className="mb-4 space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{section.label}</p>
+          {section.rows.map((raw) => {
+            const req = raw as PortalServiceRequestCard & {
+              id: string;
+              request_type: string;
+              description: string;
+              status: string;
+              portal_status?: PortalStatusSummary | null;
+              internal_job?: { id: string; current_stage: string; closed_at: string | null }[] | { id: string; current_stage: string; closed_at: string | null } | null;
+              workspace_timeline?: {
+                branch_label: string | null;
+                next_step: string | null;
+                customer_summary: string | null;
+              } | null;
+              photo_count?: number;
+            };
+            const internalJob = Array.isArray(req.internal_job) ? req.internal_job[0] : req.internal_job;
+            const portalStatus = req.portal_status ?? null;
+            const etaLabel = formatDate(portalStatus?.eta ?? null);
+
+            return (
+              <Card key={req.id} className="space-y-2 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <span className="mr-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{req.request_type}</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {req.description?.substring(0, 72)}
+                      {req.description && req.description.length > 72 ? "..." : ""}
+                    </span>
+                  </div>
+                  {portalStatus && (
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusTone(portalStatus.label, portalStatus.source)}`}>
+                      {portalStatus.label}
+                    </span>
+                  )}
                 </div>
-                {portalStatus && (
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${
-                    portalStatus.source === "service_job" ? "bg-blue-500/10 text-blue-400" :
-                    /completed/i.test(portalStatus.label) ? "bg-emerald-500/10 text-emerald-400" :
-                    /waiting/i.test(portalStatus.label) ? "bg-red-500/10 text-red-400" :
-                    "bg-amber-500/10 text-amber-400"
-                  }`}>{portalStatus.label}</span>
+
+                {req.workspace_timeline?.customer_summary && (
+                  <p className="text-sm text-foreground">{req.workspace_timeline.customer_summary}</p>
                 )}
-              </div>
-              {portalStatus && (
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span>Source: {portalStatus.source_label}</span>
-                    {etaLabel && <span>ETA: <span className="text-foreground font-medium">{etaLabel}</span></span>}
-                    {portalStatus.last_updated_at && (
-                      <span>
-                        Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </span>
+
+                {portalStatus && (
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {req.workspace_timeline?.branch_label && <span>Branch: {req.workspace_timeline.branch_label}</span>}
+                      <span>Source: {portalStatus.source_label}</span>
+                      {etaLabel && <span>ETA: <span className="font-medium text-foreground">{etaLabel}</span></span>}
+                      {portalStatus.last_updated_at && (
+                        <span>
+                          Last updated: {new Date(portalStatus.last_updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </span>
+                      )}
+                      {typeof req.photo_count === "number" && req.photo_count > 0 && <span>{req.photo_count} photo(s)</span>}
+                    </div>
+                    {req.workspace_timeline?.next_step && (
+                      <p className="text-xs text-foreground">{req.workspace_timeline.next_step}</p>
                     )}
                   </div>
-                </div>
-              )}
-              {ij?.id ? (
-                <PortalRequestShopTimeline requestId={req.id} />
-              ) : (
-                <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
-                  When the shop connects this request to a job, milestone updates will appear here.
-                </p>
-              )}
+                )}
+
+                {internalJob?.id ? (
+                  <PortalRequestShopTimeline requestId={req.id} />
+                ) : (
+                  <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+                    When the shop connects this request to a job, milestone updates will appear here.
+                  </p>
+                )}
+              </Card>
+            );
+          })}
+
+          {!isLoading && section.rows.length === 0 && (
+            <Card className="border-dashed p-6 text-center">
+              <p className="text-sm text-muted-foreground">No requests in this section right now.</p>
             </Card>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      ))}
     </PortalLayout>
   );
 }

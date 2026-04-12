@@ -16,16 +16,18 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import type {
+  CampaignTriggerContext,
+  MarketingCampaignPlan,
+} from "../../../shared/qep-moonshot-contracts.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 async function generateCampaignContent(
-  campaignType: string,
-  targetSegment: Record<string, unknown>,
-  equipmentContext: Record<string, unknown> | null,
+  trigger: CampaignTriggerContext,
 ): Promise<{ subject: string; body: string; social_copy: string }> {
   if (!OPENAI_API_KEY) {
     return {
-      subject: `New from QEP: ${campaignType.replace(/_/g, " ")}`,
+      subject: `New from QEP: ${trigger.triggerType.replace(/_/g, " ")}`,
       body: "Check out our latest offerings at Quality Equipment Parts.",
       social_copy: "New equipment available at QEP! Contact us for details.",
     };
@@ -48,7 +50,7 @@ async function generateCampaignContent(
 Return JSON: { "subject": "email subject", "body": "email body (2-3 paragraphs)", "social_copy": "Facebook/social post (2-3 sentences)" }`,
         }, {
           role: "user",
-          content: `Campaign type: ${campaignType}\nTarget: ${JSON.stringify(targetSegment)}\nEquipment: ${JSON.stringify(equipmentContext)}`,
+          content: `Campaign type: ${trigger.triggerType}\nTarget: ${JSON.stringify(trigger.targetSegment)}\nEquipment: ${JSON.stringify(trigger.equipmentContext)}\nTrigger config: ${JSON.stringify(trigger.triggerConfig ?? {})}`,
         }],
         max_tokens: 500,
         temperature: 0.7,
@@ -137,25 +139,39 @@ Deno.serve(async (req) => {
           results.triggers_processed++;
 
           if (trigger.auto_create_campaign) {
-            const content = await generateCampaignContent(
-              trigger.event_type,
-              trigger.target_segment || {},
-              trigger.equipment_filter || null,
-            );
+            const triggerContext: CampaignTriggerContext = {
+              triggerType: trigger.event_type === "new_arrival" ? "inventory_arrival" : "custom",
+              workspaceId: trigger.workspace_id,
+              targetSegment: trigger.target_segment || {},
+              equipmentContext: trigger.equipment_filter || null,
+              triggerConfig: { trigger_id: trigger.id },
+            };
+            const content = await generateCampaignContent(triggerContext);
+            const campaignPlan: MarketingCampaignPlan = {
+              name: `Auto: ${trigger.event_type.replace(/_/g, " ")} — ${new Date().toISOString().split("T")[0]}`,
+              campaignType: triggerContext.triggerType,
+              targetSegment: triggerContext.targetSegment,
+              contentTemplate: content,
+              aiGenerated: true,
+              channels: ["email"],
+              status: "scheduled",
+              triggerType: "inventory_event",
+              triggerConfig: triggerContext.triggerConfig,
+            };
 
             const { data: campaign } = await supabaseAdmin
               .from("marketing_campaigns")
               .insert({
                 workspace_id: trigger.workspace_id,
-                name: `Auto: ${trigger.event_type.replace(/_/g, " ")} — ${new Date().toISOString().split("T")[0]}`,
-                campaign_type: trigger.event_type === "new_arrival" ? "inventory_arrival" : "custom",
-                target_segment: trigger.target_segment,
-                content_template: content,
-                ai_generated: true,
-                channels: ["email"],
-                status: "scheduled",
-                trigger_type: "inventory_event",
-                trigger_config: { trigger_id: trigger.id },
+                name: campaignPlan.name,
+                campaign_type: campaignPlan.campaignType,
+                target_segment: campaignPlan.targetSegment,
+                content_template: campaignPlan.contentTemplate,
+                ai_generated: campaignPlan.aiGenerated,
+                channels: campaignPlan.channels,
+                status: campaignPlan.status,
+                trigger_type: campaignPlan.triggerType,
+                trigger_config: campaignPlan.triggerConfig,
               })
               .select("id")
               .maybeSingle();
@@ -183,11 +199,12 @@ Deno.serve(async (req) => {
         .single();
 
       if (campaign) {
-        const content = await generateCampaignContent(
-          campaign.campaign_type,
-          campaign.target_segment || {},
-          null,
-        );
+        const content = await generateCampaignContent({
+          triggerType: campaign.campaign_type,
+          workspaceId: campaign.workspace_id,
+          targetSegment: campaign.target_segment || {},
+          equipmentContext: null,
+        });
 
         await supabaseAdmin
           .from("marketing_campaigns")

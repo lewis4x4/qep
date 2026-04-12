@@ -1,10 +1,21 @@
-import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mic, MessageSquare, FileText, FileDown, ArrowRight, ArrowLeft, Save, MapPin, Loader2, PenTool } from "lucide-react";
+import {
+  Mic,
+  MessageSquare,
+  FileText,
+  FileDown,
+  ArrowRight,
+  ArrowLeft,
+  Save,
+  MapPin,
+  Loader2,
+  PenTool,
+} from "lucide-react";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
@@ -12,11 +23,27 @@ import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
 import { IncentiveStack } from "../components/IncentiveStack";
 import { SendQuoteSection } from "../components/SendQuoteSection";
-import { saveQuotePackage, saveQuoteSignature, searchCatalog, getAiEquipmentRecommendation } from "../lib/quote-api";
+import {
+  buildPortalRevisionQuoteData,
+  buildQuoteSavePayload,
+  calculateFinancing,
+  getAiEquipmentRecommendation,
+  getPortalRevision,
+  publishPortalRevision,
+  returnPortalRevisionToDraft,
+  saveQuotePackage,
+  saveQuoteSignature,
+  savePortalRevisionDraft,
+  searchCatalog,
+  submitPortalRevision,
+  type QuotePackageSaveResponse,
+} from "../lib/quote-api";
+import { computeQuoteWorkspace } from "../lib/quote-workspace";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import {
@@ -24,73 +51,138 @@ import {
   signatureDataUrlToRawBase64,
   type PortalSignaturePadHandle,
 } from "@/features/portal/components/PortalSignaturePad";
+import type {
+  QuoteEntryMode,
+  QuoteFinanceScenario,
+  QuoteFinancingPreview,
+  QuoteLineItemDraft,
+  QuoteWorkspaceDraft,
+} from "../../../../../../shared/qep-moonshot-contracts";
 
-type EntryMode = "voice" | "ai_chat" | "manual";
 type Step = "entry" | "equipment" | "financing" | "review";
 
-interface SelectedEquipment {
+interface CatalogEntryMatch {
   id?: string;
   make: string;
   model: string;
   year: number | null;
-  price: number;
-  attachments: Array<{ name: string; price: number }>;
+  list_price?: number;
+}
+
+function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
+  return {
+    kind: "equipment",
+    id: entry.id,
+    title: `${entry.make} ${entry.model}`,
+    make: entry.make,
+    model: entry.model,
+    year: entry.year,
+    quantity: 1,
+    unitPrice: entry.list_price ?? 0,
+  };
 }
 
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
-
   const [step, setStep] = useState<Step>("entry");
-  const [entryMode, setEntryMode] = useState<EntryMode>("manual");
-  const [quoteBranch, setQuoteBranch] = useState("");
+  const [draft, setDraft] = useState<QuoteWorkspaceDraft>({
+    dealId: dealId || undefined,
+    contactId: contactId || undefined,
+    entryMode: "manual",
+    branchSlug: "",
+    recommendation: null,
+    voiceSummary: null,
+    equipment: [],
+    attachments: [],
+    tradeAllowance: 0,
+    tradeValuationId: null,
+  });
+  const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [signerName, setSignerName] = useState("");
+  const [dealerMessage, setDealerMessage] = useState("");
+  const [revisionSummary, setRevisionSummary] = useState("");
+  const sigRef = useRef<PortalSignaturePadHandle>(null);
+  const queryClient = useQueryClient();
+
   const branchesQ = useActiveBranches();
   const branches = branchesQ.data ?? [];
-  const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipment[]>([]);
-  const [selectedAttachments, setSelectedAttachments] = useState<Array<{ name: string; price: number }>>([]);
-  const [tradeAllowance, setTradeAllowance] = useState<number>(0);
-  const [tradeValuationId, setTradeValuationId] = useState<string | null>(null);
-  const [aiRecommendation, setAiRecommendation] = useState<{ machine: string; attachments: string[]; reasoning: string } | null>(null);
-  const [voiceSummary, setVoiceSummary] = useState<string | null>(null);
-  const [signerName, setSignerName] = useState("");
-  const sigRef = useRef<PortalSignaturePadHandle>(null);
+  const selectedBranch = branches.find((branch) => branch.slug === draft.branchSlug);
+  const {
+    equipmentTotal,
+    attachmentTotal,
+    subtotal,
+    netTotal,
+    dealerCost,
+    marginAmount,
+    marginPct,
+    approvalState,
+    packetReadiness,
+  } = computeQuoteWorkspace(draft);
 
-  const equipmentTotal = selectedEquipment.reduce((sum, e) => sum + (e.price || 0), 0);
-  const attachmentTotal = selectedAttachments.reduce((sum, a) => sum + a.price, 0);
-  const subtotal = equipmentTotal + attachmentTotal;
-  const netTotal = subtotal - tradeAllowance;
-  const dealerCost = subtotal * 0.8; // Estimated — real cost from catalog
-  const marginAmount = netTotal - dealerCost;
-  const marginPct = netTotal > 0 ? (marginAmount / netTotal) * 100 : 0;
+  const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
 
-  const { generateAndDownload: downloadPDF, generating: pdfGenerating } = useQuotePDF();
-  const selectedBranch = branches.find((b) => b.id === quoteBranch);
+  const userRoleQuery = useQuery({
+    queryKey: ["quote-builder", "role"],
+    queryFn: async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      if (!userId) return null;
+      const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+      if (error) throw error;
+      return typeof data?.role === "string" ? data.role : null;
+    },
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    setFinanceScenarios([]);
+  }, [draft.equipment, draft.attachments, draft.tradeAllowance]);
 
   const saveMutation = useMutation({
-    mutationFn: () => saveQuotePackage({
-      deal_id: dealId,
-      contact_id: contactId || undefined,
-      equipment: selectedEquipment,
-      attachments_included: selectedAttachments,
-      trade_in_valuation_id: tradeValuationId,
-      trade_allowance: tradeAllowance,
-      equipment_total: equipmentTotal,
-      attachment_total: attachmentTotal,
-      subtotal,
-      trade_credit: tradeAllowance,
-      net_total: netTotal,
-      margin_amount: marginAmount,
-      margin_pct: marginPct,
-      ai_recommendation: aiRecommendation,
-      entry_mode: entryMode,
-      status: "ready",
-    }),
+    mutationFn: (): Promise<QuotePackageSaveResponse> =>
+      saveQuotePackage(
+        buildQuoteSavePayload(draft, {
+          equipmentTotal,
+          attachmentTotal,
+          subtotal,
+          netTotal,
+          marginAmount,
+          marginPct,
+        }),
+      ),
   });
+
+  const savedQuotePackageId = saveMutation.data?.quote?.id ?? saveMutation.data?.id ?? null;
+
+  const portalRevisionQuery = useQuery({
+    queryKey: ["quote-builder", "portal-revision", draft.dealId],
+    queryFn: () => getPortalRevision(draft.dealId!),
+    enabled: Boolean(savedQuotePackageId && draft.dealId),
+    staleTime: 5_000,
+  });
+
+  useEffect(() => {
+    const revisionDraft = portalRevisionQuery.data?.draft;
+    if (revisionDraft) {
+      setDealerMessage(revisionDraft.dealerMessage ?? "");
+      setRevisionSummary(revisionDraft.revisionSummary ?? "");
+      return;
+    }
+    const currentVersion = portalRevisionQuery.data?.review?.current_version;
+    setDealerMessage(currentVersion?.dealer_message ?? "");
+    setRevisionSummary(currentVersion?.revision_summary ?? "");
+  }, [portalRevisionQuery.data]);
 
   const voiceMutation = useMutation({
     mutationFn: async (payload: { blob: Blob; fileName: string }) => {
-      const voiceResult = await submitVoiceToQrm({ audioBlob: payload.blob, fileName: payload.fileName, dealId: dealId || undefined });
+      const voiceResult = await submitVoiceToQrm({
+        audioBlob: payload.blob,
+        fileName: payload.fileName,
+        dealId: dealId || undefined,
+      });
       if (!("transcript" in voiceResult) || !voiceResult.transcript) {
         throw new Error("Voice note did not return a usable transcript.");
       }
@@ -99,105 +191,173 @@ export function QuoteBuilderV2Page() {
       return { voiceResult, recommendation, catalogMatches };
     },
     onSuccess: ({ voiceResult, recommendation, catalogMatches }) => {
-      setAiRecommendation(recommendation);
-      setVoiceSummary(voiceResult.transcript);
-      if (catalogMatches.length > 0) {
-        const first = catalogMatches[0] as SelectedEquipment & { attachments?: Array<{ name: string; price: number }> };
-        setSelectedEquipment([{
-          id: first.id,
-          make: first.make,
-          model: first.model,
-          year: first.year,
-          price: first.price ?? 0,
-          attachments: first.attachments ?? [],
-        }]);
-      }
+      setDraft((current) => ({
+        ...current,
+        recommendation,
+        voiceSummary: voiceResult.transcript,
+        equipment: catalogMatches.length > 0
+          ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
+          : current.equipment,
+      }));
       setStep("equipment");
     },
   });
 
+  const aiIntakeMutation = useMutation({
+    mutationFn: async (prompt: string) => {
+      const recommendation = await getAiEquipmentRecommendation(prompt);
+      const catalogMatches = await searchCatalog(recommendation.machine || prompt);
+      return { recommendation, catalogMatches, prompt };
+    },
+    onSuccess: ({ recommendation, catalogMatches, prompt }) => {
+      setDraft((current) => ({
+        ...current,
+        recommendation,
+        voiceSummary: prompt,
+        equipment: catalogMatches.length > 0
+          ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
+          : current.equipment,
+      }));
+      setStep("equipment");
+    },
+  });
+
+  const financingMutation = useMutation({
+    mutationFn: () => calculateFinancing(netTotal, marginPct, draft.equipment[0]?.make),
+    onSuccess: (preview: QuoteFinancingPreview) => setFinanceScenarios(preview.scenarios ?? []),
+  });
+
   const signMutation = useMutation({
     mutationFn: async () => {
-      const quotePackageId = (saveMutation.data as { quote?: { id?: string }; id?: string } | undefined)?.quote?.id
-        ?? (saveMutation.data as { id?: string } | undefined)?.id;
+      const quotePackageId = saveMutation.data?.quote?.id ?? saveMutation.data?.id;
       if (!quotePackageId) throw new Error("Save the quote before capturing signature.");
       const dataUrl = sigRef.current?.toDataUrl();
       const base64 = dataUrl ? signatureDataUrlToRawBase64(dataUrl) : "";
       return saveQuoteSignature({
         quote_package_id: quotePackageId,
-        deal_id: dealId || undefined,
+        deal_id: draft.dealId,
         signer_name: signerName,
-        signer_email: contactId || null,
+        signer_email: draft.contactId || null,
         signature_png_base64: base64.length > 100 ? base64 : null,
       });
     },
   });
 
+  const revisionDraftMutation = useMutation({
+    mutationFn: async () => {
+      if (!draft.dealId || !savedQuotePackageId) throw new Error("Save the quote before drafting a portal revision.");
+      return savePortalRevisionDraft({
+        deal_id: draft.dealId,
+        quote_package_id: savedQuotePackageId,
+        quote_data: buildPortalRevisionQuoteData(
+          draft,
+          { subtotal, netTotal },
+          financeScenarios,
+          dealerMessage,
+          revisionSummary,
+        ),
+        dealer_message: dealerMessage || null,
+        revision_summary: revisionSummary || null,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
+    },
+  });
+
+  const revisionSubmitMutation = useMutation({
+    mutationFn: async () => {
+      if (!draft.dealId) throw new Error("Save the quote before submitting a portal revision.");
+      return submitPortalRevision({ deal_id: draft.dealId });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
+    },
+  });
+
+  const revisionReturnMutation = useMutation({
+    mutationFn: async () => {
+      if (!draft.dealId) throw new Error("No portal revision draft found.");
+      return returnPortalRevisionToDraft({ deal_id: draft.dealId });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
+    },
+  });
+
+  const revisionPublishMutation = useMutation({
+    mutationFn: async () => {
+      if (!draft.dealId) throw new Error("No portal revision draft found.");
+      return publishPortalRevision({ deal_id: draft.dealId });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
+    },
+  });
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
           <p className="text-sm text-muted-foreground">
-            Build quotes with voice, AI chat, or manual entry. Zero-blocking — works with or without IntelliDealer.
+            Build quotes with voice, AI chat, or manual entry. Zero-blocking and commercial-grade.
           </p>
         </div>
-        <AskIronAdvisorButton contextType="quote" contextId={dealId || undefined} variant="inline" />
+        <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
       </div>
 
-      {/* Step indicators */}
       <div className="flex gap-2">
-        {(["entry", "equipment", "financing", "review"] as Step[]).map((s, i) => (
+        {(["entry", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
           <button
-            key={s}
-            onClick={() => setStep(s)}
+            key={currentStep}
+            onClick={() => setStep(currentStep)}
             className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
-              step === s
+              step === currentStep
                 ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                 : "border-border text-muted-foreground hover:border-foreground/20"
             }`}
           >
-            {i + 1}. {s.charAt(0).toUpperCase() + s.slice(1)}
+            {index + 1}. {currentStep.charAt(0).toUpperCase() + currentStep.slice(1)}
           </button>
         ))}
       </div>
 
-      {/* Step 1: Entry Mode */}
       {step === "entry" && (
         <div className="space-y-4">
-          {/* Branch selector */}
           {branches.length > 0 && (
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
               <select
-                value={quoteBranch}
-                onChange={(e) => setQuoteBranch(e.target.value)}
+                value={draft.branchSlug}
+                onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
                 className="rounded border px-2 py-1.5 text-sm bg-background"
               >
                 <option value="">Select quoting branch…</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.slug}>{b.display_name}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
                 ))}
               </select>
-              {!quoteBranch && (
-                <span className="text-[11px] text-muted-foreground">Branch appears on the printed quote</span>
-              )}
             </div>
           )}
 
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {([
-              { mode: "voice" as EntryMode, icon: Mic, label: "Voice", desc: "Record a deal description — AI populates all fields" },
-              { mode: "ai_chat" as EntryMode, icon: MessageSquare, label: "AI Chat", desc: "Type a description — AI populates fields" },
-              { mode: "manual" as EntryMode, icon: FileText, label: "Manual", desc: "Traditional form entry" },
+              { mode: "voice" as QuoteEntryMode, icon: Mic, label: "Voice", desc: "Record a deal description — AI populates the quote workspace" },
+              { mode: "ai_chat" as QuoteEntryMode, icon: MessageSquare, label: "AI Chat", desc: "Type the opportunity — AI recommends the setup" },
+              { mode: "manual" as QuoteEntryMode, icon: FileText, label: "Manual", desc: "Build the quote directly from the commercial workspace" },
             ]).map(({ mode, icon: Icon, label, desc }) => (
               <button
                 key={mode}
-                onClick={() => { setEntryMode(mode); setStep("equipment"); }}
+                onClick={() => {
+                  setDraft((current) => ({ ...current, entryMode: mode }));
+                  if (mode === "manual") {
+                    setStep("equipment");
+                  }
+                }}
                 className={`rounded-xl border p-4 text-left transition hover:border-qep-orange/50 ${
-                  entryMode === mode ? "border-qep-orange bg-qep-orange/5" : "border-border"
+                  draft.entryMode === mode ? "border-qep-orange bg-qep-orange/5" : "border-border"
                 }`}
               >
                 <Icon className="h-6 w-6 text-qep-orange" />
@@ -206,11 +366,12 @@ export function QuoteBuilderV2Page() {
               </button>
             ))}
           </div>
-          {entryMode === "voice" && (
+
+          {draft.entryMode === "voice" && (
             <Card className="p-4 space-y-3">
               <p className="text-sm font-medium text-foreground">Voice intake</p>
               <p className="text-xs text-muted-foreground">
-                Record the customer need. The note is processed through the existing voice-to-QRM pipeline and then used to prefill the quote recommendation.
+                Record the customer need and let the voice-to-QRM pipeline seed the commercial workspace.
               </p>
               <VoiceRecorder
                 onRecorded={(audioBlob, fileName) => {
@@ -219,7 +380,7 @@ export function QuoteBuilderV2Page() {
                 disabled={voiceMutation.isPending}
               />
               {voiceMutation.isPending && (
-                <p className="text-xs text-muted-foreground">Processing voice note and equipment recommendation…</p>
+                <p className="text-xs text-muted-foreground">Processing voice note and commercial recommendation…</p>
               )}
               {voiceMutation.isError && (
                 <p className="text-xs text-red-400">
@@ -228,66 +389,128 @@ export function QuoteBuilderV2Page() {
               )}
             </Card>
           )}
+
+          {draft.entryMode === "ai_chat" && (
+            <Card className="space-y-3 p-4">
+              <p className="text-sm font-medium text-foreground">AI chat intake</p>
+              <p className="text-xs text-muted-foreground">
+                Describe the customer need in plain language. QEP will recommend the machine setup and seed the commercial workspace.
+              </p>
+              <textarea
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                placeholder="Example: Customer needs a compact track loader for land clearing with mulching attachment and financing options under $2,500/month."
+                className="min-h-[120px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              />
+              {aiIntakeMutation.isError && (
+                <p className="text-xs text-red-400">
+                  {aiIntakeMutation.error instanceof Error ? aiIntakeMutation.error.message : "AI intake failed"}
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
+                  disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
+                >
+                  {aiIntakeMutation.isPending ? "Building workspace..." : "Build with AI"}
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
-      {/* Step 2: Equipment Selection */}
       {step === "equipment" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Select Equipment</h2>
+          <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
 
           <EquipmentSelector
             onSelect={(entry) => {
-              setSelectedEquipment((prev) => [...prev, {
-                id: entry.id,
-                make: entry.make,
-                model: entry.model,
-                year: entry.year,
-                price: entry.list_price || 0,
-                attachments: entry.attachments || [],
-              }]);
+              setDraft((current) => ({
+                ...current,
+                equipment: [
+                  ...current.equipment,
+                  {
+                    kind: "equipment",
+                    id: entry.id,
+                    title: `${entry.make} ${entry.model}`,
+                    make: entry.make,
+                    model: entry.model,
+                    year: entry.year,
+                    quantity: 1,
+                    unitPrice: entry.list_price || 0,
+                  },
+                ],
+              }));
             }}
-            onRecommendation={(rec) => {
-              setAiRecommendation(rec);
+            onRecommendation={(recommendation) => {
+              setDraft((current) => ({ ...current, recommendation }));
             }}
           />
 
-          {aiRecommendation && (
+          {draft.recommendation && (
             <Card className="border-qep-orange/30 bg-qep-orange/5 p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">AI Recommendation</p>
-              <p className="mt-1 font-semibold text-foreground">{aiRecommendation.machine}</p>
-              {aiRecommendation.attachments.length > 0 && (
-                <p className="text-xs text-muted-foreground">Attachments: {aiRecommendation.attachments.join(", ")}</p>
+              <p className="mt-1 font-semibold text-foreground">{draft.recommendation.machine}</p>
+              {draft.recommendation.attachments.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Attachments: {draft.recommendation.attachments.join(", ")}
+                </p>
               )}
-              <p className="mt-2 text-sm italic text-foreground/80">{aiRecommendation.reasoning}</p>
-              {voiceSummary && (
-                <p className="mt-2 text-xs text-muted-foreground">Voice transcript: {voiceSummary}</p>
+              <p className="mt-2 text-sm italic text-foreground/80">{draft.recommendation.reasoning}</p>
+              {draft.voiceSummary && (
+                <p className="mt-2 text-xs text-muted-foreground">Voice transcript: {draft.voiceSummary}</p>
               )}
             </Card>
           )}
 
-          {selectedEquipment.length > 0 && (
+          {draft.equipment.length > 0 && (
             <Card className="p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selected Equipment</p>
-              {selectedEquipment.map((e, i) => (
-                <div key={i} className="mt-2 flex items-center justify-between border-t border-border pt-2">
-                  <span className="text-sm font-medium">{e.make} {e.model} {e.year && `(${e.year})`}</span>
-                  <span className="font-semibold text-foreground">${(e.price || 0).toLocaleString()}</span>
+              {draft.equipment.map((equipment, index) => (
+                <div key={`${equipment.title}-${index}`} className="mt-2 flex items-center justify-between border-t border-border pt-2">
+                  <span className="text-sm font-medium">
+                    {equipment.make} {equipment.model} {equipment.year ? `(${equipment.year})` : ""}
+                  </span>
+                  <span className="font-semibold text-foreground">${equipment.unitPrice.toLocaleString()}</span>
                 </div>
               ))}
             </Card>
           )}
 
+          <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">Commercial Readiness</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Quote Workspace</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {draft.equipment.length > 0 ? "Machine selected" : "Select a machine to continue"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Decision Rail</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {approvalState.requiresManagerApproval ? "Manager review likely" : "Commercially clear so far"}
+                </p>
+              </div>
+            </div>
+          </Card>
+
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("entry")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
-            <Button onClick={() => setStep("financing")} disabled={selectedEquipment.length === 0}>
+            <Button
+              onClick={() => {
+                financingMutation.mutate();
+                setStep("financing");
+              }}
+              disabled={draft.equipment.length === 0}
+            >
               Financing <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Financing + Trade-In */}
       {step === "financing" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Financing & Trade-In</h2>
@@ -296,13 +519,46 @@ export function QuoteBuilderV2Page() {
             <TradeInSection
               dealId={dealId}
               onTradeValueChange={(value, valId) => {
-                setTradeAllowance(value || 0);
-                setTradeValuationId(valId);
+                setDraft((current) => ({
+                  ...current,
+                  tradeAllowance: value || 0,
+                  tradeValuationId: valId,
+                }));
               }}
             />
           )}
 
           <FinancingCalculator totalAmount={netTotal} marginPct={marginPct} />
+
+          {financingMutation.isError && (
+            <Card className="border-red-500/30 bg-red-500/5 p-4">
+              <p className="text-sm text-red-400">
+                {financingMutation.error instanceof Error
+                  ? financingMutation.error.message
+                  : "Financing preview failed. Try again."}
+              </p>
+            </Card>
+          )}
+
+          {financeScenarios.length > 0 && (
+            <Card className="p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Financing Preview</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                {financeScenarios.map((scenario) => (
+                  <div key={scenario.label} className="rounded-lg border border-border/70 bg-card/50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">
+                      {scenario.monthlyPayment == null ? "—" : `$${Math.round(scenario.monthlyPayment).toLocaleString()}/mo`}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {scenario.termMonths ? `${scenario.termMonths} months` : scenario.type}
+                      {scenario.apr != null ? ` · ${scenario.apr.toFixed(2)}% APR` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("equipment")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
@@ -311,7 +567,6 @@ export function QuoteBuilderV2Page() {
         </div>
       )}
 
-      {/* Step 4: Review + Save */}
       {step === "review" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
@@ -321,16 +576,15 @@ export function QuoteBuilderV2Page() {
             waterfall={{
               equipmentTotal: subtotal,
               dealerCost,
-              tradeAllowance,
+              tradeAllowance: draft.tradeAllowance,
               netTotal,
               marginAmount,
             }}
           />
 
           <Card className="p-4 space-y-3">
-            {/* Branch letterhead on printed quote */}
-            {quoteBranch && (
-              <BranchDocumentHeader branchSlug={quoteBranch} className="pb-3 border-b mb-2" />
+            {draft.branchSlug && (
+              <BranchDocumentHeader branchSlug={draft.branchSlug} className="pb-3 border-b mb-2" />
             )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Equipment</span>
@@ -344,28 +598,53 @@ export function QuoteBuilderV2Page() {
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-semibold">${subtotal.toLocaleString()}</span>
             </div>
-            {tradeAllowance > 0 && (
+            {draft.tradeAllowance > 0 && (
               <div className="flex justify-between text-sm text-emerald-400">
                 <span>Trade-In Credit</span>
-                <span>-${tradeAllowance.toLocaleString()}</span>
+                <span>-${draft.tradeAllowance.toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between text-sm border-t border-border pt-2">
               <span className="font-bold text-foreground">Net Total</span>
               <span className="text-lg font-bold text-qep-orange">${netTotal.toLocaleString()}</span>
             </div>
-            {quoteBranch && <BranchDocumentFooter branchSlug={quoteBranch} />}
+            {draft.branchSlug && <BranchDocumentFooter branchSlug={draft.branchSlug} />}
           </Card>
 
-          {/* Tax breakdown + Section 179 */}
           {dealId && netTotal > 0 && (
             <TaxBreakdown
               dealId={dealId}
-              branchSlug={quoteBranch || undefined}
+              branchSlug={draft.branchSlug || undefined}
               equipmentCost={netTotal}
               enabled={true}
             />
           )}
+
+          <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">Commercial Readiness</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Approval</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {approvalState.requiresManagerApproval ? "Manager approval required" : "Ready to proceed"}
+                </p>
+                {approvalState.reason && (
+                  <p className="mt-1 text-xs text-muted-foreground">{approvalState.reason}</p>
+                )}
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Packet Readiness</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {packetReadiness.canSend ? "Ready to send" : "Needs completion"}
+                </p>
+                {!packetReadiness.canSend && packetReadiness.missing.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Missing: {packetReadiness.missing.join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
@@ -373,28 +652,40 @@ export function QuoteBuilderV2Page() {
               <Button
                 variant="outline"
                 onClick={() => downloadPDF({
-                  dealName: dealId || "Quote",
-                  customerName: contactId || "Customer",
+                  dealName: draft.dealId || "Quote",
+                  customerName: draft.contactId || "Customer",
                   preparedBy: "QEP Sales Team",
                   preparedDate: new Date().toLocaleDateString(),
-                  equipment: selectedEquipment.map((e) => ({ make: e.make ?? "", model: e.model ?? "", year: e.year, price: e.price ?? 0 })),
-                  attachments: selectedAttachments,
+                  equipment: draft.equipment.map((item) => ({
+                    make: item.make ?? "",
+                    model: item.model ?? item.title,
+                    year: item.year ?? null,
+                    price: item.unitPrice,
+                  })),
+                  attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
                   equipmentTotal,
                   attachmentTotal,
                   subtotal,
-                  tradeAllowance,
+                  tradeAllowance: draft.tradeAllowance,
                   netTotal,
-                  financing: [],
+                  financing: financeScenarios.map((scenario) => ({
+                    type: scenario.type,
+                    termMonths: scenario.termMonths ?? 0,
+                    rate: scenario.rate ?? scenario.apr ?? 0,
+                    monthlyPayment: scenario.monthlyPayment ?? 0,
+                    totalCost: scenario.totalCost ?? 0,
+                    lender: scenario.lender ?? "Preferred lender",
+                  })),
                   branch: (() => {
-                    const b = selectedBranch as unknown as Record<string, unknown> | undefined;
+                    const branch = selectedBranch as unknown as Record<string, unknown> | undefined;
                     return {
-                      name: (b?.display_name as string) ?? "Quality Equipment & Parts",
-                      address: (b?.address_line1 as string) ?? undefined,
-                      city: (b?.city as string) ?? undefined,
-                      state: (b?.state_province as string) ?? undefined,
-                      postalCode: (b?.postal_code as string) ?? undefined,
-                      phone: (b?.phone_main as string) ?? undefined,
-                      email: (b?.email_main as string) ?? undefined,
+                      name: (branch?.display_name as string) ?? "Quality Equipment & Parts",
+                      address: (branch?.address_line1 as string) ?? undefined,
+                      city: (branch?.city as string) ?? undefined,
+                      state: (branch?.state_province as string) ?? undefined,
+                      postalCode: (branch?.postal_code as string) ?? undefined,
+                      phone: (branch?.phone_main as string) ?? undefined,
+                      email: (branch?.email_main as string) ?? undefined,
                     };
                   })(),
                 })}
@@ -405,7 +696,7 @@ export function QuoteBuilderV2Page() {
               </Button>
               <Button
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || !dealId}
+                disabled={saveMutation.isPending || !packetReadiness.canSave}
               >
                 <Save className="mr-1 h-4 w-4" />
                 {saveMutation.isPending ? "Saving..." : "Save Quote"}
@@ -413,18 +704,147 @@ export function QuoteBuilderV2Page() {
             </div>
           </div>
 
+          {pdfError && (
+            <Card className="border-red-500/30 bg-red-500/5 p-4">
+              <p className="text-sm text-red-400">{pdfError}</p>
+            </Card>
+          )}
+
           {saveMutation.isSuccess && (
             <>
               <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
                 <p className="text-sm text-emerald-400">Quote saved successfully.</p>
               </Card>
               {(() => {
-                const savedId = (saveMutation.data as { quote?: { id?: string }; id?: string } | undefined)?.quote?.id
-                  ?? (saveMutation.data as { id?: string } | undefined)?.id;
+                const savedId = saveMutation.data?.quote?.id ?? saveMutation.data?.id;
+                const canPublish = ["manager", "owner"].includes(userRoleQuery.data ?? "");
+                const portalRevision = portalRevisionQuery.data;
+                const compareSnapshot = portalRevision?.draft?.compareSnapshot;
+                const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
                 return savedId ? (
                   <>
                     <IncentiveStack quotePackageId={savedId} />
                     <SendQuoteSection quotePackageId={savedId} />
+                    {portalRevision?.review && (
+                      <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Portal Revision</p>
+                            <p className="text-xs text-muted-foreground">
+                              Publish a revised customer proposal from this quote workflow with manager approval.
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                            {publicationStatus.replace(/_/g, " ")}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current portal proposal</p>
+                            <p className="mt-2 text-sm font-semibold text-foreground">
+                              {portalRevision.review.current_version?.version_number
+                                ? `Version ${portalRevision.review.current_version.version_number}`
+                                : "Legacy live proposal"}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Last dealer summary: {portalRevision.review.current_version?.revision_summary ?? "None recorded"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Latest customer request</p>
+                            <p className="mt-2 text-sm text-foreground">
+                              {portalRevision.publishState?.latestCustomerRequestSnapshot ?? "No requested changes are recorded on the active portal proposal."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <label className="block space-y-1 text-sm">
+                          <span className="text-muted-foreground">Dealer response message</span>
+                          <textarea
+                            value={dealerMessage}
+                            onChange={(event) => setDealerMessage(event.target.value)}
+                            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                            placeholder="Explain what changed and what the customer should notice in the revised proposal."
+                          />
+                        </label>
+
+                        <label className="block space-y-1 text-sm">
+                          <span className="text-muted-foreground">Revision summary</span>
+                          <textarea
+                            value={revisionSummary}
+                            onChange={(event) => setRevisionSummary(event.target.value)}
+                            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                            placeholder="Summarize the revision in one concise line."
+                          />
+                        </label>
+
+                        {compareSnapshot?.hasChanges && (
+                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Compare preview</p>
+                            <div className="mt-2 space-y-2 text-sm text-foreground">
+                              {(compareSnapshot.priceChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                              {(compareSnapshot.equipmentChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                              {(compareSnapshot.financingChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                              {(compareSnapshot.termsChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                              {compareSnapshot.dealerMessageChange ? <p>{compareSnapshot.dealerMessageChange}</p> : null}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => revisionDraftMutation.mutate()}
+                            disabled={revisionDraftMutation.isPending || !dealerMessage.trim() || !revisionSummary.trim()}
+                          >
+                            {revisionDraftMutation.isPending ? "Saving..." : "Save draft"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => revisionSubmitMutation.mutate()}
+                            disabled={revisionSubmitMutation.isPending || publicationStatus === "awaiting_approval"}
+                          >
+                            {revisionSubmitMutation.isPending ? "Submitting..." : "Submit for approval"}
+                          </Button>
+                          {canPublish && publicationStatus === "awaiting_approval" && (
+                            <Button
+                              variant="outline"
+                              onClick={() => revisionReturnMutation.mutate()}
+                              disabled={revisionReturnMutation.isPending}
+                            >
+                              {revisionReturnMutation.isPending ? "Returning..." : "Return to draft"}
+                            </Button>
+                          )}
+                          {canPublish && (
+                            <Button
+                              onClick={() => revisionPublishMutation.mutate()}
+                              disabled={revisionPublishMutation.isPending || publicationStatus === "none"}
+                            >
+                              {revisionPublishMutation.isPending ? "Publishing..." : "Approve & publish"}
+                            </Button>
+                          )}
+                        </div>
+
+                        {(revisionDraftMutation.error || revisionSubmitMutation.error || revisionReturnMutation.error || revisionPublishMutation.error) && (
+                          <p className="text-xs text-red-400">
+                            {[
+                              revisionDraftMutation.error,
+                              revisionSubmitMutation.error,
+                              revisionReturnMutation.error,
+                              revisionPublishMutation.error,
+                            ].find(Boolean) instanceof Error
+                              ? ([
+                                revisionDraftMutation.error,
+                                revisionSubmitMutation.error,
+                                revisionReturnMutation.error,
+                                revisionPublishMutation.error,
+                              ].find(Boolean) as Error).message
+                              : "Portal revision action failed"}
+                          </p>
+                        )}
+                      </Card>
+                    )}
                     <Card className="border-border/60 bg-card/60 p-4 space-y-3">
                       <div className="flex items-center gap-2">
                         <PenTool className="h-4 w-4 text-qep-orange" />
@@ -435,7 +855,7 @@ export function QuoteBuilderV2Page() {
                       </p>
                       <Input
                         value={signerName}
-                        onChange={(e) => setSignerName(e.target.value)}
+                        onChange={(event) => setSignerName(event.target.value)}
                         placeholder="Signer full name"
                       />
                       <PortalSignaturePad ref={sigRef} />
@@ -459,6 +879,7 @@ export function QuoteBuilderV2Page() {
               })()}
             </>
           )}
+
           {saveMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">
               <p className="text-sm text-red-400">Failed to save quote. Try again.</p>

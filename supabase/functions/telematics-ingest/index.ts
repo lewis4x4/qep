@@ -14,6 +14,7 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import type { TelematicsUsageSnapshot } from "../../../shared/qep-moonshot-contracts.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
 
@@ -84,7 +85,12 @@ Deno.serve(async (req) => {
       return safeJsonError("Method not allowed", 405, origin);
     }
 
-    const body = await req.json();
+    const body = await req.json() as {
+      device_id?: string;
+      hours?: number | null;
+      lat?: number | null;
+      lng?: number | null;
+    };
 
     // POST /reading: Ingest a single reading
     if (action === "reading") {
@@ -92,11 +98,19 @@ Deno.serve(async (req) => {
         return safeJsonError("device_id required", 400, origin);
       }
 
+      const reading: TelematicsUsageSnapshot = {
+        deviceId: body.device_id,
+        hours: body.hours ?? null,
+        lat: body.lat ?? null,
+        lng: body.lng ?? null,
+        readingAt: new Date().toISOString(),
+      };
+
       // Find the feed for this device
       const { data: feed } = await supabaseAdmin
         .from("telematics_feeds")
         .select("id, equipment_id, subscription_id")
-        .eq("device_id", body.device_id)
+        .eq("device_id", reading.deviceId)
         .eq("is_active", true)
         .maybeSingle();
 
@@ -108,15 +122,15 @@ Deno.serve(async (req) => {
       await supabaseAdmin
         .from("telematics_feeds")
         .update({
-          last_reading_at: new Date().toISOString(),
-          last_hours: body.hours ?? null,
-          last_lat: body.lat ?? null,
-          last_lng: body.lng ?? null,
+          last_reading_at: reading.readingAt,
+          last_hours: reading.hours,
+          last_lat: reading.lat,
+          last_lng: reading.lng,
         })
         .eq("id", feed.id);
 
       // If linked to EaaS subscription, update usage record
-      if (feed.subscription_id && body.hours != null) {
+      if (feed.subscription_id && reading.hours != null) {
         const today = new Date().toISOString().split("T")[0];
         const monthStart = today.substring(0, 7) + "-01";
 
@@ -126,9 +140,9 @@ Deno.serve(async (req) => {
             subscription_id: feed.subscription_id,
             period_start: monthStart,
             period_end: today,
-            hours_used: body.hours,
+            hours_used: reading.hours,
             source: "telematics",
-            telematics_device_id: body.device_id,
+            telematics_device_id: reading.deviceId,
           }, { onConflict: "subscription_id,period_start" });
       }
 

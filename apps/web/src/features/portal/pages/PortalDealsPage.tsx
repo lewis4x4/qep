@@ -87,7 +87,7 @@ export function PortalDealsPage() {
                 </div>
                 {deal.quote_review_id && (
                   <Button asChild size="sm">
-                    <Link to={`/portal/quotes#${deal.quote_review_id}`}>
+                    <Link to={`/portal/quotes/${deal.quote_review_id}`}>
                       <FileText className="mr-1 h-3.5 w-3.5" />
                       Open quote
                     </Link>

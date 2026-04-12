@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase";
+import type {
+  CustomerMachineView,
+  PortalRentalReturnWorkspaceView,
+  PortalSubscriptionWorkspaceView,
+} from "../../../../../../shared/qep-moonshot-contracts";
 
 const PORTAL_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portal-api`;
 
@@ -38,6 +43,7 @@ export interface PortalQuoteSummary {
   deal_name: string | null;
   amount: number | null;
   status: string;
+  counter_notes?: string | null;
   viewed_at: string | null;
   signed_at: string | null;
   signer_name: string | null;
@@ -45,15 +51,98 @@ export interface PortalQuoteSummary {
   quote_pdf_url?: string | null;
   quote_data?: Record<string, unknown> | null;
   portal_status: PortalCanonicalStatus;
+  current_revision?: PortalQuoteRevisionDetail | null;
+  revision_history?: PortalQuoteRevisionSummary[];
+  compare_to_previous?: PortalQuoteRevisionCompare | null;
 }
 
-export type PortalFleetResponse = { fleet?: Record<string, unknown>[] };
-export type PortalServiceRequestsResponse = { requests?: Record<string, unknown>[] };
+export interface PortalQuoteRevisionSummary {
+  id: string;
+  version_number: number;
+  published_at: string;
+  is_current: boolean;
+  dealer_message: string | null;
+  revision_summary: string | null;
+  customer_request_snapshot: string | null;
+}
+
+export interface PortalQuoteRevisionDetail extends PortalQuoteRevisionSummary {
+  quote_pdf_url: string | null;
+  quote_data: Record<string, unknown> | null;
+}
+
+export interface PortalQuoteRevisionCompare {
+  has_changes: boolean;
+  price_changes: string[];
+  equipment_changes: string[];
+  financing_changes: string[];
+  terms_changes: string[];
+  dealer_message_change: string | null;
+}
+
+export type PortalInvoiceTimelineItem = {
+  label: string;
+  detail: string;
+  at: string | null;
+  tone: "blue" | "amber" | "emerald" | "red";
+};
+
+export type PortalBillingSummary = {
+  open_balance: number;
+  overdue_balance: number;
+  subscription_invoices: number;
+  payments_in_flight: number;
+};
+
+export type PortalSubscriptionBillingDetail = {
+  subscription_id: string;
+  plan_name: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  included_hours: number | null;
+  used_hours: number | null;
+  overage_hours: number | null;
+  overage_charge: number | null;
+  maintenance_included: boolean;
+};
+
+export type PortalServiceTimelineSummary = {
+  branch_label: string | null;
+  next_step: string | null;
+  customer_summary: string | null;
+};
+
+export type PortalServiceRequestCard = Record<string, unknown> & {
+  portal_status?: PortalCanonicalStatus | null;
+  workspace_timeline?: PortalServiceTimelineSummary | null;
+  photo_count?: number;
+};
+
+export type PortalFleetAssetView = CustomerMachineView;
+export type PortalFleetResponse = { fleet?: PortalFleetAssetView[] };
+export type PortalServiceRequestsResponse = {
+  requests?: PortalServiceRequestCard[];
+  open_requests?: PortalServiceRequestCard[];
+  completed_requests?: PortalServiceRequestCard[];
+  blocked_requests?: PortalServiceRequestCard[];
+  workspace_summary?: {
+    open_count: number;
+    completed_count: number;
+    blocked_count: number;
+  };
+};
 export type PortalPartsOrdersResponse = { orders?: PortalPartsOrderSummary[] };
-export type PortalInvoicesResponse = { invoices?: Record<string, unknown>[] };
+export type PortalInvoicesResponse = {
+  invoices?: Array<Record<string, unknown> & {
+    portal_invoice_timeline?: PortalInvoiceTimelineItem[];
+    portal_subscription_billing?: PortalSubscriptionBillingDetail | null;
+  }>;
+  billing_summary?: PortalBillingSummary;
+};
 export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
 export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };
-export type PortalSubscriptionsResponse = Record<string, unknown>;
+export type PortalSubscriptionsResponse = { subscriptions?: PortalSubscriptionWorkspaceView[] };
+export type PortalRentalsResponse = { rentals?: PortalRentalReturnWorkspaceView[] };
 export type PortalSettingsResponse = {
   customer?: {
     id: string;
@@ -77,9 +166,17 @@ export type PortalSettingsResponse = {
 };
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const session = (await supabase.auth.getSession()).data.session;
+  const sessionResult = await supabase.auth.getSession();
+  let session = sessionResult.data.session;
+  if (!session?.access_token) {
+    const refreshed = await supabase.auth.refreshSession();
+    session = refreshed.data.session ?? null;
+  }
+  if (!session?.access_token) {
+    throw new Error("Portal session unavailable. Sign in again to continue.");
+  }
   return {
-    Authorization: `Bearer ${session?.access_token}`,
+    Authorization: `Bearer ${session.access_token}`,
     "Content-Type": "application/json",
   };
 }
@@ -119,8 +216,8 @@ export const portalApi = {
   getActiveDeals: (): Promise<PortalActiveDealsResponse> =>
     portalFetch<PortalActiveDealsResponse>("deals/active"),
   /** Wave 5D: fleet with LIVE service job state joined per equipment. */
-  getFleetWithStatus: (): Promise<{ fleet?: Record<string, unknown>[] }> =>
-    portalFetch<{ fleet?: Record<string, unknown>[] }>("fleet-with-status"),
+  getFleetWithStatus: (): Promise<PortalFleetResponse> =>
+    portalFetch<PortalFleetResponse>("fleet-with-status"),
   /** Wave 5D: parts purchase history grouped by machine (one-click reorder source). */
   getPartsHistory: (): Promise<{ history?: Record<string, unknown>[] }> =>
     portalFetch<{ history?: Record<string, unknown>[] }>("parts-history"),
@@ -162,4 +259,6 @@ export const portalApi = {
     portalFetch<Record<string, unknown>>("settings", { method: "PUT", body: JSON.stringify(data) }),
   getSubscriptions: (): Promise<PortalSubscriptionsResponse> =>
     portalFetch<PortalSubscriptionsResponse>("subscriptions"),
+  getRentals: (): Promise<PortalRentalsResponse> =>
+    portalFetch<PortalRentalsResponse>("rentals"),
 };

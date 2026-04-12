@@ -1,19 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { calculateFinancing } from "../lib/quote-api";
+import type { QuoteFinancingPreview } from "../../../../../../shared/qep-moonshot-contracts";
 
 interface FinancingCalculatorProps {
   totalAmount: number;
   marginPct?: number;
-}
-
-interface Scenario {
-  type: string;
-  term_months: number;
-  rate: number;
-  monthly_payment: number;
-  total_cost: number;
-  lender: string;
 }
 
 function formatCurrency(value: number): string {
@@ -38,12 +30,10 @@ export function FinancingCalculator({ totalAmount, marginPct }: FinancingCalcula
     return <Card className="border-red-500/20 p-4"><p className="text-sm text-red-400">Failed to calculate financing.</p></Card>;
   }
 
-  const scenarios: Scenario[] = data?.scenarios ?? [];
-  const marginCheck = data?.margin_check;
-  const incentives = data?.incentives as {
-    applicable?: Array<{ id: string; name: string; oem_name?: string; discount_type: string; discount_value: number; estimated_savings: number; end_date?: string }>;
-    total_savings?: number;
-  } | undefined;
+  const preview = (data ?? null) as QuoteFinancingPreview | null;
+  const scenarios = preview?.scenarios ?? [];
+  const marginCheck = preview?.margin_check;
+  const incentives = preview?.incentives ?? undefined;
 
   return (
     <div className="space-y-3">
@@ -80,14 +70,14 @@ export function FinancingCalculator({ totalAmount, marginPct }: FinancingCalcula
           <Card key={s.type} className={`p-4 ${s.type === "cash" ? "border-emerald-500/30" : ""}`}>
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{s.type}</p>
             {s.type === "cash" ? (
-              <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(s.total_cost)}</p>
+              <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(s.totalCost ?? 0)}</p>
             ) : (
               <>
-                <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(s.monthly_payment)}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+                <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(s.monthlyPayment ?? 0)}<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {s.term_months} months @ {s.rate}% • Total: {formatCurrency(s.total_cost)}
+                  {s.termMonths ?? "—"} months @ {s.rate ?? 0}% • Total: {formatCurrency(s.totalCost ?? 0)}
                 </p>
-                <p className="text-xs text-muted-foreground">{s.lender}</p>
+                <p className="text-xs text-muted-foreground">{s.lender ?? "Preferred lender"}</p>
               </>
             )}
           </Card>

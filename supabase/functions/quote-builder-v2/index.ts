@@ -19,6 +19,103 @@ import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
+function extractQuoteText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
+  const raw = (typeof value?.[keyA] === "string" ? value[keyA] : typeof value?.[keyB] === "string" ? value[keyB] : null) as string | null;
+  const trimmed = raw?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractQuoteLines(value: Record<string, unknown> | null, keyA: string, keyB: string): string[] {
+  const source = value?.[keyA] ?? value?.[keyB];
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      if (typeof record.description === "string" && record.description.trim()) return record.description.trim();
+      if (typeof record.name === "string" && record.name.trim()) return record.name.trim();
+      const combined = [record.make, record.model, record.year].filter(Boolean).join(" ").trim();
+      return combined || null;
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function extractQuoteFinancing(value: Record<string, unknown> | null): string[] {
+  const source = value?.financing;
+  if (!Array.isArray(source)) return [];
+  return source
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const parts = [
+        typeof record.type === "string" ? record.type.toUpperCase() : null,
+        Number.isFinite(Number(record.monthlyPayment)) ? `$${Math.round(Number(record.monthlyPayment)).toLocaleString()}/mo` : null,
+        Number.isFinite(Number(record.termMonths)) ? `${Math.round(Number(record.termMonths))} mo` : null,
+      ].filter(Boolean);
+      return parts.length > 0 ? parts.join(" · ") : null;
+    })
+    .filter((item): item is string => Boolean(item));
+}
+
+function extractQuoteTerms(value: Record<string, unknown> | null): string[] {
+  const source = value?.terms ?? value?.legal_terms;
+  if (typeof source === "string" && source.trim()) return [source.trim()];
+  if (!Array.isArray(source)) return [];
+  return source.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim());
+}
+
+function comparePortalRevisionPayload(
+  currentQuoteData: Record<string, unknown> | null,
+  nextQuoteData: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const currentPrice = Number(currentQuoteData?.net_total ?? currentQuoteData?.netTotal ?? 0);
+  const nextPrice = Number(nextQuoteData?.net_total ?? nextQuoteData?.netTotal ?? 0);
+  const priceChanges = Number.isFinite(currentPrice) && Number.isFinite(nextPrice) && currentPrice !== nextPrice
+    ? [`Net total: $${currentPrice.toLocaleString()} → $${nextPrice.toLocaleString()}`]
+    : [];
+
+  const compareLists = (label: string, current: string[], next: string[]) =>
+    JSON.stringify(current) === JSON.stringify(next)
+      ? []
+      : [`${label}: ${current.join(", ") || "none"} → ${next.join(", ") || "none"}`];
+
+  const equipmentChanges = compareLists(
+    "Equipment",
+    extractQuoteLines(currentQuoteData, "equipment", "equipment"),
+    extractQuoteLines(nextQuoteData, "equipment", "equipment"),
+  );
+  const financingChanges = compareLists(
+    "Financing",
+    extractQuoteFinancing(currentQuoteData),
+    extractQuoteFinancing(nextQuoteData),
+  );
+  const termsChanges = compareLists(
+    "Terms",
+    extractQuoteTerms(currentQuoteData),
+    extractQuoteTerms(nextQuoteData),
+  );
+
+  const currentDealerMessage = extractQuoteText(currentQuoteData, "dealer_message", "dealerMessage");
+  const nextDealerMessage = extractQuoteText(nextQuoteData, "dealer_message", "dealerMessage");
+
+  return {
+    hasChanges:
+      priceChanges.length > 0 ||
+      equipmentChanges.length > 0 ||
+      financingChanges.length > 0 ||
+      termsChanges.length > 0 ||
+      currentDealerMessage !== nextDealerMessage,
+    priceChanges,
+    equipmentChanges,
+    financingChanges,
+    termsChanges,
+    dealerMessageChange:
+      currentDealerMessage !== nextDealerMessage
+        ? `${currentDealerMessage ?? "No prior dealer message"} → ${nextDealerMessage ?? "No current dealer message"}`
+        : null,
+  };
+}
+
 async function aiEquipmentRecommendation(
   jobDescription: string,
   catalogEntries: Record<string, unknown>[],
@@ -144,11 +241,149 @@ Deno.serve(async (req) => {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const userRole = typeof profile?.role === "string" ? profile.role : null;
+    const canRevise = userRole !== null && ["rep", "manager", "owner"].includes(userRole);
+    const canPublish = userRole !== null && ["manager", "owner"].includes(userRole);
+
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop() || "";
 
+    async function getPortalReviewContext(dealId: string) {
+      const { data: review, error: reviewErr } = await supabase
+        .from("portal_quote_reviews")
+        .select("id, workspace_id, deal_id, status, counter_notes, quote_data, quote_pdf_url, expires_at, updated_at")
+        .eq("deal_id", dealId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (reviewErr) throw new Error(reviewErr.message);
+      if (!review?.id) return null;
+
+      const { data: versions, error: versionsErr } = await supabase
+        .from("portal_quote_review_versions")
+        .select("id, version_number, quote_data, quote_pdf_url, dealer_message, revision_summary, customer_request_snapshot, published_at, is_current")
+        .eq("portal_quote_review_id", review.id)
+        .order("version_number", { ascending: false });
+      if (versionsErr) throw new Error(versionsErr.message);
+
+      const versionRows = (versions ?? []) as Array<Record<string, unknown>>;
+      const currentVersion = versionRows.find((row) => row.is_current === true) ?? versionRows[0] ?? null;
+
+      if (!currentVersion && (review.quote_data || review.quote_pdf_url)) {
+        await supabase.from("portal_quote_review_versions").insert({
+          workspace_id: "default",
+          portal_quote_review_id: review.id,
+          version_number: 1,
+          quote_data: review.quote_data ?? {},
+          quote_pdf_url: review.quote_pdf_url ?? null,
+          dealer_message: extractQuoteText((review.quote_data ?? null) as Record<string, unknown> | null, "dealer_message", "dealerMessage"),
+          revision_summary: extractQuoteText((review.quote_data ?? null) as Record<string, unknown> | null, "revision_summary", "revisionSummary"),
+          customer_request_snapshot: review.counter_notes ?? null,
+          published_at: review.updated_at ?? new Date().toISOString(),
+          is_current: true,
+        });
+      }
+
+      const { data: freshVersions, error: freshVersionsErr } = await supabase
+        .from("portal_quote_review_versions")
+        .select("id, version_number, quote_data, quote_pdf_url, dealer_message, revision_summary, customer_request_snapshot, published_at, is_current")
+        .eq("portal_quote_review_id", review.id)
+        .order("version_number", { ascending: false });
+      if (freshVersionsErr) throw new Error(freshVersionsErr.message);
+
+      const latestVersions = (freshVersions ?? []) as Array<Record<string, unknown>>;
+      const latestCurrentVersion = latestVersions.find((row) => row.is_current === true) ?? latestVersions[0] ?? null;
+
+      const { data: draftRows, error: draftErr } = await supabase
+        .from("portal_quote_revision_drafts")
+        .select("*")
+        .eq("portal_quote_review_id", review.id)
+        .in("status", ["draft", "awaiting_approval", "published"])
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (draftErr) throw new Error(draftErr.message);
+
+      const draft = (draftRows?.[0] ?? null) as Record<string, unknown> | null;
+      const publicationStatus = draft
+        ? draft.status === "awaiting_approval"
+          ? "awaiting_approval"
+          : draft.status === "draft"
+            ? "draft_revision"
+            : "published"
+        : latestCurrentVersion
+          ? "published"
+          : "none";
+
+      return {
+        review,
+        currentVersion: latestCurrentVersion,
+        versions: latestVersions,
+        draft,
+        publicationStatus,
+      };
+    }
+
     // ── GET: Load existing quote for deal ────────────────────────────────
     if (req.method === "GET") {
+      if (action === "portal-revision") {
+        if (!canRevise) return safeJsonError("Portal revisions require rep, manager, or owner role", 403, origin);
+        const dealId = url.searchParams.get("deal_id");
+        if (!dealId) return safeJsonError("deal_id required", 400, origin);
+        const context = await getPortalReviewContext(dealId);
+        if (!context) {
+          return safeJsonOk({ review: null, draft: null, publishState: null }, origin);
+        }
+
+        return safeJsonOk({
+          review: {
+            id: context.review.id,
+            status: context.review.status,
+            counter_notes: context.review.counter_notes ?? null,
+            current_version: context.currentVersion
+              ? {
+                version_number: Number(context.currentVersion.version_number ?? 0) || null,
+                dealer_message: typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+                revision_summary: typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+              }
+              : null,
+          },
+          draft: context.draft
+            ? {
+              id: String(context.draft.id),
+              portalQuoteReviewId: String(context.draft.portal_quote_review_id),
+              quotePackageId: String(context.draft.quote_package_id),
+              dealId: String(context.draft.deal_id),
+              preparedBy: typeof context.draft.prepared_by === "string" ? context.draft.prepared_by : null,
+              approvedBy: typeof context.draft.approved_by === "string" ? context.draft.approved_by : null,
+              status: String(context.draft.status),
+              quoteData: (context.draft.quote_data ?? null) as Record<string, unknown> | null,
+              quotePdfUrl: typeof context.draft.quote_pdf_url === "string" ? context.draft.quote_pdf_url : null,
+              dealerMessage: typeof context.draft.dealer_message === "string" ? context.draft.dealer_message : null,
+              revisionSummary: typeof context.draft.revision_summary === "string" ? context.draft.revision_summary : null,
+              customerRequestSnapshot: typeof context.draft.customer_request_snapshot === "string" ? context.draft.customer_request_snapshot : null,
+              compareSnapshot: (context.draft.compare_snapshot ?? null) as Record<string, unknown> | null,
+              createdAt: String(context.draft.created_at),
+              updatedAt: String(context.draft.updated_at),
+              publishedAt: typeof context.draft.published_at === "string" ? context.draft.published_at : null,
+            }
+            : null,
+          publishState: {
+            portalQuoteReviewId: context.review.id,
+            currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) || null : null,
+            currentPublishedDealerMessage: context.currentVersion && typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+            currentPublishedRevisionSummary: context.currentVersion && typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+            latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+            publicationStatus: context.publicationStatus,
+          },
+        }, origin);
+      }
+
       const dealId = url.searchParams.get("deal_id");
       if (!dealId) return safeJsonError("deal_id required", 400, origin);
 
@@ -324,6 +559,249 @@ Deno.serve(async (req) => {
         incentives: {
           applicable: applicableIncentives,
           total_savings: totalIncentiveSavings,
+        },
+      }, origin);
+    }
+
+    // ── POST /portal-revision/* — internal dealership revision workflow ─────
+    if (action === "draft" && url.pathname.includes("/portal-revision/")) {
+      if (!canRevise) return safeJsonError("Portal revisions require rep, manager, or owner role", 403, origin);
+      if (!body.deal_id || !body.quote_package_id || !body.quote_data) {
+        return safeJsonError("deal_id, quote_package_id, and quote_data required", 400, origin);
+      }
+      const context = await getPortalReviewContext(String(body.deal_id));
+      if (!context) return safeJsonError("No linked portal quote review for this deal", 404, origin);
+
+      const compareSnapshot = comparePortalRevisionPayload(
+        (context.currentVersion?.quote_data ?? context.review.quote_data ?? null) as Record<string, unknown> | null,
+        (body.quote_data ?? null) as Record<string, unknown> | null,
+      );
+
+      const draftPayload = {
+        workspace_id: context.review.workspace_id,
+        portal_quote_review_id: context.review.id,
+        quote_package_id: body.quote_package_id,
+        deal_id: body.deal_id,
+        prepared_by: user.id,
+        approved_by: null,
+        status: "draft",
+        quote_data: body.quote_data,
+        quote_pdf_url: body.quote_pdf_url ?? null,
+        dealer_message: body.dealer_message ?? null,
+        revision_summary: body.revision_summary ?? null,
+        customer_request_snapshot: context.review.counter_notes ?? null,
+        compare_snapshot: compareSnapshot,
+        published_at: null,
+      };
+
+      if (context.draft && ["draft", "awaiting_approval"].includes(String(context.draft.status ?? ""))) {
+        const { data: updated, error } = await supabase
+          .from("portal_quote_revision_drafts")
+          .update(draftPayload)
+          .eq("id", context.draft.id)
+          .select()
+          .single();
+        if (error) return safeJsonError("Failed to save portal revision draft", 500, origin);
+        return safeJsonOk({
+          draft: {
+            id: updated.id,
+            portalQuoteReviewId: updated.portal_quote_review_id,
+            quotePackageId: updated.quote_package_id,
+            dealId: updated.deal_id,
+            preparedBy: updated.prepared_by,
+            approvedBy: updated.approved_by,
+            status: updated.status,
+            quoteData: updated.quote_data,
+            quotePdfUrl: updated.quote_pdf_url,
+            dealerMessage: updated.dealer_message,
+            revisionSummary: updated.revision_summary,
+            customerRequestSnapshot: updated.customer_request_snapshot,
+            compareSnapshot: updated.compare_snapshot,
+            createdAt: updated.created_at,
+            updatedAt: updated.updated_at,
+            publishedAt: updated.published_at,
+          },
+          publishState: {
+            portalQuoteReviewId: context.review.id,
+            currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) || null : null,
+            currentPublishedDealerMessage: context.currentVersion && typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+            currentPublishedRevisionSummary: context.currentVersion && typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+            latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+            publicationStatus: "draft_revision",
+          },
+        }, origin);
+      }
+
+      const { data: created, error } = await supabase
+        .from("portal_quote_revision_drafts")
+        .insert(draftPayload)
+        .select()
+        .single();
+      if (error) return safeJsonError("Failed to save portal revision draft", 500, origin);
+      return safeJsonOk({
+        draft: {
+          id: created.id,
+          portalQuoteReviewId: created.portal_quote_review_id,
+          quotePackageId: created.quote_package_id,
+          dealId: created.deal_id,
+          preparedBy: created.prepared_by,
+          approvedBy: created.approved_by,
+          status: created.status,
+          quoteData: created.quote_data,
+          quotePdfUrl: created.quote_pdf_url,
+          dealerMessage: created.dealer_message,
+          revisionSummary: created.revision_summary,
+          customerRequestSnapshot: created.customer_request_snapshot,
+          compareSnapshot: created.compare_snapshot,
+          createdAt: created.created_at,
+          updatedAt: created.updated_at,
+          publishedAt: created.published_at,
+        },
+        publishState: {
+          portalQuoteReviewId: context.review.id,
+          currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) || null : null,
+          currentPublishedDealerMessage: context.currentVersion && typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+          currentPublishedRevisionSummary: context.currentVersion && typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+          latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+          publicationStatus: "draft_revision",
+        },
+      }, origin);
+    }
+
+    if (action === "submit" && url.pathname.includes("/portal-revision/")) {
+      if (!canRevise) return safeJsonError("Portal revisions require rep, manager, or owner role", 403, origin);
+      if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);
+      const context = await getPortalReviewContext(String(body.deal_id));
+      if (!context?.draft) return safeJsonError("No portal revision draft found", 404, origin);
+
+      const { data: updated, error } = await supabase
+        .from("portal_quote_revision_drafts")
+        .update({ status: "awaiting_approval" })
+        .eq("id", context.draft.id)
+        .select()
+        .single();
+      if (error) return safeJsonError("Failed to submit portal revision", 500, origin);
+
+      return safeJsonOk({
+        draft: {
+          id: updated.id,
+          portalQuoteReviewId: updated.portal_quote_review_id,
+          quotePackageId: updated.quote_package_id,
+          dealId: updated.deal_id,
+          preparedBy: updated.prepared_by,
+          approvedBy: updated.approved_by,
+          status: updated.status,
+          quoteData: updated.quote_data,
+          quotePdfUrl: updated.quote_pdf_url,
+          dealerMessage: updated.dealer_message,
+          revisionSummary: updated.revision_summary,
+          customerRequestSnapshot: updated.customer_request_snapshot,
+          compareSnapshot: updated.compare_snapshot,
+          createdAt: updated.created_at,
+          updatedAt: updated.updated_at,
+          publishedAt: updated.published_at,
+        },
+        publishState: {
+          portalQuoteReviewId: context.review.id,
+          currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) || null : null,
+          currentPublishedDealerMessage: context.currentVersion && typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+          currentPublishedRevisionSummary: context.currentVersion && typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+          latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+          publicationStatus: "awaiting_approval",
+        },
+      }, origin);
+    }
+
+    if (action === "return-to-draft" && url.pathname.includes("/portal-revision/")) {
+      if (!canPublish) return safeJsonError("Returning revisions to draft requires manager or owner role", 403, origin);
+      if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);
+      const context = await getPortalReviewContext(String(body.deal_id));
+      if (!context?.draft) return safeJsonError("No portal revision draft found", 404, origin);
+
+      const { data: updated, error } = await supabase
+        .from("portal_quote_revision_drafts")
+        .update({ status: "draft" })
+        .eq("id", context.draft.id)
+        .select()
+        .single();
+      if (error) return safeJsonError("Failed to return revision to draft", 500, origin);
+
+      return safeJsonOk({
+        draft: {
+          id: updated.id,
+          portalQuoteReviewId: updated.portal_quote_review_id,
+          quotePackageId: updated.quote_package_id,
+          dealId: updated.deal_id,
+          preparedBy: updated.prepared_by,
+          approvedBy: updated.approved_by,
+          status: updated.status,
+          quoteData: updated.quote_data,
+          quotePdfUrl: updated.quote_pdf_url,
+          dealerMessage: updated.dealer_message,
+          revisionSummary: updated.revision_summary,
+          customerRequestSnapshot: updated.customer_request_snapshot,
+          compareSnapshot: updated.compare_snapshot,
+          createdAt: updated.created_at,
+          updatedAt: updated.updated_at,
+          publishedAt: updated.published_at,
+        },
+        publishState: {
+          portalQuoteReviewId: context.review.id,
+          currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) || null : null,
+          currentPublishedDealerMessage: context.currentVersion && typeof context.currentVersion.dealer_message === "string" ? context.currentVersion.dealer_message : null,
+          currentPublishedRevisionSummary: context.currentVersion && typeof context.currentVersion.revision_summary === "string" ? context.currentVersion.revision_summary : null,
+          latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+          publicationStatus: "draft_revision",
+        },
+      }, origin);
+    }
+
+    if (action === "publish" && url.pathname.includes("/portal-revision/")) {
+      if (!canPublish) return safeJsonError("Publishing portal revisions requires manager or owner role", 403, origin);
+      if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);
+      const context = await getPortalReviewContext(String(body.deal_id));
+      if (!context?.draft) return safeJsonError("No portal revision draft found", 404, origin);
+
+      const activeDraftStatus = String(context.draft.status ?? "");
+      if (!["draft", "awaiting_approval"].includes(activeDraftStatus)) {
+        return safeJsonError("Only draft or awaiting-approval revisions can be published", 400, origin);
+      }
+
+      const { error: publishErr } = await supabase
+        .from("portal_quote_reviews")
+        .update({
+          quote_data: context.draft.quote_data,
+          quote_pdf_url: context.draft.quote_pdf_url,
+          status: "sent",
+          viewed_at: null,
+          signed_at: null,
+          signer_name: null,
+          signature_url: null,
+          signer_ip: null,
+          counter_notes: context.draft.customer_request_snapshot ?? context.review.counter_notes ?? null,
+        })
+        .eq("id", context.review.id);
+      if (publishErr) return safeJsonError("Failed to publish portal revision", 500, origin);
+
+      const { error: draftUpdateErr } = await supabase
+        .from("portal_quote_revision_drafts")
+        .update({
+          status: "published",
+          approved_by: user.id,
+          published_at: new Date().toISOString(),
+        })
+        .eq("id", context.draft.id);
+      if (draftUpdateErr) return safeJsonError("Failed to finalize portal revision draft", 500, origin);
+
+      return safeJsonOk({
+        draft: null,
+        publishState: {
+          portalQuoteReviewId: context.review.id,
+          currentPublishedVersionNumber: context.currentVersion ? Number(context.currentVersion.version_number ?? 0) + 1 : 1,
+          currentPublishedDealerMessage: typeof context.draft.dealer_message === "string" ? context.draft.dealer_message : null,
+          currentPublishedRevisionSummary: typeof context.draft.revision_summary === "string" ? context.draft.revision_summary : null,
+          latestCustomerRequestSnapshot: context.review.counter_notes ?? null,
+          publicationStatus: "published",
         },
       }, origin);
     }

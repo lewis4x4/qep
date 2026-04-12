@@ -38,7 +38,7 @@ export function EquipmentSelector({ onSelect, onRecommendation }: EquipmentSelec
   const aiMutation = useMutation({
     mutationFn: async () => {
       const data = await getAiEquipmentRecommendation(jobDescription);
-      onRecommendation(data.recommendation);
+      onRecommendation(data);
     },
   });
 
