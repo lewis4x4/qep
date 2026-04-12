@@ -2,7 +2,7 @@
 -- Adds durable provider-backed communication storage, campaign execution tables,
 -- consent fields, and workspace-safe elevated CRM reads.
 
-alter table public.crm_contacts
+alter table public.qrm_contacts
   add column if not exists sms_opt_in boolean not null default false,
   add column if not exists sms_opt_in_at timestamptz,
   add column if not exists sms_opt_in_source text;
@@ -12,7 +12,7 @@ create table if not exists public.crm_campaigns (
   workspace_id text not null default 'default',
   name text not null,
   channel text not null check (channel in ('email', 'sms')),
-  template_id uuid references public.crm_activity_templates(id) on delete set null,
+  template_id uuid references public.qrm_activity_templates(id) on delete set null,
   audience_snapshot jsonb not null default '{}'::jsonb,
   state text not null default 'draft' check (state in ('draft', 'running', 'completed', 'cancelled')),
   execution_summary jsonb not null default '{}'::jsonb,
@@ -38,8 +38,8 @@ create table if not exists public.crm_campaign_recipients (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.crm_campaigns(id) on delete cascade,
   workspace_id text not null default 'default',
-  contact_id uuid not null references public.crm_contacts(id) on delete cascade,
-  activity_id uuid references public.crm_activities(id) on delete set null,
+  contact_id uuid not null references public.qrm_contacts(id) on delete cascade,
+  activity_id uuid references public.qrm_activities(id) on delete set null,
   status text not null check (
     status in ('pending', 'sent', 'delivered', 'failed', 'ineligible')
   ),
@@ -67,8 +67,8 @@ create trigger set_crm_campaign_recipients_updated_at
 create table if not exists public.crm_communication_messages (
   id uuid primary key default gen_random_uuid(),
   workspace_id text not null default 'default',
-  activity_id uuid references public.crm_activities(id) on delete set null,
-  contact_id uuid not null references public.crm_contacts(id) on delete cascade,
+  activity_id uuid references public.qrm_activities(id) on delete set null,
+  contact_id uuid not null references public.qrm_contacts(id) on delete cascade,
   channel text not null check (channel in ('email', 'sms')),
   direction text not null check (direction in ('inbound', 'outbound')),
   provider text check (provider in ('sendgrid', 'twilio')),
@@ -157,9 +157,9 @@ create policy "crm_communication_webhook_receipts_service_all"
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
 
-drop policy if exists "crm_companies_all_elevated" on public.crm_companies;
+drop policy if exists "crm_companies_all_elevated" on public.qrm_companies;
 create policy "crm_companies_all_elevated"
-  on public.crm_companies
+  on public.qrm_companies
   for all
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -170,9 +170,9 @@ create policy "crm_companies_all_elevated"
     and workspace_id = public.get_my_workspace()
   );
 
-drop policy if exists "crm_contacts_all_elevated" on public.crm_contacts;
+drop policy if exists "crm_contacts_all_elevated" on public.qrm_contacts;
 create policy "crm_contacts_all_elevated"
-  on public.crm_contacts
+  on public.qrm_contacts
   for all
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -183,9 +183,9 @@ create policy "crm_contacts_all_elevated"
     and workspace_id = public.get_my_workspace()
   );
 
-drop policy if exists "crm_deals_all_elevated" on public.crm_deals;
+drop policy if exists "crm_deals_all_elevated" on public.qrm_deals;
 create policy "crm_deals_all_elevated"
-  on public.crm_deals
+  on public.qrm_deals
   for all
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -196,9 +196,9 @@ create policy "crm_deals_all_elevated"
     and workspace_id = public.get_my_workspace()
   );
 
-drop policy if exists "crm_activities_all_elevated" on public.crm_activities;
+drop policy if exists "crm_activities_all_elevated" on public.qrm_activities;
 create policy "crm_activities_all_elevated"
-  on public.crm_activities
+  on public.qrm_activities
   for all
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -218,7 +218,7 @@ create policy "crm_activities_all_elevated"
 -- drop table if exists public.crm_communication_messages;
 -- drop table if exists public.crm_campaign_recipients;
 -- drop table if exists public.crm_campaigns;
--- alter table public.crm_contacts
+-- alter table public.qrm_contacts
 --   drop column if exists sms_opt_in_source,
 --   drop column if exists sms_opt_in_at,
 --   drop column if exists sms_opt_in;
