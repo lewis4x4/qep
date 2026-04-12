@@ -11,6 +11,7 @@ interface ActivityItem {
   type: "document" | "voice_capture";
   title: string;
   timestamp: string;
+  nextMove: string;
 }
 
 function timeAgo(iso: string): string {
@@ -53,6 +54,7 @@ export function RecentActivityFeed() {
           type: "document",
           title: `Document uploaded: ${d.title}`,
           timestamp: d.created_at,
+          nextMove: "Review whether this upload changes a live customer, quote, or operating decision.",
         }));
 
         const voiceItems: ActivityItem[] = (voiceResult.data ?? []).map((v) => {
@@ -61,7 +63,13 @@ export function RecentActivityFeed() {
           const label = contactName
             ? `Voice capture: ${contactName}`
             : "Voice capture recorded";
-          return { id: v.id, type: "voice_capture", title: label, timestamp: v.created_at };
+          return {
+            id: v.id,
+            type: "voice_capture",
+            title: label,
+            timestamp: v.created_at,
+            nextMove: "Convert the field signal into a concrete follow-up or deal update.",
+          };
         });
 
         const merged = [...docItems, ...voiceItems]
@@ -81,7 +89,7 @@ export function RecentActivityFeed() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+      <h2 className="text-lg font-semibold text-foreground mb-4">Attention Lane</h2>
       <div className="bg-card rounded-lg border border-border divide-y divide-border">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
@@ -111,6 +119,7 @@ export function RecentActivityFeed() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground truncate">{item.title}</p>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">Next move: {item.nextMove}</p>
               </div>
               <span className="text-xs text-muted-foreground shrink-0">{timeAgo(item.timestamp)}</span>
             </div>
