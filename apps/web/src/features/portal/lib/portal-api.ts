@@ -1,7 +1,13 @@
 import { supabase } from "@/lib/supabase";
 import type {
   CustomerMachineView,
+  PortalRentalBookingDraft,
+  PortalRentalContractView,
+  PortalRentalExtensionRequest,
+  PortalRentalPricingEstimate,
+  PortalRentalRateRule,
   PortalRentalReturnWorkspaceView,
+  PortalRentalWorkspaceSummary,
   PortalSubscriptionWorkspaceView,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
@@ -142,7 +148,24 @@ export type PortalInvoicesResponse = {
 export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
 export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };
 export type PortalSubscriptionsResponse = { subscriptions?: PortalSubscriptionWorkspaceView[] };
-export type PortalRentalsResponse = { rentals?: PortalRentalReturnWorkspaceView[] };
+export type PortalRentalsResponse = {
+  bookings?: PortalRentalContractView[];
+  active_contracts?: PortalRentalContractView[];
+  extension_requests?: PortalRentalExtensionRequest[];
+  returns?: PortalRentalReturnWorkspaceView[];
+  workspace_summary?: PortalRentalWorkspaceSummary;
+  booking_catalog?: {
+    units: Array<{
+      id: string;
+      label: string;
+      category: string | null;
+      dailyRate: number | null;
+      weeklyRate: number | null;
+      monthlyRate: number | null;
+    }>;
+    categories: string[];
+  };
+};
 export type PortalSettingsResponse = {
   customer?: {
     id: string;
@@ -261,4 +284,16 @@ export const portalApi = {
     portalFetch<PortalSubscriptionsResponse>("subscriptions"),
   getRentals: (): Promise<PortalRentalsResponse> =>
     portalFetch<PortalRentalsResponse>("rentals"),
+  createRentalBooking: (data: PortalRentalBookingDraft): Promise<Record<string, unknown>> =>
+    portalFetch<Record<string, unknown>>("rentals/book", { method: "POST", body: JSON.stringify(data) }),
+  createRentalExtension: (data: {
+    rental_contract_id: string;
+    requested_end_date: string;
+    customer_reason?: string | null;
+  }): Promise<Record<string, unknown>> =>
+    portalFetch<Record<string, unknown>>("rentals/extend", { method: "POST", body: JSON.stringify(data) }),
+  updateRentalRequest: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    portalFetch<Record<string, unknown>>("rentals/request", { method: "PUT", body: JSON.stringify(data) }),
+  finalizeRentalPayment: (data: { kind: "contract" | "extension"; id: string }): Promise<Record<string, unknown>> =>
+    portalFetch<Record<string, unknown>>("rentals/approve-payment", { method: "POST", body: JSON.stringify(data) }),
 };

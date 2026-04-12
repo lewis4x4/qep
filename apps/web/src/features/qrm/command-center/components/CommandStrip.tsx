@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type {
   CommandStripPayload,
-  IronRole,
   SectionFreshness,
 } from "../api/commandCenter.types";
 import { ScopeSwitcher } from "./ScopeSwitcher";
@@ -15,7 +14,7 @@ interface CommandStripProps {
   freshness: SectionFreshness;
   scope: CommandCenterScope;
   onScopeChange: (next: CommandCenterScope) => void;
-  ironRole: IronRole;
+  isElevatedViewer: boolean;
 }
 
 function formatCurrency(amount: number): string {
@@ -66,7 +65,7 @@ export function CommandStrip({
   freshness,
   scope,
   onScopeChange,
-  ironRole,
+  isElevatedViewer,
 }: CommandStripProps) {
   return (
     <Card className="border-qep-orange/20 bg-gradient-to-r from-qep-orange/[0.06] to-transparent p-4">
@@ -88,7 +87,11 @@ export function CommandStrip({
             >
               {freshness.source} · {relativeFreshness(freshness.generatedAt)}
             </Badge>
-            <ScopeSwitcher scope={scope} onChange={onScopeChange} ironRole={ironRole} />
+            <ScopeSwitcher
+              scope={scope}
+              onChange={onScopeChange}
+              canUseElevatedScopes={isElevatedViewer}
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

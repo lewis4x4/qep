@@ -1,12 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { CommandCenterScope, IronRole } from "../api/commandCenter.types";
+import type { CommandCenterScope } from "../api/commandCenter.types";
 
 interface ScopeSwitcherProps {
   scope: CommandCenterScope;
   onChange: (next: CommandCenterScope) => void;
-  ironRole: IronRole;
+  canUseElevatedScopes: boolean;
 }
 
 const ELEVATED_SCOPES: CommandCenterScope[] = ["mine", "team"];
@@ -19,12 +19,12 @@ const SCOPE_LABEL: Record<CommandCenterScope, string> = {
   company: "Company",
 };
 
-function isElevated(role: IronRole): boolean {
-  return role === "iron_manager";
-}
-
-export function ScopeSwitcher({ scope, onChange, ironRole }: ScopeSwitcherProps) {
-  const available = isElevated(ironRole) ? ELEVATED_SCOPES : ADVISOR_SCOPES;
+export function ScopeSwitcher({
+  scope,
+  onChange,
+  canUseElevatedScopes,
+}: ScopeSwitcherProps) {
+  const available = canUseElevatedScopes ? ELEVATED_SCOPES : ADVISOR_SCOPES;
 
   if (available.length <= 1) {
     return (

@@ -78,11 +78,11 @@ export interface PrimaryNavGroup extends PrimaryNavGroupDefinition {
 }
 
 export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
+  { id: "qrm", label: "QRM", href: "/qrm" },
   { id: "sales", label: "Sales", href: "/dashboard" },
   { id: "parts", label: "Parts", href: "/parts" },
   { id: "service", label: "Service", href: "/service" },
   { id: "rentals", label: "Rentals", href: "/rentals" },
-  { id: "qrm", label: "QRM", href: "/qrm" },
 ];
 
 export const NAV_ITEMS: NavItemDefinition[] = [
@@ -101,7 +101,6 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",
     sectionLabel: "Execution",
-    requiresIntelliDealer: true,
   },
   {
     label: "Field Note",

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
 import type { UserRole } from "@/lib/database.types";
+import { canUseElevatedQrmScopes } from "@/lib/home-route";
 import { isIronRole, resolveIronRoleAndBlend } from "../../lib/iron-roles";
 import { useIronRoleBlend } from "../../lib/useIronRoleBlend";
 import type {
@@ -47,6 +48,7 @@ export function QrmCommandCenterPage({
     ironRoleFromProfile,
   );
   const ironRole: IronRole = isIronRole(ironRoleInfo.role) ? ironRoleInfo.role : "iron_advisor";
+  const elevatedViewer = canUseElevatedQrmScopes(userRole, ironRole);
   // P0.5 W1-2 — when the operator holds a non-trivial blend, render the
   // dominant weight as a percentage on the role badge so the user can see
   // the implicit "60%" alongside the "Also covering: 40%" entries shown
@@ -56,7 +58,9 @@ export function QrmCommandCenterPage({
     ? ` · ${Math.round(blend[0].weight * 100)}%`
     : "";
   const headline = getRoleHeadline(ironRole);
-  const [scope, setScope] = useState<CommandCenterScope>("mine");
+  const [scope, setScope] = useState<CommandCenterScope>(
+    elevatedViewer ? "team" : "mine",
+  );
 
   const query = useCommandCenter(scope);
 
@@ -117,6 +121,7 @@ export function QrmCommandCenterPage({
           data={query.data}
           scope={scope}
           ironRole={ironRole}
+          isElevatedViewer={elevatedViewer}
           blend={blend}
           onScopeChange={setScope}
           onAccept={handleAccept}

@@ -139,6 +139,69 @@ interface PortalPaymentHistoryItem {
   reference: string | null;
 }
 
+interface RentalContractRow {
+  id: string;
+  portal_customer_id: string;
+  equipment_id: string | null;
+  requested_category: string | null;
+  requested_make: string | null;
+  requested_model: string | null;
+  branch_id: string | null;
+  delivery_mode: "pickup" | "delivery";
+  delivery_location: string | null;
+  request_type: "booking" | "extension";
+  requested_start_date: string | null;
+  requested_end_date: string | null;
+  approved_start_date: string | null;
+  approved_end_date: string | null;
+  status: string;
+  estimate_daily_rate: number | null;
+  estimate_weekly_rate: number | null;
+  estimate_monthly_rate: number | null;
+  agreed_daily_rate: number | null;
+  agreed_weekly_rate: number | null;
+  agreed_monthly_rate: number | null;
+  deposit_required: boolean | null;
+  deposit_amount: number | null;
+  deposit_status: string | null;
+  deposit_invoice_id: string | null;
+  customer_notes: string | null;
+  dealer_response: string | null;
+}
+
+interface RentalExtensionRow {
+  id: string;
+  rental_contract_id: string;
+  requested_end_date: string | null;
+  approved_end_date: string | null;
+  status: string;
+  customer_reason: string | null;
+  dealer_response: string | null;
+  additional_charge: number | null;
+  payment_invoice_id: string | null;
+  payment_status: string | null;
+  created_at: string;
+}
+
+interface RentalRateRuleRow {
+  id: string;
+  customer_id: string | null;
+  equipment_id: string | null;
+  branch_id: string | null;
+  category: string | null;
+  make: string | null;
+  model: string | null;
+  season_start: string | null;
+  season_end: string | null;
+  daily_rate: number | null;
+  weekly_rate: number | null;
+  monthly_rate: number | null;
+  minimum_days: number | null;
+  is_active: boolean;
+  priority_rank: number;
+  notes: string | null;
+}
+
 interface DocumentVisibilityAuditRow {
   document_id: string;
   visibility_after: boolean | null;
@@ -504,6 +567,80 @@ function serviceWorkspaceSummaryLine(statusLabel: string, requestType: string): 
     return `Your ${requestType} request is being reviewed by the dealership team.`;
   }
   return `Your ${requestType} request is active and moving through the dealership workflow.`;
+}
+
+function daysBetween(startDate: string | null, endDate: string | null): number | null {
+  if (!startDate || !endDate) return null;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+function withinSeason(rule: RentalRateRuleRow, now: Date): boolean {
+  if (!rule.season_start || !rule.season_end) return true;
+  const start = new Date(rule.season_start);
+  const end = new Date(rule.season_end);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+  return now >= start && now <= end;
+}
+
+function resolveRentalPricingEstimate(input: {
+  rules: RentalRateRuleRow[];
+  customerId: string;
+  equipmentId?: string | null;
+  branchId?: string | null;
+  category?: string | null;
+  make?: string | null;
+  model?: string | null;
+  equipmentRates?: { daily: number | null; weekly: number | null; monthly: number | null };
+}): { dailyRate: number | null; weeklyRate: number | null; monthlyRate: number | null; sourceLabel: string } {
+  const now = new Date();
+  const matches = input.rules
+    .filter((rule) => rule.is_active)
+    .filter((rule) => withinSeason(rule, now))
+    .filter((rule) => !rule.customer_id || rule.customer_id === input.customerId)
+    .filter((rule) => !rule.equipment_id || rule.equipment_id === input.equipmentId)
+    .filter((rule) => !rule.branch_id || rule.branch_id === input.branchId)
+    .filter((rule) => !rule.category || rule.category === input.category)
+    .filter((rule) => !rule.make || rule.make === input.make)
+    .filter((rule) => !rule.model || rule.model === input.model)
+    .map((rule) => ({
+      rule,
+      score:
+        (rule.customer_id ? 1000 : 0) +
+        (rule.equipment_id ? 800 : 0) +
+        (rule.branch_id ? 400 : 0) +
+        (rule.category ? 300 : 0) +
+        (rule.make ? 200 : 0) +
+        (rule.model ? 100 : 0),
+    }))
+    .sort((a, b) => b.score - a.score || a.rule.priority_rank - b.rule.priority_rank);
+
+  const winning = matches[0]?.rule ?? null;
+  if (winning) {
+    const scopeParts = [
+      winning.customer_id ? "customer override" : null,
+      winning.equipment_id ? "unit override" : null,
+      winning.branch_id ? "branch rule" : null,
+      winning.category ? `category ${winning.category}` : null,
+      winning.make ? winning.make : null,
+      winning.model ? winning.model : null,
+    ].filter(Boolean);
+    return {
+      dailyRate: winning.daily_rate ?? input.equipmentRates?.daily ?? null,
+      weeklyRate: winning.weekly_rate ?? input.equipmentRates?.weekly ?? null,
+      monthlyRate: winning.monthly_rate ?? input.equipmentRates?.monthly ?? null,
+      sourceLabel: scopeParts.join(" · ") || "pricing rule",
+    };
+  }
+
+  return {
+    dailyRate: input.equipmentRates?.daily ?? null,
+    weeklyRate: input.equipmentRates?.weekly ?? null,
+    monthlyRate: input.equipmentRates?.monthly ?? null,
+    sourceLabel: "equipment base rate",
+  };
 }
 
 function normalizePortalPaymentStatus(intent: PortalPaymentIntentRow | null): {
@@ -1948,66 +2085,540 @@ Deno.serve(async (req) => {
           return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
         }
 
-        const { data: fleetRows, error: fleetError } = await admin
-          .from("customer_fleet")
-          .select("equipment_id, make, model, serial_number, year")
-          .eq("portal_customer_id", portalCustomer.id)
-          .eq("workspace_id", portalWorkspaceId)
-          .not("equipment_id", "is", null);
+        const [{ data: contractRows, error: contractError }, { data: extensionRows, error: extensionError }, { data: availableRows, error: availableError }, { data: customerFleetRows, error: customerFleetError }, { data: branchRows, error: branchError }, { data: ruleRows, error: ruleError }] =
+          await Promise.all([
+            admin
+              .from("rental_contracts")
+              .select("*")
+              .eq("portal_customer_id", portalCustomer.id)
+              .eq("workspace_id", portalWorkspaceId)
+              .order("created_at", { ascending: false }),
+            admin
+              .from("rental_contract_extensions")
+              .select("*")
+              .eq("workspace_id", portalWorkspaceId)
+              .order("created_at", { ascending: false }),
+            admin
+              .from("crm_equipment")
+              .select("id, name, make, model, year, serial_number, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
+              .eq("ownership", "rental_fleet")
+              .eq("availability", "available")
+              .is("deleted_at", null)
+              .limit(200),
+            admin
+              .from("customer_fleet")
+              .select("equipment_id, make, model, serial_number, year")
+              .eq("portal_customer_id", portalCustomer.id)
+              .eq("workspace_id", portalWorkspaceId)
+              .not("equipment_id", "is", null),
+            admin
+              .from("branches")
+              .select("id, display_name")
+              .eq("workspace_id", portalWorkspaceId)
+              .eq("is_active", true),
+            admin
+              .from("rental_rate_rules")
+              .select("*")
+              .eq("workspace_id", portalWorkspaceId)
+              .eq("is_active", true),
+          ]);
 
-        if (fleetError) return safeJsonError("Failed to load rental fleet", 500, origin);
+        if (contractError) return safeJsonError("Failed to load rental contracts", 500, origin);
+        if (extensionError) return safeJsonError("Failed to load rental extensions", 500, origin);
+        if (availableError) return safeJsonError("Failed to load rentable equipment", 500, origin);
+        if (customerFleetError) return safeJsonError("Failed to load rental fleet", 500, origin);
+        if (branchError) return safeJsonError("Failed to load rental branches", 500, origin);
+        if (ruleError) return safeJsonError("Failed to load rental pricing rules", 500, origin);
 
-        const fleet = (fleetRows ?? []) as Array<{
+        const customerFleet = (customerFleetRows ?? []) as Array<{
           equipment_id: string;
           make: string | null;
           model: string | null;
           serial_number: string | null;
           year: number | null;
         }>;
-        const equipmentIds = fleet.map((row) => row.equipment_id).filter(Boolean);
-        if (equipmentIds.length === 0) {
-          return safeJsonOk({ rentals: [] }, origin);
-        }
+        const contracts = (contractRows ?? []) as RentalContractRow[];
+        const contractIds = contracts.map((row) => row.id);
+        const extensions = ((extensionRows ?? []) as RentalExtensionRow[]).filter((row) => contractIds.includes(row.rental_contract_id));
+        const invoiceIds = [
+          ...new Set([
+            ...contracts.map((row) => row.deposit_invoice_id).filter(Boolean) as string[],
+            ...extensions.map((row) => row.payment_invoice_id).filter(Boolean) as string[],
+          ]),
+        ];
+        const { data: invoiceRows } = invoiceIds.length > 0
+          ? await admin.from("customer_invoices").select("id, status").in("id", invoiceIds)
+          : { data: [] };
+        const invoiceStatusById = new Map(((invoiceRows ?? []) as Array<Record<string, unknown>>).map((row) => [
+          String(row.id),
+          typeof row.status === "string" ? row.status : null,
+        ]));
+        const equipmentIds = [
+          ...new Set([
+            ...customerFleet.map((row) => row.equipment_id).filter(Boolean),
+            ...contracts.map((row) => row.equipment_id).filter(Boolean) as string[],
+          ]),
+        ];
 
-        const { data: rentalRows, error: rentalError } = await admin
-          .from("rental_returns")
-          .select("id, equipment_id, status, rental_contract_reference, inspection_date, decision_at, refund_status, balance_due, charge_amount, deposit_amount, has_charges")
-          .eq("workspace_id", portalWorkspaceId)
-          .in("equipment_id", equipmentIds)
-          .order("created_at", { ascending: false });
-
+        const { data: returnRows, error: rentalError } = equipmentIds.length > 0
+          ? await admin
+            .from("rental_returns")
+            .select("id, equipment_id, status, rental_contract_reference, inspection_date, decision_at, refund_status, balance_due, charge_amount, deposit_amount, has_charges, rental_contract_id")
+            .eq("workspace_id", portalWorkspaceId)
+            .in("equipment_id", equipmentIds)
+            .order("created_at", { ascending: false })
+          : { data: [], error: null };
         if (rentalError) return safeJsonError("Failed to load rental returns", 500, origin);
 
-        const equipmentById = new Map(
-          fleet.map((row) => [
-            row.equipment_id,
-            {
-              id: row.equipment_id,
-              label: equipmentDisplayLabel({
-                make: row.make,
-                model: row.model,
-                year: row.year,
-              }),
-              serialNumber: row.serial_number,
+        const equipmentById = new Map<string, { id: string; label: string; serialNumber: string | null; category: string | null; rates: { daily: number | null; weekly: number | null; monthly: number | null } }>();
+        for (const row of ((availableRows ?? []) as Array<Record<string, unknown>>)) {
+          equipmentById.set(String(row.id), {
+            id: String(row.id),
+            label: equipmentDisplayLabel({
+              make: typeof row.make === "string" ? row.make : null,
+              model: typeof row.model === "string" ? row.model : null,
+              year: typeof row.year === "number" ? row.year : null,
+            }),
+            serialNumber: typeof row.serial_number === "string" ? row.serial_number : null,
+            category: typeof row.category === "string" ? row.category : null,
+            rates: {
+              daily: typeof row.daily_rental_rate === "number" ? row.daily_rental_rate : null,
+              weekly: typeof row.weekly_rental_rate === "number" ? row.weekly_rental_rate : null,
+              monthly: typeof row.monthly_rental_rate === "number" ? row.monthly_rental_rate : null,
             },
-          ]),
-        );
+          });
+        }
+        for (const row of customerFleet) {
+          if (!equipmentById.has(row.equipment_id)) {
+            equipmentById.set(row.equipment_id, {
+              id: row.equipment_id,
+              label: equipmentDisplayLabel({ make: row.make, model: row.model, year: row.year }),
+              serialNumber: row.serial_number,
+              category: null,
+              rates: { daily: null, weekly: null, monthly: null },
+            });
+          }
+        }
+        const branchById = new Map(((branchRows ?? []) as Array<Record<string, unknown>>).map((row) => [String(row.id), typeof row.display_name === "string" ? row.display_name : "Branch"]));
+        const rules = (ruleRows ?? []) as RentalRateRuleRow[];
+
+        const bookings = contracts
+          .filter((contract) => contract.request_type === "booking" && !["active", "completed"].includes(contract.status))
+          .map((contract) => {
+            const equipment = contract.equipment_id ? equipmentById.get(contract.equipment_id) ?? null : null;
+            const estimate = resolveRentalPricingEstimate({
+              rules,
+              customerId: portalCustomer.id,
+              equipmentId: contract.equipment_id,
+              branchId: contract.branch_id,
+              category: contract.requested_category,
+              make: contract.requested_make ?? equipment?.label.split(" ")[0] ?? null,
+              model: contract.requested_model ?? null,
+              equipmentRates: equipment?.rates,
+            });
+            return {
+              id: contract.id,
+              requestType: contract.request_type,
+              status: contract.status,
+              deliveryMode: contract.delivery_mode,
+              branchId: contract.branch_id,
+              branchLabel: contract.branch_id ? branchById.get(contract.branch_id) ?? null : null,
+              requestedCategory: contract.requested_category,
+              requestedMake: contract.requested_make,
+              requestedModel: contract.requested_model,
+              requestedStartDate: contract.requested_start_date,
+              requestedEndDate: contract.requested_end_date,
+              approvedStartDate: contract.approved_start_date,
+              approvedEndDate: contract.approved_end_date,
+              depositRequired: contract.deposit_required === true,
+              depositAmount: contract.deposit_amount,
+              depositStatus: contract.deposit_invoice_id
+                ? invoiceStatusById.get(contract.deposit_invoice_id) ?? contract.deposit_status
+                : contract.deposit_status,
+              depositInvoiceId: contract.deposit_invoice_id,
+              companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+              dealerResponse: contract.dealer_response,
+              customerNotes: contract.customer_notes,
+              pricingEstimate: {
+                dailyRate: contract.estimate_daily_rate ?? estimate.dailyRate,
+                weeklyRate: contract.estimate_weekly_rate ?? estimate.weeklyRate,
+                monthlyRate: contract.estimate_monthly_rate ?? estimate.monthlyRate,
+                sourceLabel: estimate.sourceLabel,
+              },
+              agreedRates: contract.agreed_daily_rate || contract.agreed_weekly_rate || contract.agreed_monthly_rate
+                ? {
+                  dailyRate: contract.agreed_daily_rate,
+                  weeklyRate: contract.agreed_weekly_rate,
+                  monthlyRate: contract.agreed_monthly_rate,
+                  sourceLabel: "approved contract rates",
+                }
+                : null,
+              equipment: equipment
+                ? { id: equipment.id, label: equipment.label, serialNumber: equipment.serialNumber }
+                : null,
+            };
+          });
+
+        const activeContracts = contracts
+          .filter((contract) => contract.status === "active" || contract.status === "awaiting_payment")
+          .map((contract) => {
+            const equipment = contract.equipment_id ? equipmentById.get(contract.equipment_id) ?? null : null;
+            return {
+              id: contract.id,
+              requestType: contract.request_type,
+              status: contract.status,
+              deliveryMode: contract.delivery_mode,
+              branchId: contract.branch_id,
+              branchLabel: contract.branch_id ? branchById.get(contract.branch_id) ?? null : null,
+              requestedCategory: contract.requested_category,
+              requestedMake: contract.requested_make,
+              requestedModel: contract.requested_model,
+              requestedStartDate: contract.requested_start_date,
+              requestedEndDate: contract.requested_end_date,
+              approvedStartDate: contract.approved_start_date,
+              approvedEndDate: contract.approved_end_date,
+              depositRequired: contract.deposit_required === true,
+              depositAmount: contract.deposit_amount,
+              depositStatus: contract.deposit_invoice_id
+                ? invoiceStatusById.get(contract.deposit_invoice_id) ?? contract.deposit_status
+                : contract.deposit_status,
+              depositInvoiceId: contract.deposit_invoice_id,
+              companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+              dealerResponse: contract.dealer_response,
+              customerNotes: contract.customer_notes,
+              pricingEstimate: null,
+              agreedRates: {
+                dailyRate: contract.agreed_daily_rate,
+                weeklyRate: contract.agreed_weekly_rate,
+                monthlyRate: contract.agreed_monthly_rate,
+                sourceLabel: "approved contract rates",
+              },
+              equipment: equipment
+                ? { id: equipment.id, label: equipment.label, serialNumber: equipment.serialNumber }
+                : null,
+            };
+          });
+
+        const extensionRequests = extensions.map((extension) => ({
+          id: extension.id,
+          rentalContractId: extension.rental_contract_id,
+          status: extension.status,
+          requestedEndDate: extension.requested_end_date,
+          approvedEndDate: extension.approved_end_date,
+          customerReason: extension.customer_reason,
+          dealerResponse: extension.dealer_response,
+          additionalCharge: extension.additional_charge,
+          paymentInvoiceId: extension.payment_invoice_id,
+          paymentStatus: extension.payment_invoice_id
+            ? invoiceStatusById.get(extension.payment_invoice_id) ?? extension.payment_status
+            : extension.payment_status,
+          createdAt: extension.created_at,
+        }));
+
+        const returns = ((returnRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
+          id: String(row.id),
+          status: typeof row.status === "string" ? row.status : "inspection_pending",
+          rentalContractReference: typeof row.rental_contract_reference === "string" ? row.rental_contract_reference : null,
+          inspectionDate: typeof row.inspection_date === "string" ? row.inspection_date : null,
+          decisionAt: typeof row.decision_at === "string" ? row.decision_at : null,
+          refundStatus: typeof row.refund_status === "string" ? row.refund_status : null,
+          balanceDue: typeof row.balance_due === "number" ? row.balance_due : null,
+          chargeAmount: typeof row.charge_amount === "number" ? row.charge_amount : null,
+          depositAmount: typeof row.deposit_amount === "number" ? row.deposit_amount : null,
+          hasCharges: typeof row.has_charges === "boolean" ? row.has_charges : null,
+          equipment: typeof row.equipment_id === "string" ? equipmentById.get(row.equipment_id) ?? null : null,
+        }));
 
         return safeJsonOk({
-          rentals: ((rentalRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
-            id: String(row.id),
-            status: typeof row.status === "string" ? row.status : "inspection_pending",
-            rentalContractReference: typeof row.rental_contract_reference === "string" ? row.rental_contract_reference : null,
-            inspectionDate: typeof row.inspection_date === "string" ? row.inspection_date : null,
-            decisionAt: typeof row.decision_at === "string" ? row.decision_at : null,
-            refundStatus: typeof row.refund_status === "string" ? row.refund_status : null,
-            balanceDue: typeof row.balance_due === "number" ? row.balance_due : null,
-            chargeAmount: typeof row.charge_amount === "number" ? row.charge_amount : null,
-            depositAmount: typeof row.deposit_amount === "number" ? row.deposit_amount : null,
-            hasCharges: typeof row.has_charges === "boolean" ? row.has_charges : null,
-            equipment: typeof row.equipment_id === "string" ? equipmentById.get(row.equipment_id) ?? null : null,
-          })),
+          bookings,
+          active_contracts: activeContracts,
+          extension_requests: extensionRequests,
+          returns,
+          workspace_summary: {
+            bookingCount: bookings.length,
+            activeContractCount: activeContracts.length,
+            extensionCount: extensionRequests.length,
+            closeoutCount: returns.length,
+          },
+          booking_catalog: {
+            units: Array.from(equipmentById.values()).map((equipment) => ({
+              id: equipment.id,
+              label: equipment.label,
+              category: equipment.category,
+              dailyRate: equipment.rates.daily,
+              weeklyRate: equipment.rates.weekly,
+              monthlyRate: equipment.rates.monthly,
+            })),
+            categories: Array.from(new Set(Array.from(equipmentById.values()).map((equipment) => equipment.category).filter(Boolean))) as string[],
+          },
         }, origin);
+      }
+
+      if (subRoute === "book" && req.method === "POST") {
+        if (!admin) return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const mode = body.mode === "category_first" ? "category_first" : "exact_unit";
+        const requestedStartDate = typeof body.requestedStartDate === "string" ? body.requestedStartDate : typeof body.requested_start_date === "string" ? body.requested_start_date : "";
+        const requestedEndDate = typeof body.requestedEndDate === "string" ? body.requestedEndDate : typeof body.requested_end_date === "string" ? body.requested_end_date : "";
+        if (!requestedStartDate || !requestedEndDate) return safeJsonError("requested_start_date and requested_end_date required", 400, origin);
+
+        let equipmentRow: Record<string, unknown> | null = null;
+        let equipmentId: string | null = typeof body.equipmentId === "string" ? body.equipmentId : typeof body.equipment_id === "string" ? body.equipment_id : null;
+        if (mode === "exact_unit") {
+          if (!equipmentId) return safeJsonError("equipment_id required for exact unit booking", 400, origin);
+          const { data, error } = await admin
+            .from("crm_equipment")
+            .select("id, make, model, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
+            .eq("id", equipmentId)
+            .eq("ownership", "rental_fleet")
+            .limit(1)
+            .maybeSingle();
+          if (error || !data) return safeJsonError("Requested rental unit is unavailable", 404, origin);
+          equipmentRow = data as Record<string, unknown>;
+        }
+
+        const { data: bookingRuleRows, error: bookingRuleError } = await admin
+          .from("rental_rate_rules")
+          .select("*")
+          .eq("workspace_id", portalWorkspaceId)
+          .eq("is_active", true);
+        if (bookingRuleError) return safeJsonError("Failed to resolve rental pricing", 500, origin);
+        const bookingRules = (bookingRuleRows ?? []) as RentalRateRuleRow[];
+
+        const branchId = typeof body.branchId === "string" ? body.branchId : typeof body.branch_id === "string" ? body.branch_id : null;
+        const estimate = resolveRentalPricingEstimate({
+          rules: bookingRules,
+          customerId: portalCustomer.id,
+          equipmentId,
+          branchId,
+          category: typeof body.requestedCategory === "string" ? body.requestedCategory : typeof body.requested_category === "string" ? body.requested_category : typeof equipmentRow?.category === "string" ? equipmentRow.category : null,
+          make: typeof body.requestedMake === "string" ? body.requestedMake : typeof body.requested_make === "string" ? body.requested_make : typeof equipmentRow?.make === "string" ? equipmentRow.make : null,
+          model: typeof body.requestedModel === "string" ? body.requestedModel : typeof body.requested_model === "string" ? body.requested_model : typeof equipmentRow?.model === "string" ? equipmentRow.model : null,
+          equipmentRates: equipmentRow
+            ? {
+              daily: typeof equipmentRow.daily_rental_rate === "number" ? equipmentRow.daily_rental_rate : null,
+              weekly: typeof equipmentRow.weekly_rental_rate === "number" ? equipmentRow.weekly_rental_rate : null,
+              monthly: typeof equipmentRow.monthly_rental_rate === "number" ? equipmentRow.monthly_rental_rate : null,
+            }
+            : undefined,
+        });
+
+        const { data: contract, error } = await admin
+          .from("rental_contracts")
+          .insert({
+            workspace_id: portalWorkspaceId,
+            portal_customer_id: portalCustomer.id,
+            equipment_id: equipmentId,
+            requested_category: typeof body.requestedCategory === "string" ? body.requestedCategory : typeof body.requested_category === "string" ? body.requested_category : null,
+            requested_make: typeof body.requestedMake === "string" ? body.requestedMake : typeof body.requested_make === "string" ? body.requested_make : null,
+            requested_model: typeof body.requestedModel === "string" ? body.requestedModel : typeof body.requested_model === "string" ? body.requested_model : null,
+            branch_id: branchId,
+            delivery_mode: body.deliveryMode === "delivery" || body.delivery_mode === "delivery" ? "delivery" : "pickup",
+            delivery_location: typeof body.deliveryLocation === "string" ? body.deliveryLocation : typeof body.delivery_location === "string" ? body.delivery_location : null,
+            request_type: "booking",
+            requested_start_date: requestedStartDate,
+            requested_end_date: requestedEndDate,
+            status: "submitted",
+            estimate_daily_rate: estimate.dailyRate,
+            estimate_weekly_rate: estimate.weeklyRate,
+            estimate_monthly_rate: estimate.monthlyRate,
+            deposit_required: false,
+            deposit_status: "not_required",
+            customer_notes: typeof body.customerNotes === "string" ? body.customerNotes : typeof body.customer_notes === "string" ? body.customer_notes : null,
+          })
+          .select()
+          .single();
+        if (error) return safeJsonError("Failed to create rental booking", 500, origin);
+        return safeJsonOk({ contract }, origin, 201);
+      }
+
+      if (subRoute === "extend" && req.method === "POST") {
+        if (!admin) return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const rentalContractId = typeof body.rental_contract_id === "string" ? body.rental_contract_id : "";
+        const requestedEndDate = typeof body.requested_end_date === "string" ? body.requested_end_date : "";
+        if (!rentalContractId || !requestedEndDate) return safeJsonError("rental_contract_id and requested_end_date required", 400, origin);
+
+        const { data: contract, error: contractError } = await admin
+          .from("rental_contracts")
+          .select("id, portal_customer_id, requested_end_date, approved_end_date")
+          .eq("id", rentalContractId)
+          .eq("portal_customer_id", portalCustomer.id)
+          .maybeSingle();
+        if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+
+        const { data: extension, error } = await admin
+          .from("rental_contract_extensions")
+          .insert({
+            workspace_id: portalWorkspaceId,
+            rental_contract_id: rentalContractId,
+            requested_end_date: requestedEndDate,
+            status: "submitted",
+            customer_reason: typeof body.customer_reason === "string" ? body.customer_reason : null,
+            requested_by: portalCustomer.id,
+            payment_status: "not_required",
+          })
+          .select()
+          .single();
+        if (error) return safeJsonError("Failed to create rental extension request", 500, origin);
+        return safeJsonOk({ extension }, origin, 201);
+      }
+
+      if (subRoute === "request" && req.method === "PUT") {
+        if (!admin) return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const kind = body.kind === "extension" ? "extension" : "contract";
+        const id = typeof body.id === "string" ? body.id : "";
+        if (!id) return safeJsonError("id required", 400, origin);
+
+        if (kind === "contract") {
+          const { data: contract, error: contractError } = await admin
+            .from("rental_contracts")
+            .select("id, portal_customer_id, status")
+            .eq("id", id)
+            .eq("portal_customer_id", portalCustomer.id)
+            .maybeSingle();
+          if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+          if (!["submitted", "reviewing", "quoted"].includes(contract.status)) {
+            return safeJsonError("This rental request can no longer be edited by the customer", 400, origin);
+          }
+
+          const patch: Record<string, unknown> = {};
+          if (body.action === "cancel") {
+            patch.status = "cancelled";
+          } else {
+            if (typeof body.requested_start_date === "string") patch.requested_start_date = body.requested_start_date;
+            if (typeof body.requested_end_date === "string") patch.requested_end_date = body.requested_end_date;
+            if (typeof body.customer_notes === "string") patch.customer_notes = body.customer_notes;
+            if (typeof body.delivery_location === "string") patch.delivery_location = body.delivery_location;
+          }
+
+          const { data: updated, error } = await admin
+            .from("rental_contracts")
+            .update(patch)
+            .eq("id", id)
+            .select()
+            .single();
+          if (error) return safeJsonError("Failed to update rental request", 500, origin);
+          return safeJsonOk({ contract: updated }, origin);
+        }
+
+        const { data: extension, error: extensionError } = await admin
+          .from("rental_contract_extensions")
+          .select("id, status, rental_contract_id, rental_contracts!inner(portal_customer_id)")
+          .eq("id", id)
+          .maybeSingle();
+        if (extensionError || !extension) return safeJsonError("Rental extension request not found", 404, origin);
+        const contractJoin = Array.isArray(extension.rental_contracts) ? extension.rental_contracts[0] : extension.rental_contracts;
+        if (contractJoin?.portal_customer_id !== portalCustomer.id) return safeJsonError("Rental extension request not found", 404, origin);
+        if (!["submitted", "reviewing"].includes(extension.status)) {
+          return safeJsonError("This extension request can no longer be edited by the customer", 400, origin);
+        }
+
+        const patch: Record<string, unknown> = {};
+        if (body.action === "cancel") patch.status = "cancelled";
+        else {
+          if (typeof body.requested_end_date === "string") patch.requested_end_date = body.requested_end_date;
+          if (typeof body.customer_reason === "string") patch.customer_reason = body.customer_reason;
+        }
+        const { data: updated, error } = await admin
+          .from("rental_contract_extensions")
+          .update(patch)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) return safeJsonError("Failed to update rental extension request", 500, origin);
+        return safeJsonOk({ extension: updated }, origin);
+      }
+
+      if (subRoute === "approve-payment" && req.method === "POST") {
+        if (!admin) return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+        const kind = body.kind === "extension" ? "extension" : "contract";
+        const id = typeof body.id === "string" ? body.id : "";
+        if (!id) return safeJsonError("id required", 400, origin);
+
+        if (kind === "contract") {
+          const { data: contract, error: contractError } = await admin
+            .from("rental_contracts")
+            .select("id, portal_customer_id, status, deposit_required, deposit_invoice_id")
+            .eq("id", id)
+            .eq("portal_customer_id", portalCustomer.id)
+            .maybeSingle();
+          if (contractError || !contract) return safeJsonError("Rental contract not found", 404, origin);
+
+          let invoiceStatus = "paid";
+          if (contract.deposit_required && contract.deposit_invoice_id) {
+            const { data: invoice } = await admin
+              .from("customer_invoices")
+              .select("status")
+              .eq("id", contract.deposit_invoice_id)
+              .maybeSingle();
+            invoiceStatus = typeof invoice?.status === "string" ? invoice.status : "";
+          }
+
+          if (contract.deposit_required && invoiceStatus !== "paid") {
+            return safeJsonError("Rental deposit is not settled yet", 400, origin);
+          }
+
+          const { data: updated, error } = await admin
+            .from("rental_contracts")
+            .update({
+              status: "active",
+              deposit_status: contract.deposit_required ? "paid" : "not_required",
+            })
+            .eq("id", id)
+            .select()
+            .single();
+          if (error) return safeJsonError("Failed to finalize rental payment", 500, origin);
+          return safeJsonOk({ contract: updated }, origin);
+        }
+
+        const { data: extension, error: extensionError } = await admin
+          .from("rental_contract_extensions")
+          .select("id, status, payment_invoice_id, rental_contract_id, approved_end_date, rental_contracts!inner(portal_customer_id)")
+          .eq("id", id)
+          .maybeSingle();
+        if (extensionError || !extension) return safeJsonError("Rental extension request not found", 404, origin);
+        const contractJoin = Array.isArray(extension.rental_contracts) ? extension.rental_contracts[0] : extension.rental_contracts;
+        if (contractJoin?.portal_customer_id !== portalCustomer.id) return safeJsonError("Rental extension request not found", 404, origin);
+
+        let invoiceStatus = "paid";
+        if (extension.payment_invoice_id) {
+          const { data: invoice } = await admin
+            .from("customer_invoices")
+            .select("status")
+            .eq("id", extension.payment_invoice_id)
+            .maybeSingle();
+          invoiceStatus = typeof invoice?.status === "string" ? invoice.status : "";
+        }
+        if (extension.payment_invoice_id && invoiceStatus !== "paid") {
+          return safeJsonError("Extension payment is not settled yet", 400, origin);
+        }
+
+        await admin
+          .from("rental_contract_extensions")
+          .update({ payment_status: extension.payment_invoice_id ? "paid" : "not_required" })
+          .eq("id", id);
+        const { data: updatedContract, error } = await admin
+          .from("rental_contracts")
+          .update({
+            approved_end_date: extension.approved_end_date,
+            requested_end_date: extension.approved_end_date,
+          })
+          .eq("id", extension.rental_contract_id)
+          .select()
+          .single();
+        if (error) return safeJsonError("Failed to finalize extension payment", 500, origin);
+        return safeJsonOk({ contract: updatedContract }, origin);
       }
     }
 

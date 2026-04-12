@@ -20,6 +20,7 @@ import {
   shouldShowProtectedRouteBootstrap,
 } from "./lib/auth-route-bootstrap";
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
+import { resolveHomeRoute } from "./lib/home-route";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 import { PortalLoginPage } from "./features/portal/pages/PortalLoginPage";
 
@@ -160,6 +161,9 @@ const IncentiveCatalogPage = lazy(() =>
 );
 const CatalogImportPage = lazy(() =>
   import("./features/admin/pages/CatalogImportPage").then((m) => ({ default: m.CatalogImportPage }))
+);
+const RentalPricingPage = lazy(() =>
+  import("./features/admin/pages/RentalPricingPage").then((m) => ({ default: m.RentalPricingPage }))
 );
 const FleetRadarPage = lazy(() =>
   import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
@@ -759,6 +763,8 @@ function App() {
     await supabase.auth.signOut();
   }
 
+  const homeRoute = resolveHomeRoute(profile.role, profile.iron_role);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -777,10 +783,10 @@ function App() {
               profile={profile}
               onLogout={handleLogout}
               quoteBuilderEnabled={quoteBuilderAccess.connected}
-              quoteBuilderLoading={quoteBuilderAccess.loading}
-            >
-              <AnimatedRoutes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            quoteBuilderLoading={quoteBuilderAccess.loading}
+          >
+            <AnimatedRoutes>
+              <Route path="/" element={<Navigate to={homeRoute} replace />} />
               <Route
                 path="/dashboard"
                 element={
@@ -1268,6 +1274,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CatalogImportPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/rental-pricing"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <RentalPricingPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

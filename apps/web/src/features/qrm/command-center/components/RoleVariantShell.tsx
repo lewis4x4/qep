@@ -35,6 +35,7 @@ interface RoleVariantShellProps {
    * single-role legacy mode and no extra badges are shown.
    */
   blend?: IronRoleBlendEntry[];
+  isElevatedViewer: boolean;
   onScopeChange: (next: CommandCenterScope) => void;
   onAccept?: (card: RecommendationCardPayload) => void;
   onDismiss?: (card: RecommendationCardPayload) => void;
@@ -45,6 +46,7 @@ export function RoleVariantShell({
   scope,
   ironRole,
   blend,
+  isElevatedViewer,
   onScopeChange,
   onAccept,
   onDismiss,
@@ -72,7 +74,7 @@ export function RoleVariantShell({
             freshness={freshness}
             scope={scope}
             onScopeChange={onScopeChange}
-            ironRole={ironRole}
+            isElevatedViewer={isElevatedViewer}
           />
         );
       case "aiChiefOfStaff":

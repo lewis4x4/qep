@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, DollarSign, RefreshCcw, Truck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -47,7 +49,57 @@ interface TrafficRow {
   created_at: string;
 }
 
+interface PortalCustomerRow {
+  id: string;
+  crm_company_id: string | null;
+  first_name: string;
+  last_name: string;
+}
+
+interface RentalContractApprovalRow {
+  id: string;
+  portal_customer_id: string;
+  equipment_id: string | null;
+  requested_category: string | null;
+  requested_make: string | null;
+  requested_model: string | null;
+  branch_id: string | null;
+  requested_start_date: string;
+  requested_end_date: string;
+  status: string;
+  estimate_daily_rate: number | null;
+  estimate_weekly_rate: number | null;
+  estimate_monthly_rate: number | null;
+  customer_notes: string | null;
+  dealer_response: string | null;
+}
+
+interface RentalExtensionApprovalRow {
+  id: string;
+  rental_contract_id: string;
+  requested_end_date: string;
+  approved_end_date: string | null;
+  status: string;
+  customer_reason: string | null;
+  dealer_response: string | null;
+  additional_charge: number | null;
+  payment_status: string | null;
+}
+
+interface BranchOptionRow {
+  id: string;
+  display_name: string;
+}
+
 export function RentalCommandCenterPage() {
+  const queryClient = useQueryClient();
+  const [dealerResponses, setDealerResponses] = useState<Record<string, string>>({});
+  const [assignedUnits, setAssignedUnits] = useState<Record<string, string>>({});
+  const [approvedBranches, setApprovedBranches] = useState<Record<string, string>>({});
+  const [depositAmounts, setDepositAmounts] = useState<Record<string, string>>({});
+  const [extensionResponses, setExtensionResponses] = useState<Record<string, string>>({});
+  const [extensionCharges, setExtensionCharges] = useState<Record<string, string>>({});
+
   const commandQuery = useQuery({
     queryKey: ["qrm", "rental-command"],
     queryFn: async () => {
@@ -112,6 +164,200 @@ export function RentalCommandCenterPage() {
     refetchInterval: 120_000,
   });
 
+  const contractQueueQuery = useQuery({
+    queryKey: ["qrm", "rental-contract-queue"],
+    queryFn: async () => {
+      const [contractsResult, extensionsResult, portalCustomersResult, equipmentResult, branchResult] = await Promise.all([
+        supabase
+          .from("rental_contracts")
+          .select("id, portal_customer_id, equipment_id, requested_category, requested_make, requested_model, branch_id, requested_start_date, requested_end_date, status, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, customer_notes, dealer_response")
+          .in("status", ["submitted", "reviewing", "quoted", "approved", "awaiting_payment"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("rental_contract_extensions")
+          .select("id, rental_contract_id, requested_end_date, approved_end_date, status, customer_reason, dealer_response, additional_charge, payment_status")
+          .in("status", ["submitted", "reviewing", "approved"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("portal_customers")
+          .select("id, crm_company_id, first_name, last_name")
+          .limit(200),
+        supabase
+          .from("crm_equipment")
+          .select("id, name, make, model, year, availability, location_description, daily_rental_rate, current_market_value")
+          .eq("ownership", "rental_fleet")
+          .is("deleted_at", null)
+          .limit(500),
+        supabase
+          .from("branches")
+          .select("id, display_name")
+          .eq("is_active", true)
+          .limit(100),
+      ]);
+
+      if (contractsResult.error) throw new Error(contractsResult.error.message);
+      if (extensionsResult.error) throw new Error(extensionsResult.error.message);
+      if (portalCustomersResult.error) throw new Error(portalCustomersResult.error.message);
+      if (equipmentResult.error) throw new Error(equipmentResult.error.message);
+      if (branchResult.error) throw new Error(branchResult.error.message);
+
+      return {
+        contracts: (contractsResult.data ?? []) as RentalContractApprovalRow[],
+        extensions: (extensionsResult.data ?? []) as RentalExtensionApprovalRow[],
+        customers: (portalCustomersResult.data ?? []) as PortalCustomerRow[],
+        equipment: (equipmentResult.data ?? []) as EquipmentRow[],
+        branches: (branchResult.data ?? []) as BranchOptionRow[],
+      };
+    },
+    staleTime: 60_000,
+  });
+
+  const approveBookingMutation = useMutation({
+    mutationFn: async (payload: {
+      contract: RentalContractApprovalRow;
+      equipmentId: string;
+      branchId: string | null;
+      dealerResponse: string | null;
+      depositAmount: number;
+    }) => {
+      const { contract, equipmentId, branchId, dealerResponse, depositAmount } = payload;
+      const customer = contractQueueQuery.data?.customers.find((item) => item.id === contract.portal_customer_id);
+      if (!customer) throw new Error("Portal customer not found for this rental request.");
+
+      let depositInvoiceId: string | null = null;
+      let status: string = "active";
+      let depositStatus: string | null = "not_required";
+
+      if (depositAmount > 0) {
+        const invoiceNumber = `RENT-${Date.now()}`;
+        const { data: invoice, error: invoiceError } = await supabase
+          .from("customer_invoices")
+          .insert({
+            portal_customer_id: customer.id,
+            crm_company_id: customer.crm_company_id,
+            invoice_number: invoiceNumber,
+            due_date: new Date().toISOString().slice(0, 10),
+            description: "Rental deposit",
+            amount: depositAmount,
+            total: depositAmount,
+            status: "pending",
+          })
+          .select()
+          .single();
+        if (invoiceError || !invoice?.id) throw new Error(invoiceError?.message ?? "Failed to create rental deposit invoice.");
+        depositInvoiceId = invoice.id;
+        status = "awaiting_payment";
+        depositStatus = "pending";
+        await supabase.from("customer_invoice_line_items").insert({
+          invoice_id: invoice.id,
+          description: "Rental deposit",
+          quantity: 1,
+          unit_price: depositAmount,
+        });
+      }
+
+      const { error } = await supabase
+        .from("rental_contracts")
+        .update({
+          equipment_id: equipmentId,
+          branch_id: branchId,
+          approved_start_date: contract.requested_start_date,
+          approved_end_date: contract.requested_end_date,
+          agreed_daily_rate: contract.estimate_daily_rate,
+          agreed_weekly_rate: contract.estimate_weekly_rate,
+          agreed_monthly_rate: contract.estimate_monthly_rate,
+          deposit_required: depositAmount > 0,
+          deposit_amount: depositAmount > 0 ? depositAmount : null,
+          deposit_invoice_id: depositInvoiceId,
+          deposit_status: depositStatus,
+          dealer_response: dealerResponse,
+          status,
+        })
+        .eq("id", contract.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "invoices"] });
+    },
+  });
+
+  const declineBookingMutation = useMutation({
+    mutationFn: async (payload: { id: string; dealerResponse: string | null }) => {
+      const { error } = await supabase
+        .from("rental_contracts")
+        .update({ status: "declined", dealer_response: payload.dealerResponse })
+        .eq("id", payload.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const approveExtensionMutation = useMutation({
+    mutationFn: async (payload: { extension: RentalExtensionApprovalRow; dealerResponse: string | null; additionalCharge: number }) => {
+      const { extension, dealerResponse, additionalCharge } = payload;
+      let paymentInvoiceId: string | null = null;
+      let paymentStatus: string | null = "not_required";
+      if (additionalCharge > 0) {
+        const { data: invoice, error: invoiceError } = await supabase
+          .from("customer_invoices")
+          .insert({
+            invoice_number: `EXT-${Date.now()}`,
+            due_date: new Date().toISOString().slice(0, 10),
+            description: "Rental extension charge",
+            amount: additionalCharge,
+            total: additionalCharge,
+            status: "pending",
+          })
+          .select()
+          .single();
+        if (invoiceError || !invoice?.id) throw new Error(invoiceError?.message ?? "Failed to create extension invoice.");
+        paymentInvoiceId = invoice.id;
+        paymentStatus = "pending";
+      } else {
+        await supabase
+          .from("rental_contracts")
+          .update({ approved_end_date: extension.requested_end_date, requested_end_date: extension.requested_end_date })
+          .eq("id", extension.rental_contract_id);
+      }
+      const { error } = await supabase
+        .from("rental_contract_extensions")
+        .update({
+          status: "approved",
+          approved_end_date: extension.requested_end_date,
+          dealer_response: dealerResponse,
+          additional_charge: additionalCharge > 0 ? additionalCharge : null,
+          payment_invoice_id: paymentInvoiceId,
+          payment_status: paymentStatus,
+        })
+        .eq("id", extension.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "invoices"] });
+    },
+  });
+
+  const declineExtensionMutation = useMutation({
+    mutationFn: async (payload: { id: string; dealerResponse: string | null }) => {
+      const { error } = await supabase
+        .from("rental_contract_extensions")
+        .update({ status: "declined", dealer_response: payload.dealerResponse })
+        .eq("id", payload.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
   const center = commandQuery.data;
 
   return (
@@ -136,6 +382,170 @@ export function RentalCommandCenterPage() {
             <SummaryCard icon={RefreshCcw} label="Ready" value={String(center.summary.readyCount)} detail={`${Math.round(center.summary.utilizationPct * 100)}% utilization`} />
             <SummaryCard icon={Wrench} label="Recovery" value={String(center.summary.recoveryCount)} detail={`${center.summary.returnsInFlight} return cases in flight`} tone="warn" />
             <SummaryCard icon={Truck} label="Motion risk" value={String(center.summary.motionRiskCount)} detail={`${center.summary.motionCount} rental moves open`} tone={center.summary.motionRiskCount > 0 ? "warn" : "default"} />
+          </div>
+
+          <div className="flex justify-end">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/admin/rental-pricing">
+                Rental pricing admin <ArrowUpRight className="ml-1 h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card className="p-4">
+              <h2 className="text-sm font-semibold text-foreground">Pending booking approvals</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Approve customer booking requests, assign units for category-first requests, and trigger deposit checkout.
+              </p>
+              <div className="mt-4 space-y-3">
+                {(contractQueueQuery.data?.contracts ?? []).filter((contract) => ["submitted", "reviewing", "quoted", "approved", "awaiting_payment"].includes(contract.status)).map((contract) => {
+                  const customer = contractQueueQuery.data?.customers.find((item) => item.id === contract.portal_customer_id);
+                  const availableUnits = (contractQueueQuery.data?.equipment ?? []).filter((equipment) => equipment.availability === "available");
+                  return (
+                    <div key={contract.id} className="rounded-xl border border-border/60 bg-muted/10 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">
+                            {[customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Portal customer"}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {(contract.requested_category ?? [contract.requested_make, contract.requested_model].filter(Boolean).join(" ")) || "Exact unit booking"}
+                            {" · "}
+                            {contract.requested_start_date} → {contract.requested_end_date}
+                          </p>
+                          {contract.customer_notes ? <p className="mt-2 text-xs text-muted-foreground">{contract.customer_notes}</p> : null}
+                        </div>
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                          {contract.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <select
+                          value={assignedUnits[contract.id] ?? contract.equipment_id ?? ""}
+                          onChange={(event) => setAssignedUnits((current) => ({ ...current, [contract.id]: event.target.value }))}
+                          className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                        >
+                          <option value="">Assign unit…</option>
+                          {availableUnits.map((equipment) => (
+                            <option key={equipment.id} value={equipment.id}>
+                              {[equipment.year, equipment.make, equipment.model].filter(Boolean).join(" ")}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={approvedBranches[contract.id] ?? contract.branch_id ?? ""}
+                          onChange={(event) => setApprovedBranches((current) => ({ ...current, [contract.id]: event.target.value }))}
+                          className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                        >
+                          <option value="">Assign branch…</option>
+                          {(contractQueueQuery.data?.branches ?? []).map((branch) => (
+                            <option key={branch.id} value={branch.id}>{branch.display_name}</option>
+                          ))}
+                        </select>
+                        <Input
+                          value={depositAmounts[contract.id] ?? ""}
+                          onChange={(event) => setDepositAmounts((current) => ({ ...current, [contract.id]: event.target.value }))}
+                          placeholder="Deposit amount (optional)"
+                        />
+                        <Input
+                          value={dealerResponses[contract.id] ?? contract.dealer_response ?? ""}
+                          onChange={(event) => setDealerResponses((current) => ({ ...current, [contract.id]: event.target.value }))}
+                          placeholder="Dealer response"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => approveBookingMutation.mutate({
+                              contract,
+                              equipmentId: assignedUnits[contract.id] ?? contract.equipment_id ?? "",
+                              branchId: approvedBranches[contract.id] ?? contract.branch_id ?? null,
+                              dealerResponse: dealerResponses[contract.id] ?? contract.dealer_response ?? null,
+                              depositAmount: Number(depositAmounts[contract.id] ?? 0) || 0,
+                            })}
+                            disabled={approveBookingMutation.isPending || !(assignedUnits[contract.id] ?? contract.equipment_id)}
+                          >
+                            {approveBookingMutation.isPending ? "Approving..." : "Approve booking"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => declineBookingMutation.mutate({
+                              id: contract.id,
+                              dealerResponse: dealerResponses[contract.id] ?? "Rental request declined by dealership.",
+                            })}
+                            disabled={declineBookingMutation.isPending}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <h2 className="text-sm font-semibold text-foreground">Pending extension approvals</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Approve or decline extension requests and collect any additional extension charge when needed.
+              </p>
+              <div className="mt-4 space-y-3">
+                {(contractQueueQuery.data?.extensions ?? []).filter((extension) => ["submitted", "reviewing", "approved"].includes(extension.status)).map((extension) => (
+                  <div key={extension.id} className="rounded-xl border border-border/60 bg-muted/10 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">Extension request</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Requested end date {extension.requested_end_date}
+                          {extension.customer_reason ? ` · ${extension.customer_reason}` : ""}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                        {extension.status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      <Input
+                        value={extensionResponses[extension.id] ?? extension.dealer_response ?? ""}
+                        onChange={(event) => setExtensionResponses((current) => ({ ...current, [extension.id]: event.target.value }))}
+                        placeholder="Dealer response"
+                      />
+                      <Input
+                        value={extensionCharges[extension.id] ?? ""}
+                        onChange={(event) => setExtensionCharges((current) => ({ ...current, [extension.id]: event.target.value }))}
+                        placeholder="Additional charge (optional)"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => approveExtensionMutation.mutate({
+                            extension,
+                            dealerResponse: extensionResponses[extension.id] ?? extension.dealer_response ?? null,
+                            additionalCharge: Number(extensionCharges[extension.id] ?? 0) || 0,
+                          })}
+                          disabled={approveExtensionMutation.isPending}
+                        >
+                          {approveExtensionMutation.isPending ? "Approving..." : "Approve extension"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => declineExtensionMutation.mutate({
+                            id: extension.id,
+                            dealerResponse: extensionResponses[extension.id] ?? "Extension request declined by dealership.",
+                          })}
+                          disabled={declineExtensionMutation.isPending}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">

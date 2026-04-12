@@ -1,10 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
 import { AskIronAdvisorButton } from "@/components/primitives";
-import type { PortalRentalReturnWorkspaceView } from "../../../../../../shared/qep-moonshot-contracts";
-import { ClipboardCheck, Receipt, RotateCcw, ShieldAlert } from "lucide-react";
+import { PayInvoiceButton } from "../components/PayInvoiceButton";
+import type {
+  PortalRentalBookingDraft,
+  PortalRentalContractView,
+  PortalRentalExtensionRequest,
+  PortalRentalReturnWorkspaceView,
+} from "../../../../../../shared/qep-moonshot-contracts";
+import { ClipboardCheck, PackageCheck, Receipt, RotateCcw, ShieldAlert, Truck } from "lucide-react";
 
 function formatCurrency(value: number | null): string {
   if (value == null) return "—";
@@ -19,42 +28,102 @@ function formatDate(value: string | null): string {
 }
 
 function tone(status: string): string {
-  if (status === "completed") return "bg-emerald-500/10 text-emerald-300";
-  if (status === "refund_processing") return "bg-blue-500/10 text-blue-300";
-  if (status === "damage_assessment" || status === "work_order_open") return "bg-red-500/10 text-red-300";
+  if (status === "active" || status === "completed") return "bg-emerald-500/10 text-emerald-300";
+  if (status === "awaiting_payment" || status === "approved") return "bg-blue-500/10 text-blue-300";
+  if (status === "declined" || status === "cancelled") return "bg-red-500/10 text-red-300";
   return "bg-amber-500/10 text-amber-300";
 }
 
+function emptyBookingDraft(): PortalRentalBookingDraft {
+  return {
+    mode: "exact_unit",
+    equipmentId: null,
+    requestedCategory: null,
+    requestedMake: null,
+    requestedModel: null,
+    requestedStartDate: null,
+    requestedEndDate: null,
+    deliveryMode: "pickup",
+    branchId: null,
+    deliveryLocation: null,
+    customerNotes: null,
+  };
+}
+
 export function PortalRentalsPage() {
+  const queryClient = useQueryClient();
+  const [bookingDraft, setBookingDraft] = useState<PortalRentalBookingDraft>(emptyBookingDraft());
+  const [extensionNotes, setExtensionNotes] = useState<Record<string, string>>({});
+  const [extensionDates, setExtensionDates] = useState<Record<string, string>>({});
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["portal", "rentals"],
     queryFn: portalApi.getRentals,
     staleTime: 30_000,
   });
 
-  const rentals = data?.rentals ?? [];
+  const bookingMutation = useMutation({
+    mutationFn: () => portalApi.createRentalBooking(bookingDraft),
+    onSuccess: async () => {
+      setBookingDraft(emptyBookingDraft());
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const extensionMutation = useMutation({
+    mutationFn: (payload: { rental_contract_id: string; requested_end_date: string; customer_reason?: string | null }) =>
+      portalApi.createRentalExtension(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const updateRequestMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => portalApi.updateRentalRequest(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const finalizePaymentMutation = useMutation({
+    mutationFn: (payload: { kind: "contract" | "extension"; id: string }) => portalApi.finalizeRentalPayment(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["portal", "rentals"] });
+    },
+  });
+
+  const bookings = data?.bookings ?? [];
+  const activeContracts = data?.active_contracts ?? [];
+  const extensionRequests = data?.extension_requests ?? [];
+  const returns = data?.returns ?? [];
+  const summary = data?.workspace_summary;
+  const catalog = data?.booking_catalog;
+  const selectedUnit = useMemo(
+    () => catalog?.units?.find((unit) => unit.id === bookingDraft.equipmentId) ?? null,
+    [catalog?.units, bookingDraft.equipmentId],
+  );
 
   return (
     <PortalLayout>
       <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
         <Card className="border-white/10 bg-white/[0.04] p-5 text-white shadow-[0_20px_80px_rgba(0,0,0,0.18)]">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-qep-orange">Rental closeout board</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-qep-orange">Rental workspace</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Open returns</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{rentals.filter((item) => item.status !== "completed").length}</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Bookings</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{summary?.bookingCount ?? bookings.length}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Charge exposure</p>
-              <p className="mt-3 text-3xl font-semibold text-white">
-                {formatCurrency(rentals.reduce((sum, item) => sum + (item.chargeAmount ?? 0), 0))}
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Active rentals</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{summary?.activeContractCount ?? activeContracts.length}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Refunds pending</p>
-              <p className="mt-3 text-3xl font-semibold text-white">
-                {rentals.filter((item) => item.refundStatus === "pending" || item.refundStatus === "processing").length}
-              </p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Extensions</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{summary?.extensionCount ?? extensionRequests.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Closeouts</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{summary?.closeoutCount ?? returns.length}</p>
             </div>
           </div>
         </Card>
@@ -62,13 +131,13 @@ export function PortalRentalsPage() {
         <Card className="border-qep-orange/20 bg-qep-orange/10 p-5 text-white">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-qep-orange">Ask Iron</p>
           <p className="mt-3 text-sm leading-6 text-white/75">
-            Ask which returns need intervention first, where refund risk is building, and whether any closeouts are stuck.
+            Ask what to book, where payment is blocking activation, or which extension/return needs attention first.
           </p>
           <div className="mt-4">
             <AskIronAdvisorButton
               contextType="portal-rentals"
-              contextTitle="Portal rentals"
-              draftPrompt="Review the customer rental closeout board. Which returns are stuck, where is refund or damage risk building, and what should happen next?"
+              contextTitle="Portal rental workspace"
+              draftPrompt="Review the portal rental workspace. Explain booking demand, active rental commitments, payment blockers, extension requests, and return risk."
               preferredSurface="sheet"
               variant="inline"
               className="border-white/15 bg-white/5 text-white hover:bg-white/10"
@@ -80,107 +149,384 @@ export function PortalRentalsPage() {
 
       {isLoading && (
         <div className="mt-4 space-y-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Card key={index} className="h-44 animate-pulse border-white/10 bg-white/[0.03]" />
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="h-40 animate-pulse border-white/10 bg-white/[0.03]" />
           ))}
         </div>
       )}
 
       {isError && (
         <Card className="mt-4 border-red-500/20 bg-red-500/5 p-6">
-          <p className="text-sm text-red-300">Failed to load rental return status.</p>
+          <p className="text-sm text-red-300">Failed to load rental workspace.</p>
         </Card>
       )}
 
       <div className="mt-4 space-y-4">
-        {rentals.map((rental: PortalRentalReturnWorkspaceView) => (
-          <Card key={rental.id} className="border-white/10 bg-white/[0.04] p-5 text-white shadow-[0_20px_80px_rgba(0,0,0,0.18)]">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${tone(rental.status)}`}>
-                    {rental.status.replace(/_/g, " ")}
-                  </span>
-                  {rental.rentalContractReference && (
-                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                      Contract {rental.rentalContractReference}
-                    </span>
-                  )}
-                </div>
-                <h2 className="mt-3 text-xl font-semibold text-white">
-                  {rental.equipment?.label ?? "Rental equipment"}
-                </h2>
-                <p className="mt-1 text-sm text-white/60">
-                  {rental.equipment?.serialNumber ? `S/N ${rental.equipment.serialNumber}` : "Serial unavailable"}
-                </p>
+        <Card className="border-white/10 bg-white/[0.04] p-5 text-white">
+          <div className="flex items-center gap-2">
+            <Truck className="h-4 w-4 text-qep-orange" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">New booking</p>
+          </div>
+          <div className="mt-4 space-y-3">
+            <div className="flex gap-2">
+              {(["exact_unit", "category_first"] as const).map((mode) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  variant={bookingDraft.mode === mode ? "default" : "outline"}
+                  onClick={() => setBookingDraft((current) => ({
+                    ...current,
+                    mode,
+                    equipmentId: mode === "category_first" ? null : current.equipmentId,
+                  }))}
+                >
+                  {mode === "exact_unit" ? "Exact unit" : "Equipment type"}
+                </Button>
+              ))}
+            </div>
+
+            {bookingDraft.mode === "exact_unit" ? (
+              <select
+                value={bookingDraft.equipmentId ?? ""}
+                onChange={(event) => setBookingDraft((current) => ({ ...current, equipmentId: event.target.value || null }))}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              >
+                <option value="">Select a rentable unit…</option>
+                {(catalog?.units ?? []).map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <select
+                  value={bookingDraft.requestedCategory ?? ""}
+                  onChange={(event) => setBookingDraft((current) => ({ ...current, requestedCategory: event.target.value || null }))}
+                  className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="">Category…</option>
+                  {(catalog?.categories ?? []).map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+                <Input
+                  value={bookingDraft.requestedMake ?? ""}
+                  onChange={(event) => setBookingDraft((current) => ({ ...current, requestedMake: event.target.value || null }))}
+                  placeholder="Preferred make"
+                />
+                <Input
+                  value={bookingDraft.requestedModel ?? ""}
+                  onChange={(event) => setBookingDraft((current) => ({ ...current, requestedModel: event.target.value || null }))}
+                  placeholder="Preferred model"
+                />
               </div>
-              <AskIronAdvisorButton
-                contextType="portal-rental-return"
-                contextId={rental.id}
-                contextTitle={rental.equipment?.label ?? "Rental return"}
-                draftPrompt={`Review this rental return. Explain inspection status, charge exposure, refund posture, and what the customer should expect next.`}
-                evidence={[
-                  `Status: ${rental.status}`,
-                  `Inspection date: ${rental.inspectionDate ?? "unknown"}`,
-                  `Charges: ${rental.hasCharges == null ? "pending" : rental.hasCharges ? "yes" : "no"}`,
-                  `Charge amount: ${rental.chargeAmount ?? 0}`,
-                  `Refund status: ${rental.refundStatus ?? "none"}`,
-                ].join("\n")}
-                preferredSurface="sheet"
-                variant="inline"
-                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-                label="Ask Iron"
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                type="date"
+                value={bookingDraft.requestedStartDate ?? ""}
+                onChange={(event) => setBookingDraft((current) => ({ ...current, requestedStartDate: event.target.value || null }))}
+              />
+              <Input
+                type="date"
+                value={bookingDraft.requestedEndDate ?? ""}
+                onChange={(event) => setBookingDraft((current) => ({ ...current, requestedEndDate: event.target.value || null }))}
               />
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-                <div className="flex items-center gap-2 text-white/55">
-                  <ClipboardCheck className="h-4 w-4 text-qep-orange" />
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Inspection</p>
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-white">{formatDate(rental.inspectionDate)}</p>
-                <p className="mt-1 text-xs text-white/50">Decision {formatDate(rental.decisionAt)}</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-                <div className="flex items-center gap-2 text-white/55">
-                  <ShieldAlert className="h-4 w-4 text-qep-orange" />
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Damage</p>
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-white">
-                  {rental.hasCharges == null ? "Pending" : rental.hasCharges ? "Charges applied" : "Clean return"}
-                </p>
-                <p className="mt-1 text-xs text-white/50">Charge amount {formatCurrency(rental.chargeAmount)}</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-                <div className="flex items-center gap-2 text-white/55">
-                  <RotateCcw className="h-4 w-4 text-qep-orange" />
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Refund</p>
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-white">{rental.refundStatus?.replace(/_/g, " ") ?? "Not started"}</p>
-                <p className="mt-1 text-xs text-white/50">Deposit {formatCurrency(rental.depositAmount)}</p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
-                <div className="flex items-center gap-2 text-white/55">
-                  <Receipt className="h-4 w-4 text-qep-orange" />
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Balance</p>
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-white">{formatCurrency(rental.balanceDue)}</p>
-                <p className="mt-1 text-xs text-white/50">Deposit covers charges {rental.hasCharges === false ? "not needed" : "review required"}</p>
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <select
+                value={bookingDraft.deliveryMode}
+                onChange={(event) => setBookingDraft((current) => ({ ...current, deliveryMode: event.target.value === "delivery" ? "delivery" : "pickup" }))}
+                className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              >
+                <option value="pickup">Pickup</option>
+                <option value="delivery">Delivery</option>
+              </select>
+              <Input
+                value={bookingDraft.deliveryLocation ?? ""}
+                onChange={(event) => setBookingDraft((current) => ({ ...current, deliveryLocation: event.target.value || null }))}
+                placeholder="Branch or delivery location"
+              />
             </div>
-          </Card>
-        ))}
 
-        {!isLoading && rentals.length === 0 && (
-          <Card className="border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-white/65">
-            No rental returns are visible for this portal customer yet.
-          </Card>
-        )}
+            <textarea
+              value={bookingDraft.customerNotes ?? ""}
+              onChange={(event) => setBookingDraft((current) => ({ ...current, customerNotes: event.target.value || null }))}
+              className="min-h-[100px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+              placeholder="Use case, site conditions, timing notes, transport notes…"
+            />
+
+            <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rough estimate</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <p className="text-sm text-foreground">Daily {formatCurrency(selectedUnit?.dailyRate ?? null)}</p>
+                <p className="text-sm text-foreground">Weekly {formatCurrency(selectedUnit?.weeklyRate ?? null)}</p>
+                <p className="text-sm text-foreground">Monthly {formatCurrency(selectedUnit?.monthlyRate ?? null)}</p>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Final pricing and unit assignment are confirmed by the dealership before checkout.
+              </p>
+            </div>
+
+            <Button
+              onClick={() => bookingMutation.mutate()}
+              disabled={
+                bookingMutation.isPending ||
+                !bookingDraft.requestedStartDate ||
+                !bookingDraft.requestedEndDate ||
+                (bookingDraft.mode === "exact_unit" ? !bookingDraft.equipmentId : !bookingDraft.requestedCategory)
+              }
+            >
+              {bookingMutation.isPending ? "Submitting…" : "Submit rental request"}
+            </Button>
+          </div>
+        </Card>
+
+        <Section
+          title="Active rentals"
+          icon={PackageCheck}
+          items={activeContracts}
+          renderItem={(contract) => {
+            const relatedExtensions = extensionRequests.filter((item) => item.rentalContractId === contract.id);
+            const pendingExtension = relatedExtensions.find((item) => ["submitted", "reviewing"].includes(item.status));
+            return (
+              <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${tone(contract.status)}`}>
+                        {contract.status.replace(/_/g, " ")}
+                      </span>
+                      {contract.branchLabel && <span className="text-[11px] uppercase tracking-[0.18em] text-white/45">{contract.branchLabel}</span>}
+                    </div>
+                    <h2 className="mt-3 text-xl font-semibold text-white">
+                      {contract.equipment?.label ?? contract.requestedCategory ?? "Rental contract"}
+                    </h2>
+                    <p className="mt-1 text-sm text-white/60">
+                      {formatDate(contract.approvedStartDate ?? contract.requestedStartDate)} → {formatDate(contract.approvedEndDate ?? contract.requestedEndDate)}
+                    </p>
+                    {contract.dealerResponse ? (
+                      <p className="mt-2 text-sm text-foreground">{contract.dealerResponse}</p>
+                    ) : null}
+                  </div>
+
+                  <AskIronAdvisorButton
+                    contextType="portal-rental-contract"
+                    contextId={contract.id}
+                    contextTitle={contract.equipment?.label ?? contract.requestedCategory ?? "Rental contract"}
+                    draftPrompt="Review this rental contract. Explain current state, pricing, payment blockers, and what action should happen next."
+                    preferredSurface="sheet"
+                    variant="inline"
+                    className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                    label="Ask Iron"
+                  />
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Metric label="Deposit" value={formatCurrency(contract.depositAmount)} detail={contract.depositStatus ?? "not required"} />
+                  <Metric label="Agreed daily" value={formatCurrency(contract.agreedRates?.dailyRate ?? null)} detail={contract.agreedRates?.sourceLabel ?? "pending"} />
+                  <Metric label="Delivery" value={contract.deliveryMode} detail={contract.branchLabel ?? "branch pending"} />
+                  <Metric label="Estimate" value={formatCurrency(contract.pricingEstimate?.dailyRate ?? null)} detail={contract.pricingEstimate?.sourceLabel ?? "base rate"} />
+                </div>
+
+                {contract.depositInvoiceId && contract.companyId && contract.depositStatus !== "paid" && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <PayInvoiceButton
+                      invoiceId={contract.depositInvoiceId}
+                      companyId={contract.companyId}
+                      amountCents={Math.round((contract.depositAmount ?? 0) * 100)}
+                      description={`Rental deposit for ${contract.equipment?.label ?? contract.requestedCategory ?? "rental booking"}`}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => finalizePaymentMutation.mutate({ kind: "contract", id: contract.id })}
+                      disabled={finalizePaymentMutation.isPending}
+                    >
+                      {finalizePaymentMutation.isPending ? "Checking payment..." : "Finalize after payment"}
+                    </Button>
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-lg border border-border/60 bg-background/60 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Request extension</p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      type="date"
+                      value={extensionDates[contract.id] ?? ""}
+                      onChange={(event) => setExtensionDates((current) => ({ ...current, [contract.id]: event.target.value }))}
+                    />
+                    <Input
+                      value={extensionNotes[contract.id] ?? ""}
+                      onChange={(event) => setExtensionNotes((current) => ({ ...current, [contract.id]: event.target.value }))}
+                      placeholder="Reason for extension"
+                    />
+                    <Button
+                      onClick={() => extensionMutation.mutate({
+                        rental_contract_id: contract.id,
+                        requested_end_date: extensionDates[contract.id],
+                        customer_reason: extensionNotes[contract.id] || null,
+                      })}
+                      disabled={extensionMutation.isPending || !extensionDates[contract.id] || Boolean(pendingExtension)}
+                    >
+                      {pendingExtension ? "Extension pending" : "Request extension"}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          }}
+          emptyText="No active rental contracts are visible right now."
+        />
+
+        <Section
+          title="Extension requests"
+          icon={RotateCcw}
+          items={extensionRequests}
+          renderItem={(extension) => (
+            <Card key={extension.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-white">Extension request</p>
+                  <p className="mt-1 text-sm text-white/60">
+                    Requested end date {formatDate(extension.requestedEndDate)}
+                    {extension.approvedEndDate ? ` · approved ${formatDate(extension.approvedEndDate)}` : ""}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${tone(extension.status)}`}>
+                  {extension.status.replace(/_/g, " ")}
+                </span>
+              </div>
+              {extension.customerReason ? <p className="mt-2 text-sm text-foreground">{extension.customerReason}</p> : null}
+              {extension.dealerResponse ? <p className="mt-2 text-sm text-white/70">{extension.dealerResponse}</p> : null}
+              {extension.additionalCharge != null ? (
+                <p className="mt-2 text-sm text-white/70">Additional charge {formatCurrency(extension.additionalCharge)}</p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["submitted", "reviewing"].includes(extension.status) && (
+                  <>
+                    <Input
+                      type="date"
+                      value={extensionDates[extension.id] ?? extension.requestedEndDate ?? ""}
+                      onChange={(event) => setExtensionDates((current) => ({ ...current, [extension.id]: event.target.value }))}
+                    />
+                    <Input
+                      value={extensionNotes[extension.id] ?? extension.customerReason ?? ""}
+                      onChange={(event) => setExtensionNotes((current) => ({ ...current, [extension.id]: event.target.value }))}
+                      placeholder="Update reason"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => updateRequestMutation.mutate({
+                        kind: "extension",
+                        id: extension.id,
+                        requested_end_date: extensionDates[extension.id] || extension.requestedEndDate,
+                        customer_reason: extensionNotes[extension.id] || extension.customerReason,
+                      })}
+                    >
+                      Update
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => updateRequestMutation.mutate({ kind: "extension", id: extension.id, action: "cancel" })}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                )}
+                {extension.paymentInvoiceId && extension.paymentStatus !== "paid" && (
+                  <Button
+                    variant="outline"
+                    onClick={() => finalizePaymentMutation.mutate({ kind: "extension", id: extension.id })}
+                    disabled={finalizePaymentMutation.isPending}
+                  >
+                    {finalizePaymentMutation.isPending ? "Checking payment..." : "Finalize after payment"}
+                  </Button>
+                )}
+              </div>
+            </Card>
+          )}
+          emptyText="No extension requests are in flight right now."
+        />
+
+        <Section
+          title="Return & closeout"
+          icon={ClipboardCheck}
+          items={returns}
+          renderItem={(rental) => (
+            <Card key={rental.id} className="border-white/10 bg-white/[0.04] p-5 text-white shadow-[0_20px_80px_rgba(0,0,0,0.18)]">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${tone(rental.status)}`}>
+                      {rental.status.replace(/_/g, " ")}
+                    </span>
+                    {rental.rentalContractReference && (
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                        Contract {rental.rentalContractReference}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="mt-3 text-xl font-semibold text-white">
+                    {rental.equipment?.label ?? "Rental equipment"}
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    {rental.equipment?.serialNumber ? `S/N ${rental.equipment.serialNumber}` : "Serial unavailable"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Inspection" value={formatDate(rental.inspectionDate)} detail={`Decision ${formatDate(rental.decisionAt)}`} />
+                <Metric label="Damage" value={rental.hasCharges == null ? "Pending" : rental.hasCharges ? "Charges applied" : "Clean return"} detail={`Charge amount ${formatCurrency(rental.chargeAmount)}`} />
+                <Metric label="Refund" value={rental.refundStatus?.replace(/_/g, " ") ?? "Not started"} detail={`Deposit ${formatCurrency(rental.depositAmount)}`} />
+                <Metric label="Balance" value={formatCurrency(rental.balanceDue)} detail={`Deposit covers charges ${rental.hasCharges === false ? "not needed" : "review required"}`} />
+              </div>
+            </Card>
+          )}
+          emptyText="No rental returns are visible for this portal customer yet."
+        />
       </div>
     </PortalLayout>
+  );
+}
+
+function Section<T>({
+  title,
+  icon: Icon,
+  items,
+  renderItem,
+  emptyText,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: T[];
+  renderItem: (item: T) => React.ReactNode;
+  emptyText: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-qep-orange" />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{title}</p>
+      </div>
+      {items.length > 0 ? items.map(renderItem) : (
+        <Card className="border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-white/65">
+          {emptyText}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#10192d]/70 p-4">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">{label}</p>
+      <p className="mt-3 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-1 text-xs text-white/50">{detail}</p>
+    </div>
   );
 }

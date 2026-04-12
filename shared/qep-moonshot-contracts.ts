@@ -186,6 +186,111 @@ export interface PortalRentalReturnWorkspaceView {
   } | null;
 }
 
+export type PortalRentalDeliveryMode = "pickup" | "delivery";
+export type PortalRentalRequestType = "booking" | "extension";
+export type PortalRentalContractStatus =
+  | "submitted"
+  | "reviewing"
+  | "quoted"
+  | "approved"
+  | "awaiting_payment"
+  | "active"
+  | "completed"
+  | "declined"
+  | "cancelled";
+
+export interface PortalRentalPricingEstimate {
+  dailyRate: number | null;
+  weeklyRate: number | null;
+  monthlyRate: number | null;
+  sourceLabel: string;
+}
+
+export interface PortalRentalContractView {
+  id: string;
+  requestType: PortalRentalRequestType;
+  status: PortalRentalContractStatus;
+  deliveryMode: PortalRentalDeliveryMode;
+  branchId: string | null;
+  branchLabel: string | null;
+  requestedCategory: string | null;
+  requestedMake: string | null;
+  requestedModel: string | null;
+  requestedStartDate: string | null;
+  requestedEndDate: string | null;
+  approvedStartDate: string | null;
+  approvedEndDate: string | null;
+  depositRequired: boolean;
+  depositAmount: number | null;
+  depositStatus: string | null;
+  depositInvoiceId: string | null;
+  companyId: string | null;
+  dealerResponse: string | null;
+  customerNotes: string | null;
+  pricingEstimate: PortalRentalPricingEstimate | null;
+  agreedRates: PortalRentalPricingEstimate | null;
+  equipment: {
+    id: string | null;
+    label: string;
+    serialNumber: string | null;
+  } | null;
+}
+
+export interface PortalRentalExtensionRequest {
+  id: string;
+  rentalContractId: string;
+  status: "submitted" | "reviewing" | "approved" | "declined" | "cancelled";
+  requestedEndDate: string | null;
+  approvedEndDate: string | null;
+  customerReason: string | null;
+  dealerResponse: string | null;
+  additionalCharge: number | null;
+  paymentInvoiceId: string | null;
+  paymentStatus: string | null;
+  createdAt: string;
+}
+
+export interface PortalRentalWorkspaceSummary {
+  bookingCount: number;
+  activeContractCount: number;
+  extensionCount: number;
+  closeoutCount: number;
+}
+
+export interface PortalRentalBookingDraft {
+  mode: "exact_unit" | "category_first";
+  equipmentId: string | null;
+  requestedCategory: string | null;
+  requestedMake: string | null;
+  requestedModel: string | null;
+  requestedStartDate: string | null;
+  requestedEndDate: string | null;
+  deliveryMode: PortalRentalDeliveryMode;
+  branchId: string | null;
+  deliveryLocation: string | null;
+  customerNotes: string | null;
+}
+
+export interface PortalRentalRateRule {
+  id: string;
+  scopeLabel: string;
+  customerId: string | null;
+  equipmentId: string | null;
+  branchId: string | null;
+  category: string | null;
+  make: string | null;
+  model: string | null;
+  seasonStart: string | null;
+  seasonEnd: string | null;
+  dailyRate: number | null;
+  weeklyRate: number | null;
+  monthlyRate: number | null;
+  minimumDays: number | null;
+  isActive: boolean;
+  priorityRank: number;
+  notes: string | null;
+}
+
 export type CampaignTriggerType =
   | "inventory_arrival"
   | "seasonal"
