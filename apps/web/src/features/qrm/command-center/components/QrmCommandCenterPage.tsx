@@ -7,6 +7,7 @@
 
 import { useCallback, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/primitives/GlassPanel";
@@ -64,6 +65,27 @@ export function QrmCommandCenterPage({
 
   const query = useCommandCenter(scope);
 
+  const commandStrip = query.data?.commandStrip;
+  const aiChiefOfStaff = query.data?.aiChiefOfStaff;
+  const recommendationCount = query.data
+    ? query.data.actionLanes.revenueReady.length + query.data.actionLanes.revenueAtRisk.length + query.data.actionLanes.blockers.length
+    : 0;
+  const commandCenterWhatMattersNow = query.isLoading
+    ? "Command-center pressure is loading."
+    : commandStrip
+      ? `${commandStrip.blockedDeals} blocked deal${commandStrip.blockedDeals === 1 ? "" : "s"}, ${commandStrip.overdueFollowUps} overdue follow-up${commandStrip.overdueFollowUps === 1 ? "" : "s"}, and ${recommendationCount} guided move${recommendationCount === 1 ? "" : "s"} are in play.`
+      : "Command-center summary is not available yet.";
+  const commandCenterNextMove = query.isLoading
+    ? "Preparing the next move."
+    : aiChiefOfStaff?.bestMove
+      ? aiChiefOfStaff.bestMove.headline
+      : commandStrip && commandStrip.blockedDeals > 0
+        ? `Clear ${commandStrip.blockedDeals} blocked deal${commandStrip.blockedDeals === 1 ? "" : "s"} before scanning lower-priority work.`
+        : "Use this pass to confirm the board is quiet and keep the next action lane clean.";
+  const commandCenterRiskIfIgnored = commandStrip && (commandStrip.blockedDeals > 0 || commandStrip.overdueFollowUps > 0 || commandStrip.atRiskRevenue > 0)
+    ? "If this page becomes a dashboard instead of a command lane, urgent work will hide in plain sight."
+    : "Without a clear top brief, operators spend time scanning instead of deciding.";
+
   const handleAccept = useCallback((card: RecommendationCardPayload) => {
     // Phase 0 P0.8 — log trace_id for telemetry. Full event emission in Phase 2.
     if (card.traceId) {
@@ -95,6 +117,21 @@ export function QrmCommandCenterPage({
           </span>
         </div>
       </header>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+          <p className="mt-2 text-sm text-foreground">{commandCenterWhatMattersNow}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+          <p className="mt-2 text-sm text-foreground">{commandCenterNextMove}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+          <p className="mt-2 text-sm text-foreground">{commandCenterRiskIfIgnored}</p>
+        </Card>
+      </div>
 
       {query.isLoading && (
         <GlassPanel className="flex items-center justify-center gap-3 py-20 text-sm text-slate-400">
