@@ -1,222 +1,350 @@
+import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import type { RouterCtx } from "./crm-router-service.ts";
 import { decryptCredential } from "./integration-crypto.ts";
-
-type CommunicationActivityType = "email" | "sms";
-type CommunicationProvider = "sendgrid" | "twilio";
-
-interface IntegrationStatusRow {
-  status: "connected" | "pending_credentials" | "error" | "demo_mode";
-  credentials_encrypted: string | null;
-  endpoint_url: string | null;
-}
+import {
+  type CommunicationBinding,
+  type CommunicationChannel,
+  type CommunicationContact,
+  type CommunicationProvider,
+  computeCampaignIneligibility,
+  computeDirectCommunicationIneligibility,
+  fetchCommunicationBinding,
+  interpolateCommunicationTemplate,
+  normalizePhoneNumber,
+  pickCredential,
+  summarizeBodyPreview,
+} from "./crm-communication-helpers.ts";
 
 interface ContactRow {
   id: string;
+  workspace_id: string;
+  first_name: string;
+  last_name: string;
   email: string | null;
   phone: string | null;
+  title: string | null;
+  sms_opt_in: boolean | null;
+  sms_opt_in_at: string | null;
+  sms_opt_in_source: string | null;
+  company_name: string | null;
 }
 
 interface DealRow {
   primary_contact_id: string | null;
 }
 
-interface CommunicationDeliveryInput {
-  activityType: CommunicationActivityType;
+export interface CommunicationDeliveryInput {
+  activityId: string;
+  activityType: CommunicationChannel;
   sendNow: boolean;
   body: string | null;
   contactId: string | null;
   companyId: string | null;
   dealId: string | null;
+  campaignId?: string | null;
 }
 
-function parseCredentials(raw: string | null): Record<string, string> | null {
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const output: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string" && value.trim().length > 0) {
-        output[key] = value.trim();
-      }
-    }
-    return Object.keys(output).length > 0 ? output : { raw };
-  } catch {
-    return { raw };
-  }
-}
-
-function pickCredential(
-  credentials: Record<string, string> | null,
-  keys: string[],
-): string | null {
-  if (!credentials) return null;
-  for (const key of keys) {
-    const value = credentials[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  return null;
-}
-
-function maskDestination(
-  value: string,
-  type: CommunicationActivityType,
-): string {
+function maskDestination(value: string, type: CommunicationChannel): string {
   if (type === "email") {
     const [local, domain] = value.split("@");
-    if (!local || !domain) return "masked";
-    const head = local.slice(0, 1);
-    return `${head}***@${domain}`;
+    return local && domain ? `${local.slice(0, 1)}***@${domain}` : "masked";
   }
-
   const digits = value.replace(/\D/g, "");
-  if (digits.length < 4) return "****";
-  return `***-***-${digits.slice(-4)}`;
+  return digits.length >= 4 ? `***-***-${digits.slice(-4)}` : "****";
 }
 
-function manualDeliveryMetadata(params: {
-  provider: CommunicationProvider;
-  reasonCode: string;
-  message: string;
-  attemptedAt: string;
-}): Record<string, unknown> {
+function manualDeliveryMetadata(
+  provider: CommunicationProvider,
+  reasonCode: string,
+  message: string,
+  attemptedAt: string,
+): Record<string, unknown> {
   return {
     attempted: false,
     mode: "manual",
-    provider: params.provider,
+    provider,
     status: "manual_logged",
-    reasonCode: params.reasonCode,
-    message: params.message,
-    attemptedAt: params.attemptedAt,
+    reasonCode,
+    message,
+    attemptedAt,
   };
 }
 
-function failedDeliveryMetadata(params: {
-  provider: CommunicationProvider;
-  reasonCode: string;
-  message: string;
-  attemptedAt: string;
-  destination: string;
-}): Record<string, unknown> {
+function failedDeliveryMetadata(
+  provider: CommunicationProvider,
+  reasonCode: string,
+  message: string,
+  attemptedAt: string,
+  destination: string,
+  messageId: string | null,
+): Record<string, unknown> {
   return {
     attempted: true,
     mode: "live",
-    provider: params.provider,
+    provider,
     status: "failed",
-    reasonCode: params.reasonCode,
-    message: params.message,
-    attemptedAt: params.attemptedAt,
-    destination: params.destination,
+    reasonCode,
+    message,
+    attemptedAt,
+    destination,
+    messageId,
   };
 }
 
-function sentDeliveryMetadata(params: {
-  provider: CommunicationProvider;
-  attemptedAt: string;
-  destination: string;
-  externalMessageId: string | null;
-}): Record<string, unknown> {
+function sentDeliveryMetadata(
+  provider: CommunicationProvider,
+  attemptedAt: string,
+  destination: string,
+  externalMessageId: string | null,
+  messageId: string,
+): Record<string, unknown> {
   return {
     attempted: true,
     mode: "live",
-    provider: params.provider,
+    provider,
     status: "sent",
-    attemptedAt: params.attemptedAt,
-    destination: params.destination,
-    externalMessageId: params.externalMessageId,
+    attemptedAt,
+    destination,
+    externalMessageId,
+    messageId,
+  };
+}
+
+function toCommunicationContact(row: ContactRow): CommunicationContact {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    phone: row.phone,
+    title: row.title,
+    smsOptIn: row.sms_opt_in === true,
+    smsOptInAt: row.sms_opt_in_at,
+    smsOptInSource: row.sms_opt_in_source,
+    companyName: row.company_name,
   };
 }
 
 async function fetchContactById(
   ctx: RouterCtx,
   contactId: string,
-): Promise<ContactRow | null> {
-  const { data, error } = await ctx.admin
-    .from("crm_contacts")
-    .select("id, email, phone")
-    .eq("workspace_id", ctx.workspaceId)
-    .eq("id", contactId)
-    .is("deleted_at", null)
-    .maybeSingle<ContactRow>();
-
-  if (error || !data) return null;
-  return data;
+): Promise<CommunicationContact | null> {
+  return fetchContactByIdWithClient(
+    ctx.admin,
+    ctx.workspaceId,
+    contactId,
+  );
 }
 
-async function resolveDeliveryContact(
+async function fetchContactByIdWithClient(
+  client: SupabaseClient,
+  workspaceId: string,
+  contactId: string,
+): Promise<CommunicationContact | null> {
+  const { data, error } = await client
+    .from("crm_contacts")
+    .select(
+      "id, workspace_id, first_name, last_name, email, phone, title, sms_opt_in, sms_opt_in_at, sms_opt_in_source, crm_companies(name)",
+    )
+    .eq("workspace_id", workspaceId)
+    .eq("id", contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const companyName =
+    data.crm_companies && typeof data.crm_companies === "object" &&
+      !Array.isArray(data.crm_companies)
+      ? ((data.crm_companies as { name?: unknown }).name as
+        | string
+        | undefined) ?? null
+      : null;
+
+  return toCommunicationContact({
+    ...(data as Omit<ContactRow, "company_name">),
+    company_name: companyName,
+  });
+}
+
+function getCommunicationAuthorizationClient(ctx: RouterCtx): SupabaseClient {
+  return ctx.caller.isServiceRole ? ctx.admin : ctx.callerDb;
+}
+
+async function resolveAuthorizedContactId(
   ctx: RouterCtx,
-  input: CommunicationDeliveryInput,
-): Promise<ContactRow | null> {
+  input: Pick<CommunicationDeliveryInput, "contactId" | "companyId" | "dealId">,
+): Promise<string | null> {
+  const client = getCommunicationAuthorizationClient(ctx);
+
   if (input.contactId) {
-    return fetchContactById(ctx, input.contactId);
+    const { data, error } = await client
+      .from("crm_contacts")
+      .select("id")
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", input.contactId)
+      .is("deleted_at", null)
+      .maybeSingle<{ id: string }>();
+    if (error || !data?.id) return null;
+    return data.id;
   }
 
   if (input.dealId) {
-    const { data: deal, error: dealError } = await ctx.admin
+    const { data, error } = await client
       .from("crm_deals")
       .select("primary_contact_id")
       .eq("workspace_id", ctx.workspaceId)
       .eq("id", input.dealId)
       .is("deleted_at", null)
       .maybeSingle<DealRow>();
-
-    if (dealError || !deal?.primary_contact_id) return null;
-    return fetchContactById(ctx, deal.primary_contact_id);
+    if (error || !data?.primary_contact_id) return null;
+    return data.primary_contact_id;
   }
 
   if (input.companyId) {
-    const { data, error } = await ctx.admin
+    const { data, error } = await client
       .from("crm_contacts")
-      .select("id, email, phone")
+      .select("id")
       .eq("workspace_id", ctx.workspaceId)
       .eq("primary_company_id", input.companyId)
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(1)
-      .maybeSingle<ContactRow>();
-
-    if (error || !data) return null;
-    return data;
+      .maybeSingle<{ id: string }>();
+    if (error || !data?.id) return null;
+    return data.id;
   }
 
   return null;
 }
 
-async function sendViaSendGrid(params: {
-  apiKey: string;
-  endpointUrl: string | null;
-  toEmail: string;
-  fromEmail: string;
-  fromName: string | null;
-  body: string;
-}): Promise<
+export async function resolveDeliveryContact(
+  ctx: RouterCtx,
+  input: Pick<CommunicationDeliveryInput, "contactId" | "companyId" | "dealId">,
+): Promise<CommunicationContact | null> {
+  const authorizedContactId = await resolveAuthorizedContactId(ctx, input);
+  if (!authorizedContactId) return null;
+  return fetchContactById(ctx, authorizedContactId);
+}
+
+async function createMessageRecord(
+  ctx: RouterCtx,
+  input: {
+    contact: CommunicationContact;
+    activityId: string;
+    channel: CommunicationChannel;
+    provider: CommunicationProvider;
+    occurredAt: string;
+    body: string;
+    campaignId?: string | null;
+    createdBy: string | null;
+  },
+): Promise<string> {
+  const { data, error } = await ctx.admin
+    .from("crm_communication_messages")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      activity_id: input.activityId,
+      contact_id: input.contact.id,
+      channel: input.channel,
+      direction: "outbound",
+      provider: input.provider,
+      status: "pending",
+      body_preview: summarizeBodyPreview(input.body),
+      campaign_id: input.campaignId ?? null,
+      occurred_at: input.occurredAt,
+      created_by: input.createdBy,
+      metadata: {},
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (error || !data) {
+    throw new Error(
+      `Failed to create communication message row: ${
+        error?.message ?? "unknown error"
+      }`,
+    );
+  }
+  return data.id;
+}
+
+async function updateMessageRecord(
+  ctx: RouterCtx,
+  messageId: string,
+  updates: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await ctx.admin
+    .from("crm_communication_messages")
+    .update(updates)
+    .eq("id", messageId)
+    .eq("workspace_id", ctx.workspaceId);
+  if (error) {
+    throw new Error(
+      `Failed to update communication message row: ${error.message}`,
+    );
+  }
+}
+
+async function sendViaSendGrid(
+  params: {
+    binding: CommunicationBinding;
+    body: string;
+    toEmail: string;
+    activityId: string;
+    messageId: string;
+  },
+): Promise<
   { ok: true; externalMessageId: string | null } | {
     ok: false;
     reasonCode: string;
     message: string;
   }
 > {
-  const baseUrl = params.endpointUrl?.trim() || "https://api.sendgrid.com";
-  const response = await fetch(`${baseUrl}/v3/mail/send`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
+  const apiKey = pickCredential(params.binding.credentials, [
+    "api_key",
+    "sendgrid_api_key",
+    "token",
+    "raw",
+  ]);
+  if (!apiKey || !params.binding.fromEmail) {
+    return {
+      ok: false,
+      reasonCode: "missing_sender",
+      message: "SendGrid requires api_key and from_email.",
+    };
+  }
+
+  const response = await fetch(
+    `${
+      params.binding.endpointUrl?.trim() || "https://api.sendgrid.com"
+    }/v3/mail/send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{
+          to: [{ email: params.toEmail }],
+          subject: "QEP CRM update",
+          custom_args: {
+            activity_id: params.activityId,
+            message_id: params.messageId,
+            route_token: params.binding.routeToken,
+            provider_account_id: params.binding.accountId,
+            from_email: params.binding.fromEmail,
+          },
+        }],
+        from: params.binding.fromName
+          ? { email: params.binding.fromEmail, name: params.binding.fromName }
+          : { email: params.binding.fromEmail },
+        content: [{ type: "text/plain", value: params.body }],
+      }),
+      signal: AbortSignal.timeout(30_000),
     },
-    body: JSON.stringify({
-      personalizations: [{
-        to: [{ email: params.toEmail }],
-        subject: "QEP QRM update",
-      }],
-      from: params.fromName
-        ? { email: params.fromEmail, name: params.fromName }
-        : { email: params.fromEmail },
-      content: [{ type: "text/plain", value: params.body }],
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  );
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -229,53 +357,63 @@ async function sendViaSendGrid(params: {
     };
   }
 
-  return {
-    ok: true,
-    externalMessageId: response.headers.get("x-message-id"),
-  };
+  return { ok: true, externalMessageId: response.headers.get("x-message-id") };
 }
 
-async function sendViaTwilio(params: {
-  accountSid: string;
-  authToken: string;
-  endpointUrl: string | null;
-  toPhone: string;
-  fromNumber: string | null;
-  messagingServiceSid: string | null;
-  body: string;
-}): Promise<
+async function sendViaTwilio(
+  params: { binding: CommunicationBinding; body: string; toPhone: string },
+): Promise<
   { ok: true; externalMessageId: string | null } | {
     ok: false;
     reasonCode: string;
     message: string;
   }
 > {
-  const baseUrl = params.endpointUrl?.trim() || "https://api.twilio.com";
-  const payload = new URLSearchParams({
-    To: params.toPhone,
-    Body: params.body,
-  });
-  if (params.messagingServiceSid) {
-    payload.set("MessagingServiceSid", params.messagingServiceSid);
-  } else if (params.fromNumber) {
-    payload.set("From", params.fromNumber);
-  } else {
+  const accountSid = pickCredential(params.binding.credentials, [
+    "account_sid",
+    "sid",
+  ]);
+  const authToken = pickCredential(params.binding.credentials, [
+    "auth_token",
+    "token",
+  ]);
+  const defaultFromNumber = params.binding.defaultFromNumber;
+  if (!accountSid || !authToken) {
+    return {
+      ok: false,
+      reasonCode: "missing_credentials",
+      message: "Twilio requires account_sid and auth_token.",
+    };
+  }
+  if (!defaultFromNumber) {
     return {
       ok: false,
       reasonCode: "missing_sender",
-      message:
-        "Twilio sender is missing. Configure from_number or messaging_service_sid.",
+      message: "Twilio requires a workspace default_from_number.",
     };
   }
 
+  const callbackBase = Deno.env.get("SUPABASE_URL");
+  const statusCallbackUrl = callbackBase && params.binding.routeToken
+    ? `${callbackBase}/functions/v1/twilio-webhook?rt=${
+      encodeURIComponent(params.binding.routeToken)
+    }`
+    : null;
+  const payload = new URLSearchParams({
+    To: params.toPhone,
+    From: defaultFromNumber,
+    Body: params.body,
+  });
+  if (statusCallbackUrl) payload.set("StatusCallback", statusCallbackUrl);
+
   const response = await fetch(
-    `${baseUrl}/2010-04-01/Accounts/${params.accountSid}/Messages.json`,
+    `${
+      params.binding.endpointUrl?.trim() || "https://api.twilio.com"
+    }/2010-04-01/Accounts/${accountSid}/Messages.json`,
     {
       method: "POST",
       headers: {
-        Authorization: `Basic ${
-          btoa(`${params.accountSid}:${params.authToken}`)
-        }`,
+        Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: payload,
@@ -297,10 +435,7 @@ async function sendViaTwilio(params: {
   const json = await response.json().catch(() => null) as
     | { sid?: string }
     | null;
-  return {
-    ok: true,
-    externalMessageId: json?.sid ?? null,
-  };
+  return { ok: true, externalMessageId: json?.sid ?? null };
 }
 
 export async function deliverCrmCommunication(
@@ -313,185 +448,141 @@ export async function deliverCrmCommunication(
   const attemptedAt = new Date().toISOString();
 
   if (!input.sendNow) {
-    return manualDeliveryMetadata({
+    return manualDeliveryMetadata(
       provider,
-      reasonCode: "send_not_requested",
-      message: "Saved as timeline activity only.",
+      "send_not_requested",
+      "Saved as timeline activity only.",
       attemptedAt,
-    });
+    );
   }
-
-  if (!input.body || input.body.trim().length === 0) {
-    return manualDeliveryMetadata({
+  if (!input.body?.trim()) {
+    return manualDeliveryMetadata(
       provider,
-      reasonCode: "missing_body",
-      message: "Message body is required for live delivery.",
+      "missing_body",
+      "Message body is required for live delivery.",
       attemptedAt,
-    });
+    );
   }
 
   const contact = await resolveDeliveryContact(ctx, input);
   if (!contact) {
-    return manualDeliveryMetadata({
+    return manualDeliveryMetadata(
       provider,
-      reasonCode: "missing_recipient_contact",
-      message: "No recipient contact found for this activity target.",
+      "missing_recipient_contact",
+      "No recipient contact found for this activity target.",
       attemptedAt,
-    });
+    );
   }
 
   const rawDestination = input.activityType === "email"
     ? contact.email?.trim() ?? null
-    : contact.phone?.trim() ?? null;
+    : normalizePhoneNumber(contact.phone);
   if (!rawDestination) {
-    return manualDeliveryMetadata({
+    return manualDeliveryMetadata(
       provider,
-      reasonCode: "missing_recipient_address",
-      message: `Recipient ${input.activityType} destination is missing.`,
+      "missing_recipient_address",
+      `Recipient ${input.activityType} destination is missing.`,
       attemptedAt,
-    });
+    );
   }
+
+  const binding = await fetchCommunicationBinding({
+    admin: ctx.admin,
+    workspaceId: ctx.workspaceId,
+    provider,
+    decryptCredential,
+  });
+  if (!binding) {
+    return manualDeliveryMetadata(
+      provider,
+      "integration_not_connected",
+      `${provider} is not connected. Activity was logged only.`,
+      attemptedAt,
+    );
+  }
+
+  const ineligibility = input.campaignId
+    ? computeCampaignIneligibility(input.activityType, contact, binding)
+    : computeDirectCommunicationIneligibility(
+      input.activityType,
+      contact,
+      binding,
+    );
+  if (ineligibility) {
+    return manualDeliveryMetadata(
+      provider,
+      ineligibility,
+      input.activityType === "email"
+        ? "Recipient email is missing or integration is unavailable."
+        : "Recipient phone or SMS consent is missing, or Twilio is unavailable.",
+      attemptedAt,
+    );
+  }
+
+  const renderedBody = interpolateCommunicationTemplate(input.body, contact)
+    .trim();
+  if (!renderedBody) {
+    return manualDeliveryMetadata(
+      provider,
+      "missing_body",
+      "Message body is required for live delivery.",
+      attemptedAt,
+    );
+  }
+
+  const messageId = await createMessageRecord(ctx, {
+    contact,
+    activityId: input.activityId,
+    channel: input.activityType,
+    provider,
+    occurredAt: attemptedAt,
+    body: renderedBody,
+    campaignId: input.campaignId ?? null,
+    createdBy: ctx.caller.userId,
+  });
   const destination = maskDestination(rawDestination, input.activityType);
 
-  const { data: statusRow, error: statusError } = await ctx.admin
-    .from("integration_status")
-    .select("status, credentials_encrypted, endpoint_url")
-    .eq("workspace_id", ctx.workspaceId)
-    .eq("integration_key", provider)
-    .maybeSingle<IntegrationStatusRow>();
-
-  if (statusError || !statusRow) {
-    return manualDeliveryMetadata({
-      provider,
-      reasonCode: "integration_not_configured",
-      message: `${provider} is not configured for this workspace.`,
-      attemptedAt,
-    });
-  }
-
-  if (statusRow.status !== "connected" || !statusRow.credentials_encrypted) {
-    return manualDeliveryMetadata({
-      provider,
-      reasonCode: "integration_not_connected",
-      message: `${provider} is not connected. Activity was logged only.`,
-      attemptedAt,
-    });
-  }
-
-  let credentials: Record<string, string> | null = null;
-  try {
-    credentials = parseCredentials(
-      await decryptCredential(statusRow.credentials_encrypted, provider),
-    );
-  } catch {
-    return failedDeliveryMetadata({
-      provider,
-      reasonCode: "credential_decrypt_failed",
-      message: "Unable to decrypt integration credentials.",
-      attemptedAt,
-      destination,
-    });
-  }
-
-  if (!credentials) {
-    return manualDeliveryMetadata({
-      provider,
-      reasonCode: "missing_credentials",
-      message: "No integration credentials available for delivery.",
-      attemptedAt,
-    });
-  }
-
-  if (provider === "sendgrid") {
-    const apiKey = pickCredential(credentials, [
-      "api_key",
-      "sendgrid_api_key",
-      "token",
-      "raw",
-    ]);
-    const fromEmail = pickCredential(credentials, [
-      "from_email",
-      "sender_email",
-      "from",
-    ]);
-    const fromName = pickCredential(credentials, ["from_name", "sender_name"]);
-
-    if (!apiKey || !fromEmail) {
-      return manualDeliveryMetadata({
-        provider,
-        reasonCode: "missing_sender",
-        message: "SendGrid requires api_key and from_email.",
-        attemptedAt,
-      });
-    }
-
-    const sendResult = await sendViaSendGrid({
-      apiKey,
-      endpointUrl: statusRow.endpoint_url,
+  const sendResult = provider === "sendgrid"
+    ? await sendViaSendGrid({
+      binding,
+      body: renderedBody,
       toEmail: rawDestination,
-      fromEmail,
-      fromName,
-      body: input.body,
+      activityId: input.activityId,
+      messageId,
+    })
+    : await sendViaTwilio({
+      binding,
+      body: renderedBody,
+      toPhone: rawDestination,
     });
-
-    if (!sendResult.ok) {
-      return failedDeliveryMetadata({
-        provider,
-        reasonCode: sendResult.reasonCode,
-        message: sendResult.message,
-        attemptedAt,
-        destination,
-      });
-    }
-
-    return sentDeliveryMetadata({
-      provider,
-      attemptedAt,
-      destination,
-      externalMessageId: sendResult.externalMessageId,
-    });
-  }
-
-  const accountSid = pickCredential(credentials, ["account_sid", "sid"]);
-  const authToken = pickCredential(credentials, ["auth_token", "token"]);
-  const fromNumber = pickCredential(credentials, ["from_number", "from"]);
-  const messagingServiceSid = pickCredential(credentials, [
-    "messaging_service_sid",
-  ]);
-
-  if (!accountSid || !authToken) {
-    return manualDeliveryMetadata({
-      provider,
-      reasonCode: "missing_credentials",
-      message: "Twilio requires account_sid and auth_token.",
-      attemptedAt,
-    });
-  }
-
-  const sendResult = await sendViaTwilio({
-    accountSid,
-    authToken,
-    endpointUrl: statusRow.endpoint_url,
-    toPhone: rawDestination,
-    fromNumber,
-    messagingServiceSid,
-    body: input.body,
-  });
 
   if (!sendResult.ok) {
-    return failedDeliveryMetadata({
+    await updateMessageRecord(ctx, messageId, {
+      status: "failed",
+      failure_code: sendResult.reasonCode,
+      metadata: { destination, message: sendResult.message },
+    });
+    return failedDeliveryMetadata(
       provider,
-      reasonCode: sendResult.reasonCode,
-      message: sendResult.message,
+      sendResult.reasonCode,
+      sendResult.message,
       attemptedAt,
       destination,
-    });
+      messageId,
+    );
   }
 
-  return sentDeliveryMetadata({
+  await updateMessageRecord(ctx, messageId, {
+    status: "sent",
+    provider_message_id: sendResult.externalMessageId,
+    metadata: { destination },
+  });
+
+  return sentDeliveryMetadata(
     provider,
     attemptedAt,
     destination,
-    externalMessageId: sendResult.externalMessageId,
-  });
+    sendResult.externalMessageId,
+    messageId,
+  );
 }

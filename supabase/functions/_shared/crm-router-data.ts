@@ -1,5 +1,23 @@
 import { fetchCompanySubtreeIdSet, type RouterCtx } from "./crm-router-service.ts";
 import { deliverCrmCommunication } from "./crm-communication-delivery.ts";
+import {
+  computeCampaignIneligibility,
+  computeDirectCommunicationIneligibility,
+  fetchCommunicationBinding,
+  type CommunicationChannel,
+  type CommunicationContact,
+} from "./crm-communication-helpers.ts";
+import {
+  canAccessEquipmentFinancials,
+  hasRestrictedEquipmentFinancialPayload,
+} from "./crm-equipment-financial-access.ts";
+import {
+  EQUIPMENT_FULL_SELECT_COLS,
+  EQUIPMENT_SAFE_SELECT_COLS,
+  mapEquipmentRow,
+} from "./crm-equipment-record.ts";
+import { resolveDeliveryContact } from "./crm-communication-delivery.ts";
+import { decryptCredential } from "./integration-crypto.ts";
 
 export type CustomRecordType = "contact" | "company" | "equipment";
 
@@ -104,6 +122,13 @@ export interface ActivityDeliverPayload {
   updatedAt?: string;
 }
 
+export interface CommunicationTargetPayload {
+  activityType: "email" | "sms";
+  contactId?: string | null;
+  companyId?: string | null;
+  dealId?: string | null;
+}
+
 export type FollowUpReminderSource = "pipeline_quick" | "deal_detail" | "voice" | "system";
 
 export interface DealPatchPayload {
@@ -158,6 +183,72 @@ function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function toCommunicationMergeFields(contact: CommunicationContact): Record<string, string> {
+  return {
+    company_name: contact.companyName ?? "",
+    email: contact.email ?? "",
+    first_name: contact.firstName,
+    full_name: `${contact.firstName} ${contact.lastName}`.trim(),
+    last_name: contact.lastName,
+    phone: contact.phone ?? "",
+    title: contact.title ?? "",
+  };
+}
+
+export async function getCommunicationTarget(
+  ctx: RouterCtx,
+  payload: CommunicationTargetPayload,
+): Promise<unknown> {
+  const activityType = payload.activityType as CommunicationChannel;
+  const contact = await resolveDeliveryContact(ctx, {
+    contactId: cleanText(payload.contactId ?? null),
+    companyId: cleanText(payload.companyId ?? null),
+    dealId: cleanText(payload.dealId ?? null),
+  });
+
+  if (!contact) {
+    return {
+      available: false,
+      contact: null,
+      reasonCode: "missing_recipient_contact",
+      mergeFields: {},
+    };
+  }
+
+  const provider = activityType === "email" ? "sendgrid" : "twilio";
+  const binding = await fetchCommunicationBinding({
+    admin: ctx.admin,
+    workspaceId: ctx.workspaceId,
+    provider,
+    decryptCredential,
+  });
+  const reasonCode = computeDirectCommunicationIneligibility(
+    activityType,
+    contact,
+    binding,
+  );
+
+  return {
+    available: reasonCode === null,
+    contact: {
+      id: contact.id,
+      companyName: contact.companyName,
+      email: contact.email,
+      firstName: contact.firstName,
+      fullName: `${contact.firstName} ${contact.lastName}`.trim(),
+      lastName: contact.lastName,
+      phone: contact.phone,
+      smsOptIn: contact.smsOptIn,
+      smsOptInAt: contact.smsOptInAt,
+      smsOptInSource: contact.smsOptInSource,
+      title: contact.title,
+    },
+    mergeFields: toCommunicationMergeFields(contact),
+    provider,
+    reasonCode,
+  };
 }
 
 async function syncFollowUpReminderFromDealRow(
@@ -278,68 +369,84 @@ async function getActivityForPatch(
   };
 }
 
-const EQUIPMENT_SELECT_COLS = [
-  "id", "company_id", "primary_contact_id", "name", "asset_tag", "serial_number",
-  "make", "model", "year", "category", "vin_pin",
-  "condition", "availability", "ownership",
-  "engine_hours", "mileage", "fuel_type", "weight_class", "operating_capacity",
-  "location_description", "latitude", "longitude",
-  "purchase_price", "current_market_value", "replacement_cost",
-  "daily_rental_rate", "weekly_rental_rate", "monthly_rental_rate",
-  "warranty_expires_on", "last_inspection_at", "next_service_due_at",
-  "notes", "photo_urls",
-  "metadata", "created_at", "updated_at",
-].join(", ");
+async function getActivityById(
+  ctx: RouterCtx,
+  activityId: string,
+): Promise<{
+  id: string;
+  workspaceId: string;
+  activityType: string;
+  body: string | null;
+  occurredAt: string;
+  contactId: string | null;
+  companyId: string | null;
+  dealId: string | null;
+  createdBy: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_activities")
+    .select(
+      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", activityId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
-// deno-lint-ignore no-explicit-any
-function mapEquipmentRow(row: any) {
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+
   return {
-    id: row.id,
-    companyId: row.company_id,
-    primaryContactId: row.primary_contact_id,
-    name: row.name,
-    assetTag: row.asset_tag,
-    serialNumber: row.serial_number,
-    make: row.make ?? null,
-    model: row.model ?? null,
-    year: row.year ?? null,
-    category: row.category ?? null,
-    vinPin: row.vin_pin ?? null,
-    condition: row.condition ?? null,
-    availability: row.availability ?? "available",
-    ownership: row.ownership ?? "customer_owned",
-    engineHours: row.engine_hours != null ? Number(row.engine_hours) : null,
-    mileage: row.mileage != null ? Number(row.mileage) : null,
-    fuelType: row.fuel_type ?? null,
-    weightClass: row.weight_class ?? null,
-    operatingCapacity: row.operating_capacity ?? null,
-    locationDescription: row.location_description ?? null,
-    latitude: row.latitude != null ? Number(row.latitude) : null,
-    longitude: row.longitude != null ? Number(row.longitude) : null,
-    purchasePrice: row.purchase_price != null ? Number(row.purchase_price) : null,
-    currentMarketValue: row.current_market_value != null ? Number(row.current_market_value) : null,
-    replacementCost: row.replacement_cost != null ? Number(row.replacement_cost) : null,
-    dailyRentalRate: row.daily_rental_rate != null ? Number(row.daily_rental_rate) : null,
-    weeklyRentalRate: row.weekly_rental_rate != null ? Number(row.weekly_rental_rate) : null,
-    monthlyRentalRate: row.monthly_rental_rate != null ? Number(row.monthly_rental_rate) : null,
-    warrantyExpiresOn: row.warranty_expires_on ?? null,
-    lastInspectionAt: row.last_inspection_at ?? null,
-    nextServiceDueAt: row.next_service_due_at ?? null,
-    notes: row.notes ?? null,
-    photoUrls: Array.isArray(row.photo_urls) ? row.photo_urls : [],
-    metadata: row.metadata ?? {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    id: data.id,
+    workspaceId: data.workspace_id,
+    activityType: data.activity_type,
+    body: data.body,
+    occurredAt: data.occurred_at,
+    contactId: data.contact_id,
+    companyId: data.company_id,
+    dealId: data.deal_id,
+    createdBy: data.created_by,
+    metadata:
+      data.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+        ? (data.metadata as Record<string, unknown>)
+        : {},
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
   };
+}
+
+function getEquipmentReadClient(ctx: RouterCtx) {
+  return canAccessEquipmentFinancials(ctx.caller) ? ctx.admin : ctx.callerDb;
+}
+
+function getEquipmentSelectCols(ctx: RouterCtx): string {
+  return canAccessEquipmentFinancials(ctx.caller)
+    ? EQUIPMENT_FULL_SELECT_COLS
+    : EQUIPMENT_SAFE_SELECT_COLS;
+}
+
+function assertEquipmentFinancialWriteAllowed(
+  ctx: RouterCtx,
+  payload: Partial<EquipmentPayload>,
+): void {
+  if (
+    !canAccessEquipmentFinancials(ctx.caller) &&
+    hasRestrictedEquipmentFinancialPayload(payload)
+  ) {
+    throw new Error("FORBIDDEN");
+  }
 }
 
 export async function listEquipment(
   ctx: RouterCtx,
   companyId: string | null,
 ): Promise<unknown[]> {
-  let query = ctx.callerDb
+  let query = getEquipmentReadClient(ctx)
     .from("crm_equipment")
-    .select(EQUIPMENT_SELECT_COLS)
+    .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
@@ -352,7 +459,8 @@ export async function listEquipment(
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data ?? []).map(mapEquipmentRow);
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  return rows.map(mapEquipmentRow);
 }
 
 export async function listEquipmentForCompanySubtree(
@@ -369,9 +477,10 @@ export async function listEquipmentForCompanySubtree(
     return [];
   }
 
-  const { data, error } = await ctx.callerDb
+  const equipmentReadClient = getEquipmentReadClient(ctx);
+  const { data, error } = await equipmentReadClient
     .from("crm_equipment")
-    .select(EQUIPMENT_SELECT_COLS)
+    .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .in("company_id", ids)
@@ -380,12 +489,11 @@ export async function listEquipmentForCompanySubtree(
 
   if (error) throw error;
 
-  type EquipmentDbRow = { company_id: string | null } & Record<string, unknown>;
-  const rows = (data ?? []) as unknown as EquipmentDbRow[];
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
   const companyIds = [...new Set(rows.map((row) => String(row.company_id)))];
   let nameMap = new Map<string, string>();
   if (companyIds.length > 0) {
-    const { data: compRows, error: compError } = await ctx.callerDb
+    const { data: compRows, error: compError } = await equipmentReadClient
       .from("crm_companies")
       .select("id, name")
       .eq("workspace_id", ctx.workspaceId)
@@ -434,17 +542,8 @@ export async function createActivity(
     await ensureDealVisible(ctx, dealId);
   }
 
+  const activityId = crypto.randomUUID();
   const metadata: Record<string, unknown> = {};
-  if (activityType === "email" || activityType === "sms") {
-    metadata.communication = await deliverCrmCommunication(ctx, {
-      activityType,
-      sendNow: payload.sendNow === true,
-      body: cleanText(payload.body ?? null),
-      contactId,
-      companyId,
-      dealId,
-    });
-  }
   if (activityType === "task") {
     const dueAt = cleanText(payload.task?.dueAt ?? null);
     if (dueAt && Number.isNaN(Date.parse(dueAt))) {
@@ -461,9 +560,10 @@ export async function createActivity(
     };
   }
 
-  const { data, error } = await ctx.callerDb
+  const { error } = await ctx.callerDb
     .from("crm_activities")
     .insert({
+      id: activityId,
       workspace_id: ctx.workspaceId,
       activity_type: activityType,
       body: cleanText(payload.body ?? null),
@@ -474,26 +574,35 @@ export async function createActivity(
       created_by: ctx.caller.userId,
       metadata,
     })
-    .select(
-      "id, workspace_id, activity_type, body, occurred_at, contact_id, company_id, deal_id, created_by, metadata, created_at, updated_at",
-    )
-    .single();
-
   if (error) throw error;
 
+  let nextMetadata = metadata;
+  if (activityType === "email" || activityType === "sms") {
+    nextMetadata = {
+      ...nextMetadata,
+      communication: await deliverCrmCommunication(ctx, {
+        activityId,
+        activityType,
+        sendNow: payload.sendNow === true,
+        body: cleanText(payload.body ?? null),
+        contactId,
+        companyId,
+        dealId,
+      }),
+    };
+
+    const { error: metadataError } = await ctx.callerDb
+      .from("crm_activities")
+      .update({ metadata: nextMetadata })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", activityId);
+    if (metadataError) throw metadataError;
+  }
+
+  const activity = await getActivityById(ctx, activityId);
   return {
-    id: data.id,
-    workspaceId: data.workspace_id,
-    activityType: data.activity_type,
-    body: data.body,
-    occurredAt: data.occurred_at,
-    contactId: data.contact_id,
-    companyId: data.company_id,
-    dealId: data.deal_id,
-    createdBy: data.created_by,
-    metadata: (data.metadata as Record<string, unknown> | null) ?? {},
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    ...activity,
+    metadata: nextMetadata,
   };
 }
 
@@ -749,6 +858,7 @@ export async function deliverActivity(
   let deliveredCommunication: Record<string, unknown>;
   try {
     deliveredCommunication = await deliverCrmCommunication(ctx, {
+      activityId,
       activityType: activity.activityType,
       sendNow: payload.sendNow !== false,
       body: cleanText(activity.body ?? null),
@@ -1423,6 +1533,7 @@ export async function createEquipment(
   const companyId = cleanText(payload.companyId);
   if (!companyId) throw new Error("VALIDATION_COMPANY_ID_REQUIRED");
   await ensureRecordVisible(ctx, "company", companyId);
+  assertEquipmentFinancialWriteAllowed(ctx, payload);
 
   const insertPayload: Record<string, unknown> = {
     workspace_id: ctx.workspaceId,
@@ -1438,7 +1549,7 @@ export async function createEquipment(
   const { data, error } = await ctx.callerDb
     .from("crm_equipment")
     .insert(insertPayload)
-    .select(EQUIPMENT_SELECT_COLS)
+    .select("id")
     .single();
 
   if (error) {
@@ -1450,16 +1561,16 @@ export async function createEquipment(
     }
     throw error;
   }
-  return mapEquipmentRow(data);
+  return getEquipment(ctx, String(data.id));
 }
 
 export async function getEquipment(
   ctx: RouterCtx,
   equipmentId: string,
 ): Promise<unknown> {
-  const { data, error } = await ctx.callerDb
+  const { data, error } = await getEquipmentReadClient(ctx)
     .from("crm_equipment")
-    .select(EQUIPMENT_SELECT_COLS)
+    .select(getEquipmentSelectCols(ctx))
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)
     .is("deleted_at", null)
@@ -1467,7 +1578,7 @@ export async function getEquipment(
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
-  return mapEquipmentRow(data);
+  return mapEquipmentRow(data as unknown as Record<string, unknown>);
 }
 
 export async function listDealEquipment(
@@ -1572,6 +1683,7 @@ export async function patchEquipment(
   equipmentId: string,
   payload: Partial<EquipmentPayload>,
 ): Promise<unknown> {
+  assertEquipmentFinancialWriteAllowed(ctx, payload);
   const updates: Record<string, unknown> = {};
   if (payload.companyId !== undefined) {
     const cid = cleanText(payload.companyId);
@@ -1605,7 +1717,7 @@ export async function patchEquipment(
     .eq("workspace_id", ctx.workspaceId)
     .eq("id", equipmentId)
     .is("deleted_at", null)
-    .select(EQUIPMENT_SELECT_COLS)
+    .select("id")
     .maybeSingle();
 
   if (error) {
@@ -1619,7 +1731,7 @@ export async function patchEquipment(
   }
   if (!data) throw new Error("NOT_FOUND");
 
-  return mapEquipmentRow(data);
+  return getEquipment(ctx, equipmentId);
 }
 
 export async function patchCompanyParent(

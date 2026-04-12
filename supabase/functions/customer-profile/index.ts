@@ -8,10 +8,19 @@ import {
   type FleetRow,
   mapCustomerProfileDto,
 } from "../_shared/customer-profile-dto.ts";
+import {
+  buildDgeRefreshDedupeKey,
+  enqueueDgeRefreshJob,
+  findOpenDgeRefreshJob,
+  triggerDgeRefreshWorker,
+} from "../_shared/dge-refresh-jobs.ts";
 import { fail, ok, optionsResponse } from "../_shared/dge-http.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
+import {
+  mergeSnapshotBadges,
+  resolveRefreshEnvelope,
+} from "../_shared/dge-refresh-state.ts";
 
-import { captureEdgeException } from "../_shared/sentry.ts";
 function clean(value: string | null): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -21,6 +30,11 @@ function clean(value: string | null): string | null {
 function parseBooleanQuery(value: string | null): boolean {
   return value === "true" || value === "1";
 }
+
+const CUSTOMER_PROFILE_STALE_MS = Number.parseInt(
+  Deno.env.get("CUSTOMER_PROFILE_STALE_MS") ?? String(4 * 60 * 60 * 1000),
+  10,
+);
 
 Deno.serve(async (req): Promise<Response> => {
   const origin = req.headers.get("origin");
@@ -93,6 +107,7 @@ Deno.serve(async (req): Promise<Response> => {
     const includeFleet = parseBooleanQuery(
       url.searchParams.get("include_fleet"),
     );
+    const refreshRequested = parseBooleanQuery(url.searchParams.get("refresh"));
 
     if (!profileId && !hubspotContactId && !intellidealerCustomerId && !email) {
       return fail({
@@ -199,12 +214,80 @@ Deno.serve(async (req): Promise<Response> => {
       fleet = (fleetRows ?? []) as FleetRow[];
     }
 
+    const workspaceId = caller.workspaceId ?? "default";
+    const dedupeKey = buildDgeRefreshDedupeKey(
+      "customer_profile_refresh",
+      profile.id,
+    );
+    let openJob = await findOpenDgeRefreshJob(adminClient, {
+      workspaceId,
+      dedupeKey,
+    });
+    let queueError: string | null = null;
+
+    if (refreshRequested) {
+      try {
+        const enqueued = await enqueueDgeRefreshJob(adminClient, {
+          workspaceId,
+          jobType: "customer_profile_refresh",
+          dedupeKey,
+          requestPayload: {
+            customer_profiles_extended_id: profile.id,
+            hubspot_contact_id: profile.hubspot_contact_id,
+            intellidealer_customer_id: profile.intellidealer_customer_id,
+            requested_by: caller.userId,
+          },
+          requestedBy: caller.userId,
+          priority: 40,
+        });
+
+        openJob = {
+          id: enqueued.jobId,
+          workspace_id: workspaceId,
+          job_type: "customer_profile_refresh",
+          dedupe_key: dedupeKey,
+          status: enqueued.status,
+          created_at: new Date().toISOString(),
+          last_error: null,
+        };
+        if (enqueued.enqueued) {
+          await triggerDgeRefreshWorker();
+        }
+      } catch (error) {
+        queueError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    const metadata = profile.metadata ?? {};
+    const snapshotUpdatedAt = typeof metadata.last_dna_refresh_at === "string"
+      ? metadata.last_dna_refresh_at
+      : profile.updated_at;
+    const refresh = resolveRefreshEnvelope({
+      snapshotUpdatedAt,
+      staleAfterMs: CUSTOMER_PROFILE_STALE_MS,
+      openJob: openJob
+        ? {
+          id: openJob.id,
+          status: openJob.status,
+          created_at: openJob.created_at,
+          last_error: openJob.last_error,
+        }
+        : null,
+    });
+
+    if (queueError) {
+      refresh.status = "degraded";
+      refresh.last_error = queueError;
+    }
+
     const response = mapCustomerProfileDto({
       row: profile,
       role: caller.role,
       isServiceRole: caller.isServiceRole,
       includeFleet,
       fleet,
+      dataBadges: mergeSnapshotBadges([], refresh),
+      refresh,
     });
 
     await adminClient
@@ -221,7 +304,6 @@ Deno.serve(async (req): Promise<Response> => {
 
     return ok(response, { origin });
   } catch (error) {
-    captureEdgeException(error, { fn: "customer-profile", req });
     return fail({
       origin,
       status: 500,

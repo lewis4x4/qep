@@ -1,5 +1,4 @@
 import { resolveCallerContext } from "../_shared/dge-auth.ts";
-import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   crmFail,
   crmOk,
@@ -21,6 +20,13 @@ import {
   requireElevated,
 } from "../_shared/crm-router-service.ts";
 import {
+  createCampaign,
+  executeCampaign,
+  listCampaigns,
+  patchCampaign,
+  type CampaignPayload,
+} from "../_shared/crm-campaigns.ts";
+import {
   createActivity,
   createCompany,
   createContact,
@@ -32,6 +38,7 @@ import {
   createEquipment,
   getEquipment,
   dismissDuplicateCandidate,
+  getCommunicationTarget,
   getRecordCustomFields,
   listCustomFieldDefinitions,
   listDuplicateCandidates,
@@ -50,6 +57,7 @@ import {
   type ActivityPayload,
   type ActivityPatchPayload,
   type CompanyUpsertPayload,
+  type CommunicationTargetPayload,
   type ContactUpsertPayload,
   type CustomFieldDefinitionPayload,
   type CustomRecordType,
@@ -96,12 +104,21 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "SERVICE_WORKSPACE_UNBOUND") {
+    return crmFail({
+      origin,
+      status: 403,
+      code: "FORBIDDEN",
+      message: "Service callers must present a signed workspace claim.",
+    });
+  }
+
   if (message === "NOT_FOUND") {
     return crmFail({
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "Requested QRM resource was not found.",
+      message: "Requested CRM resource was not found.",
     });
   }
 
@@ -305,6 +322,19 @@ function mapError(origin: string | null, error: unknown): Response {
   }
 
   if (
+    message === "VALIDATION_CAMPAIGN_REQUIRED_FIELDS" ||
+    message === "VALIDATION_CAMPAIGN_PATCH_REQUIRED" ||
+    message === "VALIDATION_CAMPAIGN_EXECUTION_READY"
+  ) {
+    return crmFail({
+      origin,
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Campaign request validation failed.",
+    });
+  }
+
+  if (
     message.startsWith("VALIDATION_") ||
     message.startsWith("UNKNOWN_CUSTOM_FIELD:") ||
     message.startsWith("INVALID_CUSTOM_FIELD_TYPE:") ||
@@ -333,7 +363,7 @@ function mapError(origin: string | null, error: unknown): Response {
     origin,
     status: 500,
     code: "UNEXPECTED_ERROR",
-    message: "QRM router request failed.",
+    message: "CRM router request failed.",
   });
 }
 
@@ -352,7 +382,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "QRM route not found.",
+      message: "CRM route not found.",
     });
   }
 
@@ -366,6 +396,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const types = url.searchParams.get("types") ?? "contact,company";
       const results = await crmSearch(ctx, q, types);
       return crmOk({ results }, { origin });
+    }
+
+    if (
+      req.method === "GET" &&
+      segments[1] === "communication-target" &&
+      segments.length === 2
+    ) {
+      requireCaller(ctx);
+      const body = {
+        activityType: safeText(url.searchParams.get("activity_type")) as CommunicationTargetPayload["activityType"],
+        companyId: safeText(url.searchParams.get("company_id")),
+        contactId: safeText(url.searchParams.get("contact_id")),
+        dealId: safeText(url.searchParams.get("deal_id")),
+      };
+      if (body.activityType !== "email" && body.activityType !== "sms") {
+        return crmFail({
+          origin,
+          status: 400,
+          code: "VALIDATION_ERROR",
+          message: "activity_type must be email or sms.",
+        });
+      }
+      const target = await getCommunicationTarget(ctx, body);
+      return crmOk({ target }, { origin });
     }
 
     if (
@@ -411,6 +465,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = await readJsonBody<ActivityDeliverPayload>(req);
       const activity = await deliverActivity(ctx, segments[2], body);
       return crmOk({ activity }, { origin });
+    }
+
+    if (segments[1] === "campaigns") {
+      requireCaller(ctx);
+      requireElevated(ctx);
+
+      if (req.method === "GET" && segments.length === 2) {
+        const campaigns = await listCampaigns(ctx);
+        return crmOk({ campaigns }, { origin });
+      }
+
+      if (req.method === "POST" && segments.length === 2) {
+        const body = await readJsonBody<CampaignPayload>(req);
+        const campaign = await createCampaign(ctx, body);
+        return crmOk({ campaign }, { origin, status: 201 });
+      }
+
+      if (req.method === "PATCH" && segments.length === 3) {
+        const body = await readJsonBody<CampaignPayload>(req);
+        const campaign = await patchCampaign(ctx, segments[2], body);
+        return crmOk({ campaign }, { origin });
+      }
+
+      if (req.method === "POST" && segments.length === 4 && segments[3] === "execute") {
+        const result = await executeCampaign(ctx, segments[2]);
+        return crmOk({ result }, { origin });
+      }
     }
 
     if (
@@ -694,13 +775,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       origin,
       status: 404,
       code: "NOT_FOUND",
-      message: "QRM route not found.",
+      message: "CRM route not found.",
     });
   } catch (error) {
-    captureEdgeException(error, { fn: "crm-router", req });
     const message = error instanceof Error ? error.message : String(error);
     if (message === "UNAUTHORIZED") {
       await deny(ctx, "caller_identity_unresolved");
+    } else if (message === "SERVICE_WORKSPACE_UNBOUND") {
+      await deny(ctx, "service_workspace_unbound");
     } else if (message === "FORBIDDEN") {
       await deny(ctx, "insufficient_role_for_route");
     }

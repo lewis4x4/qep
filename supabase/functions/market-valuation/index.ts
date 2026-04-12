@@ -3,6 +3,12 @@ import {
   resolveCallerContext,
 } from "../_shared/dge-auth.ts";
 import {
+  buildDgeRefreshDedupeKey,
+  enqueueDgeRefreshJob,
+  findOpenDgeRefreshJob,
+  triggerDgeRefreshWorker,
+} from "../_shared/dge-refresh-jobs.ts";
+import {
   corsHeaders,
   fail,
   ok,
@@ -10,36 +16,16 @@ import {
   readJsonObject,
 } from "../_shared/dge-http.ts";
 import { checkRateLimit } from "../_shared/dge-rate-limit.ts";
-import { createIntegrationManager } from "../_shared/integration-manager.ts";
-import { captureEdgeException } from "../_shared/sentry.ts";
-import type {
-  AdapterResult,
-  AuctionDataRequest,
-  AuctionDataResult,
-  IronGuidesRequest,
-  IronGuidesResult,
-  RouseRequest,
-  RouseResult,
-} from "../_shared/integration-types.ts";
 import {
-  computeValuationBadges,
-  deriveTtlHours,
   mapMarketValuationRowToResult,
-  type MarketValuationRow,
-  mergeSourceBreakdown,
   isStockOnlyValuationRequest,
-  scoreCacheCandidate,
-  telemetryFromSettledResults,
   validateMarketValuationRequest,
 } from "../_shared/market-valuation-logic.ts";
-
-function resolveCompositeSource(
-  telemetry: Array<{ isMock: boolean }>,
-): "composite_mock" | "composite_partial" | "composite_live" {
-  if (telemetry.every((row) => row.isMock)) return "composite_mock";
-  if (telemetry.some((row) => row.isMock)) return "composite_partial";
-  return "composite_live";
-}
+import { findBestMarketValuationSnapshot } from "../_shared/market-valuation-refresh.ts";
+import {
+  mergeSnapshotBadges,
+  resolveRefreshEnvelope,
+} from "../_shared/dge-refresh-state.ts";
 
 function rateLimitedMarketValuationResponse(
   origin: string | null,
@@ -130,33 +116,10 @@ Deno.serve(async (req): Promise<Response> => {
       });
     }
 
-    const nowIso = new Date().toISOString();
+    const workspaceId = caller.workspaceId ?? "default";
+    const snapshot = await findBestMarketValuationSnapshot(adminClient, request);
 
-    if (isStockOnlyValuationRequest(request)) {
-      const { data: stockRows } = await adminClient
-        .from("market_valuations")
-        .select("*")
-        .eq("stock_number", request.stock_number)
-        .gt("expires_at", nowIso)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (stockRows?.length) {
-        const best = (stockRows as MarketValuationRow[])
-          .map((row) => ({ row, score: scoreCacheCandidate(row, request) }))
-          .sort((a, b) => b.score - a.score)[0];
-
-        if (best && best.score > 1.5) {
-          return ok(
-            mapMarketValuationRowToResult(
-              best.row,
-              caller.isServiceRole || caller.role !== "rep",
-            ),
-            { origin },
-          );
-        }
-      }
-
+    if (isStockOnlyValuationRequest(request) && !snapshot) {
       return fail({
         origin,
         status: 400,
@@ -167,146 +130,120 @@ Deno.serve(async (req): Promise<Response> => {
       });
     }
 
-    const { data: cacheRows } = await adminClient
-      .from("market_valuations")
-      .select("*")
-      .eq("make", request.make)
-      .eq("model", request.model)
-      .eq("year", request.year)
-      .gt("expires_at", nowIso)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const identity = [
+      request.stock_number ?? "",
+      request.make,
+      request.model,
+      String(request.year),
+      String(request.hours),
+      request.condition,
+      request.location ?? "",
+    ].join("|");
+    const dedupeKey = buildDgeRefreshDedupeKey(
+      "market_valuation_refresh",
+      identity,
+    );
+    let openJob = await findOpenDgeRefreshJob(adminClient, {
+      workspaceId,
+      dedupeKey,
+    });
+    const freshSnapshot = snapshot
+      ? Date.parse(snapshot.expires_at) > Date.now()
+      : false;
+    let queueError: string | null = null;
 
-    if (cacheRows?.length) {
-      const best = (cacheRows as MarketValuationRow[])
-        .map((row) => ({ row, score: scoreCacheCandidate(row, request) }))
-        .sort((a, b) => b.score - a.score)[0];
-
-      if (best && best.score > 1.5) {
-        return ok(
-          mapMarketValuationRowToResult(
-            best.row,
-            caller.isServiceRole || caller.role !== "rep",
-          ),
-          { origin },
-        );
+    if (!freshSnapshot && !openJob) {
+      try {
+        const enqueued = await enqueueDgeRefreshJob(adminClient, {
+          workspaceId,
+          jobType: "market_valuation_refresh",
+          dedupeKey,
+          requestPayload: { ...request, requested_by: caller.userId },
+          requestedBy: caller.userId,
+          priority: 30,
+        });
+        openJob = {
+          id: enqueued.jobId,
+          workspace_id: workspaceId,
+          job_type: "market_valuation_refresh",
+          dedupe_key: dedupeKey,
+          status: enqueued.status,
+          created_at: new Date().toISOString(),
+          last_error: null,
+        };
+        if (enqueued.enqueued) {
+          await triggerDgeRefreshWorker();
+        }
+      } catch (error) {
+        queueError = error instanceof Error ? error.message : String(error);
       }
     }
 
-    const manager = createIntegrationManager();
-    await manager.loadStatuses();
+    const refresh = resolveRefreshEnvelope({
+      snapshotUpdatedAt: freshSnapshot
+        ? new Date().toISOString()
+        : snapshot?.created_at ?? null,
+      staleAfterMs: 60_000,
+      openJob: openJob
+        ? {
+          id: openJob.id,
+          status: openJob.status,
+          created_at: openJob.created_at,
+          last_error: openJob.last_error,
+        }
+        : null,
+    });
 
-    const settled = await Promise.allSettled([
-      manager.execute<IronGuidesRequest, IronGuidesResult>("ironguides", {
-        make: request.make,
-        model: request.model,
-        year: request.year,
-        hours: request.hours,
-        zip: request.location,
-      }),
-      manager.execute<AuctionDataRequest, AuctionDataResult>("auction_data", {
-        make: request.make,
-        model: request.model,
-        yearMin: request.year - 2,
-        yearMax: request.year + 2,
-        limit: 8,
-      }),
-      manager.execute<RouseRequest, RouseResult>("rouse", {
-        category: "compact_construction",
-        region: request.location ?? "us-southeast",
-      }),
-    ]) as [
-      PromiseSettledResult<AdapterResult<IronGuidesResult>>,
-      PromiseSettledResult<AdapterResult<AuctionDataResult>>,
-      PromiseSettledResult<AdapterResult<RouseResult>>,
-    ];
-
-    const telemetry = telemetryFromSettledResults(settled);
-
-    if (telemetry.length === 0) {
-      return fail({
-        origin,
-        status: 502,
-        code: "UPSTREAM_UNAVAILABLE",
-        message: "All valuation sources failed.",
-        details: { failure_reason: "no_source_succeeded" },
-      });
+    if (queueError) {
+      refresh.status = "degraded";
+      refresh.last_error = queueError;
+    } else if (!freshSnapshot && snapshot && !openJob) {
+      refresh.status = "stale";
+      refresh.stale = true;
     }
 
-    const totalWeight = telemetry.reduce((sum, row) => sum + row.weight, 0);
-    const estimatedFmv = telemetry.reduce((sum, row) =>
-      sum + row.value * row.weight, 0) / totalWeight;
-    const confidence = telemetry.reduce((sum, row) =>
-      sum + row.confidence * row.weight, 0) / totalWeight;
+    if (snapshot) {
+      const response = mapMarketValuationRowToResult(
+        snapshot,
+        caller.isServiceRole || caller.role !== "rep",
+      );
+      response.data_badges = mergeSnapshotBadges(response.data_badges, refresh);
+      response.refresh = refresh;
+      response.valuation_status = freshSnapshot && !openJob
+        ? "ready"
+        : queueError
+        ? "degraded"
+        : "pending_refresh";
+      return ok(response, { origin });
+    }
 
-    const explicitLow = telemetry.find((row) =>
-      row.lowEstimate !== undefined
-    )?.lowEstimate;
-    const explicitHigh = telemetry.find((row) =>
-      row.highEstimate !== undefined
-    )?.highEstimate;
-    const spread = Math.max(0.08, 0.26 - confidence * 0.12);
-
-    const lowEstimate = explicitLow ?? Math.round(estimatedFmv * (1 - spread));
-    const highEstimate = explicitHigh ??
-      Math.round(estimatedFmv * (1 + spread));
-    const sourceBreakdown = mergeSourceBreakdown(telemetry);
-    const dataBadges = computeValuationBadges(telemetry);
-    const ttlHours = deriveTtlHours(manager.getStatus("ironguides")?.config);
-
-    const source = resolveCompositeSource(telemetry);
-
-    const { data: inserted, error: insertError } = await adminClient
-      .from("market_valuations")
-      .insert({
-        stock_number: request.stock_number ?? null,
-        make: request.make,
-        model: request.model,
-        year: request.year,
-        hours: request.hours,
-        condition: request.condition,
-        location: request.location ?? null,
-        estimated_fmv: Math.round(estimatedFmv),
-        low_estimate: lowEstimate,
-        high_estimate: highEstimate,
-        confidence_score: Number(confidence.toFixed(2)),
-        source,
-        source_detail: {
-          source_breakdown: sourceBreakdown,
-          data_badges: dataBadges,
-          adapter_telemetry: telemetry.map((row) => ({
-            source: row.source,
-            badge: row.badge,
-            latency_ms: row.latencyMs,
-            is_mock: row.isMock,
-          })),
-        },
-        expires_at: new Date(Date.now() + ttlHours * 60 * 60 * 1000)
-          .toISOString(),
-        valued_by: caller.userId,
-      })
-      .select("*")
-      .single();
-
-    if (insertError || !inserted) {
+    if (queueError || !openJob) {
       return fail({
         origin,
-        status: 500,
-        code: "DB_WRITE_FAILED",
-        message: "Failed to persist valuation record.",
-        details: { reason: insertError?.message },
+        status: 503,
+        code: "REFRESH_QUEUE_UNAVAILABLE",
+        message: "No cached valuation is available and the refresh queue could not be scheduled.",
+        details: { reason: queueError },
       });
     }
 
     return ok(
-      mapMarketValuationRowToResult(
-        inserted as MarketValuationRow,
-        caller.isServiceRole || caller.role !== "rep",
-      ),
+      {
+        id: `pending:${openJob.id}`,
+        estimated_fmv: null,
+        low_estimate: null,
+        high_estimate: null,
+        confidence_score: 0,
+        source: "pending_refresh",
+        source_breakdown: [],
+        data_badges: mergeSnapshotBadges(["ESTIMATED"], refresh),
+        expires_at: new Date().toISOString(),
+        valuation_status: "pending_refresh",
+        refresh,
+      },
       { origin },
     );
   } catch (error) {
-    captureEdgeException(error, { fn: "market-valuation", req });
     if (error instanceof SyntaxError) {
       return fail({
         origin,

@@ -337,14 +337,22 @@ export interface ValuationSourceBreakdown {
 
 export interface MarketValuationResult {
   id: string;
-  estimated_fmv: number;
-  low_estimate: number;
-  high_estimate: number;
+  estimated_fmv: number | null;
+  low_estimate: number | null;
+  high_estimate: number | null;
   confidence_score: number;
   source: string;
   source_breakdown: ValuationSourceBreakdown[];
   data_badges: DataBadge[];
   expires_at: string;
+  valuation_status?: "ready" | "pending_refresh" | "degraded";
+  refresh?: {
+    status: "fresh" | "refreshing" | "stale" | "degraded";
+    stale: boolean;
+    job_id: string | null;
+    requested_at: string | null;
+    last_error: string | null;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

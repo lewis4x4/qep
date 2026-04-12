@@ -196,14 +196,15 @@ export function mapMarketValuationRowToResult(
 
   return {
     id: row.id,
-    estimated_fmv: Number(row.estimated_fmv ?? 0),
-    low_estimate: Number(row.low_estimate ?? 0),
-    high_estimate: Number(row.high_estimate ?? 0),
+    estimated_fmv: row.estimated_fmv === null ? null : Number(row.estimated_fmv),
+    low_estimate: row.low_estimate === null ? null : Number(row.low_estimate),
+    high_estimate: row.high_estimate === null ? null : Number(row.high_estimate),
     confidence_score: Number(row.confidence_score ?? 0),
     source: row.source,
     source_breakdown: includeBreakdown ? detailBreakdown : [],
     data_badges: badges,
     expires_at: row.expires_at,
+    valuation_status: "ready",
   };
 }
 

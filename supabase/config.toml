@@ -73,7 +73,7 @@ verify_jwt = false
 [functions.crm-router]
 verify_jwt = false
 
-[functions.demo-admin]
+[functions.crm-auth-audit]
 verify_jwt = false
 
 # DGE routes validate JWT + roles in _shared/dge-auth.ts (resolveCallerContext).
@@ -92,192 +92,17 @@ verify_jwt = false
 [functions.customer-profile]
 verify_jwt = false
 
-[functions.integration-test-connection]
-verify_jwt = true
+[functions.dge-refresh-worker]
+verify_jwt = false
 
-# JWT is validated inside the function (Bearer + getUser). Gateway verify_jwt can 401
-# valid clients when token shape/version differs; keep off like other app-scoped functions.
+[functions.sendgrid-webhook]
+verify_jwt = false
+
+[functions.twilio-webhook]
+verify_jwt = false
+
 [functions.integration-availability]
 verify_jwt = false
 
-# Service engine: JWT validated in _shared/service-auth.ts (requireServiceUser).
-[functions.service-job-router]
-verify_jwt = false
-
-[functions.service-intake]
-verify_jwt = false
-
-[functions.service-knowledge-capture]
-verify_jwt = false
-
-[functions.service-parts-planner]
-verify_jwt = false
-
-[functions.service-quote-engine]
-verify_jwt = false
-
-[functions.service-notifications]
-verify_jwt = false
-
-[functions.service-completion-feedback]
-verify_jwt = false
-
-[functions.service-haul-router]
-verify_jwt = false
-
-[functions.service-tat-monitor]
-verify_jwt = false
-
-[functions.service-stage-enforcer]
-verify_jwt = false
-
-[functions.service-parts-manager]
-verify_jwt = false
-
-[functions.service-billing-post]
-verify_jwt = false
-
-[functions.service-vendor-escalator]
-verify_jwt = false
-
-[functions.service-invoice-generator]
-verify_jwt = false
-
-[functions.service-jobcode-learner]
-verify_jwt = false
-
-[functions.service-jobcode-suggestion-merge]
-verify_jwt = false
-
-[functions.service-scheduler]
-verify_jwt = false
-
-[functions.service-calendar-slots]
-verify_jwt = false
-
-[functions.service-upsell-scanner]
-verify_jwt = false
-
-[functions.service-public-job-status]
-verify_jwt = false
-
-[functions.service-vendor-inbound]
-verify_jwt = false
-
-[functions.service-customer-notify-dispatch]
-verify_jwt = false
-
-[functions.portal-api]
-verify_jwt = false
-
-# Email to portal customer when parts order ships (JWT validated in function).
-[functions.parts-order-customer-notify]
-verify_jwt = false
-
-# Internal/counter parts orders (JWT validated in function).
-[functions.parts-order-manager]
-verify_jwt = false
-
-# Reorder intelligence cron (service_role auth).
-[functions.parts-reorder-compute]
-verify_jwt = false
-
-# Demand forecast engine cron (service_role auth).
-[functions.parts-demand-forecast]
-verify_jwt = false
-
-# Autonomous replenishment engine cron (service_role auth).
-[functions.parts-auto-replenish]
-verify_jwt = false
-
-# Voice-to-parts-order (JWT validated in function).
-[functions.voice-to-parts-order]
-verify_jwt = false
-
-# Photo-based part identification (JWT validated in function).
-[functions.parts-identify-photo]
-verify_jwt = false
-
-# Predictive failure parts kitting cron (service_role auth).
-[functions.parts-predictive-kitter]
-verify_jwt = false
-
-# Network optimizer + analytics cron (service_role auth).
-[functions.parts-network-optimizer]
-verify_jwt = false
-
-# Wave 6.11 Flare submit endpoint. Validates the JWT internally via
-# supabase.auth.getUser() so the gateway-level verify must be disabled
-# (otherwise the gateway 401s before the function's CORS handler runs and
-# the browser sees "Load failed" with no actionable error).
-[functions.flare-submit]
-verify_jwt = false
-
-# Wave 6.11 Flare close-the-loop notifier. Same internal-auth pattern as
-# flare-submit; gateway verify disabled so the function-level CORS preflight
-# handler can return properly.
-[functions.flare-notify-fixed]
-verify_jwt = false
-
-# Wave 7 Iron Companion functions. ALL use requireServiceUser() internally
-# (Bearer + supabase.auth.getUser(token)), so gateway verify_jwt MUST be off
-# — otherwise the gateway 401s clients with stale/expiring tokens before the
-# function ever runs, and the operator sees a useless "Invalid JWT" with no
-# context. Same pattern as flare-submit + integration-availability.
-[functions.iron-orchestrator]
-verify_jwt = false
-
-[functions.iron-knowledge]
-verify_jwt = false
-
-[functions.iron-execute-flow-step]
-verify_jwt = false
-
-[functions.iron-undo-flow-run]
-verify_jwt = false
-
-[functions.iron-transcribe]
-verify_jwt = false
-
-[functions.iron-tts]
-verify_jwt = false
-
-# QRM Phase 0 publishers + edge functions. ALL validate auth internally
-# via _shared/cron-auth.ts (service-role / x-internal-service-secret) or
-# _shared/dge-auth.ts (user JWT for manual manager invocation). Gateway
-# verify_jwt MUST be off so the modern pg_cron pattern (migration 212)
-# can call them with `x-internal-service-secret` instead of a JWT —
-# otherwise the gateway 401s before the function's auth helper runs.
-[functions.anomaly-scan]
-verify_jwt = false
-
-[functions.follow-up-engine]
-verify_jwt = false
-
-[functions.nudge-scheduler]
-verify_jwt = false
-
-[functions.deal-timing-scan]
-verify_jwt = false
-
-# QRM Command Center: validates user JWT inside the function via
-# callerClient.auth.getUser(token). Same gateway-off pattern as the
-# Iron Companion functions above for the same reason.
-[functions.qrm-command-center]
-verify_jwt = false
-
-# QRM Prediction Scorer: nightly grader, service-role only.
-[functions.qrm-prediction-scorer]
-verify_jwt = false
-
-# QRM Honesty Calibration nightly scan (Phase 0 P0.6). Validates auth
-# internally via _shared/cron-auth.ts; gateway verify_jwt off so pg_cron
-# (migration 214) can call it with x-internal-service-secret.
-[functions.qrm-honesty-scan]
-verify_jwt = false
-
-# QRM Prediction Trace — user-facing trace viewer (Phase 0 P0.8).
-# JWT validated inside the function; gateway verify_jwt off for consistency
-# with the other QRM functions.
-[functions.qrm-prediction-trace]
-verify_jwt = false
+[functions.integration-test-connection]
+verify_jwt = true
