@@ -8,7 +8,7 @@ revoke select (
   daily_rental_rate,
   weekly_rental_rate,
   monthly_rental_rate
-) on table public.crm_equipment from authenticated;
+) on table public.qrm_equipment from authenticated;
 
 grant select (
   purchase_price,
@@ -17,26 +17,26 @@ grant select (
   daily_rental_rate,
   weekly_rental_rate,
   monthly_rental_rate
-) on table public.crm_equipment to service_role;
+) on table public.qrm_equipment to service_role;
 
-drop policy if exists "crm_equipment_rep_scope" on public.crm_equipment;
+drop policy if exists "crm_equipment_rep_scope" on public.qrm_equipment;
 
 create policy "crm_equipment_rep_select"
-  on public.crm_equipment for select
+  on public.qrm_equipment for select
   using (
     public.get_my_role() = 'rep'
     and public.crm_rep_can_access_company(company_id)
   );
 
 create policy "crm_equipment_rep_insert"
-  on public.crm_equipment for insert
+  on public.qrm_equipment for insert
   with check (
     public.get_my_role() = 'rep'
     and public.crm_rep_can_access_company(company_id)
   );
 
 create policy "crm_equipment_rep_update"
-  on public.crm_equipment for update
+  on public.qrm_equipment for update
   using (
     public.get_my_role() = 'rep'
     and public.crm_rep_can_access_company(company_id)
@@ -47,7 +47,7 @@ create policy "crm_equipment_rep_update"
   );
 
 create policy "crm_equipment_rep_delete"
-  on public.crm_equipment for delete
+  on public.qrm_equipment for delete
   using (
     public.get_my_role() = 'rep'
     and public.crm_rep_can_access_company(company_id)
@@ -90,7 +90,7 @@ $$;
 
 revoke execute on function public.crm_guard_rep_equipment_financial_write() from public;
 
-drop trigger if exists guard_rep_equipment_financial_write on public.crm_equipment;
+drop trigger if exists guard_rep_equipment_financial_write on public.qrm_equipment;
 create trigger guard_rep_equipment_financial_write
-  before insert or update on public.crm_equipment
+  before insert or update on public.qrm_equipment
   for each row execute function public.crm_guard_rep_equipment_financial_write();

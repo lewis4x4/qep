@@ -2,14 +2,14 @@
 -- can archive templates while reps stay limited to active rows and archived
 -- templates remain immutable.
 
-drop policy if exists "crm_activity_templates_select_workspace" on public.crm_activity_templates;
-drop policy if exists "crm_activity_templates_select_rep_workspace" on public.crm_activity_templates;
-drop policy if exists "crm_activity_templates_select_elevated_workspace" on public.crm_activity_templates;
-drop policy if exists "crm_activity_templates_elevated_update_workspace" on public.crm_activity_templates;
-drop policy if exists "crm_activity_templates_elevated_archive_workspace" on public.crm_activity_templates;
+drop policy if exists "crm_activity_templates_select_workspace" on public.qrm_activity_templates;
+drop policy if exists "crm_activity_templates_select_rep_workspace" on public.qrm_activity_templates;
+drop policy if exists "crm_activity_templates_select_elevated_workspace" on public.qrm_activity_templates;
+drop policy if exists "crm_activity_templates_elevated_update_workspace" on public.qrm_activity_templates;
+drop policy if exists "crm_activity_templates_elevated_archive_workspace" on public.qrm_activity_templates;
 
 create policy "crm_activity_templates_select_rep_workspace"
-  on public.crm_activity_templates
+  on public.qrm_activity_templates
   for select
   using (
     public.get_my_role() = 'rep'
@@ -18,7 +18,7 @@ create policy "crm_activity_templates_select_rep_workspace"
   );
 
 create policy "crm_activity_templates_select_elevated_workspace"
-  on public.crm_activity_templates
+  on public.qrm_activity_templates
   for select
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -26,7 +26,7 @@ create policy "crm_activity_templates_select_elevated_workspace"
   );
 
 create policy "crm_activity_templates_elevated_update_workspace"
-  on public.crm_activity_templates
+  on public.qrm_activity_templates
   for update
   using (
     public.get_my_role() in ('admin', 'manager', 'owner')
@@ -41,7 +41,7 @@ create policy "crm_activity_templates_elevated_update_workspace"
     )
   );
 
-create or replace function public.crm_activity_templates_block_archived_updates()
+create or replace function public.qrm_activity_templates_block_archived_updates()
 returns trigger
 language plpgsql
 set search_path = ''
@@ -56,19 +56,19 @@ begin
 end;
 $$;
 
-drop trigger if exists crm_activity_templates_block_archived_updates on public.crm_activity_templates;
+drop trigger if exists crm_activity_templates_block_archived_updates on public.qrm_activity_templates;
 create trigger crm_activity_templates_block_archived_updates
-  before update on public.crm_activity_templates
-  for each row execute function public.crm_activity_templates_block_archived_updates();
+  before update on public.qrm_activity_templates
+  for each row execute function public.qrm_activity_templates_block_archived_updates();
 
 -- Rollback (do not execute automatically)
--- drop trigger if exists crm_activity_templates_block_archived_updates on public.crm_activity_templates;
--- drop function if exists public.crm_activity_templates_block_archived_updates();
--- drop policy if exists "crm_activity_templates_elevated_update_workspace" on public.crm_activity_templates;
--- drop policy if exists "crm_activity_templates_select_elevated_workspace" on public.crm_activity_templates;
--- drop policy if exists "crm_activity_templates_select_rep_workspace" on public.crm_activity_templates;
+-- drop trigger if exists crm_activity_templates_block_archived_updates on public.qrm_activity_templates;
+-- drop function if exists public.qrm_activity_templates_block_archived_updates();
+-- drop policy if exists "crm_activity_templates_elevated_update_workspace" on public.qrm_activity_templates;
+-- drop policy if exists "crm_activity_templates_select_elevated_workspace" on public.qrm_activity_templates;
+-- drop policy if exists "crm_activity_templates_select_rep_workspace" on public.qrm_activity_templates;
 -- create policy "crm_activity_templates_select_workspace"
---   on public.crm_activity_templates
+--   on public.qrm_activity_templates
 --   for select
 --   using (
 --     public.get_my_role() in ('rep', 'admin', 'manager', 'owner')
@@ -76,7 +76,7 @@ create trigger crm_activity_templates_block_archived_updates
 --     and deleted_at is null
 --   );
 -- create policy "crm_activity_templates_elevated_update_workspace"
---   on public.crm_activity_templates
+--   on public.qrm_activity_templates
 --   for update
 --   using (
 --     public.get_my_role() in ('admin', 'manager', 'owner')
