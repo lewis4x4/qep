@@ -39,22 +39,22 @@ interface QuickAction {
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
-    label: "Knowledge Chat",
-    description: "Ask questions about your equipment catalog and company knowledge base.",
+    label: "QRM Chat",
+    description: "Ask QRM questions about accounts, deals, field signals, and operating context.",
     icon: MessageSquare,
     href: "/chat",
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
     label: "Voice Capture",
-    description: "Record field visits and automatically extract deal data.",
+    description: "Record field visits and turn the signal into usable QRM follow-through.",
     icon: Mic,
     href: "/voice",
     roles: ["rep", "admin", "manager", "owner"],
   },
   {
     label: "Quote Builder",
-    description: "Build and export professional equipment quotes.",
+    description: "Build quote-ready proposals with QRM context and next-move clarity.",
     icon: FileText,
     href: "/quote",
     roles: ["rep", "manager", "owner"],
@@ -219,7 +219,41 @@ export function DashboardPage({ userId, userRole, userEmail, userName }: Dashboa
         <h1 className="text-2xl font-bold text-foreground">
           {greeting}, {firstName}.
         </h1>
-        <p className="text-muted-foreground mt-1">Here&apos;s your overview.</p>
+        <p className="text-muted-foreground mt-1">QRM home for attention, signal, and the next move.</p>
+      </div>
+
+      <div className="mb-8 grid gap-4 lg:grid-cols-3">
+        <Card className="border-border bg-card lg:col-span-2">
+          <CardContent className="pt-5 pb-4 space-y-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Attention</p>
+              <p className="mt-1 text-sm text-foreground">
+                {showCommandCenter
+                  ? "Use the command surface to spot pressured deals, fresh field notes, and stalled follow-up."
+                  : "Check fresh uploads, team activity, and voice capture volume before diving deeper."}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Signal</p>
+              <p className="mt-1 text-sm text-foreground">
+                Voice captures and quote work should feed the same operating rhythm, not live in separate silos.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+              <p className="mt-1 text-sm text-foreground">
+                Start with the surface that reduces uncertainty fastest, then move the deal or task forward immediately.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="pt-5 pb-4 space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Operating focus</p>
+            <p className="text-sm text-foreground">QRM should stay calm on the surface and sharp underneath.</p>
+            <p className="text-xs text-muted-foreground">Keep field signal, quote readiness, and action surfaces moving as one system.</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Stat Cards */}
@@ -241,7 +275,7 @@ export function DashboardPage({ userId, userRole, userEmail, userName }: Dashboa
 
       {/* Quick Actions */}
       <div className="mb-10">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Command Surfaces</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {visibleActions.map((action) => (
             <Card key={action.href} className="flex flex-col">

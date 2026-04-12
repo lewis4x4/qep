@@ -905,6 +905,12 @@ function FieldIntelligenceSection({
                       "{snippet}"
                     </p>
                   )}
+                  <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Next move</p>
+                  <p className="mt-1 text-xs text-slate-300 line-clamp-2">
+                    {vc.manager_attention
+                      ? "Manager review should happen before this signal goes stale."
+                      : "Push this field note into the right deal, follow-up, or quote motion now."}
+                  </p>
                 </div>
                 <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
                   {timeAgo(vc.created_at)}
