@@ -132,6 +132,25 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
     return (enrollmentsQuery.data ?? []).filter((enrollment) => enrollment.sequenceId === selectedSequenceId);
   }, [enrollmentsQuery.data, selectedSequenceId]);
 
+  const activeSequenceCount = sequences.filter((sequence) => sequence.isActive).length;
+  const pausedEnrollmentCount = selectedEnrollments.filter((enrollment) => enrollment.status === "paused").length;
+  const overdueEnrollmentCount = selectedEnrollments.filter((enrollment) => {
+    if (!enrollment.nextStepDueAt) return false;
+    const dueAt = Date.parse(enrollment.nextStepDueAt);
+    return Number.isFinite(dueAt) && dueAt < Date.now() && enrollment.status === "active";
+  }).length;
+  const sequencesWhatMattersNow = sequencesQuery.isLoading
+    ? "Sequence coverage is loading."
+    : `${activeSequenceCount} active sequence${activeSequenceCount === 1 ? "" : "s"} and ${selectedEnrollments.length} visible enrollment${selectedEnrollments.length === 1 ? "" : "s"} are in play.`;
+  const sequencesNextMove = overdueEnrollmentCount > 0
+    ? `Review ${overdueEnrollmentCount} overdue enrollment${overdueEnrollmentCount === 1 ? "" : "s"} before the next scheduler pass.`
+    : pausedEnrollmentCount > 0
+      ? `Decide whether ${pausedEnrollmentCount} paused enrollment${pausedEnrollmentCount === 1 ? "" : "s"} should resume or stay parked.`
+      : "Tighten the highest-value active sequence so the next trigger stage produces one obvious move.";
+  const sequencesRiskIfIgnored = overdueEnrollmentCount > 0
+    ? "Overdue enrollments can make automation look active while deals quietly stall."
+    : "If sequence coverage drifts, follow-up quality becomes manual and inconsistent again.";
+
   function resetEditor(sequence?: QrmFollowUpSequence | null): void {
     setEditor(sequence ? toEditorState(sequence) : EMPTY_EDITOR);
     setSelectedSequenceId(sequence?.id ?? null);
@@ -222,6 +241,21 @@ export function QrmFollowUpSequencesPage({ userId }: QrmFollowUpSequencesPagePro
         title="QRM Sequences"
         subtitle="Own the follow-up automation that keeps deals moving after the first quote goes out."
       />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+          <p className="mt-2 text-sm text-foreground">{sequencesWhatMattersNow}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+          <p className="mt-2 text-sm text-foreground">{sequencesNextMove}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+          <p className="mt-2 text-sm text-foreground">{sequencesRiskIfIgnored}</p>
+        </Card>
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="space-y-4 rounded-2xl border border-border p-4 shadow-sm">
