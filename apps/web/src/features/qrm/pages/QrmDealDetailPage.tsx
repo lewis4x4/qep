@@ -224,6 +224,21 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   }
 
   const dealName = dealQueryData?.name ?? "deal";
+  const dealWhatMattersNow = !dealQueryData
+    ? "Deal context is loading."
+    : dealQueryData.nextFollowUpAt
+      ? `Next follow-up is set for ${formatTimestamp(dealQueryData.nextFollowUpAt)}.`
+      : "No follow-up is set on this deal."
+  const dealNextMove = !dealQueryData
+    ? "Wait for the deal to load."
+    : dealQueryData.nextFollowUpAt
+      ? "Execute the scheduled touch and move the deal forward based on the latest signal."
+      : "Set the next follow-up now so this deal has a clear owner action."
+  const dealRiskIfIgnored = !dealQueryData
+    ? "No risk available yet."
+    : dealQueryData.nextFollowUpAt
+      ? "A dated follow-up still fails if nobody acts on it."
+      : "Without a next follow-up, this deal can stall silently."
   const isLoading = compositeQuery.isLoading;
   const hasError = compositeQuery.isError;
   const hasDeal = Boolean(dealQueryData);
