@@ -8,6 +8,7 @@ import {
   Moon,
   Sun,
   PanelTopOpen,
+  Bug,
 } from "lucide-react";
 import { BRAND_NAME } from "@/components/BrandLogo";
 import {
@@ -692,6 +693,16 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <ThemeAppearanceSubmenu />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => {
+                  const w = window as Window & { flare?: (sev?: string) => void };
+                  if (typeof w.flare === "function") w.flare("bug");
+                }}
+              >
+                <Bug className="w-4 h-4 mr-2" aria-hidden="true" />
+                Report a Bug
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"

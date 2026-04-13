@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, User, LogOut, Moon, Sun, Monitor } from "lucide-react";
+import { Search, User, LogOut, Moon, Sun, Monitor, Bug } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SalesGlobalSearch } from "./SalesGlobalSearch";
@@ -104,6 +104,18 @@ export function SalesTopHeader() {
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              <DropdownMenuItem
+                onClick={() => {
+                  // Trigger the Flare bug reporter (same as Ctrl+Shift+B)
+                  const w = window as Window & { flare?: (sev?: string) => void };
+                  if (typeof w.flare === "function") {
+                    w.flare("bug");
+                  }
+                }}
+              >
+                <Bug className="w-4 h-4 mr-2" />
+                Report a Bug
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => supabase.auth.signOut()}
