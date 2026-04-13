@@ -131,6 +131,9 @@ function canManageIntegrations(role) {
 function isOwner(role) {
   return role === "owner";
 }
+function isAdmin(role) {
+  return role === "admin" || role === "owner";
+}
 function deniedResponse({ ch, route, action, callerUserId, reasonCode, status, error }) {
   emitAuthzDenialAuditEvent({
     route,
@@ -538,6 +541,29 @@ Deno.serve(async (req)=>{
             ...ch,
             "Content-Type": "application/json"
           }
+        });
+      }
+      // ── UPDATE DEPARTMENT ─────────────────────────────────────────────
+      if (body.action === "update-department") {
+        if (!isOwner(caller.role) && !isAdmin(caller.role)) {
+          return deniedResponse({
+            ch, route, action: body.action, callerUserId: caller.id,
+            reasonCode: "elevated_role_required_for_update_department",
+            status: 403, error: "Only owners and admins can change departments"
+          });
+        }
+        if (!body.userId || body.iron_role === undefined) {
+          return new Response(JSON.stringify({ error: "userId and iron_role are required" }), {
+            status: 400, headers: { ...ch, "Content-Type": "application/json" }
+          });
+        }
+        const { error: updateErr } = await adminClient.from("profiles").update({
+          iron_role: body.iron_role || null,
+          updated_at: new Date().toISOString()
+        }).eq("id", body.userId);
+        if (updateErr) throw updateErr;
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200, headers: { ...ch, "Content-Type": "application/json" }
         });
       }
       // ── BACKFILL PROFILE ────────────────────────────────────────────────

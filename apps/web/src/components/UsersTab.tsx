@@ -130,6 +130,8 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   const [roleDialog, setRoleDialog] = useState<UserRecord | null>(null);
   const [pendingRole, setPendingRole] = useState<UserRole>("rep");
   const [deactivateTarget, setDeactivateTarget] = useState<UserRecord | null>(null);
+  const [deptDialog, setDeptDialog] = useState<UserRecord | null>(null);
+  const [pendingDept, setPendingDept] = useState<string>("");
 
   const isOwner = callerRole === "owner";
   const inviteRoleOptions: UserRole[] = isOwner ? ROLE_OPTIONS : ["rep"];
@@ -248,6 +250,26 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
     } catch (err) {
       toast({
         title: "Role update failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function confirmDeptChange(): Promise<void> {
+    if (!deptDialog) return;
+    const userId = deptDialog.id;
+    setDeptDialog(null);
+    setPendingAction(userId + "-dept");
+    try {
+      await callAdminUsers({ action: "update-department", userId, iron_role: pendingDept });
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, iron_role: pendingDept || null } : u)));
+      toast({ title: "Department updated" });
+    } catch (err) {
+      toast({
+        title: "Department update failed",
         description: err instanceof Error ? err.message : "Unknown error",
         variant: "destructive",
       });
@@ -714,6 +736,14 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                               >
                                 Change Role
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setPendingDept(user.iron_role ?? "");
+                                  setDeptDialog(user);
+                                }}
+                              >
+                                Change Department
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => setDeactivateTarget(user)}
@@ -803,6 +833,42 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
               Cancel
             </Button>
             <Button onClick={() => void confirmRoleChange()}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Department Change Dialog */}
+      <Dialog open={!!deptDialog} onOpenChange={(open) => !open && setDeptDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Department</DialogTitle>
+            <DialogDescription>
+              Update the department for {deptDialog?.full_name ?? deptDialog?.email ?? "this user"}.
+              This determines which companion they see on login.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="dept-select" className="text-sm mb-1.5 block">
+              Department
+            </Label>
+            <select
+              id="dept-select"
+              value={pendingDept}
+              onChange={(e) => setPendingDept(e.target.value)}
+              className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-qep-orange"
+            >
+              <option value="">— None</option>
+              <option value="iron_advisor">Sales</option>
+              <option value="iron_woman">Parts</option>
+              <option value="iron_man">Service</option>
+              <option value="iron_manager">Management</option>
+            </select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeptDialog(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmDeptChange()}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
