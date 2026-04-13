@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
+import { rentalOpsApi } from "../lib/rental-ops-api";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import {
@@ -51,7 +52,6 @@ interface TrafficRow {
 
 interface PortalCustomerRow {
   id: string;
-  crm_company_id: string | null;
   first_name: string;
   last_name: string;
 }
@@ -60,6 +60,7 @@ interface RentalContractApprovalRow {
   id: string;
   portal_customer_id: string;
   equipment_id: string | null;
+  assignment_status: "pending_assignment" | "assigned" | null;
   requested_category: string | null;
   requested_make: string | null;
   requested_model: string | null;
@@ -170,7 +171,7 @@ export function RentalCommandCenterPage() {
       const [contractsResult, extensionsResult, portalCustomersResult, equipmentResult, branchResult] = await Promise.all([
         supabase
           .from("rental_contracts")
-          .select("id, portal_customer_id, equipment_id, requested_category, requested_make, requested_model, branch_id, requested_start_date, requested_end_date, status, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, customer_notes, dealer_response")
+          .select("id, portal_customer_id, equipment_id, assignment_status, requested_category, requested_make, requested_model, branch_id, requested_start_date, requested_end_date, status, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, customer_notes, dealer_response")
           .in("status", ["submitted", "reviewing", "quoted", "approved", "awaiting_payment"])
           .order("created_at", { ascending: false }),
         supabase
@@ -180,7 +181,7 @@ export function RentalCommandCenterPage() {
           .order("created_at", { ascending: false }),
         supabase
           .from("portal_customers")
-          .select("id, crm_company_id, first_name, last_name")
+          .select("id, first_name, last_name")
           .limit(200),
         supabase
           .from("crm_equipment")
@@ -220,61 +221,13 @@ export function RentalCommandCenterPage() {
       dealerResponse: string | null;
       depositAmount: number;
     }) => {
-      const { contract, equipmentId, branchId, dealerResponse, depositAmount } = payload;
-      const customer = contractQueueQuery.data?.customers.find((item) => item.id === contract.portal_customer_id);
-      if (!customer) throw new Error("Portal customer not found for this rental request.");
-
-      let depositInvoiceId: string | null = null;
-      let status: string = "active";
-      let depositStatus: string | null = "not_required";
-
-      if (depositAmount > 0) {
-        const invoiceNumber = `RENT-${Date.now()}`;
-        const { data: invoice, error: invoiceError } = await supabase
-          .from("customer_invoices")
-          .insert({
-            portal_customer_id: customer.id,
-            crm_company_id: customer.crm_company_id,
-            invoice_number: invoiceNumber,
-            due_date: new Date().toISOString().slice(0, 10),
-            description: "Rental deposit",
-            amount: depositAmount,
-            total: depositAmount,
-            status: "pending",
-          })
-          .select()
-          .single();
-        if (invoiceError || !invoice?.id) throw new Error(invoiceError?.message ?? "Failed to create rental deposit invoice.");
-        depositInvoiceId = invoice.id;
-        status = "awaiting_payment";
-        depositStatus = "pending";
-        await supabase.from("customer_invoice_line_items").insert({
-          invoice_id: invoice.id,
-          description: "Rental deposit",
-          quantity: 1,
-          unit_price: depositAmount,
-        });
-      }
-
-      const { error } = await supabase
-        .from("rental_contracts")
-        .update({
-          equipment_id: equipmentId,
-          branch_id: branchId,
-          approved_start_date: contract.requested_start_date,
-          approved_end_date: contract.requested_end_date,
-          agreed_daily_rate: contract.estimate_daily_rate,
-          agreed_weekly_rate: contract.estimate_weekly_rate,
-          agreed_monthly_rate: contract.estimate_monthly_rate,
-          deposit_required: depositAmount > 0,
-          deposit_amount: depositAmount > 0 ? depositAmount : null,
-          deposit_invoice_id: depositInvoiceId,
-          deposit_status: depositStatus,
-          dealer_response: dealerResponse,
-          status,
-        })
-        .eq("id", contract.id);
-      if (error) throw new Error(error.message);
+      await rentalOpsApi.approveBooking({
+        contract_id: payload.contract.id,
+        equipment_id: payload.equipmentId,
+        branch_id: payload.branchId,
+        dealer_response: payload.dealerResponse,
+        deposit_amount: payload.depositAmount,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
@@ -285,11 +238,10 @@ export function RentalCommandCenterPage() {
 
   const declineBookingMutation = useMutation({
     mutationFn: async (payload: { id: string; dealerResponse: string | null }) => {
-      const { error } = await supabase
-        .from("rental_contracts")
-        .update({ status: "declined", dealer_response: payload.dealerResponse })
-        .eq("id", payload.id);
-      if (error) throw new Error(error.message);
+      await rentalOpsApi.declineBooking({
+        contract_id: payload.id,
+        dealer_response: payload.dealerResponse,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
@@ -299,43 +251,11 @@ export function RentalCommandCenterPage() {
 
   const approveExtensionMutation = useMutation({
     mutationFn: async (payload: { extension: RentalExtensionApprovalRow; dealerResponse: string | null; additionalCharge: number }) => {
-      const { extension, dealerResponse, additionalCharge } = payload;
-      let paymentInvoiceId: string | null = null;
-      let paymentStatus: string | null = "not_required";
-      if (additionalCharge > 0) {
-        const { data: invoice, error: invoiceError } = await supabase
-          .from("customer_invoices")
-          .insert({
-            invoice_number: `EXT-${Date.now()}`,
-            due_date: new Date().toISOString().slice(0, 10),
-            description: "Rental extension charge",
-            amount: additionalCharge,
-            total: additionalCharge,
-            status: "pending",
-          })
-          .select()
-          .single();
-        if (invoiceError || !invoice?.id) throw new Error(invoiceError?.message ?? "Failed to create extension invoice.");
-        paymentInvoiceId = invoice.id;
-        paymentStatus = "pending";
-      } else {
-        await supabase
-          .from("rental_contracts")
-          .update({ approved_end_date: extension.requested_end_date, requested_end_date: extension.requested_end_date })
-          .eq("id", extension.rental_contract_id);
-      }
-      const { error } = await supabase
-        .from("rental_contract_extensions")
-        .update({
-          status: "approved",
-          approved_end_date: extension.requested_end_date,
-          dealer_response: dealerResponse,
-          additional_charge: additionalCharge > 0 ? additionalCharge : null,
-          payment_invoice_id: paymentInvoiceId,
-          payment_status: paymentStatus,
-        })
-        .eq("id", extension.id);
-      if (error) throw new Error(error.message);
+      await rentalOpsApi.approveExtension({
+        extension_id: payload.extension.id,
+        dealer_response: payload.dealerResponse,
+        additional_charge: payload.additionalCharge,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
@@ -346,11 +266,10 @@ export function RentalCommandCenterPage() {
 
   const declineExtensionMutation = useMutation({
     mutationFn: async (payload: { id: string; dealerResponse: string | null }) => {
-      const { error } = await supabase
-        .from("rental_contract_extensions")
-        .update({ status: "declined", dealer_response: payload.dealerResponse })
-        .eq("id", payload.id);
-      if (error) throw new Error(error.message);
+      await rentalOpsApi.declineExtension({
+        extension_id: payload.id,
+        dealer_response: payload.dealerResponse,
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["qrm", "rental-contract-queue"] });
@@ -414,6 +333,11 @@ export function RentalCommandCenterPage() {
                             {" · "}
                             {contract.requested_start_date} → {contract.requested_end_date}
                           </p>
+                          {contract.assignment_status === "pending_assignment" ? (
+                            <p className="mt-2 text-xs font-medium text-amber-300">
+                              Unit assignment is still pending. This booking cannot move forward until a specific rental unit is assigned.
+                            </p>
+                          ) : null}
                           {contract.customer_notes ? <p className="mt-2 text-xs text-muted-foreground">{contract.customer_notes}</p> : null}
                         </div>
                         <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">

@@ -9,6 +9,10 @@ import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts"
 import { suggestedFollowUpHintLine } from "../_shared/crm-follow-up-suggestions.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
+  isSensitiveLookupQuery,
+  SENSITIVE_LOOKUP_RESPONSE,
+} from "../_shared/chat-security.ts";
+import {
   buildEvidenceExcerpt,
   rerankKbEvidence,
   type KbEvidenceRow,
@@ -201,6 +205,48 @@ function jsonError(
       },
     },
   );
+}
+
+function streamChatResponse(
+  traceId: string,
+  headers: Record<string, string>,
+  payload: {
+    text: string;
+    sources?: SourcePayload[];
+    meta?: Record<string, unknown>;
+  },
+) {
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    start(controller) {
+      if (payload.meta) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ meta: payload.meta })}\n\n`),
+        );
+      }
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ text: payload.text })}\n\n`),
+      );
+      if ((payload.sources?.length ?? 0) > 0) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ sources: payload.sources })}\n\n`),
+        );
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(readable, {
+    headers: {
+      ...headers,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "X-Trace-Id": traceId,
+      "X-QEP-Chat-Revision": CHAT_EDGE_REVISION,
+    },
+  });
 }
 
 function cleanString(value: unknown): string | null {
@@ -2222,6 +2268,25 @@ Deno.serve(async (req) => {
     const MAX_HISTORY_ITEMS = 20;
     if (typeof rawMessage !== "string" || rawMessage.length > MAX_MESSAGE_LENGTH || !rawMessage.trim()) {
       return jsonError(traceId, 400, "INVALID_MESSAGE", "Message is required.", ch);
+    }
+
+    if (isSensitiveLookupQuery(rawMessage)) {
+      return streamChatResponse(traceId, ch, {
+        text: SENSITIVE_LOOKUP_RESPONSE,
+        meta: {
+          trace_id: traceId,
+          retrieval: {
+            embedding_ok: false,
+            embedding_degraded: false,
+            document_evidence_count: 0,
+            crm_evidence_count: 0,
+            service_evidence_count: 0,
+            tool_rounds_used: 0,
+            empty_evidence: true,
+            latency_ms: 0,
+          },
+        },
+      });
     }
 
     const validatedHistory: ChatMessage[] = [];

@@ -143,6 +143,7 @@ interface RentalContractRow {
   id: string;
   portal_customer_id: string;
   equipment_id: string | null;
+  assignment_status: "pending_assignment" | "assigned" | null;
   requested_category: string | null;
   requested_make: string | null;
   requested_model: string | null;
@@ -640,6 +641,121 @@ function resolveRentalPricingEstimate(input: {
     weeklyRate: input.equipmentRates?.weekly ?? null,
     monthlyRate: input.equipmentRates?.monthly ?? null,
     sourceLabel: "equipment base rate",
+  };
+}
+
+function normalizeRentalPaymentStatus(rawStatus: string | null | undefined): "not_required" | "pending" | "processing" | "paid" | "failed" {
+  switch ((rawStatus ?? "").toLowerCase()) {
+    case "paid":
+      return "paid";
+    case "processing":
+    case "partial":
+    case "viewed":
+      return "processing";
+    case "failed":
+    case "void":
+    case "overdue":
+      return "failed";
+    case "pending":
+    case "sent":
+      return "pending";
+    default:
+      return "not_required";
+  }
+}
+
+function buildRentalPaymentStatusView(input: {
+  kind: "deposit" | "extension";
+  rawStatus: string | null | undefined;
+  amount: number | null;
+  invoiceId: string | null;
+  companyId: string | null;
+}): {
+  kind: "deposit" | "extension";
+  status: "not_required" | "pending" | "processing" | "paid" | "failed";
+  amount: number | null;
+  invoiceId: string | null;
+  companyId: string | null;
+  headline: string;
+  detail: string;
+  canPayNow: boolean;
+  canFinalize: boolean;
+} | null {
+  const kindLabel = input.kind === "deposit" ? "deposit" : "extension";
+  const status = normalizeRentalPaymentStatus(input.rawStatus);
+
+  if (status === "not_required" && !input.invoiceId && !input.amount) {
+    return null;
+  }
+
+  if (status === "paid") {
+    return {
+      kind: input.kind,
+      status,
+      amount: input.amount,
+      invoiceId: input.invoiceId,
+      companyId: input.companyId,
+      headline: input.kind === "deposit" ? "Deposit received" : "Extension payment received",
+      detail: input.kind === "deposit"
+        ? "The dealership has a paid deposit on file. Finalize the rental to activate the contract."
+        : "The approved extension payment is settled. Finalize the extension to apply the new rental end date.",
+      canPayNow: false,
+      canFinalize: true,
+    };
+  }
+
+  if (status === "processing") {
+    return {
+      kind: input.kind,
+      status,
+      amount: input.amount,
+      invoiceId: input.invoiceId,
+      companyId: input.companyId,
+      headline: input.kind === "deposit" ? "Deposit processing" : "Extension payment processing",
+      detail: "The payment provider is still processing this checkout. Finalize once the portal shows a successful settlement.",
+      canPayNow: Boolean(input.invoiceId && input.companyId && (input.amount ?? 0) > 0),
+      canFinalize: true,
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      kind: input.kind,
+      status,
+      amount: input.amount,
+      invoiceId: input.invoiceId,
+      companyId: input.companyId,
+      headline: input.kind === "deposit" ? "Deposit payment needs attention" : "Extension payment needs attention",
+      detail: `The ${kindLabel} payment did not complete. Retry checkout or contact the dealership team if the failure persists.`,
+      canPayNow: Boolean(input.invoiceId && input.companyId && (input.amount ?? 0) > 0),
+      canFinalize: false,
+    };
+  }
+
+  if (status === "pending") {
+    return {
+      kind: input.kind,
+      status,
+      amount: input.amount,
+      invoiceId: input.invoiceId,
+      companyId: input.companyId,
+      headline: input.kind === "deposit" ? "Deposit ready for checkout" : "Extension payment ready for checkout",
+      detail: `The dealership approved this ${kindLabel} requirement. Complete checkout, then finalize here once payment clears.`,
+      canPayNow: Boolean(input.invoiceId && input.companyId && (input.amount ?? 0) > 0),
+      canFinalize: true,
+    };
+  }
+
+  return {
+    kind: input.kind,
+    status,
+    amount: input.amount,
+    invoiceId: input.invoiceId,
+    companyId: input.companyId,
+    headline: input.kind === "deposit" ? "No deposit required" : "No extension payment required",
+    detail: `No customer payment is required before the ${kindLabel} can move forward.`,
+    canPayNow: false,
+    canFinalize: false,
   };
 }
 
@@ -2101,6 +2217,7 @@ Deno.serve(async (req) => {
             admin
               .from("crm_equipment")
               .select("id, name, make, model, year, serial_number, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
+              .eq("workspace_id", portalWorkspaceId)
               .eq("ownership", "rental_fleet")
               .eq("availability", "available")
               .is("deleted_at", null)
@@ -2220,6 +2337,7 @@ Deno.serve(async (req) => {
               id: contract.id,
               requestType: contract.request_type,
               status: contract.status,
+              assignmentStatus: contract.assignment_status ?? (contract.equipment_id ? "assigned" : "pending_assignment"),
               deliveryMode: contract.delivery_mode,
               branchId: contract.branch_id,
               branchLabel: contract.branch_id ? branchById.get(contract.branch_id) ?? null : null,
@@ -2253,6 +2371,15 @@ Deno.serve(async (req) => {
                   sourceLabel: "approved contract rates",
                 }
                 : null,
+              paymentStatusView: buildRentalPaymentStatusView({
+                kind: "deposit",
+                rawStatus: contract.deposit_invoice_id
+                  ? invoiceStatusById.get(contract.deposit_invoice_id) ?? contract.deposit_status
+                  : contract.deposit_status,
+                amount: contract.deposit_amount,
+                invoiceId: contract.deposit_invoice_id,
+                companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+              }),
               equipment: equipment
                 ? { id: equipment.id, label: equipment.label, serialNumber: equipment.serialNumber }
                 : null,
@@ -2260,13 +2387,14 @@ Deno.serve(async (req) => {
           });
 
         const activeContracts = contracts
-          .filter((contract) => contract.status === "active" || contract.status === "awaiting_payment")
+          .filter((contract) => contract.status === "active")
           .map((contract) => {
             const equipment = contract.equipment_id ? equipmentById.get(contract.equipment_id) ?? null : null;
             return {
               id: contract.id,
               requestType: contract.request_type,
               status: contract.status,
+              assignmentStatus: contract.assignment_status ?? "assigned",
               deliveryMode: contract.delivery_mode,
               branchId: contract.branch_id,
               branchLabel: contract.branch_id ? branchById.get(contract.branch_id) ?? null : null,
@@ -2293,27 +2421,46 @@ Deno.serve(async (req) => {
                 monthlyRate: contract.agreed_monthly_rate,
                 sourceLabel: "approved contract rates",
               },
+              paymentStatusView: buildRentalPaymentStatusView({
+                kind: "deposit",
+                rawStatus: contract.deposit_invoice_id
+                  ? invoiceStatusById.get(contract.deposit_invoice_id) ?? contract.deposit_status
+                  : contract.deposit_status,
+                amount: contract.deposit_amount,
+                invoiceId: contract.deposit_invoice_id,
+                companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+              }),
               equipment: equipment
                 ? { id: equipment.id, label: equipment.label, serialNumber: equipment.serialNumber }
                 : null,
             };
           });
 
-        const extensionRequests = extensions.map((extension) => ({
-          id: extension.id,
-          rentalContractId: extension.rental_contract_id,
-          status: extension.status,
-          requestedEndDate: extension.requested_end_date,
-          approvedEndDate: extension.approved_end_date,
-          customerReason: extension.customer_reason,
-          dealerResponse: extension.dealer_response,
-          additionalCharge: extension.additional_charge,
-          paymentInvoiceId: extension.payment_invoice_id,
-          paymentStatus: extension.payment_invoice_id
+        const extensionRequests = extensions.map((extension) => {
+          const paymentStatus = extension.payment_invoice_id
             ? invoiceStatusById.get(extension.payment_invoice_id) ?? extension.payment_status
-            : extension.payment_status,
-          createdAt: extension.created_at,
-        }));
+            : extension.payment_status;
+          return {
+            id: extension.id,
+            rentalContractId: extension.rental_contract_id,
+            status: extension.status,
+            requestedEndDate: extension.requested_end_date,
+            approvedEndDate: extension.approved_end_date,
+            customerReason: extension.customer_reason,
+            dealerResponse: extension.dealer_response,
+            additionalCharge: extension.additional_charge,
+            paymentInvoiceId: extension.payment_invoice_id,
+            paymentStatus,
+            paymentStatusView: buildRentalPaymentStatusView({
+              kind: "extension",
+              rawStatus: paymentStatus,
+              amount: extension.additional_charge,
+              invoiceId: extension.payment_invoice_id,
+              companyId: typeof portalCustomer.crm_company_id === "string" ? portalCustomer.crm_company_id : null,
+            }),
+            createdAt: extension.created_at,
+          };
+        });
 
         const returns = ((returnRows ?? []) as Array<Record<string, unknown>>).map((row) => ({
           id: String(row.id),
@@ -2371,8 +2518,10 @@ Deno.serve(async (req) => {
           const { data, error } = await admin
             .from("crm_equipment")
             .select("id, make, model, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
+            .eq("workspace_id", portalWorkspaceId)
             .eq("id", equipmentId)
             .eq("ownership", "rental_fleet")
+            .eq("availability", "available")
             .limit(1)
             .maybeSingle();
           if (error || !data) return safeJsonError("Requested rental unit is unavailable", 404, origin);
@@ -2411,6 +2560,7 @@ Deno.serve(async (req) => {
             workspace_id: portalWorkspaceId,
             portal_customer_id: portalCustomer.id,
             equipment_id: equipmentId,
+            assignment_status: mode === "category_first" ? "pending_assignment" : "assigned",
             requested_category: typeof body.requestedCategory === "string" ? body.requestedCategory : typeof body.requested_category === "string" ? body.requested_category : null,
             requested_make: typeof body.requestedMake === "string" ? body.requestedMake : typeof body.requested_make === "string" ? body.requested_make : null,
             requested_model: typeof body.requestedModel === "string" ? body.requestedModel : typeof body.requested_model === "string" ? body.requested_model : null,
@@ -2432,6 +2582,61 @@ Deno.serve(async (req) => {
           .single();
         if (error) return safeJsonError("Failed to create rental booking", 500, origin);
         return safeJsonOk({ contract }, origin, 201);
+      }
+
+      if (subRoute === "estimate" && req.method === "POST") {
+        if (!admin) return safeJsonError("Rental operations are not configured on this environment.", 503, origin);
+        const parsed = await parseJsonBody(req, origin);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body as Record<string, unknown>;
+
+        const equipmentId = typeof body.equipment_id === "string" ? body.equipment_id : null;
+        let equipmentRow: Record<string, unknown> | null = null;
+        if (equipmentId) {
+          const { data, error } = await admin
+            .from("crm_equipment")
+            .select("id, make, model, category, daily_rental_rate, weekly_rental_rate, monthly_rental_rate")
+            .eq("workspace_id", portalWorkspaceId)
+            .eq("id", equipmentId)
+            .eq("ownership", "rental_fleet")
+            .limit(1)
+            .maybeSingle();
+          if (error) return safeJsonError("Failed to load rental unit for estimate", 500, origin);
+          equipmentRow = (data ?? null) as Record<string, unknown> | null;
+        }
+
+        const { data: estimateRuleRows, error: estimateRuleError } = await admin
+          .from("rental_rate_rules")
+          .select("*")
+          .eq("workspace_id", portalWorkspaceId)
+          .eq("is_active", true);
+        if (estimateRuleError) return safeJsonError("Failed to resolve rental pricing", 500, origin);
+
+        const estimate = resolveRentalPricingEstimate({
+          rules: (estimateRuleRows ?? []) as RentalRateRuleRow[],
+          customerId: portalCustomer.id,
+          equipmentId,
+          branchId: typeof body.branch_id === "string" ? body.branch_id : null,
+          category: typeof body.requested_category === "string" ? body.requested_category : typeof equipmentRow?.category === "string" ? equipmentRow.category : null,
+          make: typeof body.requested_make === "string" ? body.requested_make : typeof equipmentRow?.make === "string" ? equipmentRow.make : null,
+          model: typeof body.requested_model === "string" ? body.requested_model : typeof equipmentRow?.model === "string" ? equipmentRow.model : null,
+          equipmentRates: equipmentRow
+            ? {
+              daily: typeof equipmentRow.daily_rental_rate === "number" ? equipmentRow.daily_rental_rate : null,
+              weekly: typeof equipmentRow.weekly_rental_rate === "number" ? equipmentRow.weekly_rental_rate : null,
+              monthly: typeof equipmentRow.monthly_rental_rate === "number" ? equipmentRow.monthly_rental_rate : null,
+            }
+            : undefined,
+        });
+
+        return safeJsonOk({
+          estimate: {
+            dailyRate: estimate.dailyRate,
+            weeklyRate: estimate.weeklyRate,
+            monthlyRate: estimate.monthlyRate,
+            sourceLabel: estimate.sourceLabel,
+          },
+        }, origin);
       }
 
       if (subRoute === "extend" && req.method === "POST") {

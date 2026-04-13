@@ -55,6 +55,7 @@ function withinSeason(rule: RentalRateRuleRecord, now: Date): boolean {
 export function RentalPricingPage() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(emptyDraft());
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [preview, setPreview] = useState({
     customerId: "",
     equipmentId: "",
@@ -140,15 +141,65 @@ export function RentalPricingPage() {
         priority_rank: Number(draft.priorityRank) || 100,
         notes: draft.notes || null,
       };
-      const { error } = await (supabase as unknown as {
+      const table = (supabase as unknown as {
         from: (table: string) => {
           insert: (value: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>;
+          update: (value: Record<string, unknown>) => {
+            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
+          };
         };
-      }).from("rental_rate_rules").insert(payload);
+      }).from("rental_rate_rules");
+      const result = editingRuleId
+        ? await table.update(payload).eq("id", editingRuleId)
+        : await table.insert(payload);
+      const error = result.error;
       if (error) throw new Error(error.message ?? "Failed to save pricing rule.");
     },
     onSuccess: async () => {
       setDraft(emptyDraft());
+      setEditingRuleId(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin", "rental-rate-rules"] });
+    },
+  });
+
+  const toggleRuleMutation = useMutation({
+    mutationFn: async (payload: { id: string; isActive: boolean }) => {
+      const { error } = await (supabase as unknown as {
+        from: (table: string) => {
+          update: (value: Record<string, unknown>) => {
+            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
+          };
+        };
+      })
+        .from("rental_rate_rules")
+        .update({ is_active: payload.isActive })
+        .eq("id", payload.id);
+      if (error) throw new Error(error.message ?? "Failed to update pricing rule.");
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin", "rental-rate-rules"] });
+    },
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as unknown as {
+        from: (table: string) => {
+          delete: () => {
+            eq: (column: string, value: string) => Promise<{ error: { message?: string } | null }>;
+          };
+        };
+      })
+        .from("rental_rate_rules")
+        .delete()
+        .eq("id", id);
+      if (error) throw new Error(error.message ?? "Failed to delete pricing rule.");
+    },
+    onSuccess: async () => {
+      if (editingRuleId) {
+        setEditingRuleId(null);
+        setDraft(emptyDraft());
+      }
       await queryClient.invalidateQueries({ queryKey: ["admin", "rental-rate-rules"] });
     },
   });
@@ -242,8 +293,19 @@ export function RentalPricingPage() {
               placeholder="Why this pricing rule exists..."
             />
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving..." : "Create pricing rule"}
+              {saveMutation.isPending ? "Saving..." : editingRuleId ? "Update pricing rule" : "Create pricing rule"}
             </Button>
+            {editingRuleId ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingRuleId(null);
+                  setDraft(emptyDraft());
+                }}
+              >
+                Cancel edit
+              </Button>
+            ) : null}
           </div>
         </Card>
 
@@ -291,7 +353,7 @@ export function RentalPricingPage() {
           </Card>
 
           <Card className="p-4">
-            <p className="text-sm font-semibold text-foreground">Active pricing rules</p>
+            <p className="text-sm font-semibold text-foreground">Pricing rules</p>
             <div className="mt-4 space-y-3">
               {(rulesQuery.data ?? []).map((rule) => (
                 <div key={rule.id} className="rounded-xl border border-border/60 bg-muted/10 p-3">
@@ -311,11 +373,64 @@ export function RentalPricingPage() {
                         Daily {formatCurrency(rule.daily_rate)} · Weekly {formatCurrency(rule.weekly_rate)} · Monthly {formatCurrency(rule.monthly_rate)}
                       </p>
                     </div>
-                    <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold text-qep-orange">
-                      priority {rule.priority_rank}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        rule.is_active ? "bg-emerald-500/10 text-emerald-300" : "bg-white/10 text-white/55"
+                      }`}>
+                        {rule.is_active ? "active" : "inactive"}
+                      </span>
+                      <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold text-qep-orange">
+                        priority {rule.priority_rank}
+                      </span>
+                    </div>
                   </div>
                   {rule.notes ? <p className="mt-2 text-xs text-muted-foreground">{rule.notes}</p> : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingRuleId(rule.id);
+                        setDraft({
+                          customerId: rule.customer_id ?? "",
+                          equipmentId: rule.equipment_id ?? "",
+                          branchId: rule.branch_id ?? "",
+                          category: rule.category ?? "",
+                          make: rule.make ?? "",
+                          model: rule.model ?? "",
+                          seasonStart: rule.season_start ?? "",
+                          seasonEnd: rule.season_end ?? "",
+                          dailyRate: rule.daily_rate?.toString() ?? "",
+                          weeklyRate: rule.weekly_rate?.toString() ?? "",
+                          monthlyRate: rule.monthly_rate?.toString() ?? "",
+                          minimumDays: rule.minimum_days?.toString() ?? "",
+                          priorityRank: rule.priority_rank.toString(),
+                          notes: rule.notes ?? "",
+                        });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleRuleMutation.mutate({ id: rule.id, isActive: !rule.is_active })}
+                      disabled={toggleRuleMutation.isPending}
+                    >
+                      {rule.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (!window.confirm("Delete this rental pricing rule?")) return;
+                        deleteRuleMutation.mutate(rule.id);
+                      }}
+                      disabled={deleteRuleMutation.isPending}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

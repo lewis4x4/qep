@@ -166,6 +166,9 @@ export type PortalRentalsResponse = {
     categories: string[];
   };
 };
+export type PortalRentalEstimateResponse = {
+  estimate: PortalRentalPricingEstimate;
+};
 export type PortalSettingsResponse = {
   customer?: {
     id: string;
@@ -296,4 +299,12 @@ export const portalApi = {
     portalFetch<Record<string, unknown>>("rentals/request", { method: "PUT", body: JSON.stringify(data) }),
   finalizeRentalPayment: (data: { kind: "contract" | "extension"; id: string }): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("rentals/approve-payment", { method: "POST", body: JSON.stringify(data) }),
+  estimateRentalPricing: (data: {
+    equipment_id?: string | null;
+    branch_id?: string | null;
+    requested_category?: string | null;
+    requested_make?: string | null;
+    requested_model?: string | null;
+  }): Promise<PortalRentalEstimateResponse> =>
+    portalFetch<PortalRentalEstimateResponse>("rentals/estimate", { method: "POST", body: JSON.stringify(data) }),
 };

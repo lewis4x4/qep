@@ -5,8 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PortalLayout } from "../components/PortalLayout";
 import { portalApi } from "../lib/portal-api";
+import {
+  canEditPortalRentalBooking,
+  canEditPortalRentalExtension,
+  canRequestPortalRentalExtension,
+  getPortalRentalContractStage,
+  validatePortalRentalBookingDraft,
+} from "../lib/portal-rentals";
 import { AskIronAdvisorButton } from "@/components/primitives";
-import { PayInvoiceButton } from "../components/PayInvoiceButton";
+import { RentalPaymentStatusCard } from "../components/RentalPaymentStatusCard";
 import type {
   PortalRentalBookingDraft,
   PortalRentalContractView,
@@ -53,6 +60,9 @@ function emptyBookingDraft(): PortalRentalBookingDraft {
 export function PortalRentalsPage() {
   const queryClient = useQueryClient();
   const [bookingDraft, setBookingDraft] = useState<PortalRentalBookingDraft>(emptyBookingDraft());
+  const [bookingStartDates, setBookingStartDates] = useState<Record<string, string>>({});
+  const [bookingEndDates, setBookingEndDates] = useState<Record<string, string>>({});
+  const [bookingNotes, setBookingNotes] = useState<Record<string, string>>({});
   const [extensionNotes, setExtensionNotes] = useState<Record<string, string>>({});
   const [extensionDates, setExtensionDates] = useState<Record<string, string>>({});
 
@@ -102,6 +112,32 @@ export function PortalRentalsPage() {
     () => catalog?.units?.find((unit) => unit.id === bookingDraft.equipmentId) ?? null,
     [catalog?.units, bookingDraft.equipmentId],
   );
+  const bookingDraftState = validatePortalRentalBookingDraft(bookingDraft);
+  const estimateQuery = useQuery({
+    queryKey: [
+      "portal",
+      "rental-estimate",
+      bookingDraft.equipmentId,
+      bookingDraft.branchId,
+      bookingDraft.requestedCategory,
+      bookingDraft.requestedMake,
+      bookingDraft.requestedModel,
+    ],
+    queryFn: () => portalApi.estimateRentalPricing({
+      equipment_id: bookingDraft.equipmentId,
+      branch_id: bookingDraft.branchId,
+      requested_category: bookingDraft.requestedCategory,
+      requested_make: bookingDraft.requestedMake,
+      requested_model: bookingDraft.requestedModel,
+    }),
+    enabled: Boolean(
+      bookingDraft.equipmentId ||
+      bookingDraft.requestedCategory ||
+      bookingDraft.requestedMake ||
+      bookingDraft.requestedModel,
+    ),
+    staleTime: 30_000,
+  });
 
   return (
     <PortalLayout>
@@ -262,11 +298,14 @@ export function PortalRentalsPage() {
             <div className="rounded-lg border border-border/60 bg-background/60 p-3">
               <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rough estimate</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <p className="text-sm text-foreground">Daily {formatCurrency(selectedUnit?.dailyRate ?? null)}</p>
-                <p className="text-sm text-foreground">Weekly {formatCurrency(selectedUnit?.weeklyRate ?? null)}</p>
-                <p className="text-sm text-foreground">Monthly {formatCurrency(selectedUnit?.monthlyRate ?? null)}</p>
+                <p className="text-sm text-foreground">Daily {formatCurrency(estimateQuery.data?.estimate.dailyRate ?? selectedUnit?.dailyRate ?? null)}</p>
+                <p className="text-sm text-foreground">Weekly {formatCurrency(estimateQuery.data?.estimate.weeklyRate ?? selectedUnit?.weeklyRate ?? null)}</p>
+                <p className="text-sm text-foreground">Monthly {formatCurrency(estimateQuery.data?.estimate.monthlyRate ?? selectedUnit?.monthlyRate ?? null)}</p>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
+                {estimateQuery.data?.estimate.sourceLabel
+                  ? `Estimate source: ${estimateQuery.data.estimate.sourceLabel}. `
+                  : ""}
                 Final pricing and unit assignment are confirmed by the dealership before checkout.
               </p>
             </div>
@@ -275,15 +314,146 @@ export function PortalRentalsPage() {
               onClick={() => bookingMutation.mutate()}
               disabled={
                 bookingMutation.isPending ||
-                !bookingDraft.requestedStartDate ||
-                !bookingDraft.requestedEndDate ||
-                (bookingDraft.mode === "exact_unit" ? !bookingDraft.equipmentId : !bookingDraft.requestedCategory)
+                !bookingDraftState.valid
               }
             >
               {bookingMutation.isPending ? "Submitting…" : "Submit rental request"}
             </Button>
+            {!bookingDraftState.valid && bookingDraftState.reason ? (
+              <p className="text-xs text-amber-200">{bookingDraftState.reason}</p>
+            ) : null}
           </div>
         </Card>
+
+        <Section
+          title="Booking requests"
+          icon={Truck}
+          items={bookings}
+          renderItem={(contract) => {
+            const contractStage = getPortalRentalContractStage(contract);
+            return (
+              <Card key={contract.id} className="border-white/10 bg-white/[0.04] p-5 text-white">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${tone(contract.status)}`}>
+                      {contract.status.replace(/_/g, " ")}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                      contract.assignmentStatus === "pending_assignment"
+                        ? "bg-amber-500/10 text-amber-300"
+                        : "bg-emerald-500/10 text-emerald-200"
+                    }`}>
+                      {contract.assignmentStatus === "pending_assignment" ? "awaiting unit assignment" : "unit assigned"}
+                    </span>
+                    {contract.branchLabel ? (
+                      <span className="text-[11px] uppercase tracking-[0.18em] text-white/45">{contract.branchLabel}</span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-3 text-xl font-semibold text-white">
+                    {contract.equipment?.label ?? contract.requestedCategory ?? "Rental booking"}
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    {formatDate(contract.approvedStartDate ?? contract.requestedStartDate)} → {formatDate(contract.approvedEndDate ?? contract.requestedEndDate)}
+                  </p>
+                  {contractStage === "pending_assignment" ? (
+                    <p className="mt-2 text-sm text-amber-200">
+                      The dealership is still selecting the exact rental unit that matches your requested equipment type and dates.
+                    </p>
+                  ) : null}
+                  {contractStage === "awaiting_payment" ? (
+                    <p className="mt-2 text-sm text-blue-200">
+                      Your unit and terms are approved. The rental will activate after deposit checkout is completed and finalized here.
+                    </p>
+                  ) : null}
+                  {contractStage === "ready_to_finalize" ? (
+                    <p className="mt-2 text-sm text-emerald-200">
+                      Payment is settled. Finalize the rental below to move this booking into the active rental lane.
+                    </p>
+                  ) : null}
+                  {contract.dealerResponse ? (
+                    <p className="mt-2 text-sm text-foreground">{contract.dealerResponse}</p>
+                  ) : null}
+                  {contract.customerNotes ? (
+                    <p className="mt-2 text-sm text-white/70">{contract.customerNotes}</p>
+                  ) : null}
+                </div>
+
+                <AskIronAdvisorButton
+                  contextType="portal-rental-contract"
+                  contextId={contract.id}
+                  contextTitle={contract.equipment?.label ?? contract.requestedCategory ?? "Rental booking"}
+                  draftPrompt="Review this rental booking request. Explain whether unit assignment, payment, or dealership review is the current blocker and what should happen next."
+                  preferredSurface="sheet"
+                  variant="inline"
+                  className="border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  label="Ask Iron"
+                />
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Assignment" value={contract.assignmentStatus === "pending_assignment" ? "Pending" : "Assigned"} detail={contract.equipment?.label ?? contract.requestedCategory ?? "Unit selection in progress"} />
+                <Metric label="Estimate" value={formatCurrency(contract.pricingEstimate?.dailyRate ?? null)} detail={contract.pricingEstimate?.sourceLabel ?? "base rate"} />
+                  <Metric label="Deposit" value={formatCurrency(contract.depositAmount)} detail={contract.depositStatus ?? "not required"} />
+                  <Metric label="Delivery" value={contract.deliveryMode} detail={contract.branchLabel ?? "branch pending"} />
+                </div>
+
+                <RentalPaymentStatusCard
+                  payment={contract.paymentStatusView}
+                  description={`Rental booking for ${contract.equipment?.label ?? contract.requestedCategory ?? "rental request"}`}
+                  finalizeLabel="Finalize rental after payment"
+                  finalizePending={finalizePaymentMutation.isPending}
+                  onFinalize={() => finalizePaymentMutation.mutate({ kind: "contract", id: contract.id })}
+                />
+
+                {canEditPortalRentalBooking(contract) ? (
+                  <div className="mt-4 rounded-lg border border-border/60 bg-background/60 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Update booking request</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <Input
+                        type="date"
+                        value={bookingStartDates[contract.id] ?? contract.requestedStartDate ?? ""}
+                        onChange={(event) => setBookingStartDates((current) => ({ ...current, [contract.id]: event.target.value }))}
+                      />
+                      <Input
+                        type="date"
+                        value={bookingEndDates[contract.id] ?? contract.requestedEndDate ?? ""}
+                        onChange={(event) => setBookingEndDates((current) => ({ ...current, [contract.id]: event.target.value }))}
+                      />
+                    </div>
+                    <Input
+                      className="mt-2"
+                      value={bookingNotes[contract.id] ?? contract.customerNotes ?? ""}
+                      onChange={(event) => setBookingNotes((current) => ({ ...current, [contract.id]: event.target.value }))}
+                      placeholder="Update request notes"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => updateRequestMutation.mutate({
+                          kind: "contract",
+                          id: contract.id,
+                          requested_start_date: bookingStartDates[contract.id] || contract.requestedStartDate,
+                          requested_end_date: bookingEndDates[contract.id] || contract.requestedEndDate,
+                          customer_notes: bookingNotes[contract.id] || contract.customerNotes,
+                        })}
+                      >
+                        Update
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => updateRequestMutation.mutate({ kind: "contract", id: contract.id, action: "cancel" })}
+                      >
+                        Cancel request
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </Card>
+            );
+          }}
+          emptyText="No booking requests are in flight right now."
+        />
 
         <Section
           title="Active rentals"
@@ -332,24 +502,6 @@ export function PortalRentalsPage() {
                   <Metric label="Estimate" value={formatCurrency(contract.pricingEstimate?.dailyRate ?? null)} detail={contract.pricingEstimate?.sourceLabel ?? "base rate"} />
                 </div>
 
-                {contract.depositInvoiceId && contract.companyId && contract.depositStatus !== "paid" && (
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <PayInvoiceButton
-                      invoiceId={contract.depositInvoiceId}
-                      companyId={contract.companyId}
-                      amountCents={Math.round((contract.depositAmount ?? 0) * 100)}
-                      description={`Rental deposit for ${contract.equipment?.label ?? contract.requestedCategory ?? "rental booking"}`}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => finalizePaymentMutation.mutate({ kind: "contract", id: contract.id })}
-                      disabled={finalizePaymentMutation.isPending}
-                    >
-                      {finalizePaymentMutation.isPending ? "Checking payment..." : "Finalize after payment"}
-                    </Button>
-                  </div>
-                )}
-
                 <div className="mt-4 rounded-lg border border-border/60 bg-background/60 p-3">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Request extension</p>
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -369,7 +521,7 @@ export function PortalRentalsPage() {
                         requested_end_date: extensionDates[contract.id],
                         customer_reason: extensionNotes[contract.id] || null,
                       })}
-                      disabled={extensionMutation.isPending || !extensionDates[contract.id] || Boolean(pendingExtension)}
+                      disabled={extensionMutation.isPending || !extensionDates[contract.id] || !canRequestPortalRentalExtension(contract, Boolean(pendingExtension))}
                     >
                       {pendingExtension ? "Extension pending" : "Request extension"}
                     </Button>
@@ -404,8 +556,17 @@ export function PortalRentalsPage() {
               {extension.additionalCharge != null ? (
                 <p className="mt-2 text-sm text-white/70">Additional charge {formatCurrency(extension.additionalCharge)}</p>
               ) : null}
+
+              <RentalPaymentStatusCard
+                payment={extension.paymentStatusView}
+                description="Approved rental extension"
+                finalizeLabel="Finalize extension after payment"
+                finalizePending={finalizePaymentMutation.isPending}
+                onFinalize={() => finalizePaymentMutation.mutate({ kind: "extension", id: extension.id })}
+              />
+
               <div className="mt-3 flex flex-wrap gap-2">
-                {["submitted", "reviewing"].includes(extension.status) && (
+                {canEditPortalRentalExtension(extension) && (
                   <>
                     <Input
                       type="date"
@@ -435,15 +596,6 @@ export function PortalRentalsPage() {
                       Cancel
                     </Button>
                   </>
-                )}
-                {extension.paymentInvoiceId && extension.paymentStatus !== "paid" && (
-                  <Button
-                    variant="outline"
-                    onClick={() => finalizePaymentMutation.mutate({ kind: "extension", id: extension.id })}
-                    disabled={finalizePaymentMutation.isPending}
-                  >
-                    {finalizePaymentMutation.isPending ? "Checking payment..." : "Finalize after payment"}
-                  </Button>
                 )}
               </div>
             </Card>

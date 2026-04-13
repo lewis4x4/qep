@@ -35,8 +35,8 @@ const ROUTE_META = [
   {
     prefix: "/portal/rentals",
     eyebrow: "Customer operating room",
-    title: "Rental Closeout",
-    subtitle: "Monitor inspections, charge decisions, refunds, and final closeout state for returned rental equipment.",
+    title: "Rental Workspace",
+    subtitle: "Book equipment, follow approvals and payment state, manage extensions, and monitor return closeout from one customer-safe rental lane.",
   },
   {
     prefix: "/portal/invoices",
