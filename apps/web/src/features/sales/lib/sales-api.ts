@@ -35,7 +35,8 @@ export async function fetchTodayBriefing(): Promise<DailyBriefing | null> {
 export async function fetchRepPipeline(): Promise<RepPipelineDeal[]> {
   const { data, error } = await supabase
     .from("v_rep_pipeline")
-    .select("*");
+    .select("*")
+    .limit(500);
 
   if (error) throw error;
   return (data ?? []) as RepPipelineDeal[];
