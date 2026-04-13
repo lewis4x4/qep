@@ -46,7 +46,7 @@ function resolveRepHomeRoute(ironRole?: string | null): string {
       return "/qrm";
     case "iron_advisor":
     default:
-      return "/dashboard";
+      return "/sales/today";
   }
 }
 

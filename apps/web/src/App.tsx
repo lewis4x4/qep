@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuth } from "./hooks/useAuth";
 import { LoginPage } from "./components/LoginPage";
-import { AppLayout } from "./components/AppLayout";
+import { AppLayout, type AppLayoutProps } from "./components/AppLayout";
 import { DashboardPage } from "./components/DashboardPage";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SessionExpiredModal } from "./components/SessionExpiredModal";
@@ -23,6 +23,10 @@ import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import { resolveHomeRoute } from "./lib/home-route";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
 import { PortalLoginPage } from "./features/portal/pages/PortalLoginPage";
+
+const SalesRoutes = lazy(() =>
+  import("./features/sales/SalesRoutes").then((m) => ({ default: m.SalesRoutes }))
+);
 
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
@@ -525,6 +529,38 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * SalesOrAppLayout — renders children directly when on /sales/* routes
+ * (Sales Companion has its own SalesShell via SalesRoutes), otherwise
+ * wraps in the standard AppLayout.
+ */
+function SalesOrAppLayout({
+  profile,
+  onLogout,
+  quoteBuilderEnabled,
+  quoteBuilderLoading,
+  children,
+}: AppLayoutProps) {
+  const location = useLocation();
+  const isSalesRoute = location.pathname.startsWith("/sales");
+
+  if (isSalesRoute) {
+    // Sales Companion renders its own shell; skip AppLayout
+    return <>{children}</>;
+  }
+
+  return (
+    <AppLayout
+      profile={profile}
+      onLogout={onLogout}
+      quoteBuilderEnabled={quoteBuilderEnabled}
+      quoteBuilderLoading={quoteBuilderLoading}
+    >
+      {children}
+    </AppLayout>
+  );
+}
+
 function App() {
   const { user, profile, loading, error } = useAuth();
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
@@ -782,12 +818,12 @@ function App() {
                 void supabase.auth.signOut();
               }}
             />
-            <AppLayout
+            <SalesOrAppLayout
               profile={profile}
               onLogout={handleLogout}
               quoteBuilderEnabled={quoteBuilderAccess.connected}
-            quoteBuilderLoading={quoteBuilderAccess.loading}
-          >
+              quoteBuilderLoading={quoteBuilderAccess.loading}
+            >
             <AnimatedRoutes>
               <Route path="/" element={<Navigate to={homeRoute} replace />} />
               <Route
@@ -2245,9 +2281,14 @@ function App() {
               {/* Customer Portal routes */}
               {portalRouteElements()}
 
+              <Route path="/sales/*" element={
+                <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" /></div>}>
+                  <SalesRoutes />
+                </Suspense>
+              } />
               <Route path="*" element={<NotFoundPage />} />
               </AnimatedRoutes>
-            </AppLayout>
+            </SalesOrAppLayout>
             <IronShell />
             </FlareProvider>
           </IronStoreProvider>
