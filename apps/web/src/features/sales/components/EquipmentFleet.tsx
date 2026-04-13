@@ -1,12 +1,43 @@
-import { Wrench, AlertTriangle } from "lucide-react";
+import { Truck, Flame } from "lucide-react";
 import type { CustomerEquipment } from "../lib/types";
 
-function estimateTradeWindow(hours: number | null, year: number | null): string | null {
-  if (!hours) return null;
-  if (hours > 7000) return "Trade window: NOW";
-  if (hours > 5000) return "1-2 years out";
-  if (hours > 3000) return "2-3 years out";
-  return null;
+/* ── Trade status classification ────────────────────────── */
+function getTradeStatus(hours: number | null): {
+  label: string;
+  status: "trade_ready" | "trade_soon" | "good";
+  iconBg: string;
+  iconColor: string;
+  dotBg: string;
+  dotText: string;
+} {
+  if (hours != null && hours > 7000) {
+    return {
+      label: "Trade Ready",
+      status: "trade_ready",
+      iconBg: "bg-red-500/10",
+      iconColor: "text-red-500",
+      dotBg: "bg-red-500/15",
+      dotText: "text-red-400",
+    };
+  }
+  if (hours != null && hours > 5000) {
+    return {
+      label: "Trade Soon",
+      status: "trade_soon",
+      iconBg: "bg-amber-500/10",
+      iconColor: "text-amber-500",
+      dotBg: "bg-amber-500/15",
+      dotText: "text-amber-400",
+    };
+  }
+  return {
+    label: "Good",
+    status: "good",
+    iconBg: "bg-foreground/[0.04]",
+    iconColor: "text-muted-foreground",
+    dotBg: "bg-emerald-500/15",
+    dotText: "text-emerald-400",
+  };
 }
 
 export function EquipmentFleet({
@@ -14,74 +45,94 @@ export function EquipmentFleet({
 }: {
   equipment: CustomerEquipment[];
 }) {
+  const tradeReadyCount = equipment.filter(
+    (eq) => eq.engine_hours != null && eq.engine_hours > 7000,
+  ).length;
+
   return (
     <section>
-      <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        <Wrench className="w-4 h-4" />
-        Equipment Fleet
-        {equipment.length > 0 && (
-          <span className="text-slate-400 normal-case font-normal">
+      {/* Section header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Truck className="w-3.5 h-3.5 text-qep-orange" />
+          <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
+            Equipment Fleet
+          </span>
+          <span className="text-[11px] text-muted-foreground/50">
             ({equipment.length})
           </span>
+        </div>
+        {tradeReadyCount > 0 && (
+          <div className="flex items-center gap-1 px-2 py-[3px] rounded-[10px] bg-red-500/10">
+            <Flame className="w-[10px] h-[10px] text-red-400" />
+            <span className="text-[10px] font-extrabold text-red-400 uppercase tracking-[0.04em]">
+              {tradeReadyCount} Trade Ready
+            </span>
+          </div>
         )}
-      </h2>
+      </div>
 
       {equipment.length === 0 ? (
-        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl px-4 py-6 text-center">
-          <p className="text-sm text-slate-500">No equipment on file.</p>
-          <p className="text-xs text-slate-400 mt-1">
+        <div className="bg-[hsl(var(--card))] border border-dashed border-white/[0.12] rounded-[14px] px-4 py-6 text-center">
+          <p className="text-sm text-muted-foreground">No equipment on file.</p>
+          <p className="text-xs text-muted-foreground/50 mt-1">
             Log what you see on-site during your next visit.
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {equipment.map((eq) => {
-            const tradeWindow = estimateTradeWindow(eq.engine_hours, eq.year);
-            const isTradeNow = tradeWindow === "Trade window: NOW";
-
+        <div className="bg-[hsl(var(--card))] rounded-[14px] border border-white/[0.06] overflow-hidden">
+          {equipment.map((eq, i) => {
+            const trade = getTradeStatus(eq.engine_hours);
             return (
               <div
                 key={eq.id}
-                className={`bg-white rounded-xl border px-4 py-3 ${
-                  isTradeNow
-                    ? "border-amber-300 bg-amber-50/50"
-                    : "border-slate-200"
+                className={`flex items-center gap-3 p-3.5 ${
+                  i < equipment.length - 1
+                    ? "border-b border-white/[0.06]"
+                    : ""
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {eq.make ?? ""} {eq.model ?? eq.name ?? "Unknown"}{" "}
-                      {eq.year ? `\u00B7 ${eq.year}` : ""}
-                    </p>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {eq.engine_hours != null && (
-                        <span className="text-xs text-slate-500">
-                          {eq.engine_hours.toLocaleString()} hrs
-                        </span>
-                      )}
-                      {eq.serial_number && (
-                        <span className="text-xs text-slate-400">
-                          S/N: {eq.serial_number}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                {/* Equipment icon */}
+                <div
+                  className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 ${trade.iconBg}`}
+                >
+                  <Truck
+                    className={`w-[18px] h-[18px] ${trade.iconColor}`}
+                  />
+                </div>
 
-                  {tradeWindow && (
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-1 rounded-full whitespace-nowrap flex items-center gap-1 ${
-                        isTradeNow
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {isTradeNow && (
-                        <AlertTriangle className="w-3 h-3" />
-                      )}
-                      {tradeWindow}
-                    </span>
-                  )}
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-foreground">
+                    {eq.make ?? ""} {eq.model ?? eq.name ?? "Unknown"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {eq.year ? `${eq.year} · ` : ""}
+                    {eq.engine_hours != null
+                      ? `${eq.engine_hours.toLocaleString()} hrs`
+                      : ""}
+                    {eq.serial_number ? ` · S/N: ${eq.serial_number}` : ""}
+                  </p>
+                </div>
+
+                {/* Trade status dot */}
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${trade.dotBg}`}
+                >
+                  <span
+                    className={`w-[6px] h-[6px] rounded-full ${
+                      trade.status === "trade_ready"
+                        ? "bg-red-400"
+                        : trade.status === "trade_soon"
+                          ? "bg-amber-400"
+                          : "bg-emerald-400"
+                    }`}
+                  />
+                  <span
+                    className={`text-[10px] font-bold ${trade.dotText}`}
+                  >
+                    {trade.label}
+                  </span>
                 </div>
               </div>
             );

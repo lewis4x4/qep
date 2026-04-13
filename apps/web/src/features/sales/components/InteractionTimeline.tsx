@@ -1,32 +1,31 @@
-import { Clock, Phone, Mail, MessageSquare, FileText, Users } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { CustomerActivity } from "../lib/types";
 
-const ACTIVITY_ICONS: Record<string, typeof Clock> = {
-  call: Phone,
-  email: Mail,
-  meeting: Users,
-  note: FileText,
-  sms: MessageSquare,
-  task: Clock,
-};
-
+/* ── Activity type → timeline color ─────────────────────── */
 const ACTIVITY_COLORS: Record<string, string> = {
-  call: "text-blue-500 bg-blue-50",
-  email: "text-purple-500 bg-purple-50",
-  meeting: "text-emerald-500 bg-emerald-50",
-  note: "text-slate-500 bg-slate-50",
-  sms: "text-cyan-500 bg-cyan-50",
-  task: "text-amber-500 bg-amber-50",
+  call: "bg-emerald-400",
+  email: "bg-blue-400",
+  meeting: "bg-purple-400",
+  note: "bg-muted-foreground",
+  sms: "bg-cyan-400",
+  task: "bg-amber-400",
+  visit: "bg-emerald-400",
+  quote: "bg-blue-400",
 };
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return new Date(dateStr).toLocaleDateString();
+function getActivityColor(type: string): string {
+  return ACTIVITY_COLORS[type] ?? "bg-muted-foreground/50";
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export function InteractionTimeline({
@@ -38,41 +37,40 @@ export function InteractionTimeline({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        <Clock className="w-4 h-4" />
-        Recent Activity
-      </h2>
+      {/* Section header */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-[0.1em]">
+          Recent Activity
+        </span>
+      </div>
 
-      <div className="space-y-1">
-        {activities.map((act) => {
-          const Icon =
-            ACTIVITY_ICONS[act.activity_type] ?? FileText;
-          const color =
-            ACTIVITY_COLORS[act.activity_type] ?? "text-slate-500 bg-slate-50";
-
+      <div className="bg-[hsl(var(--card))] rounded-[14px] border border-white/[0.06] py-1">
+        {activities.slice(0, 8).map((act, i, arr) => {
+          const dotColor = getActivityColor(act.activity_type);
           return (
             <div
               key={act.id}
-              className="flex items-start gap-3 py-2"
+              className="flex gap-2.5 px-3.5 py-2.5 items-start"
             >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${color}`}
-              >
-                <Icon className="w-4 h-4" />
+              {/* Date column */}
+              <div className="w-[52px] shrink-0 text-[11px] text-muted-foreground/60 font-semibold pt-[1px]">
+                {formatDate(act.occurred_at)}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-600 capitalize">
+
+              {/* Timeline connector */}
+              <div className="relative w-[2px] self-stretch shrink-0 bg-white/[0.06]">
+                <div
+                  className={`absolute top-1 -left-[3px] w-2 h-2 rounded-full ${dotColor}`}
+                />
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0 text-[13px] text-foreground leading-snug">
+                {act.body ?? (
+                  <span className="capitalize text-muted-foreground">
                     {act.activity_type}
                   </span>
-                  <span className="text-[10px] text-slate-400 shrink-0">
-                    {timeAgo(act.occurred_at)}
-                  </span>
-                </div>
-                {act.body && (
-                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
-                    {act.body}
-                  </p>
                 )}
               </div>
             </div>

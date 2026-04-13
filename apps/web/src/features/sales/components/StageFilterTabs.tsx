@@ -31,28 +31,28 @@ export function StageFilterTabs({
   return (
     <div
       ref={scrollRef}
-      className="sticky top-14 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200 overflow-x-auto scrollbar-none"
+      className="sticky top-0 z-10 bg-[hsl(var(--background))] border-b border-white/[0.06] overflow-x-auto scrollbar-none"
     >
-      <div className="flex gap-1 px-4 py-2 min-w-max">
+      <div className="flex gap-1.5 px-3 py-2.5 min-w-max">
         {options.map((opt) => (
           <button
             key={opt.key}
             ref={opt.key === active ? activeRef : undefined}
             onClick={() => onChange(opt.key)}
             className={cn(
-              "flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors",
+              "flex items-center gap-1.5 px-3.5 py-[7px] rounded-full text-xs font-bold whitespace-nowrap transition-all duration-150 border",
               opt.key === active
-                ? "bg-qep-orange text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                ? "bg-qep-orange text-white border-qep-orange"
+                : "bg-[hsl(var(--card))] text-muted-foreground border-white/[0.06] hover:border-white/20",
             )}
           >
             {opt.label}
             <span
               className={cn(
-                "text-xs rounded-full px-1.5 py-0.5 font-semibold min-w-[20px] text-center",
+                "text-[10px] font-extrabold rounded-[10px] px-[7px] py-[1px] min-w-[20px] text-center",
                 opt.key === active
-                  ? "bg-white/20 text-white"
-                  : "bg-slate-200 text-slate-500",
+                  ? "bg-white/25 text-white"
+                  : "bg-foreground/[0.06] text-muted-foreground/60",
               )}
             >
               {opt.count}
