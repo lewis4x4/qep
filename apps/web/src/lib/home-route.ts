@@ -10,7 +10,7 @@ export function resolveHomeRoute(
     case "manager":
       return "/qrm";
     case "parts":
-      return "/parts";
+      return "/parts/companion/queue";
     case "service":
       return "/service";
     case "rental":
@@ -41,7 +41,7 @@ function resolveRepHomeRoute(ironRole?: string | null): string {
     case "iron_man":
       return "/service";
     case "iron_woman":
-      return "/parts";
+      return "/parts/companion/queue";
     case "iron_manager":
       return "/qrm";
     case "iron_advisor":
@@ -55,7 +55,7 @@ function resolveIronRoleFallback(ironRole?: string | null): string {
     case "iron_man":
       return "/service";
     case "iron_woman":
-      return "/parts";
+      return "/parts/companion/queue";
     case "iron_manager":
       return "/qrm";
     default:

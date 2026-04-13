@@ -9,13 +9,13 @@ describe("resolveHomeRoute", () => {
   });
 
   test("keeps reps on sales unless their iron role maps to another department", () => {
-    expect(resolveHomeRoute("rep", "iron_advisor")).toBe("/dashboard");
-    expect(resolveHomeRoute("rep", "iron_woman")).toBe("/parts");
+    expect(resolveHomeRoute("rep", "iron_advisor")).toBe("/sales/today");
+    expect(resolveHomeRoute("rep", "iron_woman")).toBe("/parts/companion/queue");
     expect(resolveHomeRoute("rep", "iron_man")).toBe("/service");
   });
 
   test("supports future department roles directly", () => {
-    expect(resolveHomeRoute("parts")).toBe("/parts");
+    expect(resolveHomeRoute("parts")).toBe("/parts/companion/queue");
     expect(resolveHomeRoute("service")).toBe("/service");
     expect(resolveHomeRoute("rental")).toBe("/rentals");
     expect(resolveHomeRoute("rentals")).toBe("/rentals");
