@@ -28,6 +28,10 @@ const SalesRoutes = lazy(() =>
   import("./features/sales/SalesRoutes").then((m) => ({ default: m.SalesRoutes }))
 );
 
+const PartsCompanionRoutes = lazy(() =>
+  import("./features/parts-companion/PartsCompanionRoutes").then((m) => ({ default: m.PartsCompanionRoutes }))
+);
+
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
 );
@@ -543,9 +547,10 @@ function SalesOrAppLayout({
 }: AppLayoutProps) {
   const location = useLocation();
   const isSalesRoute = location.pathname.startsWith("/sales");
+  const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
 
-  if (isSalesRoute) {
-    // Sales Companion renders its own shell; skip AppLayout
+  if (isSalesRoute || isPartsCompanionRoute) {
+    // Companion apps render their own shell; skip AppLayout
     return <>{children}</>;
   }
 
@@ -2284,6 +2289,11 @@ function App() {
               <Route path="/sales/*" element={
                 <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" /></div>}>
                   <SalesRoutes />
+                </Suspense>
+              } />
+              <Route path="/parts/companion/*" element={
+                <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" /></div>}>
+                  <PartsCompanionRoutes />
                 </Suspense>
               } />
               <Route path="*" element={<NotFoundPage />} />
