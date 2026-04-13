@@ -1,11 +1,33 @@
 import { useState } from "react";
-import { Search, User } from "lucide-react";
+import { Search, User, LogOut, Moon, Sun, Monitor } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { SalesGlobalSearch } from "./SalesGlobalSearch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useTheme } from "@/hooks/useTheme";
 
 export function SalesTopHeader() {
   const { profile } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
+  const { setPreference, preference: theme } = useTheme();
+
+  const initials = profile?.full_name
+    ? profile.full_name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : null;
 
   return (
     <>
@@ -29,20 +51,69 @@ export function SalesTopHeader() {
           >
             <Search className="w-5 h-5" />
           </button>
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-            {profile?.full_name ? (
-              <span className="text-white text-xs font-semibold">
-                {profile.full_name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </span>
-            ) : (
-              <User className="w-4 h-4 text-white/70" />
-            )}
-          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="User menu"
+                className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange"
+              >
+                {initials ? (
+                  <span className="text-white text-xs font-semibold">
+                    {initials}
+                  </span>
+                ) : (
+                  <User className="w-4 h-4 text-white/70" />
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {profile?.full_name && (
+                <>
+                  <div className="px-2 py-1.5">
+                    <p className="text-sm font-semibold text-foreground">
+                      {profile.full_name}
+                    </p>
+                  </div>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  {theme === "dark" ? (
+                    <Moon className="w-4 h-4 mr-2" />
+                  ) : theme === "light" ? (
+                    <Sun className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Monitor className="w-4 h-4 mr-2" />
+                  )}
+                  Appearance
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => setPreference("light")}>
+                    <Sun className="w-4 h-4 mr-2" />
+                    Light
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPreference("dark")}>
+                    <Moon className="w-4 h-4 mr-2" />
+                    Dark
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setPreference("system")}>
+                    <Monitor className="w-4 h-4 mr-2" />
+                    System
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => supabase.auth.signOut()}
+                className="text-red-400 focus:text-red-400"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Log Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
