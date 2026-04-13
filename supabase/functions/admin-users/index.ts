@@ -203,12 +203,49 @@ Deno.serve(async (req)=>{
       ]);
       if (profileResult.error) throw profileResult.error;
       const profiles = profileResult.data;
-      let authUsers: Array<{ id: string; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null }> = [];
+      let authUsers: Array<{ id: string; email?: string | null; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null; raw_user_meta_data?: Record<string, unknown> | null }> = [];
       if (!authResult.error && authResult.data) {
         authUsers = authResult.data;
       } else if (authResult.error) {
         console.warn("[admin-users] get_auth_user_metadata degraded:", authResult.error?.message ?? "no data");
       }
+
+      // Auto-backfill: detect auth users with no matching profile row
+      const profileIds = new Set((profiles ?? []).map((p: { id: string }) => p.id));
+      const orphanedAuthUsers = authUsers.filter((au) => !profileIds.has(au.id));
+      if (orphanedAuthUsers.length > 0) {
+        console.log(`[admin-users] Auto-backfilling ${orphanedAuthUsers.length} orphaned auth user(s)`);
+        for (const orphan of orphanedAuthUsers) {
+          try {
+            // Ensure workspace membership
+            await adminClient.from("profile_workspaces").upsert(
+              { profile_id: orphan.id, workspace_id: "default" },
+              { onConflict: "profile_id,workspace_id" }
+            );
+            // Create profile
+            await adminClient.from("profiles").upsert({
+              id: orphan.id,
+              email: orphan.email ?? null,
+              full_name: (orphan.raw_user_meta_data as Record<string, unknown>)?.full_name as string ?? orphan.email ?? "Unknown",
+              role: "rep",
+              active_workspace_id: "default",
+              is_active: true,
+            }, { onConflict: "id" });
+          } catch (e) {
+            console.warn(`[admin-users] Backfill failed for ${orphan.id}:`, e);
+          }
+        }
+        // Re-fetch profiles after backfill
+        const { data: refreshed } = await adminClient.from("profiles")
+          .select("id, full_name, email, role, iron_role, is_active, created_at, updated_at")
+          .order("created_at", { ascending: false });
+        if (refreshed) {
+          // Replace profiles with refreshed data
+          profiles.length = 0;
+          profiles.push(...refreshed);
+        }
+      }
+
       const authMap = new Map(authUsers.map((u)=>[
           u.id,
           {
@@ -217,15 +254,15 @@ Deno.serve(async (req)=>{
             banned_until: u.banned_until ?? null
           }
         ]));
-      const users = (profiles ?? []).map((p)=>({
+      const users = (profiles ?? []).map((p: Record<string, unknown>)=>({
           ...p,
-          ...authMap.get(p.id) ?? {
+          ...authMap.get(p.id as string) ?? {
             last_sign_in_at: null,
             email_confirmed_at: null,
             banned_until: null
           },
           // "pending" = invite email sent but user hasn't confirmed yet
-          status: authMap.get(p.id)?.email_confirmed_at ? "active" : "pending"
+          status: authMap.get(p.id as string)?.email_confirmed_at ? "active" : "pending"
         }));
       return new Response(JSON.stringify({
         users
@@ -501,6 +538,51 @@ Deno.serve(async (req)=>{
             ...ch,
             "Content-Type": "application/json"
           }
+        });
+      }
+      // ── BACKFILL PROFILE ────────────────────────────────────────────────
+      // Creates a missing profile for an existing auth user (e.g. user was
+      // created via Supabase dashboard and the trigger failed silently).
+      if (body.action === "backfill-profile") {
+        if (!isOwner(caller.role)) {
+          return deniedResponse({
+            ch, route, action: body.action, callerUserId: caller.id,
+            reasonCode: "owner_role_required_for_backfill",
+            status: 403, error: "Only owners can backfill profiles"
+          });
+        }
+        if (!body.userId) {
+          return new Response(JSON.stringify({ error: "userId is required" }), {
+            status: 400, headers: { ...ch, "Content-Type": "application/json" }
+          });
+        }
+        // Look up the auth user to get email + name
+        const { data: authUser, error: authErr } = await adminClient.auth.admin.getUserById(body.userId);
+        if (authErr || !authUser?.user) {
+          return new Response(JSON.stringify({ error: "Auth user not found" }), {
+            status: 404, headers: { ...ch, "Content-Type": "application/json" }
+          });
+        }
+        const au = authUser.user;
+        // Ensure workspace membership exists
+        await adminClient.from("profile_workspaces").upsert(
+          { profile_id: au.id, workspace_id: "default" },
+          { onConflict: "profile_id,workspace_id" }
+        );
+        // Upsert profile
+        const profileData: Record<string, unknown> = {
+          id: au.id,
+          email: au.email,
+          full_name: body.full_name ?? au.user_metadata?.full_name ?? au.email,
+          role: body.role ?? "rep",
+          active_workspace_id: "default",
+          is_active: true,
+        };
+        if (body.iron_role) profileData.iron_role = body.iron_role;
+        const { error: profileErr } = await adminClient.from("profiles").upsert(profileData, { onConflict: "id" });
+        if (profileErr) throw profileErr;
+        return new Response(JSON.stringify({ success: true, userId: au.id }), {
+          status: 200, headers: { ...ch, "Content-Type": "application/json" }
         });
       }
       // ── DEACTIVATE / REACTIVATE ──────────────────────────────────────────
