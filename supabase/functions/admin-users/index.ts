@@ -193,23 +193,21 @@ Deno.serve(async (req)=>{
     const action = req.method === "GET" ? url.searchParams.get("action") : null;
     // ── LIST USERS ──────────────────────────────────────────────────────────
     if (req.method === "GET" && action === "list") {
-      // Fetch all profiles
-      const { data: profiles, error: profileErr } = await adminClient.from("profiles").select("id, full_name, email, role, is_active, created_at, updated_at").order("created_at", {
-        ascending: false
-      });
-      if (profileErr) throw profileErr;
-      // Fetch auth metadata via direct SQL RPC (bypasses flaky GoTrue admin HTTP API)
-      // Falls back gracefully if the RPC is unavailable
+      // Fetch profiles + auth metadata in parallel for faster response
+      const [profileResult, authResult] = await Promise.all([
+        adminClient.from("profiles").select("id, full_name, email, role, iron_role, is_active, created_at, updated_at").order("created_at", { ascending: false }),
+        adminClient.rpc("get_auth_user_metadata").then(
+          (r) => r,
+          (e) => { console.warn("[admin-users] get_auth_user_metadata failed:", e); return { data: null, error: e }; }
+        ),
+      ]);
+      if (profileResult.error) throw profileResult.error;
+      const profiles = profileResult.data;
       let authUsers: Array<{ id: string; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null }> = [];
-      try {
-        const { data: rpcData, error: rpcErr } = await adminClient.rpc("get_auth_user_metadata");
-        if (!rpcErr && rpcData) {
-          authUsers = rpcData;
-        } else {
-          console.warn("[admin-users] get_auth_user_metadata degraded:", rpcErr?.message ?? "no data");
-        }
-      } catch (e) {
-        console.warn("[admin-users] get_auth_user_metadata failed:", e);
+      if (!authResult.error && authResult.data) {
+        authUsers = authResult.data;
+      } else if (authResult.error) {
+        console.warn("[admin-users] get_auth_user_metadata degraded:", authResult.error?.message ?? "no data");
       }
       const authMap = new Map(authUsers.map((u)=>[
           u.id,
@@ -326,12 +324,14 @@ Deno.serve(async (req)=>{
           }
           throw inviteErr;
         }
-        // The trigger auto-creates the profile — update role immediately after
+        // The trigger auto-creates the profile — update role + department immediately after
         if (newUser?.user) {
-          await adminClient.from("profiles").update({
+          const profilePatch: Record<string, unknown> = {
             role: body.role,
-            full_name: body.full_name
-          }).eq("id", newUser.user.id);
+            full_name: body.full_name,
+          };
+          if (body.iron_role) profilePatch.iron_role = body.iron_role;
+          await adminClient.from("profiles").update(profilePatch).eq("id", newUser.user.id);
         }
         return new Response(JSON.stringify({
           success: true,
@@ -424,15 +424,17 @@ Deno.serve(async (req)=>{
           if (pwErr) {
             console.error("[admin-users] create: profile_workspaces upsert failed:", pwErr.message);
           }
-          // Upsert profile with correct role/name
-          const { error: profileErr } = await adminClient.from("profiles").upsert({
+          // Upsert profile with correct role/name/department
+          const profileData: Record<string, unknown> = {
             id: newUser.user.id,
             email: body.email,
             full_name: body.full_name,
             role: body.role,
             active_workspace_id: "default",
-            is_active: true
-          }, {
+            is_active: true,
+          };
+          if (body.iron_role) profileData.iron_role = body.iron_role;
+          const { error: profileErr } = await adminClient.from("profiles").upsert(profileData, {
             onConflict: "id"
           });
           if (profileErr) {

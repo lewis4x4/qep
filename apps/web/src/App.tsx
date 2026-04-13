@@ -587,6 +587,8 @@ function App() {
             refetchOnWindowFocus: false,
             retry: 1,
             throwOnError: false,
+            staleTime: 2 * 60_000,   // 2 min — avoid redundant refetches on navigation
+            gcTime: 10 * 60_000,     // 10 min — keep unused cache longer for back-nav
           },
         },
       })

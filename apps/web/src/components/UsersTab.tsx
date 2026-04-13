@@ -47,6 +47,23 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   owner: "Full access. Manages team members, roles, and all settings.",
 };
 
+type Department = "sales" | "parts" | "service" | "rentals" | "";
+
+const DEPARTMENT_OPTIONS: { value: Department; label: string; ironRole: string }[] = [
+  { value: "",        label: "— None (default)",  ironRole: "" },
+  { value: "sales",   label: "Sales",             ironRole: "iron_advisor" },
+  { value: "parts",   label: "Parts",             ironRole: "iron_woman" },
+  { value: "service",  label: "Service",           ironRole: "iron_man" },
+  { value: "rentals", label: "Rentals",            ironRole: "iron_advisor" },
+];
+
+const IRON_ROLE_DISPLAY: Record<string, string> = {
+  iron_advisor: "Sales",
+  iron_woman: "Parts",
+  iron_man: "Service",
+  iron_manager: "Management",
+};
+
 const PAGE_SIZE = 10;
 
 interface UserRecord {
@@ -58,6 +75,7 @@ interface UserRecord {
   created_at: string;
   last_sign_in_at: string | null;
   status: "active" | "pending";
+  iron_role?: string | null;
 }
 
 export interface UsersTabProps {
@@ -103,6 +121,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<UserRole>("rep");
+  const [inviteDepartment, setInviteDepartment] = useState<Department>("");
   const [inviting, setInviting] = useState(false);
   const [inviteMode, setInviteMode] = useState<"invite" | "create">("invite");
   const [invitePassword, setInvitePassword] = useState("");
@@ -181,11 +200,13 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
     if (inviteMode === "create" && invitePassword.length < 8) return;
     setInviting(true);
     try {
+      const deptOption = DEPARTMENT_OPTIONS.find((d) => d.value === inviteDepartment);
       const payload: Record<string, unknown> = {
         action: inviteMode,
         email: inviteEmail.trim().toLowerCase(),
         full_name: inviteName.trim(),
         role: inviteRole,
+        ...(deptOption?.ironRole ? { iron_role: deptOption.ironRole } : {}),
       };
       if (inviteMode === "create") {
         payload.password = invitePassword;
@@ -200,6 +221,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
       setInviteEmail("");
       setInviteName("");
       setInviteRole("rep");
+      setInviteDepartment("");
       setInvitePassword("");
       setShowInvite(false);
       await loadUsers();
@@ -393,6 +415,33 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                 ))}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="invite-department">Department</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Department info" className="inline-flex items-center justify-center">
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-[220px]">
+                    Determines which companion the user sees on login (Sales, Parts, Service, or Rentals).
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <select
+                id="invite-department"
+                value={inviteDepartment}
+                onChange={(e) => setInviteDepartment(e.target.value as Department)}
+                className="w-full border border-input bg-background rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-qep-orange"
+              >
+                {DEPARTMENT_OPTIONS.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <DialogFooter className="pt-1">
               <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>
                 Cancel
@@ -542,6 +591,7 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                 <TableHead>Member</TableHead>
                 <TableHead className="hidden sm:table-cell">Email</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead className="hidden sm:table-cell">Dept</TableHead>
                 <TableHead className="hidden md:table-cell">Status</TableHead>
                 <TableHead className="hidden lg:table-cell">Last Login</TableHead>
                 {isOwner && <TableHead className="text-right">Actions</TableHead>}
@@ -598,6 +648,15 @@ export function UsersTab({ callerRole, callerId }: UsersTabProps) {
                           {ROLE_DESCRIPTIONS[user.role]}
                         </TooltipContent>
                       </Tooltip>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      {user.iron_role ? (
+                        <span className="text-xs text-muted-foreground">
+                          {IRON_ROLE_DISPLAY[user.iron_role] ?? user.iron_role}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-2">
