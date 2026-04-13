@@ -220,20 +220,21 @@ Deno.serve(async (req)=>{
         console.log(`[admin-users] Auto-backfilling ${orphanedAuthUsers.length} orphaned auth user(s)`);
         for (const orphan of orphanedAuthUsers) {
           try {
-            // Ensure workspace membership
-            await adminClient.from("profile_workspaces").upsert(
-              { profile_id: orphan.id, workspace_id: "default" },
-              { onConflict: "profile_id,workspace_id" }
-            );
-            // Create profile
-            await adminClient.from("profiles").upsert({
-              id: orphan.id,
-              email: orphan.email ?? null,
-              full_name: (orphan.raw_user_meta_data as Record<string, unknown>)?.full_name as string ?? orphan.email ?? "Unknown",
-              role: "rep",
-              active_workspace_id: "default",
-              is_active: true,
-            }, { onConflict: "id" });
+            const fullName = (orphan.raw_user_meta_data as Record<string, unknown>)?.full_name as string ?? orphan.email ?? "Unknown";
+            // Use atomic RPC that handles trigger/FK chicken-and-egg
+            const { error: bfErr } = await adminClient.rpc("backfill_profile", {
+              p_id: orphan.id,
+              p_email: orphan.email ?? null,
+              p_full_name: fullName,
+              p_role: "rep",
+              p_iron_role: null,
+              p_workspace: "default",
+            });
+            if (bfErr) {
+              console.warn(`[admin-users] Backfill RPC failed for ${orphan.id}:`, bfErr.message);
+            } else {
+              console.log(`[admin-users] Backfilled profile for ${orphan.email}`);
+            }
           } catch (e) {
             console.warn(`[admin-users] Backfill failed for ${orphan.id}:`, e);
           }
@@ -590,22 +591,15 @@ Deno.serve(async (req)=>{
           });
         }
         const au = authUser.user;
-        // Ensure workspace membership exists
-        await adminClient.from("profile_workspaces").upsert(
-          { profile_id: au.id, workspace_id: "default" },
-          { onConflict: "profile_id,workspace_id" }
-        );
-        // Upsert profile
-        const profileData: Record<string, unknown> = {
-          id: au.id,
-          email: au.email,
-          full_name: body.full_name ?? au.user_metadata?.full_name ?? au.email,
-          role: body.role ?? "rep",
-          active_workspace_id: "default",
-          is_active: true,
-        };
-        if (body.iron_role) profileData.iron_role = body.iron_role;
-        const { error: profileErr } = await adminClient.from("profiles").upsert(profileData, { onConflict: "id" });
+        // Use atomic RPC that handles trigger/FK chicken-and-egg
+        const { error: profileErr } = await adminClient.rpc("backfill_profile", {
+          p_id: au.id,
+          p_email: au.email,
+          p_full_name: body.full_name ?? au.user_metadata?.full_name ?? au.email,
+          p_role: body.role ?? "rep",
+          p_iron_role: body.iron_role ?? null,
+          p_workspace: "default",
+        });
         if (profileErr) throw profileErr;
         return new Response(JSON.stringify({ success: true, userId: au.id }), {
           status: 200, headers: { ...ch, "Content-Type": "application/json" }
