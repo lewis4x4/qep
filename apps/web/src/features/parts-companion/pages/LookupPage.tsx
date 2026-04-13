@@ -6,18 +6,80 @@ import {
   CheckCircle2,
   Plus,
   MessageSquare,
+  Copy,
+  Mic,
+  Flame,
+  History,
+  Cpu,
+  Keyboard,
+  ArrowUpRight,
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { searchParts } from "../lib/companion-api";
 import { IntelliDealerBadge } from "../components/IntelliDealerBadge";
 import type { SearchResponse, PartSearchResult, CrossReference } from "../lib/types";
 
-// ── Kbd helper ──────────────────────────────────────────────
+// ── Design Tokens ──────────────────────────────────────────
+
+const T = {
+  bg: "#0A1628",
+  bgElevated: "#0F1D31",
+  card: "#132238",
+  cardHover: "#182A44",
+  border: "#1F3254",
+  borderSoft: "#18263F",
+  orange: "#E87722",
+  orangeGlow: "rgba(232,119,34,0.15)",
+  orangeDeep: "rgba(232,119,34,0.35)",
+  text: "#E5ECF5",
+  textMuted: "#8A9BB4",
+  textDim: "#5F7391",
+  success: "#22C55E",
+  successBg: "rgba(34,197,94,0.12)",
+  danger: "#EF4444",
+  dangerBg: "rgba(239,68,68,0.12)",
+  warning: "#F59E0B",
+  warningBg: "rgba(245,158,11,0.12)",
+  info: "#3B82F6",
+  infoBg: "rgba(59,130,246,0.12)",
+  purple: "#A855F7",
+  purpleBg: "rgba(168,85,247,0.14)",
+} as const;
+
+// ── Kbd helper ─────────────────────────────────────────────
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center px-1.5 py-px rounded border border-[#D1D5DB] bg-[#F9FAFB] text-[11px] font-medium font-mono text-[#718096] min-w-[20px]">
+    <kbd className="inline-flex items-center justify-center px-1.5 py-px rounded border border-[#1F3254] bg-[#0F1D31] text-[11px] font-semibold font-mono text-[#8A9BB4] min-w-[20px]">
       {children}
     </kbd>
+  );
+}
+
+// ── Copyable PN Component ──────────────────────────────────
+
+function Copyable({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText?.(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      }}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold font-mono cursor-pointer transition-all duration-150"
+      style={{
+        border: `1px solid ${copied ? T.success : T.border}`,
+        background: copied ? T.successBg : T.bgElevated,
+        color: copied ? T.success : T.text,
+      }}
+    >
+      {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+      {copied ? "Copied" : text}
+    </button>
   );
 }
 
@@ -28,9 +90,9 @@ function CrossRefChip({ crossRef }: { crossRef: CrossReference }) {
     <span
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium"
       style={{
-        background: crossRef.verified ? "#EDE9FE" : "#FEF3C7",
-        color: crossRef.verified ? "#5B21B6" : "#92400E",
-        border: `1px solid ${crossRef.verified ? "#DDD6FE" : "#FDE68A"}`,
+        background: crossRef.verified ? T.purpleBg : T.warningBg,
+        color: crossRef.verified ? T.purple : T.warning,
+        border: `1px solid ${crossRef.verified ? "rgba(168,85,247,0.25)" : "rgba(245,158,11,0.25)"}`,
       }}
     >
       {crossRef.source}:{" "}
@@ -40,14 +102,44 @@ function CrossRefChip({ crossRef }: { crossRef: CrossReference }) {
   );
 }
 
+// ── Quick search chips ─────────────────────────────────────
+
+const QUICK_SEARCHES = [
+  "Barko 495",
+  "Bandit knife",
+  "ASV RT-75",
+  "Peterson 5710C",
+  "Hydraulic filter",
+  "Track roller",
+];
+
+// ── Mock hot-this-month data ───────────────────────────────
+
+const HOT_PARTS = [
+  { rank: 1, pn: "BK-HYD-4951", desc: "Hydraulic Pump Seal Kit", velocity: 247, trend: 18 },
+  { rank: 2, pn: "BN-KNF-6300", desc: "Chipper Knife Set (4pc)", velocity: 189, trend: 12 },
+  { rank: 3, pn: "ASV-TRK-2040", desc: "Track Roller Assembly", velocity: 156, trend: -3 },
+  { rank: 4, pn: "PT-CYL-5710", desc: "Grapple Cylinder Rebuild", velocity: 134, trend: 24 },
+  { rank: 5, pn: "FLT-HYD-0022", desc: "Return Line Filter Element", velocity: 121, trend: 7 },
+];
+
+// ── Mock symptom-to-part data ──────────────────────────────
+
+const SYMPTOM_PARTS = [
+  { symptom: "Boom drift under load", pn: "BK-SLV-4400", desc: "Spool Valve Sleeve", confidence: 94 },
+  { symptom: "Track tension loss", pn: "ASV-TNS-3001", desc: "Tension Spring Assembly", confidence: 91 },
+  { symptom: "Chipper stall at feed", pn: "BN-CLT-6200", desc: "Clutch Pack Assembly", confidence: 88 },
+];
+
 // ── Lookup Page ─────────────────────────────────────────────
 
 export function LookupPage() {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [recentLookups, setRecentLookups] = useState<
-    Array<{ q: string; results: number; time: string }>
+    Array<{ q: string; results: number; time: string; topPn?: string }>
   >(() => {
     try {
       return JSON.parse(localStorage.getItem("parts_recent_lookups") || "[]");
@@ -62,15 +154,27 @@ export function LookupPage() {
     inputRef.current?.focus();
   }, []);
 
+  // Global "/" shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "/" && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const searchMutation = useMutation({
     mutationFn: (q: string) => searchParts(q),
     onSuccess: (data, variables) => {
       setSearchResult(data);
-      // Update recent lookups
       const entry = {
         q: variables,
         results: data.total_results,
         time: "just now",
+        topPn: data.results[0]?.part_number,
       };
       const updated = [entry, ...recentLookups.filter((r) => r.q !== variables)].slice(0, 15);
       setRecentLookups(updated);
@@ -97,19 +201,38 @@ export function LookupPage() {
   const hasResults = searchResult && searchResult.results.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Search bar */}
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: T.bg }}>
+      {/* ── Hero / Search Section ─────────────────────────── */}
       <div
-        className="flex-shrink-0 bg-white"
+        className="flex-shrink-0 relative"
         style={{
-          padding: "16px 24px",
-          borderBottom: "1px solid #E2E8F0",
+          background: `linear-gradient(180deg, ${T.orangeDeep} 0%, ${T.orangeGlow} 30%, transparent 100%)`,
+          padding: "32px 24px 20px",
         }}
       >
+        {/* Title Row */}
+        <div className="flex items-center gap-3 mb-5">
+          <Search size={22} style={{ color: T.orange }} />
+          <h1
+            className="font-extrabold tracking-tight"
+            style={{ fontSize: 22, color: T.text, margin: 0 }}
+          >
+            Parts Lookup
+          </h1>
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold"
+            style={{ background: T.purpleBg, color: T.purple, border: `1px solid rgba(168,85,247,0.25)` }}
+          >
+            <Sparkles size={11} /> AI
+          </span>
+        </div>
+
+        {/* Search Input */}
         <div className="relative flex items-center">
           <Search
-            size={20}
-            className="absolute left-4 text-[#718096]"
+            size={18}
+            className="absolute left-4"
+            style={{ color: T.textMuted }}
           />
           <input
             ref={inputRef}
@@ -119,29 +242,75 @@ export function LookupPage() {
               if (e.key === "Enter") handleSearch();
               if (e.key === "Escape") handleClear();
             }}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Search by part number, machine model, description, or symptom..."
-            className="w-full rounded-xl text-[15px] outline-none transition-colors duration-150 font-sans"
+            className="w-full rounded-xl outline-none transition-all duration-150 font-sans"
             style={{
-              padding: "14px 90px 14px 48px",
-              border: `2px solid ${query ? "#E87722" : "#E2E8F0"}`,
+              fontSize: 16,
+              padding: "14px 110px 14px 46px",
+              background: T.card,
+              border: `2px solid ${searchFocused || query ? T.orange : T.border}`,
+              color: T.text,
             }}
           />
-          <div className="absolute right-3 flex gap-1">
+          <div className="absolute right-3 flex items-center gap-1.5">
             {query && (
               <button
                 onClick={handleClear}
-                className="p-1.5 rounded-md border-none bg-[#F3F4F6] cursor-pointer flex"
+                className="p-1.5 rounded-md border-none cursor-pointer flex"
+                style={{ background: T.bgElevated }}
               >
-                <X size={16} className="text-[#718096]" />
+                <X size={16} style={{ color: T.textMuted }} />
               </button>
             )}
+            <button
+              className="p-1.5 rounded-md border-none cursor-pointer flex"
+              style={{ background: T.bgElevated }}
+              title="Voice search"
+            >
+              <Mic size={16} style={{ color: T.textMuted }} />
+            </button>
+            <Kbd>/</Kbd>
           </div>
+        </div>
+
+        {/* Quick Search Chips */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {QUICK_SEARCHES.map((chip) => (
+            <button
+              key={chip}
+              onClick={() => {
+                setQuery(chip);
+                searchMutation.mutate(chip);
+              }}
+              className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all duration-150"
+              style={{
+                background: T.bgElevated,
+                border: `1px solid ${T.border}`,
+                color: T.textMuted,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = T.orange;
+                e.currentTarget.style.color = T.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = T.border;
+                e.currentTarget.style.color = T.textMuted;
+              }}
+            >
+              {chip}
+            </button>
+          ))}
         </div>
 
         {/* Query classification indicator */}
         {searchResult && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-[#718096]">
-            <span className="px-2 py-0.5 rounded bg-[#FFF3E8] text-qep-orange font-semibold">
+          <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: T.textMuted }}>
+            <span
+              className="px-2 py-0.5 rounded font-semibold"
+              style={{ background: T.orangeGlow, color: T.orange }}
+            >
               {searchResult.query_type.replace("_", " ")}
             </span>
             <span>
@@ -152,14 +321,17 @@ export function LookupPage() {
             {searchResult.machine_identified && (
               <span className="ml-1">
                 Machine:{" "}
-                <strong className="text-[#2D3748]">
+                <strong style={{ color: T.text }}>
                   {searchResult.machine_identified.manufacturer}{" "}
                   {searchResult.machine_identified.model}
                 </strong>
               </span>
             )}
             {searchResult.degraded && (
-              <span className="ml-2 px-2 py-0.5 rounded bg-[#FEF3C7] text-[#92400E] font-semibold">
+              <span
+                className="ml-2 px-2 py-0.5 rounded font-semibold"
+                style={{ background: T.warningBg, color: T.warning }}
+              >
                 {searchResult.degraded_reason || "Degraded mode"}
               </span>
             )}
@@ -167,93 +339,242 @@ export function LookupPage() {
         )}
       </div>
 
-      {/* Results or Recent */}
+      {/* ── Main Content ──────────────────────────────────── */}
       <div className="flex-1 overflow-auto" style={{ padding: "16px 24px" }}>
+        {/* Loading */}
         {searchMutation.isPending && (
           <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-3 border-qep-orange border-t-transparent rounded-full animate-spin" />
+            <div
+              className="w-8 h-8 rounded-full animate-spin"
+              style={{ border: `3px solid ${T.border}`, borderTopColor: T.orange }}
+            />
           </div>
         )}
 
+        {/* Error */}
         {searchMutation.isError && (
-          <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          <div
+            className="p-4 rounded-lg text-sm"
+            style={{ background: T.dangerBg, border: `1px solid rgba(239,68,68,0.25)`, color: T.danger }}
+          >
             Search failed: {(searchMutation.error as Error).message}
           </div>
         )}
 
+        {/* ── Dashboard (no results) ──────────────────────── */}
         {!searchResult && !searchMutation.isPending && (
-          <div>
-            {/* Recent Lookups */}
-            {recentLookups.length > 0 && (
-              <>
-                <div className="text-[13px] font-bold text-[#718096] uppercase tracking-wider mb-3">
-                  Recent Lookups
-                </div>
-                {recentLookups.map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setQuery(r.q);
-                      searchMutation.mutate(r.q);
-                    }}
-                    className="flex items-center w-full px-3.5 py-2.5 rounded-lg border-none bg-white cursor-pointer mb-1 text-left transition-colors duration-100 hover:bg-[#F7F8FA]"
-                  >
-                    <Search size={14} className="text-[#718096] mr-2.5 flex-shrink-0" />
-                    <span className="flex-1 text-sm text-[#2D3748]">{r.q}</span>
-                    <span className="text-xs text-[#718096] mr-3">
-                      {r.results} result{r.results !== 1 ? "s" : ""}
+          <div className="flex flex-col gap-5">
+            {/* Two-column grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Hot This Month */}
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ background: T.card, border: `1px solid ${T.border}` }}
+              >
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: `1px solid ${T.borderSoft}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Flame size={16} style={{ color: T.orange }} />
+                    <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: T.text }}>
+                      Hot This Month
                     </span>
-                    <span className="text-xs text-[#718096]">{r.time}</span>
-                  </button>
-                ))}
-              </>
-            )}
-
-            {/* Keyboard shortcuts */}
-            <div
-              className="mt-8 p-5 rounded-xl bg-white"
-              style={{ border: "1px dashed #E2E8F0" }}
-            >
-              <div className="text-xs font-bold text-[#718096] uppercase tracking-wider mb-2.5">
-                Keyboard Shortcuts
+                  </div>
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
+                    style={{ background: T.orangeGlow, color: T.orange }}
+                  >
+                    Live Velocity
+                  </span>
+                </div>
+                <div className="p-2">
+                  {HOT_PARTS.map((p) => (
+                    <div
+                      key={p.rank}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-100"
+                      style={{ cursor: "default" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = T.cardHover)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      {/* Rank badge */}
+                      <span
+                        className="flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold"
+                        style={{
+                          background: p.rank === 1 ? T.orangeGlow : T.bgElevated,
+                          color: p.rank === 1 ? T.orange : T.textMuted,
+                          border: `1px solid ${p.rank === 1 ? "rgba(232,119,34,0.3)" : T.borderSoft}`,
+                        }}
+                      >
+                        {p.rank}
+                      </span>
+                      {/* PN + desc */}
+                      <div className="flex-1 min-w-0">
+                        <Copyable text={p.pn} />
+                        <div className="text-xs mt-0.5 truncate" style={{ color: T.textMuted }}>
+                          {p.desc}
+                        </div>
+                      </div>
+                      {/* Velocity */}
+                      <span className="text-sm font-bold font-mono" style={{ color: T.text }}>
+                        {p.velocity}
+                      </span>
+                      {/* Trend */}
+                      <span
+                        className="flex items-center gap-0.5 text-xs font-semibold"
+                        style={{ color: p.trend >= 0 ? T.success : T.danger }}
+                      >
+                        {p.trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                        {p.trend >= 0 ? "+" : ""}{p.trend}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px] text-[#4A5568]">
-                <div>
-                  <Kbd>/</Kbd> <span className="ml-1.5">Focus search</span>
+
+              {/* Recent Searches */}
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ background: T.card, border: `1px solid ${T.border}` }}
+              >
+                <div
+                  className="flex items-center gap-2 px-4 py-3"
+                  style={{ borderBottom: `1px solid ${T.borderSoft}` }}
+                >
+                  <History size={16} style={{ color: T.info }} />
+                  <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: T.text }}>
+                    Recent Searches
+                  </span>
                 </div>
-                <div>
-                  <Kbd>Tab</Kbd> <span className="ml-1.5">Next result</span>
+                <div className="p-2">
+                  {recentLookups.length === 0 && (
+                    <div className="px-4 py-8 text-center text-sm" style={{ color: T.textDim }}>
+                      No recent searches yet
+                    </div>
+                  )}
+                  {recentLookups.slice(0, 6).map((r, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setQuery(r.q);
+                        searchMutation.mutate(r.q);
+                      }}
+                      className="flex items-center w-full px-3 py-2.5 rounded-lg border-none cursor-pointer text-left transition-colors duration-100"
+                      style={{ background: "transparent" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = T.cardHover)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <Search size={14} className="flex-shrink-0 mr-2.5" style={{ color: T.textDim }} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold" style={{ color: T.text }}>
+                          {r.q}
+                        </span>
+                        {r.topPn && (
+                          <span className="text-xs font-mono ml-2" style={{ color: T.textDim }}>
+                            {r.topPn}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs mr-2" style={{ color: T.textDim }}>
+                        {r.time}
+                      </span>
+                      <ArrowUpRight size={14} style={{ color: T.textDim }} />
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <Kbd>Enter</Kbd> <span className="ml-1.5">Expand result</span>
-                </div>
-                <div>
-                  <Kbd>Esc</Kbd> <span className="ml-1.5">Clear search</span>
-                </div>
-                <div>
-                  <Kbd>Q</Kbd> <span className="ml-1.5">Toggle queue</span>
-                </div>
-                <div>
-                  <Kbd>⌘K</Kbd> <span className="ml-1.5">Search anywhere</span>
-                </div>
+              </div>
+            </div>
+
+            {/* Symptom to Part (Iron) */}
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{ background: T.card, border: `1px solid ${T.border}` }}
+            >
+              <div
+                className="flex items-center gap-2 px-4 py-3"
+                style={{ borderBottom: `1px solid ${T.borderSoft}` }}
+              >
+                <Cpu size={16} style={{ color: T.purple }} />
+                <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: T.text }}>
+                  Symptom &rarr; Part (Iron)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4">
+                {SYMPTOM_PARTS.map((s, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg p-3"
+                    style={{ background: T.bg, border: `1px solid ${T.borderSoft}` }}
+                  >
+                    <div className="text-xs mb-2" style={{ color: T.textMuted }}>
+                      {s.symptom}
+                    </div>
+                    <div className="mb-1">
+                      <Copyable text={s.pn} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs" style={{ color: T.textDim }}>
+                        {s.desc}
+                      </span>
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                        style={{ background: T.successBg, color: T.success }}
+                      >
+                        {s.confidence}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Keyboard Shortcuts */}
+            <div
+              className="flex items-center gap-4 px-4 py-3 rounded-xl flex-wrap"
+              style={{ background: T.bgElevated, border: `1px solid ${T.border}` }}
+            >
+              <div className="flex items-center gap-2 mr-2">
+                <Keyboard size={14} style={{ color: T.textDim }} />
+                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: T.textDim }}>
+                  Shortcuts
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>/</Kbd> <span>Focus search</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>Tab</Kbd> <span>Next result</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>Enter</Kbd> <span>Expand</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>Esc</Kbd> <span>Clear</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>Q</Kbd> <span>Queue</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.textMuted }}>
+                <Kbd>&#8984;K</Kbd> <span>Search anywhere</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Search Results */}
+        {/* ── Search Results ──────────────────────────────── */}
         {hasResults && (
           <div className="flex flex-col gap-2.5">
-            {searchResult!.results.map((r) => (
+            {searchResult!.results.map((r: PartSearchResult) => (
               <div
                 key={r.part_id}
-                className="bg-white rounded-xl overflow-hidden transition-all duration-150"
+                className="rounded-xl overflow-hidden transition-all duration-150"
                 style={{
-                  border: `1px solid ${expanded === r.part_id ? "#E87722" : "#E2E8F0"}`,
+                  background: T.card,
+                  border: `1px solid ${expanded === r.part_id ? T.orange : T.border}`,
                   boxShadow:
                     expanded === r.part_id
-                      ? "0 0 0 2px #FFF3E8"
-                      : "0 1px 3px rgba(0,0,0,0.04)",
+                      ? `0 0 0 2px ${T.orangeGlow}`
+                      : "none",
                 }}
               >
                 {/* Result header */}
@@ -266,14 +587,14 @@ export function LookupPage() {
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-base font-bold font-mono text-[#2D3748]">
+                        <span className="text-base font-bold font-mono" style={{ color: T.text }}>
                           {r.part_number}
                         </span>
-                        <span className="text-sm text-[#4A5568]">
+                        <span className="text-sm" style={{ color: T.textMuted }}>
                           · {r.description}
                         </span>
                       </div>
-                      <div className="text-xs text-[#718096]">
+                      <div className="text-xs" style={{ color: T.textDim }}>
                         {r.manufacturer} OEM
                         {r.category ? ` · ${r.category}` : ""}
                       </div>
@@ -285,10 +606,10 @@ export function LookupPage() {
                       style={{
                         background:
                           r.confidence >= 0.9
-                            ? "#D1FAE5"
+                            ? T.successBg
                             : r.confidence >= 0.8
-                              ? "#FEF3C7"
-                              : "#F3F4F6",
+                              ? T.warningBg
+                              : T.bgElevated,
                       }}
                     >
                       <span
@@ -296,10 +617,10 @@ export function LookupPage() {
                         style={{
                           color:
                             r.confidence >= 0.9
-                              ? "#065F46"
+                              ? T.success
                               : r.confidence >= 0.8
-                                ? "#92400E"
-                                : "#718096",
+                                ? T.warning
+                                : T.textMuted,
                         }}
                       >
                         {Math.round(r.confidence * 100)}%
@@ -309,10 +630,10 @@ export function LookupPage() {
                         style={{
                           color:
                             r.confidence >= 0.9
-                              ? "#065F46"
+                              ? T.success
                               : r.confidence >= 0.8
-                                ? "#92400E"
-                                : "#718096",
+                                ? T.warning
+                                : T.textMuted,
                         }}
                       >
                         match
@@ -333,29 +654,42 @@ export function LookupPage() {
                 {/* Expanded content */}
                 {expanded === r.part_id && (
                   <div
-                    className="p-4 bg-[#FAFBFC]"
-                    style={{ borderTop: "1px solid #E2E8F0" }}
+                    className="p-4"
+                    style={{ background: T.bg, borderTop: `1px solid ${T.border}` }}
                   >
                     {/* Frequently ordered with */}
                     {r.frequently_ordered_with.length > 0 && (
                       <div className="mb-3">
-                        <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider mb-1.5">
+                        <div
+                          className="text-[11px] font-bold uppercase tracking-wider mb-1.5"
+                          style={{ color: T.textDim }}
+                        >
                           Also order with this part
                         </div>
                         {r.frequently_ordered_with.map((f, i) => (
                           <div
                             key={i}
-                            className="flex items-center justify-between px-3 py-2 rounded-md bg-white border border-[#E2E8F0] mb-1"
+                            className="flex items-center justify-between px-3 py-2 rounded-md mb-1"
+                            style={{ background: T.card, border: `1px solid ${T.borderSoft}` }}
                           >
                             <div>
-                              <span className="font-mono font-semibold text-[13px] text-[#2D3748]">
+                              <span className="font-mono font-semibold text-[13px]" style={{ color: T.text }}>
                                 {f.part_number}
                               </span>
-                              <span className="text-xs text-[#718096] ml-2">
+                              <span className="text-xs ml-2" style={{ color: T.textMuted }}>
                                 {f.description}
                               </span>
                             </div>
-                            <button className="px-2.5 py-1 rounded border border-qep-orange bg-white text-[11px] font-semibold text-qep-orange cursor-pointer hover:bg-[#FFF3E8]">
+                            <button
+                              className="px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer transition-colors"
+                              style={{
+                                border: `1px solid ${T.orange}`,
+                                background: "transparent",
+                                color: T.orange,
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = T.orangeGlow)}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                            >
                               + Add
                             </button>
                           </div>
@@ -366,10 +700,20 @@ export function LookupPage() {
                     {/* Actions */}
                     <div className="flex gap-2 flex-wrap">
                       <IntelliDealerBadge partNumber={r.part_number} />
-                      <button className="flex items-center gap-1 px-3 py-1.5 rounded-md border-none bg-qep-orange text-white text-xs font-semibold cursor-pointer hover:bg-[#D06A1E]">
+                      <button
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-md border-none text-white text-xs font-semibold cursor-pointer transition-colors"
+                        style={{ background: T.orange }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#D06A1E")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = T.orange)}
+                      >
                         <Plus size={13} /> Add to Request
                       </button>
-                      <button className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#E2E8F0] bg-white text-[#4A5568] text-xs font-semibold cursor-pointer hover:bg-[#F7F8FA]">
+                      <button
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors"
+                        style={{ border: `1px solid ${T.border}`, background: T.card, color: T.textMuted }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = T.cardHover)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = T.card)}
+                      >
                         <MessageSquare size={13} /> Ask AI
                       </button>
                     </div>
@@ -380,9 +724,13 @@ export function LookupPage() {
 
             {/* Can't find it? */}
             <div className="text-center py-4">
-              <button className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#4A5568] cursor-pointer hover:bg-[#F7F8FA]">
-                <MessageSquare size={14} /> Can&apos;t find what you need? Ask the
-                AI Assistant
+              <button
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-colors"
+                style={{ border: `1px solid ${T.border}`, background: T.card, color: T.textMuted }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = T.cardHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = T.card)}
+              >
+                <MessageSquare size={14} /> Can&apos;t find what you need? Ask the AI Assistant
               </button>
             </div>
           </div>
@@ -391,22 +739,29 @@ export function LookupPage() {
         {/* KB Evidence (if any) */}
         {searchResult && searchResult.kb_evidence.length > 0 && (
           <div className="mt-4">
-            <div className="text-[11px] font-bold text-[#718096] uppercase tracking-wider mb-2">
+            <div
+              className="text-[11px] font-bold uppercase tracking-wider mb-2"
+              style={{ color: T.textDim }}
+            >
               Related Documentation
             </div>
             {searchResult.kb_evidence.slice(0, 3).map((ev, i) => (
               <div
                 key={i}
-                className="p-3 rounded-lg bg-white border border-[#E2E8F0] mb-2"
+                className="p-3 rounded-lg mb-2"
+                style={{ background: T.card, border: `1px solid ${T.border}` }}
               >
-                <div className="text-xs font-semibold text-[#2D3748] mb-1">
+                <div className="text-xs font-semibold mb-1" style={{ color: T.text }}>
                   {ev.source_title}
-                  {ev.page_number ? ` — pg ${ev.page_number}` : ""}
+                  {ev.page_number ? ` -- pg ${ev.page_number}` : ""}
                 </div>
-                <div className="text-xs text-[#4A5568] leading-relaxed line-clamp-3">
+                <div
+                  className="text-xs leading-relaxed line-clamp-3"
+                  style={{ color: T.textMuted }}
+                >
                   {ev.excerpt}
                 </div>
-                <div className="text-[10px] text-[#718096] mt-1">
+                <div className="text-[10px] mt-1" style={{ color: T.textDim }}>
                   Confidence: {Math.round(ev.confidence * 100)}%
                 </div>
               </div>

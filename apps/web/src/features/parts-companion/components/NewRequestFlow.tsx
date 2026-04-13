@@ -1,8 +1,29 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
+import { X, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { createPartsRequest } from "../lib/companion-api";
 import type { RequestSource, RequestPriority } from "../lib/types";
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+const T = {
+  bg: "#0A1628",
+  bgElevated: "#0F1D31",
+  card: "#132238",
+  cardHover: "#182A44",
+  border: "#1F3254",
+  borderSoft: "#18263F",
+  orange: "#E87722",
+  orangeGlow: "rgba(232,119,34,0.15)",
+  orangeDeep: "rgba(232,119,34,0.35)",
+  text: "#E5ECF5",
+  textMuted: "#8A9BB4",
+  textDim: "#5F7391",
+  success: "#22C55E",
+  successBg: "rgba(34,197,94,0.12)",
+  danger: "#EF4444",
+  warning: "#F59E0B",
+  info: "#3B82F6",
+} as const;
 
 interface NewRequestFlowProps {
   onClose: () => void;
@@ -16,6 +37,7 @@ interface DraftItem {
 }
 
 type Step = "source" | "machine" | "parts" | "review";
+const STEPS: Step[] = ["source", "machine", "parts", "review"];
 
 const SOURCE_OPTIONS: Array<{
   key: RequestSource;
@@ -59,7 +81,7 @@ const PRIORITY_OPTIONS: Array<{
     key: "critical",
     label: "Critical",
     description: "Machine on lift, tech waiting",
-    color: "#DC2626",
+    color: "#EF4444",
   },
   {
     key: "urgent",
@@ -71,15 +93,28 @@ const PRIORITY_OPTIONS: Array<{
     key: "normal",
     label: "Normal",
     description: "Standard request",
-    color: "#3182CE",
+    color: "#3B82F6",
   },
   {
     key: "low",
     label: "Low",
     description: "Restock, non-urgent",
-    color: "#718096",
+    color: "#5F7391",
   },
 ];
+
+/* Shared input style helper */
+const inputStyle: React.CSSProperties = {
+  background: T.card,
+  border: `1px solid ${T.border}`,
+  color: T.text,
+  borderRadius: 8,
+  padding: "10px 14px",
+  fontSize: 14,
+  outline: "none",
+  width: "100%",
+  boxSizing: "border-box",
+};
 
 export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
   const queryClient = useQueryClient();
@@ -142,7 +177,7 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
       case "source":
         return !!source;
       case "machine":
-        return true; // Machine is optional
+        return true;
       case "parts":
         return items.length > 0;
       case "review":
@@ -151,62 +186,86 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
   };
 
   const nextStep = () => {
-    const steps: Step[] = ["source", "machine", "parts", "review"];
-    const idx = steps.indexOf(step);
-    if (idx < steps.length - 1) setStep(steps[idx + 1]);
+    const idx = STEPS.indexOf(step);
+    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]);
   };
 
   const prevStep = () => {
-    const steps: Step[] = ["source", "machine", "parts", "review"];
-    const idx = steps.indexOf(step);
-    if (idx > 0) setStep(steps[idx - 1]);
+    const idx = STEPS.indexOf(step);
+    if (idx > 0) setStep(STEPS[idx - 1]);
   };
 
+  const stepIdx = STEPS.indexOf(step);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+    >
+      <div
+        className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden rounded-2xl"
+        style={{
+          background: T.bgElevated,
+          border: `1px solid ${T.border}`,
+          boxShadow: "0 25px 50px rgba(0,0,0,0.5)",
+        }}
+      >
+        {/* ── Header ──────────────────────────────────────────── */}
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: `1px solid ${T.border}` }}
+        >
           <div>
-            <h2 className="text-lg font-bold text-[#2D3748]">New Request</h2>
-            <div className="flex items-center gap-1 mt-1">
-              {(["source", "machine", "parts", "review"] as Step[]).map(
-                (s, i) => (
-                  <div key={s} className="flex items-center gap-1">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        background:
-                          s === step
-                            ? "#E87722"
-                            : (["source", "machine", "parts", "review"] as Step[]).indexOf(s) <
-                                (["source", "machine", "parts", "review"] as Step[]).indexOf(step)
-                              ? "#38A169"
-                              : "#E2E8F0",
-                      }}
+            <h2
+              className="text-lg font-bold"
+              style={{ color: T.text, margin: 0 }}
+            >
+              New Request
+            </h2>
+            <div className="flex items-center gap-1 mt-1.5">
+              {STEPS.map((s, i) => (
+                <div key={s} className="flex items-center gap-1">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full transition-colors duration-200"
+                    style={{
+                      background:
+                        i < stepIdx
+                          ? T.success
+                          : s === step
+                            ? T.orange
+                            : T.borderSoft,
+                    }}
+                  />
+                  {i < STEPS.length - 1 && (
+                    <div
+                      className="w-5 h-px"
+                      style={{ background: T.borderSoft }}
                     />
-                    {i < 3 && (
-                      <div className="w-4 h-px bg-[#E2E8F0]" />
-                    )}
-                  </div>
-                ),
-              )}
+                  )}
+                </div>
+              ))}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded border-none bg-transparent cursor-pointer hover:bg-[#F3F4F6]"
+            className="p-1.5 rounded-lg border-none cursor-pointer transition-colors duration-150"
+            style={{ background: "transparent", color: T.textMuted }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.card)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <X size={20} className="text-[#718096]" />
+            <X size={20} />
           </button>
         </div>
 
-        {/* Content */}
+        {/* ── Content ─────────────────────────────────────────── */}
         <div className="flex-1 overflow-auto px-6 py-5">
           {/* Step 1: Source + Priority */}
           {step === "source" && (
             <div>
-              <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+              <h3
+                className="text-sm font-bold mb-3"
+                style={{ color: T.text }}
+              >
                 Request Source
               </h3>
               <div className="flex flex-col gap-2 mb-6">
@@ -214,24 +273,32 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                   <button
                     key={opt.key}
                     onClick={() => setSource(opt.key)}
-                    className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer text-left transition-all duration-150"
+                    className="flex items-center gap-3 p-3 rounded-lg cursor-pointer text-left transition-all duration-150"
                     style={{
-                      borderColor:
-                        source === opt.key ? "#E87722" : "#E2E8F0",
+                      border: `1px solid ${source === opt.key ? T.orange : T.border}`,
                       background:
-                        source === opt.key ? "#FFF3E8" : "white",
+                        source === opt.key ? T.orangeGlow : T.card,
                     }}
                   >
                     <div className="flex-1">
-                      <div className="text-[13px] font-semibold text-[#2D3748]">
+                      <div
+                        className="text-[13px] font-semibold"
+                        style={{ color: T.text }}
+                      >
                         {opt.label}
                       </div>
-                      <div className="text-[11px] text-[#718096]">
+                      <div
+                        className="text-[11px]"
+                        style={{ color: T.textMuted }}
+                      >
                         {opt.description}
                       </div>
                     </div>
                     {source === opt.key && (
-                      <div className="w-5 h-5 rounded-full bg-qep-orange flex items-center justify-center">
+                      <div
+                        className="w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{ background: T.orange }}
+                      >
                         <div className="w-2 h-2 rounded-full bg-white" />
                       </div>
                     )}
@@ -239,7 +306,10 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                 ))}
               </div>
 
-              <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+              <h3
+                className="text-sm font-bold mb-3"
+                style={{ color: T.text }}
+              >
                 Priority
               </h3>
               <div className="flex gap-2">
@@ -247,12 +317,13 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                   <button
                     key={opt.key}
                     onClick={() => setPriority(opt.key)}
-                    className="flex-1 p-2.5 rounded-lg border cursor-pointer text-center transition-all duration-150"
+                    className="flex-1 p-2.5 rounded-lg cursor-pointer text-center transition-all duration-150"
                     style={{
-                      borderColor:
-                        priority === opt.key ? opt.color : "#E2E8F0",
+                      border: `1px solid ${priority === opt.key ? opt.color : T.border}`,
                       background:
-                        priority === opt.key ? `${opt.color}10` : "white",
+                        priority === opt.key
+                          ? `${opt.color}18`
+                          : T.card,
                     }}
                   >
                     <div
@@ -261,7 +332,10 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                     >
                       {opt.label}
                     </div>
-                    <div className="text-[10px] text-[#718096] mt-0.5">
+                    <div
+                      className="text-[10px] mt-0.5"
+                      style={{ color: T.textMuted }}
+                    >
                       {opt.description}
                     </div>
                   </button>
@@ -273,26 +347,42 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
           {/* Step 2: Machine */}
           {step === "machine" && (
             <div>
-              <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+              <h3
+                className="text-sm font-bold mb-3"
+                style={{ color: T.text }}
+              >
                 Machine (optional)
               </h3>
               <input
                 value={machineDescription}
                 onChange={(e) => setMachineDescription(e.target.value)}
                 placeholder="e.g., 2019 Barko 495ML, S/N BMT-4217"
-                className="w-full p-3 rounded-lg border border-[#E2E8F0] text-sm outline-none mb-4 focus:border-qep-orange"
+                style={{
+                  ...inputStyle,
+                  marginBottom: 16,
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
               />
 
               {source === "service" && (
                 <>
-                  <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+                  <h3
+                    className="text-sm font-bold mb-3"
+                    style={{ color: T.text }}
+                  >
                     Bay Number
                   </h3>
                   <input
                     value={bayNumber}
                     onChange={(e) => setBayNumber(e.target.value)}
                     placeholder="e.g., Bay 3"
-                    className="w-full p-3 rounded-lg border border-[#E2E8F0] text-sm outline-none mb-4 focus:border-qep-orange"
+                    style={{
+                      ...inputStyle,
+                      marginBottom: 16,
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                   />
                 </>
               )}
@@ -300,14 +390,19 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
               {(source === "customer_phone" ||
                 source === "customer_walkin") && (
                 <>
-                  <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+                  <h3
+                    className="text-sm font-bold mb-3"
+                    style={{ color: T.text }}
+                  >
                     Customer Name
                   </h3>
                   <input
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="e.g., Jake Thompson, Thompson Logging"
-                    className="w-full p-3 rounded-lg border border-[#E2E8F0] text-sm outline-none focus:border-qep-orange"
+                    style={inputStyle}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                   />
                 </>
               )}
@@ -317,7 +412,10 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
           {/* Step 3: Parts */}
           {step === "parts" && (
             <div>
-              <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+              <h3
+                className="text-sm font-bold mb-3"
+                style={{ color: T.text }}
+              >
                 Parts Needed
               </h3>
 
@@ -327,26 +425,46 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                   {items.map((item, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-[#F7F8FA] border border-[#E2E8F0]"
+                      className="flex items-center gap-3 p-3 rounded-lg"
+                      style={{
+                        background: T.bg,
+                        border: `1px solid ${T.borderSoft}`,
+                      }}
                     >
                       <div className="flex-1">
-                        <span className="font-mono font-semibold text-[13px] text-[#2D3748]">
+                        <span
+                          className="font-mono font-semibold text-[13px]"
+                          style={{ color: T.text }}
+                        >
                           {item.part_number}
                         </span>
                         {item.description && (
-                          <span className="text-xs text-[#718096] ml-2">
+                          <span
+                            className="text-xs ml-2"
+                            style={{ color: T.textMuted }}
+                          >
                             {item.description}
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-[#718096]">
+                      <span
+                        className="text-xs"
+                        style={{ color: T.textMuted }}
+                      >
                         x{item.quantity}
                       </span>
                       <button
                         onClick={() => removeItem(i)}
-                        className="p-1 rounded border-none bg-transparent cursor-pointer hover:bg-red-50"
+                        className="p-1 rounded border-none bg-transparent cursor-pointer transition-colors duration-150"
+                        style={{ color: T.danger }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "rgba(239,68,68,0.12)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "transparent")
+                        }
                       >
-                        <Trash2 size={14} className="text-red-400" />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ))}
@@ -356,7 +474,10 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
               {/* Add new item */}
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
-                  <label className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider block mb-1">
+                  <label
+                    className="text-[11px] font-semibold uppercase tracking-wider block mb-1"
+                    style={{ color: T.textMuted }}
+                  >
                     Part Number
                   </label>
                   <input
@@ -366,11 +487,19 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                       if (e.key === "Enter") addItem();
                     }}
                     placeholder="BK-495-HF-024"
-                    className="w-full p-2.5 rounded-lg border border-[#E2E8F0] text-sm font-mono outline-none focus:border-qep-orange"
+                    style={{
+                      ...inputStyle,
+                      fontFamily: "monospace",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                   />
                 </div>
-                <div className="w-20">
-                  <label className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider block mb-1">
+                <div style={{ width: 80 }}>
+                  <label
+                    className="text-[11px] font-semibold uppercase tracking-wider block mb-1"
+                    style={{ color: T.textMuted }}
+                  >
                     Qty
                   </label>
                   <input
@@ -380,27 +509,41 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                       setNewPartQty(Math.max(1, parseInt(e.target.value) || 1))
                     }
                     min={1}
-                    className="w-full p-2.5 rounded-lg border border-[#E2E8F0] text-sm outline-none text-center focus:border-qep-orange"
+                    style={{
+                      ...inputStyle,
+                      textAlign: "center",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                   />
                 </div>
                 <button
                   onClick={addItem}
                   disabled={!newPartNumber.trim()}
-                  className="flex items-center gap-1 px-4 py-2.5 rounded-lg border-none bg-qep-orange text-white text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#D06A1E]"
+                  className="flex items-center gap-1 px-4 py-2.5 rounded-lg border-none text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+                  style={{
+                    background: T.orange,
+                    color: "#fff",
+                  }}
                 >
                   <Plus size={14} /> Add
                 </button>
               </div>
 
-              <div className="mt-2">
-                <label className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider block mb-1">
+              <div className="mt-3">
+                <label
+                  className="text-[11px] font-semibold uppercase tracking-wider block mb-1"
+                  style={{ color: T.textMuted }}
+                >
                   Description (optional)
                 </label>
                 <input
                   value={newPartDesc}
                   onChange={(e) => setNewPartDesc(e.target.value)}
                   placeholder="Hydraulic Return Filter"
-                  className="w-full p-2.5 rounded-lg border border-[#E2E8F0] text-sm outline-none focus:border-qep-orange"
+                  style={inputStyle}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                 />
               </div>
             </div>
@@ -409,44 +552,93 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
           {/* Step 4: Review */}
           {step === "review" && (
             <div>
-              <h3 className="text-sm font-bold text-[#2D3748] mb-3">
+              <h3
+                className="text-sm font-bold mb-3"
+                style={{ color: T.text }}
+              >
                 Review Request
               </h3>
               <div className="flex flex-col gap-3">
-                <div className="p-3 rounded-lg bg-[#F7F8FA] border border-[#E2E8F0]">
-                  <div className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider mb-1">
+                <div
+                  className="p-3 rounded-lg"
+                  style={{
+                    background: T.bg,
+                    border: `1px solid ${T.borderSoft}`,
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+                    style={{ color: T.textMuted }}
+                  >
                     Source
                   </div>
-                  <div className="text-sm text-[#2D3748] capitalize">
+                  <div
+                    className="text-sm capitalize"
+                    style={{ color: T.text }}
+                  >
                     {source?.replace("_", " ")}
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-[#F7F8FA] border border-[#E2E8F0]">
-                  <div className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider mb-1">
+                <div
+                  className="p-3 rounded-lg"
+                  style={{
+                    background: T.bg,
+                    border: `1px solid ${T.borderSoft}`,
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+                    style={{ color: T.textMuted }}
+                  >
                     Priority
                   </div>
-                  <div className="text-sm text-[#2D3748] capitalize">
+                  <div
+                    className="text-sm capitalize"
+                    style={{ color: T.text }}
+                  >
                     {priority}
                   </div>
                 </div>
                 {machineDescription && (
-                  <div className="p-3 rounded-lg bg-[#F7F8FA] border border-[#E2E8F0]">
-                    <div className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider mb-1">
+                  <div
+                    className="p-3 rounded-lg"
+                    style={{
+                      background: T.bg,
+                      border: `1px solid ${T.borderSoft}`,
+                    }}
+                  >
+                    <div
+                      className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+                      style={{ color: T.textMuted }}
+                    >
                       Machine
                     </div>
-                    <div className="text-sm text-[#2D3748]">
+                    <div
+                      className="text-sm"
+                      style={{ color: T.text }}
+                    >
                       {machineDescription}
                     </div>
                   </div>
                 )}
-                <div className="p-3 rounded-lg bg-[#F7F8FA] border border-[#E2E8F0]">
-                  <div className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider mb-1">
+                <div
+                  className="p-3 rounded-lg"
+                  style={{
+                    background: T.bg,
+                    border: `1px solid ${T.borderSoft}`,
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+                    style={{ color: T.textMuted }}
+                  >
                     Parts ({items.length})
                   </div>
                   {items.map((it, i) => (
                     <div
                       key={i}
-                      className="text-sm text-[#2D3748] font-mono"
+                      className="text-sm font-mono"
+                      style={{ color: T.text }}
                     >
                       {it.part_number} x{it.quantity}
                       {it.description ? ` — ${it.description}` : ""}
@@ -456,7 +648,10 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
               </div>
 
               <div className="mt-4">
-                <label className="text-[11px] font-semibold text-[#718096] uppercase tracking-wider block mb-1">
+                <label
+                  className="text-[11px] font-semibold uppercase tracking-wider block mb-1"
+                  style={{ color: T.textMuted }}
+                >
                   Notes (optional)
                 </label>
                 <textarea
@@ -464,12 +659,24 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Additional context..."
                   rows={3}
-                  className="w-full p-3 rounded-lg border border-[#E2E8F0] text-sm outline-none resize-none focus:border-qep-orange"
+                  style={{
+                    ...inputStyle,
+                    resize: "none",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = T.orange)}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
                 />
               </div>
 
               {createMutation.isError && (
-                <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                <div
+                  className="mt-3 p-3 rounded-lg text-sm"
+                  style={{
+                    background: "rgba(239,68,68,0.12)",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    color: T.danger,
+                  }}
+                >
                   Failed to create request.{" "}
                   {(createMutation.error as Error).message}
                 </div>
@@ -478,20 +685,34 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#E2E8F0]">
+        {/* ── Footer ──────────────────────────────────────────── */}
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderTop: `1px solid ${T.border}` }}
+        >
           <button
             onClick={step === "source" ? onClose : prevStep}
-            className="px-4 py-2 rounded-lg border border-[#E2E8F0] bg-white text-sm font-semibold text-[#4A5568] cursor-pointer hover:bg-[#F7F8FA]"
+            className="px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-colors duration-150"
+            style={{
+              background: T.card,
+              border: `1px solid ${T.border}`,
+              color: T.textMuted,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.cardHover)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = T.card)}
           >
-            {step === "source" ? "Cancel" : "← Back"}
+            {step === "source" ? "Cancel" : "\u2190 Back"}
           </button>
 
           {step === "review" ? (
             <button
               onClick={() => createMutation.mutate()}
               disabled={createMutation.isPending}
-              className="px-6 py-2 rounded-lg border-none bg-qep-orange text-white text-sm font-bold cursor-pointer disabled:opacity-60 hover:bg-[#D06A1E]"
+              className="px-6 py-2 rounded-lg border-none text-sm font-bold cursor-pointer disabled:opacity-60 transition-colors duration-150"
+              style={{
+                background: T.orange,
+                color: "#fff",
+              }}
             >
               {createMutation.isPending ? "Creating..." : "Submit Request"}
             </button>
@@ -499,7 +720,11 @@ export function NewRequestFlow({ onClose }: NewRequestFlowProps) {
             <button
               onClick={nextStep}
               disabled={!canProceed()}
-              className="flex items-center gap-1 px-4 py-2 rounded-lg border-none bg-qep-orange text-white text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#D06A1E]"
+              className="flex items-center gap-1 px-4 py-2 rounded-lg border-none text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+              style={{
+                background: T.orange,
+                color: "#fff",
+              }}
             >
               Next <ChevronRight size={14} />
             </button>

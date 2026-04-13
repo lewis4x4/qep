@@ -1,6 +1,18 @@
 import { useState } from "react";
 import { ExternalLink, Copy, CheckCircle2 } from "lucide-react";
 
+/* ── Design tokens ─────────────────────────────────────────────── */
+const T = {
+  bgElevated: "#0F1D31",
+  border: "#1F3254",
+  text: "#E5ECF5",
+  textMuted: "#8A9BB4",
+  warning: "#F59E0B",
+  warningBg: "rgba(245,158,11,0.12)",
+  success: "#22C55E",
+  successBg: "rgba(34,197,94,0.12)",
+} as const;
+
 interface IntelliDealerBadgeProps {
   partNumber: string;
   className?: string;
@@ -27,9 +39,18 @@ export function IntelliDealerBadge({
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       {/* Check IntelliDealer badge */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#FEF3C7] border border-[#FDE68A]">
-        <ExternalLink size={13} className="text-[#92400E]" />
-        <span className="text-xs font-semibold text-[#92400E]">
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md"
+        style={{
+          background: T.warningBg,
+          border: `1px solid rgba(245,158,11,0.25)`,
+        }}
+      >
+        <ExternalLink size={13} style={{ color: T.warning }} />
+        <span
+          className="text-xs font-semibold"
+          style={{ color: T.warning }}
+        >
           Check IntelliDealer
         </span>
       </div>
@@ -37,11 +58,12 @@ export function IntelliDealerBadge({
       {/* Copy part number */}
       <button
         onClick={handleCopy}
-        className="flex items-center gap-1 px-2 py-1.5 rounded border text-xs font-medium cursor-pointer transition-all duration-150"
+        className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium cursor-pointer transition-all duration-150"
         style={{
-          borderColor: "#E2E8F0",
-          background: copied ? "#D1FAE5" : "white",
-          color: copied ? "#065F46" : "#4A5568",
+          fontFamily: "monospace",
+          border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : T.border}`,
+          background: copied ? T.successBg : T.bgElevated,
+          color: copied ? T.success : T.textMuted,
         }}
       >
         {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}

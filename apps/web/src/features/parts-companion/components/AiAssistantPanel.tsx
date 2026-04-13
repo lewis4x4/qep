@@ -1,10 +1,42 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Zap, ArrowRight, Info, AlertCircle } from "lucide-react";
+import {
+  X,
+  ArrowRight,
+  FileText,
+  Mic,
+  Search,
+  ArrowLeftRight,
+  Wrench,
+  Gauge,
+  LayoutList,
+  TrendingUp,
+  PackageCheck,
+  Sparkles,
+} from "lucide-react";
 import {
   useIronKnowledgeStream,
   type IronKnowledgeSource,
 } from "../../../lib/iron/useIronKnowledgeStream";
+import { IronAvatar } from "../../../lib/iron/IronAvatar";
 import type { AiMessage } from "../lib/types";
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+const T = {
+  bg: "#0A1628",
+  bgElevated: "#0F1D31",
+  card: "#132238",
+  cardHover: "#182A44",
+  border: "#1F3254",
+  borderSoft: "#18263F",
+  orange: "#E87722",
+  orangeGlow: "rgba(232,119,34,0.15)",
+  orangeDeep: "rgba(232,119,34,0.35)",
+  text: "#E5ECF5",
+  textMuted: "#8A9BB4",
+  textDim: "#5F7391",
+  success: "#22C55E",
+  successBg: "rgba(34,197,94,0.12)",
+} as const;
 
 interface AiAssistantPanelProps {
   onClose: () => void;
@@ -21,6 +53,17 @@ function sourcesToCitations(
     excerpt: s.excerpt,
   }));
 }
+
+const SUGGESTIONS: Array<{ icon: typeof Search; label: string; prompt: string }> = [
+  { icon: Search, label: "Part search", prompt: "What oil filter fits a Barko 495ML?" },
+  { icon: ArrowLeftRight, label: "Cross-reference", prompt: "Cross-reference NAPA 1515 to OEM" },
+  { icon: Wrench, label: "Service kit", prompt: "500-hour service kit for ASV RT-75?" },
+  { icon: Gauge, label: "Torque spec", prompt: "Torque spec for track tensioner bolts?" },
+  { icon: LayoutList, label: "Queue status", prompt: "Show me current parts queue status" },
+  { icon: TrendingUp, label: "Top parts", prompt: "What are the top-selling parts this month?" },
+  { icon: PackageCheck, label: "Reorders", prompt: "Which parts need reordering soon?" },
+  { icon: Sparkles, label: "Upsell opportunities", prompt: "Identify upsell opportunities for recent orders" },
+];
 
 export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -69,13 +112,6 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     }
   }, [stream.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const suggestedPrompts = [
-    "What oil filter fits a Barko 495ML?",
-    "Hydraulic fluid capacity for ASV RT-75?",
-    "Cross-reference NAPA 1515 to OEM",
-    "Torque spec for track tensioner bolts?",
-  ];
-
   const handleSend = useCallback(
     async (text?: string) => {
       const message = (text ?? input).trim();
@@ -106,63 +142,119 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
 
   return (
     <div
-      className="flex flex-col h-full bg-white flex-shrink-0"
+      className="flex flex-col h-full flex-shrink-0"
       style={{
-        width: 360,
-        borderLeft: "1px solid #E2E8F0",
+        width: 480,
+        background: T.bgElevated,
+        borderLeft: `1px solid ${T.border}`,
+        boxShadow: "-20px 0 60px rgba(0,0,0,0.5)",
       }}
     >
-      {/* Header */}
+      {/* ── Header ──────────────────────────────────────────────── */}
       <div
-        className="flex items-center justify-between flex-shrink-0"
+        className="flex-shrink-0"
         style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid #E2E8F0",
+          background: `linear-gradient(180deg, ${T.orangeGlow} 0%, transparent 100%)`,
         }}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#FFF3E8]">
-            <Zap size={14} className="text-qep-orange" />
+        <div
+          className="flex items-center justify-between"
+          style={{ padding: "16px 20px" }}
+        >
+          <div className="flex items-center gap-3">
+            <IronAvatar
+              state={isStreaming ? "thinking" : "idle"}
+              size={40}
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-[15px] font-bold"
+                  style={{ color: T.text }}
+                >
+                  Iron
+                </span>
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                  style={{
+                    background: T.successBg,
+                    color: T.success,
+                  }}
+                >
+                  Online
+                </span>
+                {stream.meta?.degradation_state === "reduced" && (
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+                    style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B" }}
+                  >
+                    Reduced
+                  </span>
+                )}
+              </div>
+              <div
+                className="text-[11px] mt-0.5"
+                style={{ color: T.textDim }}
+              >
+                Parts counter copilot &middot; inventory &middot; cross-refs &middot; specs
+              </div>
+            </div>
           </div>
-          <span className="text-[13px] font-bold text-[#2D3748]">
-            Parts AI
-          </span>
-          {stream.meta?.degradation_state === "reduced" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#92400E] font-semibold">
-              Reduced
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
           <button
             onClick={onClose}
-            className="border-none bg-transparent cursor-pointer p-1"
+            className="border-none bg-transparent cursor-pointer p-1.5 rounded-lg transition-colors duration-150"
+            style={{ color: T.textMuted }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.card)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <X size={16} className="text-[#718096]" />
+            <X size={18} />
           </button>
         </div>
       </div>
 
-      {/* Messages */}
+      {/* ── Messages ────────────────────────────────────────────── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto flex flex-col gap-3 p-4"
+        className="flex-1 overflow-auto flex flex-col gap-3"
+        style={{ padding: "16px 20px" }}
       >
-        {messages.length === 0 && !isStreaming && (
-          <div className="flex flex-col gap-3 mt-4">
-            <p className="text-[13px] text-[#718096] text-center">
+        {/* Suggestion grid when conversation is fresh */}
+        {messages.length < 3 && !isStreaming && messages.length === 0 && (
+          <div className="flex flex-col gap-4 mt-2">
+            <p
+              className="text-[13px] text-center"
+              style={{ color: T.textMuted }}
+            >
               Ask about parts, specs, maintenance, or cross-references.
             </p>
-            <div className="flex flex-col gap-2">
-              {suggestedPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  onClick={() => handleSend(prompt)}
-                  className="text-left px-3 py-2 rounded-lg border border-[#E2E8F0] bg-white text-[13px] text-[#4A5568] cursor-pointer hover:bg-[#F7F8FA] hover:border-[#E87722] transition-all duration-150"
-                >
-                  {prompt}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              {SUGGESTIONS.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={s.label}
+                    onClick={() => handleSend(s.prompt)}
+                    className="flex items-center gap-2.5 text-left rounded-lg cursor-pointer transition-all duration-150"
+                    style={{
+                      padding: "10px 12px",
+                      background: T.card,
+                      border: `1px solid ${T.border}`,
+                      color: T.text,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = T.orange;
+                      e.currentTarget.style.background = T.orangeGlow;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = T.border;
+                      e.currentTarget.style.background = T.card;
+                    }}
+                  >
+                    <Icon size={14} style={{ color: T.orange, flexShrink: 0 }} />
+                    <span className="text-[12px] font-medium">{s.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -170,56 +262,69 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`max-w-[90%] ${msg.role === "user" ? "self-end" : "self-start"}`}
+            className={`max-w-[85%] ${msg.role === "user" ? "self-end" : "self-start"}`}
           >
             <div
               className="rounded-xl text-[13px] leading-relaxed whitespace-pre-wrap"
               style={{
                 padding: "10px 14px",
-                background: msg.role === "user" ? "#E87722" : "#F7F8FA",
-                color: msg.role === "user" ? "white" : "#2D3748",
+                background: msg.role === "user" ? T.orange : T.card,
+                color: T.text,
                 border:
-                  msg.role === "assistant" ? "1px solid #E2E8F0" : "none",
+                  msg.role === "assistant"
+                    ? `1px solid ${T.border}`
+                    : "none",
               }}
             >
               {msg.content}
             </div>
-            {msg.citations && msg.citations.length > 0 &&
-              msg.citations.map((cite, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-1 mt-1 px-2 text-[11px] text-[#718096]"
-                >
-                  <Info size={10} />
-                  {cite.title}
-                  {cite.page_number ? `, pg ${cite.page_number}` : ""}
-                </div>
-              ))}
+            {msg.citations && msg.citations.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {msg.citations.map((cite, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px]"
+                    style={{
+                      background: T.card,
+                      border: `1px solid ${T.borderSoft}`,
+                      color: T.textMuted,
+                    }}
+                  >
+                    <FileText size={10} />
+                    {cite.title}
+                    {cite.page_number ? `, pg ${cite.page_number}` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 
         {/* Live streaming bubble */}
         {isStreaming && (
-          <div className="self-start max-w-[90%]">
+          <div className="self-start max-w-[85%]">
             <div
               className="rounded-xl text-[13px] leading-relaxed whitespace-pre-wrap"
               style={{
                 padding: "10px 14px",
-                background: "#F7F8FA",
-                color: "#2D3748",
-                border: "1px solid #E2E8F0",
+                background: T.card,
+                color: T.text,
+                border: `1px solid ${T.border}`,
               }}
             >
               {stream.text || (
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#718096] animate-bounce" />
+                <div className="flex gap-1.5 py-1">
                   <span
-                    className="w-2 h-2 rounded-full bg-[#718096] animate-bounce"
-                    style={{ animationDelay: "0.15s" }}
+                    className="w-2 h-2 rounded-full animate-bounce"
+                    style={{ background: T.orange }}
                   />
                   <span
-                    className="w-2 h-2 rounded-full bg-[#718096] animate-bounce"
-                    style={{ animationDelay: "0.3s" }}
+                    className="w-2 h-2 rounded-full animate-bounce"
+                    style={{ background: T.orange, animationDelay: "0.15s" }}
+                  />
+                  <span
+                    className="w-2 h-2 rounded-full animate-bounce"
+                    style={{ background: T.orange, animationDelay: "0.3s" }}
                   />
                 </div>
               )}
@@ -228,38 +333,67 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         )}
       </div>
 
-      {/* Input */}
+      {/* ── Composer ─────────────────────────────────────────────── */}
       <div
         className="flex-shrink-0"
         style={{
-          padding: 12,
-          borderTop: "1px solid #E2E8F0",
+          padding: "12px 20px 16px",
+          borderTop: `1px solid ${T.border}`,
         }}
       >
-        <div className="relative">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Ask about this machine..."
-            disabled={isStreaming}
-            className="w-full rounded-lg border border-[#E2E8F0] text-[13px] outline-none disabled:opacity-60"
+        <div className="flex items-center gap-2">
+          {/* Mic button */}
+          <button
+            className="flex items-center justify-center rounded-lg border cursor-pointer transition-colors duration-150"
             style={{
-              padding: "10px 40px 10px 14px",
-              boxSizing: "border-box",
+              width: 40,
+              height: 40,
+              background: T.card,
+              borderColor: T.border,
+              color: T.textMuted,
             }}
-          />
+          >
+            <Mic size={16} />
+          </button>
+
+          {/* Text input */}
+          <div className="relative flex-1">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask Iron anything..."
+              disabled={isStreaming}
+              className="w-full rounded-lg text-[13px] outline-none disabled:opacity-60"
+              style={{
+                padding: "10px 14px",
+                background: T.card,
+                border: `1px solid ${T.border}`,
+                color: T.text,
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {/* Send button */}
           <button
             onClick={() => handleSend()}
             disabled={isStreaming || !input.trim()}
-            className="absolute right-2 top-1/2 -translate-y-1/2 border-none rounded-md px-2 py-1 cursor-pointer flex bg-qep-orange disabled:opacity-40"
+            className="flex items-center justify-center rounded-lg border cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              width: 40,
+              height: 40,
+              background: input.trim() ? T.orange : "transparent",
+              borderColor: input.trim() ? T.orange : T.border,
+              color: input.trim() ? "#fff" : T.textMuted,
+            }}
           >
-            <ArrowRight size={14} className="text-white" />
+            <ArrowRight size={16} />
           </button>
         </div>
       </div>

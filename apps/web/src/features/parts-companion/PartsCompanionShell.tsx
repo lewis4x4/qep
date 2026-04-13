@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
 import { AppErrorBoundary } from "../../components/AppErrorBoundary";
 import { CompanionSidebar } from "./components/CompanionSidebar";
 import { CompanionTopBar } from "./components/CompanionTopBar";
 import { AiAssistantPanel } from "./components/AiAssistantPanel";
 import { NewRequestFlow } from "./components/NewRequestFlow";
+import { IronAvatar } from "../../lib/iron/IronAvatar";
 
 /**
  * PartsCompanionShell — desktop-first two-panel layout.
@@ -24,7 +24,9 @@ export function PartsCompanionShell() {
     ? "lookup"
     : location.pathname.includes("/machines")
       ? "machines"
-      : "queue";
+      : location.pathname.includes("/arrivals")
+        ? "arrivals"
+        : "queue";
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -53,6 +55,13 @@ export function PartsCompanionShell() {
           break;
         case "a":
         case "A":
+          if (!e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            setAiPanelOpen((prev) => !prev);
+          }
+          break;
+        case "i":
+        case "I":
           if (!e.metaKey && !e.ctrlKey) {
             e.preventDefault();
             setAiPanelOpen((prev) => !prev);
@@ -89,7 +98,7 @@ export function PartsCompanionShell() {
   }, [handleKeyDown]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F7F8FA] font-sans">
+    <div className="flex h-screen overflow-hidden bg-[#0A1628] font-sans">
       {/* Left Sidebar */}
       <CompanionSidebar
         activeTab={activeTab}
@@ -108,7 +117,9 @@ export function PartsCompanionShell() {
               ? "Queue"
               : activeTab === "lookup"
                 ? "Parts Lookup"
-                : "Machines"
+                : activeTab === "arrivals"
+                  ? "Arrivals"
+                  : "Machines"
           }
           aiPanelOpen={aiPanelOpen}
           onToggleAi={() => setAiPanelOpen((p) => !p)}
@@ -127,17 +138,26 @@ export function PartsCompanionShell() {
           )}
         </div>
       </div>
-      {/* New Request FAB */}
-      <button
-        onClick={() => setNewRequestOpen(true)}
-        className="fixed bottom-6 z-40 w-13 h-13 rounded-[14px] border-none bg-qep-orange text-white cursor-pointer flex items-center justify-center transition-all duration-200 hover:scale-105"
+
+      {/* Iron FAB */}
+      <div
+        className="fixed bottom-6 z-40 flex items-center justify-center cursor-pointer"
         style={{
           right: aiPanelOpen ? 384 : 24,
-          boxShadow: "0 4px 20px rgba(232,119,34,0.4)",
+          transition: "right 200ms ease",
         }}
+        onClick={() => setAiPanelOpen((p) => !p)}
       >
-        <Plus size={24} />
-      </button>
+        <div
+          className="rounded-full"
+          style={{
+            boxShadow:
+              "0 12px 40px rgba(232,119,34,0.5), 0 0 0 4px rgba(232,119,34,0.15)",
+          }}
+        >
+          <IronAvatar state="idle" size={68} />
+        </div>
+      </div>
 
       {/* New Request Modal */}
       {newRequestOpen && (

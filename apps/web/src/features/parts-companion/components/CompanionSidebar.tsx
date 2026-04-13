@@ -1,12 +1,12 @@
 import {
   Layers,
   Search,
-  Cpu,
-  MessageSquare,
+  Truck,
+  Package,
   ChevronLeft,
   ChevronRight,
-  Package,
 } from "lucide-react";
+import { IronAvatar } from "../../../lib/iron/IronAvatar";
 
 interface CompanionSidebarProps {
   activeTab: string;
@@ -20,7 +20,8 @@ interface CompanionSidebarProps {
 const NAV_ITEMS = [
   { key: "queue", label: "Queue", icon: Layers, badge: true, shortcut: null },
   { key: "lookup", label: "Lookup", icon: Search, badge: false, shortcut: "/" },
-  { key: "machines", label: "Machines", icon: Cpu, badge: false, shortcut: null },
+  { key: "machines", label: "Machines", icon: Truck, badge: false, shortcut: null },
+  { key: "arrivals", label: "Arrivals", icon: Package, badge: true, shortcut: null },
 ];
 
 export function CompanionSidebar({
@@ -35,35 +36,42 @@ export function CompanionSidebar({
     <div
       className="flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
       style={{
-        width: collapsed ? 60 : 220,
-        background: "#1B2A3D",
+        width: collapsed ? 64 : 230,
+        background: "#0F1D31",
+        borderRight: "1px solid #1F3254",
       }}
     >
-      {/* Logo */}
+      {/* Logo Section */}
       <div
-        className="flex items-center gap-2.5 flex-shrink-0"
+        className="flex items-center gap-3 flex-shrink-0"
         style={{
-          padding: collapsed ? "16px 12px" : "16px 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          padding: collapsed ? "18px 14px" : "18px 20px",
+          borderBottom: "1px solid #1F3254",
         }}
       >
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-qep-orange flex-shrink-0">
-          <Package size={18} className="text-white" />
+        <div
+          className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0"
+          style={{
+            background: "linear-gradient(135deg, #E87722 0%, #D06118 100%)",
+            boxShadow: "0 4px 12px rgba(232,119,34,0.35)",
+          }}
+        >
+          <span className="text-white text-sm font-black leading-none">Q</span>
         </div>
         {!collapsed && (
           <div>
-            <div className="text-sm font-extrabold text-white leading-tight">
-              QEP
+            <div className="text-sm font-extrabold text-white leading-tight tracking-wide">
+              QEP Parts
             </div>
-            <div className="text-[10px] text-white/50 tracking-wider">
-              PARTS COMPANION
+            <div className="text-[10px] tracking-wider" style={{ color: "#5F7391" }}>
+              Counter Companion
             </div>
           </div>
         )}
       </div>
 
       {/* Nav Items */}
-      <div className="flex-1 flex flex-col gap-0.5 p-2">
+      <div className="flex-1 flex flex-col gap-0.5 p-2 mt-1">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.key;
@@ -73,14 +81,9 @@ export function CompanionSidebar({
               onClick={() => onNavigate(item.key)}
               className="flex items-center gap-2.5 w-full text-left rounded-lg border-none cursor-pointer transition-all duration-150"
               style={{
-                padding: collapsed ? "10px 12px" : "10px 14px",
-                background: isActive
-                  ? "rgba(232, 119, 34, 0.15)"
-                  : "transparent",
-                color: isActive ? "#E87722" : "rgba(255,255,255,0.6)",
-                borderLeft: isActive
-                  ? "3px solid #E87722"
-                  : "3px solid transparent",
+                padding: collapsed ? "10px 14px" : "10px 14px",
+                background: isActive ? "rgba(232,119,34,0.15)" : "transparent",
+                color: isActive ? "#E87722" : "#8A9BB4",
               }}
             >
               <Icon size={18} />
@@ -90,12 +93,27 @@ export function CompanionSidebar({
                     {item.label}
                   </span>
                   {item.badge && (
-                    <span className="text-[10px] font-bold px-1.5 py-px rounded-lg bg-qep-orange text-white">
+                    <span
+                      className="text-[10px] font-bold px-1.5 py-px rounded-full"
+                      style={{
+                        background: isActive
+                          ? "rgba(232,119,34,0.35)"
+                          : "#1F3254",
+                        color: isActive ? "#E87722" : "#5F7391",
+                      }}
+                    >
                       0
                     </span>
                   )}
                   {item.shortcut && (
-                    <kbd className="inline-flex items-center justify-center px-1.5 py-px rounded border border-white/20 text-[11px] font-mono text-white/40 min-w-[20px]">
+                    <kbd
+                      className="inline-flex items-center justify-center px-1.5 py-px rounded text-[11px] font-mono min-w-[20px]"
+                      style={{
+                        border: "1px solid #1F3254",
+                        color: "#5F7391",
+                        background: "transparent",
+                      }}
+                    >
                       {item.shortcut}
                     </kbd>
                   )}
@@ -105,63 +123,83 @@ export function CompanionSidebar({
           );
         })}
 
+        {/* Divider */}
         <div
-          className="my-2 mx-1.5"
-          style={{
-            height: 1,
-            background: "rgba(255,255,255,0.08)",
-          }}
+          className="my-3 mx-1.5"
+          style={{ height: 1, background: "#1F3254" }}
         />
 
-        {/* AI Panel Toggle */}
+        {/* Ask Iron Button */}
         <button
           onClick={onToggleAi}
-          className="flex items-center gap-2.5 w-full text-left rounded-lg border-none cursor-pointer transition-all duration-150"
+          className="flex items-center gap-2.5 w-full text-left rounded-lg cursor-pointer transition-all duration-150"
           style={{
-            padding: collapsed ? "10px 12px" : "10px 14px",
+            padding: collapsed ? "8px 10px" : "8px 14px",
             background: aiPanelOpen
-              ? "rgba(232, 119, 34, 0.15)"
-              : "transparent",
-            color: aiPanelOpen ? "#E87722" : "rgba(255,255,255,0.6)",
+              ? "rgba(232,119,34,0.15)"
+              : "rgba(232,119,34,0.15)",
+            border: "1px solid rgba(232,119,34,0.35)",
+            color: "#E87722",
           }}
         >
-          <MessageSquare size={18} />
+          <IronAvatar state="idle" size={34} collapsed={collapsed} />
           {!collapsed && (
-            <span className="text-[13px] font-semibold">Knowledge AI</span>
+            <>
+              <span className="flex-1 text-[13px] font-semibold text-qep-orange">
+                Ask Iron
+              </span>
+              <kbd
+                className="inline-flex items-center justify-center px-1.5 py-px rounded text-[11px] font-mono min-w-[20px]"
+                style={{
+                  border: "1px solid rgba(232,119,34,0.35)",
+                  color: "rgba(232,119,34,0.6)",
+                  background: "transparent",
+                }}
+              >
+                I
+              </kbd>
+            </>
           )}
         </button>
       </div>
 
-      {/* User */}
+      {/* User Profile Section */}
       <div
         className="flex-shrink-0 flex items-center gap-2.5"
         style={{
-          padding: collapsed ? "12px" : "12px 14px",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
+          padding: collapsed ? "14px" : "14px 16px",
+          borderTop: "1px solid #1F3254",
         }}
       >
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#253649] text-xs font-bold text-white/70 flex-shrink-0">
+        <div
+          className="flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 text-xs font-bold"
+          style={{ background: "#1F3254", color: "#8A9BB4" }}
+        >
           PC
         </div>
         {!collapsed && (
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white/85 truncate">
+            <div className="text-xs font-semibold truncate" style={{ color: "#E5ECF5" }}>
               Parts Counter
             </div>
-            <span className="text-[10px] px-1.5 py-px rounded bg-[#718096] text-white font-semibold">
+            <span
+              className="inline-block text-[10px] px-1.5 py-px rounded font-semibold mt-0.5"
+              style={{ background: "#1F3254", color: "#8A9BB4" }}
+            >
               Parts
             </span>
           </div>
         )}
       </div>
 
-      {/* Collapse toggle */}
+      {/* Collapse Toggle */}
       <button
         onClick={onToggleCollapse}
-        className="flex justify-center border-none bg-transparent cursor-pointer text-white/30"
+        className="flex justify-center border-none bg-transparent cursor-pointer"
         style={{
-          padding: "8px",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
+          padding: "10px",
+          borderTop: "1px solid #1F3254",
+          color: "#5F7391",
         }}
       >
         {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}

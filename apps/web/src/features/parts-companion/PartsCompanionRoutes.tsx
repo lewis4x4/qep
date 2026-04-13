@@ -16,6 +16,11 @@ const MachineProfilePage = lazy(() =>
     default: m.MachineProfilePage,
   })),
 );
+const ArrivalsPage = lazy(() =>
+  import("./pages/ArrivalsPage").then((m) => ({
+    default: m.ArrivalsPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -62,6 +67,14 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <MachineProfilePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="arrivals"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <ArrivalsPage />
             </Suspense>
           }
         />
