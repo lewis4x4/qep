@@ -5,8 +5,20 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  LogOut,
+  Bug,
+  Settings,
 } from "lucide-react";
 import { IronAvatar } from "../../../lib/iron/IronAvatar";
+import { useAuth } from "../../../hooks/useAuth";
+import { supabase } from "../../../lib/supabase";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 
 interface CompanionSidebarProps {
   activeTab: string;
@@ -32,6 +44,16 @@ export function CompanionSidebar({
   aiPanelOpen,
   onToggleAi,
 }: CompanionSidebarProps) {
+  const { profile } = useAuth();
+
+  const displayName = profile?.full_name || "Parts Counter";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
     <div
       className="flex flex-col flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
@@ -163,33 +185,85 @@ export function CompanionSidebar({
         </button>
       </div>
 
-      {/* User Profile Section */}
+      {/* User Profile Section with Dropdown */}
       <div
-        className="flex-shrink-0 flex items-center gap-2.5"
-        style={{
-          padding: collapsed ? "14px" : "14px 16px",
-          borderTop: "1px solid #1F3254",
-        }}
+        className="flex-shrink-0"
+        style={{ borderTop: "1px solid #1F3254" }}
       >
-        <div
-          className="flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 text-xs font-bold"
-          style={{ background: "#1F3254", color: "#8A9BB4" }}
-        >
-          PC
-        </div>
-        {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold truncate" style={{ color: "#E5ECF5" }}>
-              Parts Counter
-            </div>
-            <span
-              className="inline-block text-[10px] px-1.5 py-px rounded font-semibold mt-0.5"
-              style={{ background: "#1F3254", color: "#8A9BB4" }}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="flex items-center gap-2.5 w-full text-left border-none cursor-pointer transition-colors duration-150"
+              style={{
+                padding: collapsed ? "14px" : "14px 16px",
+                background: "transparent",
+              }}
             >
-              Parts
-            </span>
-          </div>
-        )}
+              <div
+                className="flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 text-xs font-bold"
+                style={{ background: "#1F3254", color: "#8A9BB4" }}
+              >
+                {initials}
+              </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate" style={{ color: "#E5ECF5" }}>
+                    {displayName}
+                  </div>
+                  <span
+                    className="inline-block text-[10px] px-1.5 py-px rounded font-semibold mt-0.5"
+                    style={{ background: "#1F3254", color: "#8A9BB4" }}
+                  >
+                    Parts
+                  </span>
+                </div>
+              )}
+              {!collapsed && (
+                <Settings size={14} style={{ color: "#5F7391" }} />
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            className="w-48"
+          >
+            {profile?.full_name && (
+              <>
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-semibold text-foreground">
+                    {profile.full_name}
+                  </p>
+                  {profile.email && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {profile.email}
+                    </p>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem
+              onClick={() => {
+                const w = window as Window & { flare?: (sev?: string) => void };
+                if (typeof w.flare === "function") {
+                  w.flare("bug");
+                }
+              }}
+            >
+              <Bug className="w-4 h-4 mr-2" />
+              Report a Bug
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => supabase.auth.signOut()}
+              className="text-red-400 focus:text-red-400"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Log Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Collapse Toggle */}
