@@ -198,21 +198,18 @@ Deno.serve(async (req)=>{
         ascending: false
       });
       if (profileErr) throw profileErr;
-      // Fetch auth user records to get last_sign_in_at and email_confirmed_at
-      // Graceful degradation: if GoTrue admin API fails, still return profiles
+      // Fetch auth metadata via direct SQL RPC (bypasses flaky GoTrue admin HTTP API)
+      // Falls back gracefully if the RPC is unavailable
       let authUsers: Array<{ id: string; last_sign_in_at?: string | null; email_confirmed_at?: string | null; banned_until?: string | null }> = [];
       try {
-        const { data: authData, error: authErr } = await adminClient.auth.admin.listUsers({
-          page: 1,
-          perPage: 1000
-        });
-        if (!authErr && authData?.users) {
-          authUsers = authData.users;
+        const { data: rpcData, error: rpcErr } = await adminClient.rpc("get_auth_user_metadata");
+        if (!rpcErr && rpcData) {
+          authUsers = rpcData;
         } else {
-          console.warn("[admin-users] listUsers degraded:", authErr?.message ?? "no data");
+          console.warn("[admin-users] get_auth_user_metadata degraded:", rpcErr?.message ?? "no data");
         }
       } catch (e) {
-        console.warn("[admin-users] listUsers failed:", e);
+        console.warn("[admin-users] get_auth_user_metadata failed:", e);
       }
       const authMap = new Map(authUsers.map((u)=>[
           u.id,
