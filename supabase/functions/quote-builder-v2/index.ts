@@ -4,11 +4,12 @@
  * AI equipment recommendation, margin check surfacing, financing calc.
  * Zero-blocking: works with manual catalog when IntelliDealer unavailable.
  *
+ * GET /list: List quote packages for workspace (search, status filter)
+ * GET ?deal_id=...: Load existing quote for deal
  * POST /recommend: AI equipment recommendation from job description
  * POST /calculate: Financing scenarios from financing_rate_matrix
- * POST /save: Save quote package
+ * POST /save: Save quote package (with customer fields)
  * POST /sign: Persist quote e-signature
- * GET ?deal_id=...: Load existing quote for deal
  *
  * Auth: rep/manager/owner
  */
@@ -116,10 +117,18 @@ function comparePortalRevisionPayload(
   };
 }
 
+interface AiRecommendationResult {
+  machine: string;
+  attachments: string[];
+  reasoning: string;
+  alternative?: { machine: string; attachments: string[]; reasoning: string } | null;
+  jobConsiderations?: string[] | null;
+}
+
 async function aiEquipmentRecommendation(
   jobDescription: string,
   catalogEntries: Record<string, unknown>[],
-): Promise<{ machine: string; attachments: string[]; reasoning: string }> {
+): Promise<AiRecommendationResult> {
   if (!OPENAI_API_KEY) {
     return { machine: "", attachments: [], reasoning: "AI recommendation unavailable — select equipment manually." };
   }
@@ -140,12 +149,23 @@ async function aiEquipmentRecommendation(
         response_format: { type: "json_object" },
         messages: [{
           role: "system",
-          content: `You are an equipment specialist for QEP, a heavy equipment dealership. Given a job description, recommend the optimal machine and attachments from the available inventory. Return JSON: { "machine": "Make Model", "attachments": ["Attachment 1", "Attachment 2"], "reasoning": "2-3 sentence explanation of why this equipment is optimal for the described job" }`,
+          content: `You are an equipment specialist for QEP, a heavy equipment dealership. Given a job description, recommend the optimal machine and attachments from the available inventory. Also provide an alternative recommendation and key job considerations.
+
+Return JSON:
+{
+  "machine": "Make Model",
+  "attachments": ["Attachment 1", "Attachment 2"],
+  "reasoning": "2-3 sentence explanation of why this is the optimal choice",
+  "alternative": { "machine": "Make Model", "attachments": ["Attachment"], "reasoning": "Why this is a good alternative" },
+  "jobConsiderations": ["Key consideration 1", "Key consideration 2"]
+}
+
+If no good alternative exists, set alternative to null. Keep jobConsiderations to 2-3 practical notes about the job requirements.`,
         }, {
           role: "user",
           content: `Job description: ${jobDescription}\n\nAvailable equipment:\n${catalogSummary || "No catalog entries — provide general recommendation."}`,
         }],
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.3,
       }),
       signal: AbortSignal.timeout(15_000),
@@ -155,7 +175,14 @@ async function aiEquipmentRecommendation(
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content;
     if (!content) return { machine: "", attachments: [], reasoning: "No recommendation generated." };
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return {
+      machine: parsed.machine ?? "",
+      attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+      reasoning: parsed.reasoning ?? "",
+      alternative: parsed.alternative ?? null,
+      jobConsiderations: Array.isArray(parsed.jobConsiderations) ? parsed.jobConsiderations : null,
+    };
   } catch {
     return { machine: "", attachments: [], reasoning: "AI recommendation error — select manually." };
   }
@@ -331,6 +358,57 @@ Deno.serve(async (req) => {
 
     // ── GET: Load existing quote for deal ────────────────────────────────
     if (req.method === "GET") {
+      // ── GET /list: List quote packages for workspace ──────────────────
+      if (action === "list") {
+        const status = url.searchParams.get("status");
+        const search = url.searchParams.get("search")?.trim().slice(0, 100);
+
+        let query = supabase
+          .from("quote_packages")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        if (status && status !== "all") {
+          query = query.eq("status", status);
+        }
+
+        if (search) {
+          const sanitized = search.replace(/[%,().!]/g, "");
+          query = query.or(
+            `quote_number.ilike.%${sanitized}%,customer_name.ilike.%${sanitized}%,customer_company.ilike.%${sanitized}%`
+          );
+        }
+
+        const { data, error } = await query;
+        if (error) {
+          console.error("quote list error:", error);
+          return safeJsonError("Failed to list quotes", 500, origin);
+        }
+
+        const items = (data ?? []).map((row: Record<string, unknown>) => {
+          const equip = Array.isArray(row.equipment) ? row.equipment : [];
+          const summary = equip
+            .slice(0, 2)
+            .map((e: Record<string, unknown>) => [e.make, e.model].filter(Boolean).join(" "))
+            .filter(Boolean)
+            .join(", ") || "No equipment";
+          return {
+            id: row.id,
+            quote_number: row.quote_number ?? null,
+            customer_name: row.customer_name ?? null,
+            customer_company: row.customer_company ?? null,
+            status: row.status ?? "draft",
+            net_total: row.net_total ?? null,
+            equipment_summary: summary,
+            entry_mode: row.entry_mode ?? null,
+            created_at: row.created_at,
+          };
+        });
+
+        return safeJsonOk({ items }, origin);
+      }
+
       if (action === "portal-revision") {
         if (!canRevise) return safeJsonError("Portal revisions require rep, manager, or owner role", 403, origin);
         const dealId = url.searchParams.get("deal_id");
@@ -425,6 +503,35 @@ Deno.serve(async (req) => {
       );
 
       return safeJsonOk({ recommendation }, origin);
+    }
+
+    // ── POST /competitors: Nearby competitor listings (manager/owner) ────
+    if (action === "competitors") {
+      if (!canPublish) {
+        return safeJsonError("Competitor intelligence requires manager or owner role", 403, origin);
+      }
+      if (!body.make) {
+        return safeJsonError("make required", 400, origin);
+      }
+
+      let query = supabase
+        .from("competitor_listings")
+        .select("id, dealer_name, make, model, year, asking_price, condition, listing_url, scraped_at")
+        .ilike("make", `%${String(body.make).trim()}%`)
+        .order("scraped_at", { ascending: false })
+        .limit(5);
+
+      if (body.model?.trim()) {
+        query = query.ilike("model", `%${String(body.model).trim()}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("competitor listing error:", error);
+        return safeJsonOk({ listings: [] }, origin);
+      }
+
+      return safeJsonOk({ listings: data ?? [] }, origin);
     }
 
     // ── POST /inventory-first: Rank catalog entries yard-stock first ──────
@@ -833,6 +940,10 @@ Deno.serve(async (req) => {
           entry_mode: body.entry_mode || "manual",
           status: body.status || "draft",
           created_by: user.id,
+          customer_name: typeof body.customer_name === "string" ? body.customer_name.trim().slice(0, 200) : null,
+          customer_company: typeof body.customer_company === "string" ? body.customer_company.trim().slice(0, 200) : null,
+          customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null,
+          customer_email: typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null,
         }, { onConflict: "deal_id" })
         .select()
         .single();

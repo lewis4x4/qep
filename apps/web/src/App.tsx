@@ -42,6 +42,9 @@ const QuoteBuilderPage = lazy(() =>
 const QuoteBuilderV2Page = lazy(() =>
   import("./features/quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page }))
 );
+const QuoteListPage = lazy(() =>
+  import("./features/quote-builder/pages/QuoteListPage").then((m) => ({ default: m.QuoteListPage }))
+);
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
@@ -871,7 +874,7 @@ function App() {
                 path="/quote"
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
-                    <Navigate to="/quote-v2" replace />
+                    <QuoteListPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

@@ -1,11 +1,13 @@
 import { supabase } from "@/lib/supabase";
 export { getTradeValuation } from "@/features/qrm/lib/trade-walkaround-api";
 import type {
+  CompetitorListing,
   PortalQuoteRevisionCompare,
   PortalQuoteRevisionDraft,
   PortalQuoteRevisionPublishState,
   QuoteFinancingPreview,
   QuoteFinanceScenario,
+  QuoteListItem,
   QuoteRecommendation,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
@@ -46,6 +48,31 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     Authorization: `Bearer ${session.access_token}`,
     "Content-Type": "application/json",
   };
+}
+
+export async function listQuotePackages(params?: {
+  status?: string;
+  search?: string;
+}): Promise<{ items: QuoteListItem[] }> {
+  const qs = new URLSearchParams();
+  if (params?.status && params.status !== "all") qs.set("status", params.status);
+  if (params?.search) qs.set("search", params.search);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const res = await fetch(`${QUOTE_API_URL}/list${suffix}`, {
+    headers: await getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to list quotes");
+  return res.json();
+}
+
+export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
+  const res = await fetch(`${QUOTE_API_URL}/competitors`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+    body: JSON.stringify({ make, model }),
+  });
+  if (!res.ok) return { listings: [] };
+  return res.json();
 }
 
 export async function getQuoteForDeal(dealId: string) {
@@ -235,6 +262,10 @@ export function buildQuoteSavePayload(
     ai_recommendation: draft.recommendation,
     entry_mode: draft.entryMode,
     status: "ready",
+    customer_name: draft.customerName || null,
+    customer_company: draft.customerCompany || null,
+    customer_phone: draft.customerPhone || null,
+    customer_email: draft.customerEmail || null,
   };
 }
 

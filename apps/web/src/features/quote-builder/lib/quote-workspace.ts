@@ -35,6 +35,10 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   if (draft.equipment.length === 0) missing.push("equipment selection");
   if (!draft.dealId) missing.push("linked deal");
 
+  // Customer email required for send
+  const sendMissing = [...missing];
+  if (!draft.customerEmail) sendMissing.push("customer email");
+
   const approvalState: QuoteApprovalState = {
     requiresManagerApproval: marginPct < 10,
     marginPct,
@@ -52,8 +56,10 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
     approvalState,
     packetReadiness: {
       canSave: missing.length === 0,
-      canSend: missing.length === 0 && !approvalState.requiresManagerApproval,
-      missing,
+      canSend: sendMissing.length === 0 && !approvalState.requiresManagerApproval,
+      missing: approvalState.requiresManagerApproval
+        ? [...sendMissing, "manager approval (margin below 10%)"]
+        : sendMissing,
     },
   };
 }

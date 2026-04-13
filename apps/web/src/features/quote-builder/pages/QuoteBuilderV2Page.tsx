@@ -16,6 +16,8 @@ import {
   Loader2,
   PenTool,
 } from "lucide-react";
+import { CustomerInfoCard } from "../components/CustomerInfoCard";
+import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
@@ -98,6 +100,10 @@ export function QuoteBuilderV2Page() {
     attachments: [],
     tradeAllowance: 0,
     tradeValuationId: null,
+    customerName: "",
+    customerCompany: "",
+    customerPhone: "",
+    customerEmail: "",
   });
   const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -295,17 +301,63 @@ export function QuoteBuilderV2Page() {
     },
   });
 
+  const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
+  const firstEquipment = draft.equipment[0];
+
+  const intelligencePanel = (
+    <IntelligencePanel
+      recommendation={draft.recommendation}
+      voiceSummary={draft.voiceSummary}
+      onSelectPrimary={() => {
+        if (!draft.recommendation?.machine) return;
+        const alreadyAdded = draft.equipment.some((e) => e.title === draft.recommendation!.machine);
+        if (!alreadyAdded) {
+          setDraft((current) => ({
+            ...current,
+            equipment: [
+              ...current.equipment,
+              { kind: "equipment", title: current.recommendation!.machine, quantity: 1, unitPrice: 0 },
+            ],
+          }));
+        }
+        setStep("equipment");
+      }}
+      onSelectAlternative={draft.recommendation?.alternative?.machine ? () => {
+        const alt = draft.recommendation!.alternative!;
+        setDraft((current) => ({
+          ...current,
+          equipment: [
+            ...current.equipment,
+            { kind: "equipment", title: alt.machine, quantity: 1, unitPrice: 0 },
+          ],
+        }));
+        setStep("equipment");
+      } : undefined}
+      onBrowseCatalog={() => setStep("equipment")}
+      netTotal={netTotal}
+      marginPct={marginPct}
+      equipmentMake={firstEquipment?.make}
+      equipmentKey={equipmentKey}
+      hasDeal={Boolean(dealId)}
+      tradeAllowance={draft.tradeAllowance}
+      onTradeChange={(value) => setDraft((current) => ({ ...current, tradeAllowance: value }))}
+      userRole={userRoleQuery.data ?? null}
+      equipmentModel={firstEquipment?.model}
+    />
+  );
+
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">QRM Quote Builder</h1>
-            <p className="text-sm text-muted-foreground">
-              Build quotes with voice, AI chat, or manual entry, then carry the signal straight into QRM follow-through.
-            </p>
-          </div>
-          <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
+    <div className="mx-auto flex w-full max-w-7xl gap-6 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+      {/* Left column — wizard */}
+      <div className="flex w-full max-w-2xl flex-1 flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Quote Builder</h1>
+          <p className="text-sm text-muted-foreground">
+            Build quotes with voice, AI chat, or manual entry. Zero-blocking and commercial-grade.
+          </p>
+        </div>
+        <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
         </div>
 
         <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
@@ -338,7 +390,6 @@ export function QuoteBuilderV2Page() {
             </div>
           </div>
         </Card>
-      </div>
 
       <div className="flex gap-2">
         {(["entry", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
@@ -373,6 +424,14 @@ export function QuoteBuilderV2Page() {
               </select>
             </div>
           )}
+
+          <CustomerInfoCard
+            customerName={draft.customerName ?? ""}
+            customerCompany={draft.customerCompany ?? ""}
+            customerPhone={draft.customerPhone ?? ""}
+            customerEmail={draft.customerEmail ?? ""}
+            onChange={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
+          />
 
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -491,21 +550,8 @@ export function QuoteBuilderV2Page() {
             }}
           />
 
-          {draft.recommendation && (
-            <Card className="border-qep-orange/30 bg-qep-orange/5 p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">AI Recommendation</p>
-              <p className="mt-1 font-semibold text-foreground">{draft.recommendation.machine}</p>
-              {draft.recommendation.attachments.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Attachments: {draft.recommendation.attachments.join(", ")}
-                </p>
-              )}
-              <p className="mt-2 text-sm italic text-foreground/80">{draft.recommendation.reasoning}</p>
-              {draft.voiceSummary && (
-                <p className="mt-2 text-xs text-muted-foreground">Voice transcript: {draft.voiceSummary}</p>
-              )}
-            </Card>
-          )}
+          {/* Mobile-only intelligence panel (desktop shows in right column) */}
+          <div className="lg:hidden">{intelligencePanel}</div>
 
           {draft.equipment.length > 0 && (
             <Card className="p-4">
@@ -696,9 +742,10 @@ export function QuoteBuilderV2Page() {
                 variant="outline"
                 onClick={() => downloadPDF({
                   dealName: draft.dealId || "Quote",
-                  customerName: draft.contactId || "Customer",
+                  customerName: draft.customerName || draft.customerCompany || "Customer",
                   preparedBy: "QEP Sales Team",
                   preparedDate: new Date().toLocaleDateString(),
+                  aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
                   equipment: draft.equipment.map((item) => ({
                     make: item.make ?? "",
                     model: item.model ?? item.title,
@@ -930,6 +977,11 @@ export function QuoteBuilderV2Page() {
           )}
         </div>
       )}
+      </div>
+      {/* Right column — intelligence panel (desktop only) */}
+      <aside className="hidden w-80 shrink-0 lg:block">
+        <div className="sticky top-4">{intelligencePanel}</div>
+      </aside>
     </div>
   );
 }

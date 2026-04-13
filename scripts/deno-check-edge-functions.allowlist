@@ -45,6 +45,7 @@ supabase/functions/pipeline-enforcer/index.ts
 supabase/functions/portal-api/index.ts
 supabase/functions/prep-sheet/index.ts
 supabase/functions/prospecting-tracker/index.ts
+supabase/functions/rental-ops/index.ts
 supabase/functions/quote-builder-v2/index.ts
 supabase/functions/service-billing-post/index.ts
 supabase/functions/service-calendar-slots/index.ts

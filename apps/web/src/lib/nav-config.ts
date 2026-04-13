@@ -95,8 +95,8 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Workspace",
   },
   {
-    label: "Quote Builder",
-    href: "/quote-v2",
+    label: "Quotes",
+    href: "/quote",
     icon: FileText,
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",
@@ -277,15 +277,6 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "service",
     sectionLabel: "Bridge",
-  },
-  {
-    label: "Rentals Hub",
-    href: "/rentals",
-    icon: Truck,
-    roles: ["rep", "admin", "manager", "owner"],
-    primaryHeaderId: "rentals",
-    sectionLabel: "Operations",
-    showcase: true,
   },
   {
     label: "Rental Command",
@@ -545,7 +536,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
 ];
 
-export const BOTTOM_TAB_HREFS = ["/qrm", "/service", "/chat", "/voice", "/quote-v2"];
+export const BOTTOM_TAB_HREFS = ["/qrm", "/service", "/chat", "/voice", "/quote"];
 
 export function resolveNavItems(
   quoteBuilderEnabled: boolean,

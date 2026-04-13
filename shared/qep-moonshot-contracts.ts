@@ -15,6 +15,20 @@ export interface QuoteRecommendation {
   machine: string;
   attachments: string[];
   reasoning: string;
+  alternative?: { machine: string; attachments: string[]; reasoning: string } | null;
+  jobConsiderations?: string[] | null;
+}
+
+export interface CompetitorListing {
+  id: string;
+  dealer_name: string;
+  make: string;
+  model: string;
+  year: number | null;
+  asking_price: number | null;
+  condition: string | null;
+  listing_url: string | null;
+  scraped_at: string;
 }
 
 export interface QuoteFinanceScenario {
@@ -71,6 +85,22 @@ export interface QuoteWorkspaceDraft {
   attachments: QuoteLineItemDraft[];
   tradeAllowance: number;
   tradeValuationId: string | null;
+  customerName?: string;
+  customerCompany?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+}
+
+export interface QuoteListItem {
+  id: string;
+  quote_number: string | null;
+  customer_name: string | null;
+  customer_company: string | null;
+  status: string;
+  net_total: number | null;
+  equipment_summary: string;
+  entry_mode: string | null;
+  created_at: string;
 }
 
 export interface PortalQuoteRevisionCompare {
@@ -188,6 +218,7 @@ export interface PortalRentalReturnWorkspaceView {
 
 export type PortalRentalDeliveryMode = "pickup" | "delivery";
 export type PortalRentalRequestType = "booking" | "extension";
+export type PortalRentalAssignmentStatus = "pending_assignment" | "assigned";
 export type PortalRentalContractStatus =
   | "submitted"
   | "reviewing"
@@ -206,10 +237,23 @@ export interface PortalRentalPricingEstimate {
   sourceLabel: string;
 }
 
+export interface PortalRentalPaymentStatusView {
+  kind: "deposit" | "extension";
+  status: "not_required" | "pending" | "processing" | "paid" | "failed";
+  amount: number | null;
+  invoiceId: string | null;
+  companyId: string | null;
+  headline: string;
+  detail: string;
+  canPayNow: boolean;
+  canFinalize: boolean;
+}
+
 export interface PortalRentalContractView {
   id: string;
   requestType: PortalRentalRequestType;
   status: PortalRentalContractStatus;
+  assignmentStatus: PortalRentalAssignmentStatus;
   deliveryMode: PortalRentalDeliveryMode;
   branchId: string | null;
   branchLabel: string | null;
@@ -229,6 +273,7 @@ export interface PortalRentalContractView {
   customerNotes: string | null;
   pricingEstimate: PortalRentalPricingEstimate | null;
   agreedRates: PortalRentalPricingEstimate | null;
+  paymentStatusView: PortalRentalPaymentStatusView | null;
   equipment: {
     id: string | null;
     label: string;
@@ -247,6 +292,7 @@ export interface PortalRentalExtensionRequest {
   additionalCharge: number | null;
   paymentInvoiceId: string | null;
   paymentStatus: string | null;
+  paymentStatusView: PortalRentalPaymentStatusView | null;
   createdAt: string;
 }
 
