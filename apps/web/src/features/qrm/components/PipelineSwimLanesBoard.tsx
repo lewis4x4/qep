@@ -1,7 +1,8 @@
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DraggableDealCard } from "./DraggableDealCard";
 import { DroppableStageColumn } from "./DroppableStageColumn";
@@ -20,11 +21,18 @@ interface PipelineSwimLanesBoardProps {
   stageColumns: PipelineSwimLaneColumn[];
   healthProfileByCompanyId: Map<string, { profileId: string; score: number | null }>;
   onDragStart: (event: DragStartEvent) => void;
+  onDragOver?: (event: DragOverEvent) => void;
   onDragEnd: (event: DragEndEvent) => Promise<void>;
   onCommitPipelineFollowUp: (dealId: string, nextFollowUpAt: string | null) => void;
   onSchedulePipelineRefresh: (dealId: string) => void;
   onOpenHealthProfile: (profileId: string) => void;
   showAnalytics?: boolean;
+  /** Stage ids whose average time crossed the bottleneck threshold (ring in red). */
+  bottleneckStageId?: string | null;
+  /** Stage id the current drag would be rejected by gate validation. */
+  gateRejectedStageId?: string | null;
+  selectedDealIds?: Set<string>;
+  onDealSelectToggle?: (dealId: string, additive: boolean) => void;
 }
 
 const SWIM_LANES: Array<{ label: string; range: [number, number]; color: string }> = [
@@ -49,8 +57,8 @@ function avgDaysInStage(deals: QrmRepSafeDeal[]): number | null {
 
 function sortByPosition(deals: QrmRepSafeDeal[]): QrmRepSafeDeal[] {
   return [...deals].sort((a, b) => {
-    const posA = (a as unknown as Record<string, unknown>).sortPosition as number | null ?? Infinity;
-    const posB = (b as unknown as Record<string, unknown>).sortPosition as number | null ?? Infinity;
+    const posA = a.sortPosition ?? Infinity;
+    const posB = b.sortPosition ?? Infinity;
     if (posA !== posB) return posA - posB;
     return a.createdAt.localeCompare(b.createdAt);
   });
@@ -61,15 +69,33 @@ export function PipelineSwimLanesBoard({
   stageColumns,
   healthProfileByCompanyId,
   onDragStart,
+  onDragOver,
   onDragEnd,
   onCommitPipelineFollowUp,
   onSchedulePipelineRefresh,
   onOpenHealthProfile,
   showAnalytics = false,
+  bottleneckStageId = null,
+  gateRejectedStageId = null,
+  selectedDealIds,
+  onDealSelectToggle,
 }: PipelineSwimLanesBoardProps) {
+  const selectionCount = selectedDealIds?.size ?? 0;
+
   return (
-    <DndContext collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
       <div className="space-y-4">
+        {selectionCount > 1 && (
+          <Card className="border-qep-orange/40 bg-qep-orange/5 px-3 py-2 text-xs text-foreground">
+            <span className="font-semibold">{selectionCount}</span> deals selected — drag any selected card to move the batch. Shift-click to toggle.
+          </Card>
+        )}
+
         {SWIM_LANES.map((lane) => {
           const laneColumns = stageColumns.filter((col) => {
             const stage = (stages ?? []).find((s) => s.id === col.stageId);
@@ -79,6 +105,7 @@ export function PipelineSwimLanesBoard({
           if (laneColumns.length === 0) return null;
           const laneDeals = laneColumns.reduce((sum, c) => sum + c.deals.length, 0);
           const laneAmount = laneColumns.reduce((sum, c) => sum + c.amount, 0);
+
           return (
             <Card key={lane.label} className={`overflow-hidden border-l-2 ${lane.color}`}>
               <header className="flex items-center justify-between border-b border-border px-4 py-2">
@@ -96,11 +123,16 @@ export function PipelineSwimLanesBoard({
                     const avgDays = showAnalytics ? avgDaysInStage(sortedDeals) : null;
                     const isOverThreshold = avgDays !== null && avgDays > 14;
                     const isNearThreshold = avgDays !== null && avgDays > 7;
+                    const isBottleneck = bottleneckStageId === column.stageId;
+                    const isGateRejected = gateRejectedStageId === column.stageId;
 
                     return (
                       <section
                         key={column.stageId}
-                        className="w-[280px] shrink-0 rounded-xl border border-border bg-muted/30"
+                        className={cn(
+                          "w-[280px] shrink-0 rounded-xl border bg-muted/30 transition-colors",
+                          isBottleneck ? "border-rose-500/50" : "border-border",
+                        )}
                       >
                         <header className="border-b border-border px-3 py-2">
                           <div className="flex items-center justify-between gap-2">
@@ -119,10 +151,15 @@ export function PipelineSwimLanesBoard({
                                 ~{avgDays}d avg
                               </span>
                             )}
+                            {isBottleneck && (
+                              <Badge variant="outline" className="border-rose-500/40 text-[9px] text-rose-500">
+                                Bottleneck
+                              </Badge>
+                            )}
                           </div>
                         </header>
 
-                        <DroppableStageColumn stageId={column.stageId}>
+                        <DroppableStageColumn stageId={column.stageId} isGateRejected={isGateRejected}>
                           <SortableContext items={dealIds} strategy={verticalListSortingStrategy}>
                             {sortedDeals.length === 0 && (
                               <div className="rounded-lg border border-dashed border-input bg-card px-3 py-4 text-center text-xs text-muted-foreground">
@@ -135,6 +172,8 @@ export function PipelineSwimLanesBoard({
                                 key={deal.id}
                                 deal={deal}
                                 healthProfile={deal.companyId ? healthProfileByCompanyId.get(deal.companyId) ?? null : null}
+                                isSelected={selectedDealIds?.has(deal.id) ?? false}
+                                onSelectToggle={onDealSelectToggle}
                                 onCommitPipelineFollowUp={onCommitPipelineFollowUp}
                                 onSchedulePipelineRefresh={onSchedulePipelineRefresh}
                                 onOpenHealthProfile={onOpenHealthProfile}

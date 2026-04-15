@@ -200,6 +200,7 @@ export {
   listCrmWeightedOpenDeals,
   listRepSafeDealsForContact,
   patchCrmDeal,
+  reorderPipelineDeals,
 } from "./qrm-deals-api";
 
 export {

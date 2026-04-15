@@ -26,6 +26,8 @@ const composite: DealCompositeBundle = {
     slaDeadlineAt: null,
     depositStatus: "pending",
     depositAmount: null,
+    sortPosition: null,
+    marginPct: null,
   },
   contact: null,
   company: null,

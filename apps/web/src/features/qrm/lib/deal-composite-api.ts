@@ -40,6 +40,8 @@ function mapDealFromCompositeJson(d: Record<string, unknown>): QrmRepSafeDeal {
     slaDeadlineAt: (d.sla_deadline_at as string | null) ?? null,
     depositStatus: (d.deposit_status as string | null) ?? null,
     depositAmount: (d.deposit_amount as number | null) ?? null,
+    sortPosition: (d.sort_position as number | null) ?? null,
+    marginPct: (d.margin_pct as number | null) ?? null,
   };
 }
 

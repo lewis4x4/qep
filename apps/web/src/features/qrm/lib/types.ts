@@ -105,6 +105,9 @@ export interface QrmRepSafeDeal {
   slaDeadlineAt: string | null;
   depositStatus: string | null;
   depositAmount: number | null;
+  // Pipeline board polish (migration 254 — Slice 2.4)
+  sortPosition: number | null;
+  marginPct: number | null;
 }
 
 export interface QrmDealLossFields {

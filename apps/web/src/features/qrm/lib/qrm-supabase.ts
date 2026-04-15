@@ -177,6 +177,13 @@ type QrmViews = BaseViews & {
       created_at: string;
       updated_at: string;
       deleted_at: string | null;
+      // Added in migration 254 — Slice 2.4 pipeline board polish
+      sort_position: number | null;
+      margin_pct: number | null;
+      // Added in migrations 066/070 — surfaced on this view in migration 254
+      deposit_status: string | null;
+      deposit_amount: number | null;
+      sla_deadline_at: string | null;
     };
     Relationships: [];
   };

@@ -21,6 +21,8 @@ const deal: QrmRepSafeDeal = {
   slaDeadlineAt: null,
   depositStatus: null,
   depositAmount: null,
+  sortPosition: null,
+  marginPct: null,
 };
 
 const activities: QrmActivityItem[] = [

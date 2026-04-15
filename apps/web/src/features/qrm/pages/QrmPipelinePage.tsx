@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Download, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +11,7 @@ import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDr
 import { QrmDealEditorSheet } from "../components/QrmDealEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { PipelineAnalyticsOverlay } from "../components/PipelineAnalyticsOverlay";
 import { PipelineDealsTableView } from "../components/PipelineDealsTableView";
 import { PipelineFiltersBar } from "../components/PipelineFiltersBar";
 import { PipelineManagerSummary } from "../components/PipelineManagerSummary";
@@ -22,6 +23,7 @@ import {
   fetchOpenDealsFirstPage,
   type OpenDealsFirstPageResult,
 } from "../lib/pipeline-utils";
+import { computePipelineAnalytics } from "../lib/pipeline-analytics";
 import { useOpenDealsHydration } from "../hooks/useOpenDealsHydration";
 import { useCrmPipelineComputed, type UrgencyFilter } from "../hooks/useCrmPipelineComputed";
 import { useCrmPipelineDragDrop } from "../hooks/useCrmPipelineDragDrop";
@@ -39,6 +41,7 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [healthDrawerProfileId, setHealthDrawerProfileId] = useState<string | null>(null);
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(() => new Set());
   const isElevated = userRole === "admin" || userRole === "manager" || userRole === "owner";
   const { toast } = useToast();
 
@@ -137,13 +140,40 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
     );
   }, [weightedDealsQuery.data]);
 
-  const { handleDragStart, handleDragEnd, schedulePipelineRefresh } = useCrmPipelineDragDrop(
+  const clearSelection = useCallback(() => setSelectedDealIds(new Set()), []);
+
+  const handleDealSelectToggle = useCallback((dealId: string, _additive: boolean) => {
+    setSelectedDealIds((current) => {
+      const next = new Set(current);
+      if (next.has(dealId)) next.delete(dealId);
+      else next.add(dealId);
+      return next;
+    });
+  }, []);
+
+  const {
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    schedulePipelineRefresh,
+    gateRejectedStageId,
+  } = useCrmPipelineDragDrop(
     queryClient,
     hydratedDeals,
     setHydratedDeals,
     stagesQuery.data,
     (message) => toast({ title: "Stage gate", description: message, variant: "destructive" }),
+    selectedDealIds,
+    clearSelection,
   );
+
+  const analyticsSnapshot = useMemo(() => {
+    if (!showAnalytics) return null;
+    return computePipelineAnalytics({
+      stages: stagesQuery.data ?? [],
+      deals: deferredOpenDeals,
+    });
+  }, [showAnalytics, stagesQuery.data, deferredOpenDeals]);
 
   function commitPipelineFollowUpUpdate(dealId: string, nextFollowUpAt: string | null): void {
     setHydratedDeals((current) => updateDealNextFollowUp(current, dealId, nextFollowUpAt));
@@ -275,17 +305,27 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
       )}
 
       {!isLoading && !hasError && filteredDeals.length > 0 && viewMode === "board" && (
-        <PipelineSwimLanesBoard
-          stages={stagesQuery.data}
-          stageColumns={stageColumns}
-          healthProfileByCompanyId={healthProfileByCompanyId}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
-          onSchedulePipelineRefresh={schedulePipelineRefresh}
-          onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
-          showAnalytics={showAnalytics}
-        />
+        <>
+          {showAnalytics && analyticsSnapshot && (
+            <PipelineAnalyticsOverlay snapshot={analyticsSnapshot} />
+          )}
+          <PipelineSwimLanesBoard
+            stages={stagesQuery.data}
+            stageColumns={stageColumns}
+            healthProfileByCompanyId={healthProfileByCompanyId}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onCommitPipelineFollowUp={commitPipelineFollowUpUpdate}
+            onSchedulePipelineRefresh={schedulePipelineRefresh}
+            onOpenHealthProfile={(profileId) => setHealthDrawerProfileId(profileId)}
+            showAnalytics={showAnalytics}
+            bottleneckStageId={analyticsSnapshot?.bottleneckStageId ?? null}
+            gateRejectedStageId={gateRejectedStageId}
+            selectedDealIds={selectedDealIds}
+            onDealSelectToggle={handleDealSelectToggle}
+          />
+        </>
       )}
 
       <QrmDealEditorSheet

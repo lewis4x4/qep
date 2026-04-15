@@ -13,7 +13,7 @@ import type {
 const DEALS_PAGE_SIZE = 100;
 const DEALS_PAGE_LIMIT_MAX = 500;
 const REP_SAFE_DEAL_SELECT =
-  "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at";
+  "id, workspace_id, name, stage_id, primary_contact_id, company_id, assigned_rep_id, amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at, sort_position, margin_pct, deposit_status, deposit_amount, sla_deadline_at";
 const WEIGHTED_DEAL_SELECT =
   "id, workspace_id, name, stage_id, stage_name, stage_probability, primary_contact_id, company_id, assigned_rep_id, amount, weighted_amount, expected_close_on, next_follow_up_at, last_activity_at, closed_at, hubspot_deal_id, created_at, updated_at";
 
@@ -23,10 +23,13 @@ type QrmRepSafeDealRow = QrmDatabase["public"]["Views"]["crm_deals_rep_safe"]["R
 type QrmWeightedDealRow = QrmDatabase["public"]["Views"]["crm_deals_weighted"]["Row"];
 
 function toRepSafeDeal(row: QrmRepSafeDealRow): QrmRepSafeDeal {
+  // Optional fallbacks for cached rows written before migration 254 landed.
   const r = row as QrmRepSafeDealRow & {
     sla_deadline_at?: string | null;
     deposit_status?: string | null;
     deposit_amount?: number | null;
+    sort_position?: number | null;
+    margin_pct?: number | null;
   };
   return {
     id: r.id,
@@ -47,6 +50,8 @@ function toRepSafeDeal(row: QrmRepSafeDealRow): QrmRepSafeDeal {
     slaDeadlineAt: r.sla_deadline_at ?? null,
     depositStatus: r.deposit_status ?? null,
     depositAmount: r.deposit_amount ?? null,
+    sortPosition: r.sort_position ?? null,
+    marginPct: r.margin_pct ?? null,
   };
 }
 
@@ -226,4 +231,32 @@ export async function patchCrmDeal(dealId: string, input: QrmDealPatchInput): Pr
   }
 
   return patchCrmDealViaRouter(dealId, payload);
+}
+
+/**
+ * Reorder deals within a pipeline stage. Calls the `crm_reorder_pipeline_deals`
+ * RPC added in migration 254. The server enforces access + workspace + stage
+ * membership for every deal id.
+ *
+ * The deals must already be in `stageId` at the time of the call — callers
+ * that move a deal between stages should `patchCrmDeal({ stageId })` first,
+ * then reorder within the new stage.
+ */
+export async function reorderPipelineDeals(stageId: string, orderedDealIds: string[]): Promise<void> {
+  if (orderedDealIds.length === 0) return;
+
+  // The RPC is not in the generated types shim yet; cast at the call site.
+  const { error } = await (crmSupabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
+  }).rpc("crm_reorder_pipeline_deals", {
+    p_stage_id: stageId,
+    p_ordered_deal_ids: orderedDealIds,
+  });
+
+  if (error) {
+    const message = error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string"
+      ? (error as { message: string }).message
+      : "Reorder failed.";
+    throw new Error(message);
+  }
 }
