@@ -22,6 +22,7 @@ import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
+import { detectEscalationFromVoice } from "../_shared/voice-escalation-detect.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 /** Parsed GPT JSON; fields are optional at runtime. */
@@ -93,6 +94,12 @@ interface VoiceQrmIntelligence {
   competitor_mentions?: Array<{ brand?: string; context?: string }>;
   sentiment?: string | null;
   buying_intent?: string | null;
+  /** Slice 2.5 — structured escalation signal extracted from the transcript. */
+  escalation?: {
+    issue?: string | null;
+    department?: string | null;
+    severity?: string | null;
+  } | null;
 }
 
 interface VoiceQrmExtraction {
@@ -171,7 +178,12 @@ Return ONLY valid JSON:
   "intelligence": {
     "competitor_mentions": [{"brand": "string", "context": "string"}],
     "sentiment": "positive | neutral | negative",
-    "buying_intent": "high | medium | low"
+    "buying_intent": "high | medium | low",
+    "escalation": {
+      "issue": "string — concise description of the customer complaint or failure, or null",
+      "department": "Service | Parts | Warranty | Sales | Credit | null",
+      "severity": "high | medium | low — based on business impact and tone, or null"
+    }
   },
   "qrm_narrative": "string — professional first-person summary in the owner's format",
   "content_type": "sales | parts | service | process_improvement | general — classify the PRIMARY purpose of this voice note",
@@ -1014,11 +1026,60 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── 11. Voice → Escalation (Slice 2.5) ──────────────────────────────────
+    // When the transcript carries a credible escalation signal, fire the
+    // existing escalation-router function fire-and-forget so the rep's
+    // voice capture can close without waiting on OpenAI + email drafting.
+    // Failures are logged but do not fail the voice pipeline — a missed
+    // escalation is a soft failure; a failed voice capture is a hard one.
+    let escalationTriggered = false;
+    const escalationPayload = detectEscalationFromVoice(extracted, {
+      dealId,
+      contactId,
+    });
+    if (escalationPayload) {
+      escalationTriggered = true;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+      if (supabaseUrl && serviceRoleKey) {
+        // Fire-and-forget: do not await. Errors are captured in Sentry.
+        fetch(`${supabaseUrl}/functions/v1/escalation-router`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            deal_id: escalationPayload.deal_id,
+            contact_id: escalationPayload.contact_id ?? undefined,
+            issue_description: escalationPayload.issue_description,
+            department: escalationPayload.department ?? undefined,
+            severity: escalationPayload.severity ?? undefined,
+            source: escalationPayload.source,
+            detection_reason: escalationPayload.reason,
+            voice_capture_id: capture?.id ?? null,
+          }),
+        }).catch((err) => {
+          console.error("[voice-to-qrm] escalation dispatch failed:", err);
+          captureEdgeException(err, {
+            fn: "voice-to-qrm",
+            extra: {
+              stage: "escalation_dispatch",
+              deal_id: escalationPayload.deal_id,
+              reason: escalationPayload.reason,
+            },
+          });
+        });
+      }
+    }
+
     return safeJsonOk({
       success: true,
       pipeline_duration_ms: totalDuration,
       transcript,
       qrm_narrative: extracted.qrm_narrative,
+      escalation_triggered: escalationTriggered,
+      escalation_reason: escalationPayload?.reason ?? null,
       entities: {
         contact: {
           id: contactId,
