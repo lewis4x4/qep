@@ -44,9 +44,8 @@ const VoiceCapturePage = lazy(() =>
 const VoiceHistoryPage = lazy(() =>
   import("./components/VoiceHistoryPage").then((m) => ({ default: m.VoiceHistoryPage }))
 );
-const QuoteBuilderPage = lazy(() =>
-  import("./components/QuoteBuilderPage").then((m) => ({ default: m.QuoteBuilderPage }))
-);
+// Legacy QuoteBuilderPage (1628-line monolith) removed in Track 2 Slice 2.1b
+// cutover — all quote entry goes through QuoteBuilderV2Page at /quote-v2.
 const QuoteBuilderV2Page = lazy(() =>
   import("./features/quote-builder/pages/QuoteBuilderV2Page").then((m) => ({ default: m.QuoteBuilderV2Page }))
 );
