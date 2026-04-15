@@ -23,6 +23,10 @@ Every feature must pass ALL four gates:
 
 ## 1. What Has Already Shipped
 
+**Status as of 2026-04-15.** Every claim in this section links to a commit SHA
+on `main`. Items marked with ⚠️ carry a runtime gate that must be observed on
+the live system — see §19 Runtime Verification Checklist.
+
 ### Security Lockdown (formerly Unified Roadmap Sprint 0) ✅ COMPLETE
 All 8 critical security items verified fixed as of 2026-04-09:
 - deal_composite workspace isolation (migration 092)
@@ -40,22 +44,109 @@ All 8 critical security items verified fixed as of 2026-04-09:
 
 ### QRM Moonshot Phase 0 — Substrate ✅ COMPLETE
 All 8 substrate tracks shipped (migrations 207–215):
-- P0.1: Slice 1 committed and pushed
-- P0.2: Signal taxonomy + deal-signal bridge (4-source; `deal_timing_alerts` deferred)
-- P0.3: Prediction Ledger + nightly scorer
-- P0.4: Flow Bus (pub/sub alongside existing Flow Engine)
-- P0.5: Role-blend data model + frontend adoption
-- P0.6: Honesty Calibration Index (6 live probes, 2 stubbed)
-- P0.7: Time primitive + stage transition tracking
-- P0.8: Telemetry + trace substrate
+- P0.1: Slice 1 committed and pushed (`0ba1498`)
+- P0.2: Signal taxonomy + deal-signal bridge (4-source; `deal_timing_alerts` deferred) (`a763591`)
+- P0.3: Prediction Ledger + nightly scorer (`89a1c23`)
+- P0.4: Flow Bus (pub/sub alongside existing Flow Engine) (`0ed70d8`, `108073d`)
+- P0.5: Role-blend data model + frontend adoption (`0406275`, `8e93d69`)
+- P0.6: Honesty Calibration Index (6 live probes, 2 stubbed) (`56d0bd4`)
+- P0.7: Time primitive + stage transition tracking (`634af67`)
+- P0.8: Telemetry + trace substrate (`634af67`)
 
 ### QRM Moonshot Phase 1 — Command Center Spine ✅ COMPLETE
-Shipped at `/qrm/command`:
+Shipped at `/qrm/command` (`0ba1498`):
 - Global Command Strip + AI Chief of Staff (rules-based)
 - Live Action Lanes (Revenue Ready / At Risk / Blockers)
 - Pipeline Pressure Map (5 meta-stages)
 - Role-variant ordering with blended role support
 - Per-section freshness chips + terminology-locked rationale
+
+### Tracks 1–6 — Per-Slice Ship Status
+
+Code-shipped means the commit exists on `main`, the edge function or page is
+wired, and the slice passes `bun run build` + `bun run migrations:check`.
+Runtime-verified means the live gate in §19 has been observed in production.
+
+| Slice | Summary | Code shipped | Key commit(s) | Runtime gate |
+|-------|---------|:---:|---|---|
+| **Track 1 — Command Center Completion** |||||
+| 1.1 | Revenue Reality Board | ✅ | `0ba1498` (spine) → `3a06bcc` (guard) | — |
+| 1.2 | Dealer Reality Grid | ✅ | `0d33a7d` | — |
+| 1.3 | Quote Velocity Center | ✅ | `92194e8` | — |
+| 1.4 | Approval Center | ✅ | `09967b0` | — |
+| 1.5 | Blocker Board | ✅ | `25a1484` | — |
+| 1.6 | Relationship & Opportunity Engine | ✅ | `827d5cb` | — |
+| 1.7 | Knowledge Gaps + Absence Engine | ✅ | `b568206` | ⚠️ §19.1 |
+| 1.8 | Executive Intelligence Layer v1 | ✅ | `8bac94d` (marked TRACK 1 COMPLETE) | — |
+| 1.9 | `/qrm` route cutover + legacy delete | ✅ | `3a06bcc`, `118da57` | — |
+| **Track 2 — Core Business Workflows** |||||
+| 2.1a | Zero-blocking manual catalog (CSV admin + adapter) | ✅ | `e4e709d` | — |
+| 2.1b | Three entry modes + legacy monolith deletion | ✅ | `734719d` (this session) | — |
+| 2.1c | Financing preview (3 scenarios) | ✅ | `e4e709d`, `8a44443` | — |
+| 2.1d | Trade-in pull-through from `trade_valuations` | ✅ | `e4e709d` | — |
+| 2.1e | Margin check + waterfall | ✅ | `e4e709d` | — |
+| 2.1f | Proposal PDF (@react-pdf) | ✅ | `42077a4` | — |
+| 2.1g | Quote package auto-send (Resend) | ✅ | `fea5289` | — |
+| 2.1h | E-signature state machine + IP + document hash | ✅ | `8a44443`, `144e1aa` (this session) | — |
+| 2.2 | Tax & Incentive Intelligence | ✅ | `e4e709d`, migration `151_tax_intelligence`, `167_wave5_closeout_tax_incentives` | — |
+| 2.3 | Price Intelligence (xlsx/csv import, impact, requote) | ✅ | migrations `148`, `155`; edge fn `price-file-import` + `requote-drafts` | — |
+| 2.4 | Pipeline Board Polish (sort, multi-select, gates, analytics) | ✅ | `f9bc225`, `2b7b9b6` (this session) | — |
+| 2.5 | Post-Sale Automation (2 PM nudge + voice→escalation) | ✅ | `17a0e70` (this session) | ⚠️ §19.2 |
+| **Track 3 — Intelligence Layer** |||||
+| 3.1 | DGE Intelligence Cockpit (3 scenarios + waterfall + 14-var + learning) | ✅ | `12a6587` | — |
+| 3.2 | Predictive Visit List (nightly generator) | ✅ | `214a87d`, migration `220_predictive_visit_generator_cron` | — |
+| 3.3 | Live Nervous System (cross-department health score) | ✅ | `7c85464`, migrations `149`, `150`, `221_health_score_refresh_cron` | — |
+| 3.4 | AR Credit Blocking (DB trigger + override dialog) | ✅ | `17b9ecb`, `804b01e`, migration `156_live_health_score_and_ar_gate` | — |
+| 3.5 | Customer Lifecycle Timeline | ✅ | `b996187`, `804b01e` | — |
+| 3.6 | Revenue Attribution (touch-chain + nightly compute) | ✅ | `b996187`, migration `228_track3_exit_gate_closeout` (adds nightly cron) | — |
+| 3.7 | Ownership Intelligence Dashboard | ✅ | `bb1834c` | — |
+| 3.8 | Forecast Confidence | ✅ code | `ac372b8` | ⚠️ §19.3 (≥90d ledger) |
+| Track 3 gate closeout | | ✅ | `c67e60e`, migration `228` | — |
+| **Track 4 — Field & Mobile Ops** |||||
+| 4.1 | Equipment Intake Kanban (8-stage) | ✅ | `f2a22b6`, `a46323e`, migration `077` | ⚠️ §19.4 (390px) |
+| 4.2 | PDI Tap-Through Checklist | ✅ | `9fc632d` | ⚠️ §19.4 |
+| 4.3 | Traffic Ticket + Driver Workflow | ✅ | `49ff157`, migrations `073`, `078`, `122` | ⚠️ §19.4 |
+| 4.4 | Rental Return branching | ✅ | `2cee88f`, `d86f041`, migration `079` | ⚠️ §19.4 |
+| 4.5 | Payment Validation + GL Routing | ✅ | `e153e58`, migration `079` | — |
+| 4.6 | SOP Engine (ingest, skip events, compliance, nudges) | ✅ | `9413154`, `2a2e61f`, `9f6e683`, `c9694d4`, migrations `152`, `158`, `159`, `171`, `232` | ⚠️ §19.5 (≥1 real SOP with data) |
+| **Track 5 — Executive & Management** |||||
+| 5.1 | Canonical `/executive` route + front door | ✅ | `35fc4d1`, `0486808` | — |
+| 5.2 | Leadership Pulse Layer | ✅ | `0486808`, `29b4612` | — |
+| 5.3 | Deep Role Rooms (CEO / CFO / COO) | ✅ | `ce157fe`, `be94cc5`, `4a77f00`, migrations `187`, `190`, `191` | — |
+| 5.4 | Intervention Graph (memory + owner-assigned state) | ✅ | `ed943c5`, migration `222_intervention_memory` | — |
+| 5.5 | Forecast & Scenario Layer (confidence bands) | ✅ | `ac372b8` | ⚠️ §19.3 |
+| 5.6 | Board Packet & Briefing System | ✅ | `824f8b6`, `1e6f9d9`, migration `192_command_center_packet_runs`, `205_morning_briefing_cron_modern` | — |
+| 5.7 | Iron Role Command Centers + Supabase Realtime | ✅ | Page shells: `6cbdf82`; realtime: `af384a0` (this session) | — |
+| 5.8 | Data Quality Nightly Audit | ✅ | `fd23ba1`, migrations `164`, `223_data_quality_audit` | — |
+| 5.9 | Exception Inbox | ✅ | `a1d2473`, migration `165_exception_inbox` | — |
+| Track 5 sign-off | | ✅ | `12a563f` | — |
+| **Track 6 — Customer Portal & Payments** |||||
+| 6.1 | Portal Auth + Fleet Dashboard | ✅ | `2afcaf8`, migration `082_customer_portal` | — |
+| 6.2 | Service Request + Parts Ordering | ✅ | `2693aff` | — |
+| 6.3 | Invoice/Payment View + Stripe | ✅ | `e2976ce`, migration `113_customer_invoice_line_items_and_portal_pay`, edge fn `portal-stripe` | ⚠️ §19.6 (Stripe webhook e2e) |
+| 6.4 | Quote Review + E-Signature | ✅ | `824ed8f` | — |
+| 6.5 | Document Library | ✅ | `aae823a`, migration `157_portal_live_status_and_documents` | — |
+| 6.6 | Portal Fleet Mirror | ✅ | `00b042a` | — |
+| 6.7 | Portal Event Consistency | ✅ | `8952c12`, `069a44b` | — |
+| 6.8 | Customer Notifications | ✅ | `3b2eb49`, migration `226_portal_exit_gate_closeout` | — |
+| Track 6 closeout | | ✅ | `ed21e58` | — |
+
+**This session (2026-04-15) closed:** Slice 2.4 (`2b7b9b6`), Slice 2.1b cutover
+(`734719d`), Slice 2.5 (`17a0e70`), Slice 2.1h audit (`144e1aa`), Slice 5.7
+realtime (`af384a0`). 71 new unit tests; every commit passed
+`bun run migrations:check` + `bun run build`.
+
+### Summary by track
+
+| Track | Code shipped | Runtime gates outstanding |
+|-------|:---:|---|
+| 1 Command Center | ✅ | ⚠️ Absence Engine 7-day window (§19.1); Flow Bus dual-write retirement audit |
+| 2 Core Workflows | ✅ | ⚠️ 2 PM prospecting nudge + voice→escalation live observation (§19.2) |
+| 3 Intelligence | ✅ | ⚠️ Prediction Ledger ≥90 days for Forecast Confidence to stabilize (§19.3) |
+| 4 Field & Mobile | ✅ | ⚠️ 390 px viewport sign-off (§19.4); ≥1 real SOP with compliance data (§19.5) |
+| 5 Executive | ✅ | ⚠️ Realtime channel event observation (§19.7) |
+| 6 Portal & Payments | ✅ | ⚠️ Stripe webhook → AR mark-paid end-to-end (§19.6) |
+| 7 Moonshot Surfaces | 🟡 Many 7A/7B page shells on disk; content depth per-slice varies | See §9 per-slice entry conditions |
 
 ---
 
@@ -78,6 +169,10 @@ Track 7: Moonshot Operating Surfaces   (Phase 3-5 QRM surfaces, fleet visibility
 ---
 
 ## 3. Track 1 — Command Center Completion
+
+**Status (2026-04-15): ✅ CODE SHIPPED.** All 9 slices landed (`0d33a7d`–`8bac94d`);
+`/qrm` cutover + legacy `QrmHubPage.tsx` deletion shipped in `3a06bcc` / `118da57`.
+One runtime gate remains — see §19.1 (Absence Engine 7-day observation).
 
 **Goal:** Finish the QRM Command Center and cut over from the legacy `/qrm` page.
 **Entry condition:** Phase 0 complete ✅
@@ -128,6 +223,11 @@ Flip `/qrm` route to `QrmCommandCenterPage`. Delete `QrmHubPage.tsx`. PR descrip
 ---
 
 ## 4. Track 2 — Core Business Workflows
+
+**Status (2026-04-15): ✅ CODE SHIPPED.** All 5 slices (inc. every 2.1 sub-slice)
+landed. Final closeout this session: 2.4 (`2b7b9b6`), 2.1b cutover (`734719d`),
+2.5 (`17a0e70`), 2.1h e-sig audit (`144e1aa`). One runtime gate remains —
+see §19.2 (2 PM nudge + voice escalation observation).
 
 **Goal:** Quote Builder becomes the first owner-demo-able revenue workflow. Pipeline board gets polish. Post-sale automation wires up.
 **Entry condition:** Track 1 Slice 1.2 complete (Dealer Reality Grid drives quote/trade/demo tiles)
@@ -200,6 +300,12 @@ Signature capture UI, signer name + IP + timestamp. State machine: draft → sen
 
 ## 5. Track 3 — Intelligence Layer
 
+**Status (2026-04-15): ✅ CODE SHIPPED.** 3.1 (`12a6587`), 3.2 (`214a87d`),
+3.3 (`7c85464`), 3.4 (`17b9ecb`), 3.5 (`b996187`), 3.6 (`b996187` + `228`),
+3.7 (`bb1834c`), 3.8 (`ac372b8`). Exit-gate closeout `c67e60e`. Slice 3.8
+Forecast Confidence is code-complete but depends on ≥90 days of Prediction
+Ledger data to stabilize — see §19.3.
+
 **Goal:** Make the Deal Genome Engine visible. Build the live nervous system. Surface health scores, revenue attribution, and forecasting.
 **Entry condition:** Track 1 complete (command center is the intelligence home)
 **Can run in parallel with:** Track 2 (after Track 1 done), Track 4
@@ -257,6 +363,13 @@ Signature capture UI, signer name + IP + timestamp. State machine: draft → sen
 
 ## 6. Track 4 — Field & Mobile Operations
 
+**Status (2026-04-15): ✅ CODE SHIPPED.** 4.1 (`f2a22b6`), 4.2 (`9fc632d`),
+4.3 (`49ff157`), 4.4 (`2cee88f` + `d86f041`), 4.5 (`e153e58`), 4.6
+(`9413154` + `2a2e61f` + `9f6e683` + `c9694d4`). All pages routed under
+`/ops/*` in App.tsx. Two runtime gates remain: §19.4 (390 px viewport
+sign-off on all four field surfaces) and §19.5 (SOP compliance dashboard
+showing non-zero data for ≥1 real SOP).
+
 **Goal:** Equipment intake, PDI, driver workflows, rental returns — all mobile-first.
 **Entry condition:** None (independent track, can start immediately)
 **Can run in parallel with:** Track 1, Track 2, Track 3
@@ -305,6 +418,13 @@ Wizard-style mobile UI: Inspection (Iron Man) → Decision (Rental Asset Manager
 ---
 
 ## 7. Track 5 — Executive & Management Layer
+
+**Status (2026-04-15): ✅ CODE SHIPPED.** 5.1 (`35fc4d1`), 5.2 (`0486808`),
+5.3 (`ce157fe` + `be94cc5` + `4a77f00`), 5.4 (`ed943c5`), 5.5 (`ac372b8`),
+5.6 (`824f8b6` + `1e6f9d9`), 5.7 (`af384a0` this session — closes the
+Supabase Realtime requirement on the Iron dashboards), 5.8 (`fd23ba1`),
+5.9 (`a1d2473`). Sign-off `12a563f`. One runtime gate — see §19.7
+(observe realtime channel events in production).
 
 **Goal:** Build the best live dealership executive command center — a leadership operating room, not a passive analytics page.
 **Entry condition:** Track 1 Slice 1.8 (Executive Layer v1) + Track 3 Slices 3.1–3.4 complete
@@ -395,6 +515,13 @@ Cross-functional human work queue for: tax lookup failures, price-file unmatched
 
 ## 8. Track 6 — Customer Portal & Payments
 
+**Status (2026-04-15): ✅ CODE SHIPPED.** 6.1 (`2afcaf8`), 6.2 (`2693aff`),
+6.3 (`e2976ce`), 6.4 (`824ed8f`), 6.5 (`aae823a`), 6.6 (`00b042a`), 6.7
+(`8952c12` + `069a44b`), 6.8 (`3b2eb49`). Track closeout `ed21e58` "Close
+Track 6 by making payments and customer notifications operationally
+complete." One runtime gate — see §19.6 (Stripe webhook → AR mark-paid
+verified end-to-end on at least one live invoice).
+
 **Goal:** Convert the full portal backend into a customer-facing experience with payments.
 **Entry condition:** Track 3 Slices 3.3–3.4 (health score + AR blocking) complete
 **Estimated effort:** 12–15 engineer-days
@@ -433,6 +560,16 @@ Push/email when: service status changes, parts order ships, new quote available,
 ---
 
 ## 9. Track 7 — Moonshot Operating Surfaces
+
+**Status (2026-04-15): 🟡 IN PROGRESS.** Most 7A / 7B pages exist as files
+under `apps/web/src/features/qrm/pages/` (see git log — commits `5b87517`,
+`4e94f3f`, `6388a7a`, `4da29f2`, `206b852`, `3bc8519`, `8d5995f`, `bc1fefa`,
+`041cd4d`, `acd2346`, `ac70079`, `a705c13`, `d86f041`, `3bdc3ee`, `661bb71`,
+`afc780f`, `0c78d9d`, `93722bc`, `b8e3357`, `c7e6c25`, `3c1b991`, `62819e5`,
+`38e9fa0`, `9d387c3`, `a1105aa`, `88fae37`, `baa9eb2`, and others). Track 7
+completion status should be audited slice-by-slice — the fact that a page
+exists is evidence, not proof that the slice's exit conditions are met.
+7C is ethics-gated and most slices have not opened.
 
 **Goal:** Build the operating surfaces that make QEP OS a category-defining product. These are the 80+ ideas from the QRM inventory that extend the command center into a full dealership operating system.
 **Entry condition:** Track 1 complete. Individual slices have additional per-slice dependencies.
@@ -676,4 +813,106 @@ Each track has ONE question that determines whether it landed:
 
 ## 18. Where to Start
 
-Open this file. Go to §3 Track 1, Slice 1.1. That's the next delivery.
+**As of 2026-04-15**, Tracks 1 through 6 are **code-shipped** with runtime
+gates pending — see §19 for the operator checklist. The active lane is
+**Track 7 Moonshot Operating Surfaces** plus the runtime verification work.
+
+Pick one of these based on what needs to land next:
+
+1. **Run the §19 Runtime Verification Checklist.** This is the fastest way
+   to move any of Tracks 1–6 from "code-shipped" to "fully closed." Each
+   item is a single observation on production: check a row count, confirm
+   a cron fired, confirm a Stripe webhook wrote the AR ledger. Low risk,
+   high leverage, unblocks the "100% complete" claim.
+
+2. **Track 7 slice-by-slice audit.** Most 7A / 7B pages exist as files;
+   what's unclear is whether each surface's *content* matches the spec.
+   Prioritize:
+   - **7A.10 Machine Command Page / Asset 360** (`acd2346`) — the single
+     page that joins everything QEP knows about one machine.
+   - **7A.14 Service-to-Sales** (`3bdc3ee`) — recurring breakdowns →
+     replacement motion.
+   - **7A.21 Revenue Rescue Center** (`3c1b991`) — weekly saveable revenue.
+
+3. **Mobile 390 px viewport sweep (§19.4).** Track 4's exit gate explicitly
+   calls for this. A designer-led pass across `/ops/intake`, `/ops/pdi`,
+   `/ops/traffic`, `/ops/returns` would close it.
+
+The roadmap document no longer pins "Slice 1.1" as the next delivery —
+that was stale text from the April-9 snapshot. The `/qrm` command center
+is live and Slice 1.1's Revenue Reality Board is in production.
+
+---
+
+## 19. Runtime Verification Checklist
+
+Claims in §1 that code is shipped are proven by commits. The items below
+require observing the live system once and recording the result in
+`docs/operations/runtime-verification.md` (create if missing). Until each
+item is signed off, the corresponding Track is **code-shipped but not
+fully closed**.
+
+### §19.1 Track 1.7 — Absence Engine 7-day observation
+**Gate:** Roadmap §3 exit gate: *"Absence Engine running nightly for
+≥7 days with manager-reviewable data."*
+**How to verify:** Query the `absence_engine_*` tables (see migration for
+Slice 1.7, commit `b568206`) and confirm ≥7 consecutive daily rows with
+non-zero events. Confirm a manager can open the review surface and see
+the data.
+
+### §19.2 Track 2.5 — 2 PM nudge + voice→escalation
+**Gate:** The 2 PM prospecting-nudge cron (migration `255`) fires and
+writes to `crm_in_app_notifications`. Voice captures with an escalation
+signal produce tickets in `escalation_tickets`.
+**How to verify:**
+1. `select count(*) from crm_in_app_notifications where kind = 'prospecting_nudge' and created_at >= current_date;` — expect ≥1 on a weekday after 14:00 local.
+2. Record a voice note with a negative service complaint and confirm an
+   `escalation_tickets` row appears with `severity` scored by the new
+   LTV-weighted helper and `source = 'voice_to_qrm'`.
+
+### §19.3 Track 3.8 + 5.5 — Prediction Ledger ≥90 days
+**Gate:** Roadmap §5: *"Depends on P0.3 Prediction Ledger having ≥90
+days of accrued data."*
+**How to verify:**
+`select min(predicted_at) from qrm_predictions;` — confirm the earliest
+row is ≥90 days before today. Below that, forecast confidence bands are
+expected to be wide and the slice is not fully effective.
+
+### §19.4 Track 4 — Mobile 390 px viewport sign-off
+**Gate:** Roadmap §6 exit gate: *"All surfaces pass 390 px viewport test."*
+**How to verify:** Open each of `/ops/intake`, `/ops/intake/:id/pdi`,
+`/ops/traffic`, `/ops/returns`, `/ops/payments`, `/ops/sop-compliance`
+on an iPhone SE 3rd-gen viewport and an iPhone 15 Pro Max. Record any
+overflow, cut text, or untappable target ≥40 px.
+
+### §19.5 Track 4.6 — SOP compliance real data
+**Gate:** Roadmap §6 exit gate: *"SOP compliance dashboard shows
+non-zero data for at least 1 real SOP."*
+**How to verify:** Confirm ≥1 published SOP in `sop_templates` has
+`sop_skip_events` rows tied to real pipeline activity (not seed data).
+
+### §19.6 Track 6.3 — Stripe webhook end-to-end
+**Gate:** Roadmap §8: *"Stripe payments work end-to-end (webhook →
+AR mark-paid → health score recompute)."*
+**How to verify:** Trigger a test payment via the portal. Confirm:
+(a) `stripe_events` row for `payment_intent.succeeded`,
+(b) `portal_payments` row linked to the invoice,
+(c) the invoice's `balance_due` drops to zero,
+(d) the company's `customer_profiles_extended.health_score` recomputes
+within 5 seconds (Track 3.3 SLO).
+
+### §19.7 Track 5.7 — Realtime channel events
+**Gate:** Confirm the Supabase Realtime subscriptions added in
+`af384a0` fire in production when a deal moves stage.
+**How to verify:** Open `/dashboard` as an Iron Manager. In a second
+window, as any rep, move a deal between stages on `/qrm/pipeline`.
+Confirm the manager's dashboard invalidates and re-renders within
+~300 ms (debounce window + network).
+
+### §19.8 Track 1 — Flow Bus dual-write retirement
+**Gate:** Roadmap §3 exit gate: *"Flow Bus dual-write side-effects
+retired at Slice 1.2 exit."*
+**How to verify:** `grep -rn "flow_bus_publish\|dual_write" supabase/functions/`
+and confirm no code path still writes to both the legacy Flow Engine
+event table AND `flow_bus_events`. If both fire, the dual-write has
+not been retired.
