@@ -1,6 +1,7 @@
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { IronDashboardShell } from "../components/IronDashboardShell";
 import { useIronAdvisorData } from "../hooks/useDashboardData";
+import { useDashboardRealtime } from "../hooks/useDashboardRealtime";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Clock, Target, CalendarDays } from "lucide-react";
 
@@ -10,6 +11,8 @@ interface IronAdvisorDashboardProps {
 
 export function IronAdvisorDashboard({ userId }: IronAdvisorDashboardProps) {
   const { data } = useIronAdvisorData(userId);
+  // Slice 5.7 — live updates per-advisor; scope key scopes the channel.
+  useDashboardRealtime("iron_advisor", ["dashboard", "iron-advisor", userId], userId);
 
   const slaDeals = (data?.myDeals ?? []).filter(
     (d: any) => d.sla_deadline_at && new Date(d.sla_deadline_at) < new Date(),

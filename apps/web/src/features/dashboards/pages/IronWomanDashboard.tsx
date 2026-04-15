@@ -2,11 +2,14 @@ import { Link } from "react-router-dom";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { IronDashboardShell } from "../components/IronDashboardShell";
 import { useIronWomanData } from "../hooks/useDashboardData";
+import { useDashboardRealtime } from "../hooks/useDashboardRealtime";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Package, DollarSign, Boxes, CreditCard, ArrowUpRight } from "lucide-react";
 
 export function IronWomanDashboard() {
   const { data } = useIronWomanData();
+  // Slice 5.7 — live order processing / deposits / intake updates.
+  useDashboardRealtime("iron_woman", ["dashboard", "iron-woman"]);
 
   const pendingDepositTotal = (data?.pendingDeposits ?? []).reduce(
     (sum: number, d: any) => sum + (d.required_amount ?? 0),

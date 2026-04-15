@@ -2,11 +2,14 @@ import { Link } from "react-router-dom";
 import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { IronDashboardShell } from "../components/IronDashboardShell";
 import { useIronManData } from "../hooks/useDashboardData";
+import { useDashboardRealtime } from "../hooks/useDashboardRealtime";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Wrench, ClipboardCheck, Truck, RotateCcw, ArrowUpRight } from "lucide-react";
 
 export function IronManDashboard() {
   const { data } = useIronManData();
+  // Slice 5.7 — live prep / PDI / demo / return updates.
+  useDashboardRealtime("iron_man", ["dashboard", "iron-man"]);
 
   const kpis = (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

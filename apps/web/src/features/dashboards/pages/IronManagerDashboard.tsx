@@ -2,11 +2,14 @@ import { DashboardKpiCard } from "../components/DashboardKpiCard";
 import { IronDashboardShell } from "../components/IronDashboardShell";
 import { OwnershipIntelPanel } from "../components/OwnershipIntelPanel";
 import { useIronManagerData } from "../hooks/useDashboardData";
+import { useDashboardRealtime } from "../hooks/useDashboardRealtime";
 import { DEFAULT_WIDGETS } from "../widgets/role-defaults";
 import { Users, TrendingUp, AlertTriangle, DollarSign, Package } from "lucide-react";
 
 export function IronManagerDashboard() {
   const { data } = useIronManagerData();
+  // Slice 5.7 — live updates from pipeline / approvals / aging sources.
+  useDashboardRealtime("iron_manager", ["dashboard", "iron-manager"]);
 
   const totalPipeline = (data?.pipelineDeals ?? []).reduce(
     (sum: number, d: any) => sum + (d.amount ?? 0),
