@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   fetchIntelligenceSummary,
+  runEmbedBackfill,
   runSeededForecast,
   type DeadCapitalRow,
   type HotMoverRow,
@@ -95,6 +96,7 @@ function stockoutColor(risk: string): { bg: string; fg: string } {
 export function IntelligencePage() {
   const queryClient = useQueryClient();
   const [recomputing, setRecomputing] = useState(false);
+  const [embedding, setEmbedding] = useState(false);
   const [lastComputeResult, setLastComputeResult] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<IntelligenceSummary>({
@@ -114,6 +116,21 @@ export function IntelligencePage() {
       setLastComputeResult(`Failed: ${(err as Error).message}`);
     } finally {
       setRecomputing(false);
+    }
+  };
+
+  const handleEmbedBackfill = async () => {
+    setEmbedding(true);
+    setLastComputeResult(null);
+    try {
+      const r = await runEmbedBackfill(100);
+      setLastComputeResult(
+        `Embedded ${r.rows_embedded} part${r.rows_embedded === 1 ? "" : "s"} in ${r.batches} batch${r.batches === 1 ? "" : "es"} (${r.elapsed_ms.toFixed(0)}ms). ${r.rows_remaining ?? 0} remaining.`,
+      );
+    } catch (err) {
+      setLastComputeResult(`Embedding backfill failed: ${(err as Error).message}`);
+    } finally {
+      setEmbedding(false);
     }
   };
 
@@ -148,28 +165,54 @@ export function IntelligencePage() {
             </p>
           </div>
 
-          <button
-            onClick={handleRecompute}
-            disabled={recomputing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all disabled:opacity-60"
-            style={{
-              background: recomputing ? T.bgElevated : `linear-gradient(135deg, ${T.purple} 0%, #7c3aed 100%)`,
-              color: "#fff",
-              boxShadow: recomputing ? "none" : "0 6px 16px rgba(168,85,247,0.35)",
-            }}
-          >
-            {recomputing ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" />
-                Recomputing forecasts…
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} />
-                Recompute forecasts
-              </>
-            )}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleEmbedBackfill}
+              disabled={embedding}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all disabled:opacity-60"
+              style={{
+                background: embedding ? T.bgElevated : `linear-gradient(135deg, #22C55E 0%, #16A34A 100%)`,
+                color: "#fff",
+                boxShadow: embedding ? "none" : "0 6px 16px rgba(34,197,94,0.35)",
+              }}
+              title="Embed all parts for semantic search (Slice 3.1 backfill)"
+            >
+              {embedding ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Embedding parts…
+                </>
+              ) : (
+                <>
+                  <Brain size={14} />
+                  Rebuild embeddings
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleRecompute}
+              disabled={recomputing}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all disabled:opacity-60"
+              style={{
+                background: recomputing ? T.bgElevated : `linear-gradient(135deg, ${T.purple} 0%, #7c3aed 100%)`,
+                color: "#fff",
+                boxShadow: recomputing ? "none" : "0 6px 16px rgba(168,85,247,0.35)",
+              }}
+            >
+              {recomputing ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Recomputing forecasts…
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  Recompute forecasts
+                </>
+              )}
+            </button>
+          </div>
         </header>
 
         {lastComputeResult && (

@@ -166,6 +166,30 @@ export interface ActionPlayResult {
   queue_row_id: string | null;
 }
 
+export interface EmbedBackfillResult {
+  ok: boolean;
+  called_by: string;
+  elapsed_ms: number;
+  batches: number;
+  rows_embedded: number;
+  rows_skipped: number;
+  rows_errored: number;
+  api_calls: number;
+  rows_remaining: number | null;
+}
+
+export async function runEmbedBackfill(maxBatches = 100): Promise<EmbedBackfillResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase.functions.invoke("parts-embed-backfill", {
+    body: { max_batches: maxBatches },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (error) throw error;
+  return data as EmbedBackfillResult;
+}
+
 export async function actionPlay(
   playId: string,
   action: "actioned" | "dismissed" | "fulfilled" | "open",
