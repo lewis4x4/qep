@@ -164,6 +164,14 @@ export type QueryType =
   | "natural_language"
   | "cross_reference";
 
+export type MatchType =
+  | "exact"
+  | "semantic"
+  | "fts"
+  | "hybrid"
+  | "cross_ref"
+  | "machine_compat";
+
 export interface PartSearchResult {
   part_id: string;
   part_number: string;
@@ -171,6 +179,7 @@ export interface PartSearchResult {
   manufacturer: string | null;
   category: string | null;
   confidence: number;
+  match_type: MatchType;
   cross_references: CrossReference[];
   frequently_ordered_with: Array<{
     part_number: string;
@@ -202,6 +211,14 @@ export interface SearchResponse {
   search_time_ms: number;
   degraded: boolean;
   degraded_reason?: string;
+  match_mix?: {
+    semantic: number;
+    fts: number;
+    hybrid: number;
+    exact: number;
+    cross_ref: number;
+    machine_compat: number;
+  };
 }
 
 // ── Counter Inquiry Types ───────────────────────────────────

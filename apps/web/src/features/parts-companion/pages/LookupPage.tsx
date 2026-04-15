@@ -105,6 +105,9 @@ function CrossRefChip({ crossRef }: { crossRef: CrossReference }) {
 // ── Quick search chips ─────────────────────────────────────
 
 const QUICK_SEARCHES = [
+  "the thing in the chipper drum",
+  "oil filter for 2021 Yanmar",
+  "cutting edge for loader",
   "Barko 495",
   "Bandit knife",
   "ASV RT-75",
@@ -586,17 +589,66 @@ export function LookupPage() {
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-base font-bold font-mono" style={{ color: T.text }}>
                           {r.part_number}
                         </span>
                         <span className="text-sm" style={{ color: T.textMuted }}>
                           · {r.description}
                         </span>
+                        {(r.match_type === "semantic" || r.match_type === "hybrid") && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                            style={{
+                              background: "rgba(168,85,247,0.14)",
+                              color: "#A855F7",
+                              border: "1px solid rgba(168,85,247,0.5)",
+                            }}
+                            title={`Matched by ${r.match_type} (AI-powered)`}
+                          >
+                            🧠 Smart match
+                          </span>
+                        )}
+                        {r.match_type === "exact" && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{
+                              background: T.successBg,
+                              color: T.success,
+                              border: `1px solid ${T.success}`,
+                            }}
+                            title="Exact part number match"
+                          >
+                            ⌕ Exact
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs" style={{ color: T.textDim }}>
+                      <div className="text-xs mb-1.5" style={{ color: T.textDim }}>
                         {r.manufacturer} OEM
                         {r.category ? ` · ${r.category}` : ""}
+                      </div>
+                      {/* Confidence bar */}
+                      <div
+                        className="rounded-full overflow-hidden"
+                        style={{
+                          height: 3,
+                          width: 120,
+                          background: T.borderSoft,
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${Math.max(4, Math.min(100, r.confidence * 100))}%`,
+                            background:
+                              r.confidence >= 0.85
+                                ? T.success
+                                : r.confidence >= 0.7
+                                  ? T.orange
+                                  : T.warning,
+                            transition: "width 200ms ease-out",
+                          }}
+                        />
                       </div>
                     </div>
 
