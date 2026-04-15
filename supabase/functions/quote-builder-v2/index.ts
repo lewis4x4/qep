@@ -18,6 +18,7 @@ import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
+import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 
 function extractQuoteText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
@@ -956,7 +957,47 @@ Deno.serve(async (req) => {
       return safeJsonOk({ quote: data }, origin, 201);
     }
 
+    // ── POST /mark-viewed: sent → viewed transition (Slice 2.1h) ──────
+    // Called by the portal the first time a customer opens a quote. Safe
+    // to call multiple times; only transitions on the first call.
+    if (action === "mark-viewed") {
+      if (!body.quote_package_id) {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+
+      const { data: pkg, error: pkgErr } = await supabase
+        .from("quote_packages")
+        .select("id, status, viewed_at")
+        .eq("id", body.quote_package_id)
+        .maybeSingle();
+
+      if (pkgErr) return safeJsonError("Failed to load quote package", 500, origin);
+      if (!pkg) return safeJsonError("Quote package not found", 404, origin);
+
+      // Only flip when we are at `sent` and haven't already viewed.
+      const row = pkg as { id: string; status: string; viewed_at: string | null };
+      if (row.viewed_at) {
+        return safeJsonOk({ already_viewed: true, viewed_at: row.viewed_at }, origin);
+      }
+      if (row.status !== "sent") {
+        return safeJsonOk({ already_viewed: false, status: row.status }, origin);
+      }
+
+      const nowIso = new Date().toISOString();
+      const { error: updateErr } = await supabase
+        .from("quote_packages")
+        .update({ status: "viewed", viewed_at: nowIso })
+        .eq("id", body.quote_package_id)
+        .eq("status", "sent"); // race-safe: only transition from sent
+
+      if (updateErr) return safeJsonError("Failed to mark viewed", 500, origin);
+      return safeJsonOk({ already_viewed: false, status: "viewed", viewed_at: nowIso }, origin);
+    }
+
     // ── POST /sign: Save quote signature ───────────────────────────────
+    // State-machine guard (Slice 2.1h): the package must be in `sent` or
+    // `viewed`. Signing from `draft` or `expired` is rejected so a
+    // misconfigured UI can't short-circuit the send step.
     if (action === "sign") {
       if (!body.quote_package_id || !body.signer_name) {
         return safeJsonError("quote_package_id and signer_name required", 400, origin);
@@ -965,6 +1006,34 @@ Deno.serve(async (req) => {
       const signerName = String(body.signer_name).replace(/<[^>]*>/g, "").trim().slice(0, 100);
       if (!signerName) {
         return safeJsonError("signer_name cannot be empty", 400, origin);
+      }
+
+      const { data: pkg, error: pkgErr } = await supabase
+        .from("quote_packages")
+        .select("id, status, pdf_url, equipment, equipment_total, attachment_total, subtotal, trade_credit, net_total")
+        .eq("id", body.quote_package_id)
+        .maybeSingle();
+      if (pkgErr) return safeJsonError("Failed to load quote package", 500, origin);
+      if (!pkg) return safeJsonError("Quote package not found", 404, origin);
+
+      const pkgRow = pkg as {
+        id: string;
+        status: string;
+        pdf_url: string | null;
+        equipment: unknown;
+        equipment_total: number | null;
+        attachment_total: number | null;
+        subtotal: number | null;
+        trade_credit: number | null;
+        net_total: number | null;
+      };
+
+      if (!["sent", "viewed"].includes(pkgRow.status)) {
+        return safeJsonError(
+          `Cannot sign: quote must be sent or viewed (currently ${pkgRow.status}).`,
+          409,
+          origin,
+        );
       }
 
       let signatureImageUrl: string | null = null;
@@ -985,6 +1054,19 @@ Deno.serve(async (req) => {
         || "unknown";
       const signerUserAgent = req.headers.get("user-agent") ?? null;
 
+      // Integrity seal: SHA-256 over the canonical quote content the signer
+      // saw. Null-safe — we continue even if crypto.subtle is unavailable.
+      const documentHash = await computeQuoteDocumentHash({
+        quote_package_id: pkgRow.id,
+        pdf_url: pkgRow.pdf_url,
+        equipment: pkgRow.equipment,
+        equipment_total: pkgRow.equipment_total,
+        attachment_total: pkgRow.attachment_total,
+        subtotal: pkgRow.subtotal,
+        trade_credit: pkgRow.trade_credit,
+        net_total: pkgRow.net_total,
+      });
+
       const { data, error } = await supabase
         .from("quote_signatures")
         .insert({
@@ -995,6 +1077,7 @@ Deno.serve(async (req) => {
           signer_ip: signerIp,
           signer_user_agent: signerUserAgent,
           signature_image_url: signatureImageUrl,
+          document_hash: documentHash,
         })
         .select()
         .single();
@@ -1009,7 +1092,7 @@ Deno.serve(async (req) => {
         .update({ status: "accepted" })
         .eq("id", body.quote_package_id);
 
-      return safeJsonOk({ signature: data }, origin, 201);
+      return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
     }
 
     // ── POST /send-package: Send quote to customer via email ──────────
