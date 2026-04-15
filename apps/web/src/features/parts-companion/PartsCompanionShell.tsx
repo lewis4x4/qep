@@ -28,13 +28,15 @@ export function PartsCompanionShell() {
         ? "arrivals"
         : location.pathname.includes("/predictive-plays")
           ? "predictive-plays"
-          : location.pathname.includes("/pricing")
-            ? "pricing"
-            : location.pathname.includes("/intelligence")
-              ? "intelligence"
-              : location.pathname.includes("/import")
-                ? "import"
-                : "queue";
+          : location.pathname.includes("/replenish")
+            ? "replenish"
+            : location.pathname.includes("/pricing")
+              ? "pricing"
+              : location.pathname.includes("/intelligence")
+                ? "intelligence"
+                : location.pathname.includes("/import")
+                  ? "import"
+                  : "queue";
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback(

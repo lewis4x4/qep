@@ -46,6 +46,11 @@ const PricingRulesPage = lazy(() =>
     default: m.PricingRulesPage,
   })),
 );
+const ReplenishPage = lazy(() =>
+  import("./pages/ReplenishPage").then((m) => ({
+    default: m.ReplenishPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -148,6 +153,14 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <PricingRulesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="replenish"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <ReplenishPage />
             </Suspense>
           }
         />
