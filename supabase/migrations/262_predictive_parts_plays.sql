@@ -144,7 +144,11 @@ select
   p.projected_revenue,
   p.suggested_order_by,
   p.status,
-  pc_portal.company_name                        as customer_name,
+  coalesce(
+    cc.name,
+    trim(concat(pc_portal.first_name, ' ', pc_portal.last_name)),
+    'Customer'
+  )                                             as customer_name,
   cf.make                                       as machine_make,
   cf.model                                      as machine_model,
   cf.year                                       as machine_year,
@@ -165,6 +169,9 @@ from public.predicted_parts_plays p
 left join public.portal_customers pc_portal
   on pc_portal.id = p.portal_customer_id
   and pc_portal.workspace_id = p.workspace_id
+left join public.crm_companies cc
+  on cc.id = pc_portal.crm_company_id
+  and cc.workspace_id = p.workspace_id
 left join public.customer_fleet cf
   on cf.id = p.fleet_id
 left join public.vendor_profiles vp
