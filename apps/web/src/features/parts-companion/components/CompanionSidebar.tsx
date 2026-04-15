@@ -11,6 +11,7 @@ import {
   Upload,
   Brain,
   Rocket,
+  DollarSign,
 } from "lucide-react";
 import { IronAvatar } from "../../../lib/iron/IronAvatar";
 import { useAuth } from "../../../hooks/useAuth";
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
   { key: "arrivals", label: "Arrivals", icon: Package, badge: true, shortcut: null, adminOnly: false },
   { key: "intelligence", label: "Intelligence", icon: Brain, badge: false, shortcut: null, adminOnly: false },
   { key: "predictive-plays", label: "Predictive", icon: Rocket, badge: false, shortcut: null, adminOnly: false },
+  { key: "pricing", label: "Pricing", icon: DollarSign, badge: false, shortcut: null, adminOnly: true },
   { key: "import", label: "Import", icon: Upload, badge: false, shortcut: null, adminOnly: true },
 ];
 

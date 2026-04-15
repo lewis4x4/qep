@@ -41,6 +41,11 @@ const PredictivePlaysPage = lazy(() =>
     default: m.PredictivePlaysPage,
   })),
 );
+const PricingRulesPage = lazy(() =>
+  import("./pages/PricingRulesPage").then((m) => ({
+    default: m.PricingRulesPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -135,6 +140,14 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <PredictivePlaysPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="pricing"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <PricingRulesPage />
             </Suspense>
           }
         />
