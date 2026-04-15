@@ -21,6 +21,26 @@ const ArrivalsPage = lazy(() =>
     default: m.ArrivalsPage,
   })),
 );
+const ImportPage = lazy(() =>
+  import("./pages/ImportPage").then((m) => ({
+    default: m.ImportPage,
+  })),
+);
+const ImportConflictsPage = lazy(() =>
+  import("./pages/ImportConflictsPage").then((m) => ({
+    default: m.ImportConflictsPage,
+  })),
+);
+const IntelligencePage = lazy(() =>
+  import("./pages/IntelligencePage").then((m) => ({
+    default: m.IntelligencePage,
+  })),
+);
+const PredictivePlaysPage = lazy(() =>
+  import("./pages/PredictivePlaysPage").then((m) => ({
+    default: m.PredictivePlaysPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -75,6 +95,46 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <ArrivalsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="import"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <ImportPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="import/conflicts"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <ImportConflictsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="import/conflicts/:runId"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <ImportConflictsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="intelligence"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <IntelligencePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="predictive-plays"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <PredictivePlaysPage />
             </Suspense>
           }
         />

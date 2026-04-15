@@ -26,7 +26,13 @@ export function PartsCompanionShell() {
       ? "machines"
       : location.pathname.includes("/arrivals")
         ? "arrivals"
-        : "queue";
+        : location.pathname.includes("/predictive-plays")
+          ? "predictive-plays"
+          : location.pathname.includes("/intelligence")
+            ? "intelligence"
+            : location.pathname.includes("/import")
+              ? "import"
+              : "queue";
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback(

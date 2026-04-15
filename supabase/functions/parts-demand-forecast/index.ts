@@ -16,9 +16,15 @@ import { safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { logServiceCronRun } from "../_shared/service-cron-run.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
-const MODEL_VERSION = "v1_weighted_avg";
+const MODEL_VERSION = "v2_blended_cdk";
 const LOOKBACK_MONTHS = 12;
 const FORECAST_MONTHS = 3;
+
+// Blend weights — how much to trust CDK history vs internal transactional data.
+// When both signals exist, we combine them with these weights. If only one
+// exists, it takes 1.0.
+const CDK_WEIGHT = 0.6;      // 24 months of actual dealer history from DMS
+const INTERNAL_WEIGHT = 0.4; // our order_lines + service_parts signal
 
 interface MonthlyBucket {
   month: string; // YYYY-MM
@@ -129,8 +135,28 @@ Deno.serve(async (req) => {
       parts_analyzed: 0,
       forecasts_upserted: 0,
       fleet_signals_found: 0,
+      cdk_seeded_parts: 0,
+      blended_parts: 0,
       errors: 0,
     };
+
+    // ── 0. Prime from CDK 24-month history (no cold start) ────────────────
+    // Call the SQL helper that writes forecasts directly from parts_history_monthly.
+    // This gives us a baseline for every part with DMS history, even if we have
+    // no internal transactions yet.
+    try {
+      const { data: seededResult, error: seededErr } = await supabase
+        .rpc("compute_seeded_forecast", { p_workspace: null, p_forecast_months: FORECAST_MONTHS });
+      if (seededErr) {
+        console.warn("compute_seeded_forecast failed:", seededErr.message);
+      } else if (seededResult) {
+        const written = (seededResult as { forecasts_written?: number }).forecasts_written ?? 0;
+        results.cdk_seeded_parts = written;
+      }
+    } catch (err) {
+      // RPC may not exist in older deployments — fall through to v1 path
+      console.warn("CDK seeded forecast skipped:", (err as Error).message);
+    }
 
     const now = new Date();
     const lookbackStart = addMonths(now, -LOOKBACK_MONTHS);
@@ -217,6 +243,35 @@ Deno.serve(async (req) => {
         reorder_point: Number(rp.reorder_point) || 0,
         consumption_velocity: Number(rp.consumption_velocity) || 0,
       });
+    }
+
+    // ── 3b. Load CDK baselines written by compute_seeded_forecast ─────────
+    // These are our "no cold start" baselines. We'll blend them with the
+    // internal-txn predictions in step 5.
+    type CdkBaseline = {
+      predicted_qty: number;
+      confidence_low: number;
+      confidence_high: number;
+      drivers: Record<string, unknown>;
+    };
+    const cdkByKey = new Map<string, CdkBaseline>();
+    try {
+      const { data: cdkRows } = await supabase
+        .from("parts_demand_forecasts")
+        .select("workspace_id, part_number, branch_id, forecast_month, predicted_qty, confidence_low, confidence_high, drivers, seeded_from_history")
+        .eq("seeded_from_history", true)
+        .eq("computation_batch_id", batchId);
+      for (const r of cdkRows ?? []) {
+        const key = `${r.workspace_id}::${(r.part_number as string).toLowerCase()}::${r.branch_id}::${r.forecast_month}`;
+        cdkByKey.set(key, {
+          predicted_qty: Number(r.predicted_qty) || 0,
+          confidence_low: Number(r.confidence_low) || 0,
+          confidence_high: Number(r.confidence_high) || 0,
+          drivers: (r.drivers as Record<string, unknown>) ?? {},
+        });
+      }
+    } catch {
+      // compute_seeded_forecast may not have been applied yet — fall through
     }
 
     // ── 4. Fleet hours signal ─────────────────────────────────────────────
@@ -306,24 +361,62 @@ Deno.serve(async (req) => {
             rp?.reorder_point ?? null,
           );
 
+          // Blend with CDK baseline if we have one
+          const cdkKey = `${workspace_id}::${part_number}::${branch.branch_id}::${firstOfMonth(monthKey(forecastDate))}`;
+          const cdk = cdkByKey.get(cdkKey);
+
+          let finalPredicted = branchPredicted;
+          let finalLow = branchConfLow;
+          let finalHigh = branchConfHigh;
+          let seeded = false;
+          if (cdk) {
+            // True blend: 60% CDK dealer history + 40% internal txn signal
+            finalPredicted = Math.round(
+              (cdk.predicted_qty * CDK_WEIGHT + branchPredicted * INTERNAL_WEIGHT) * 100,
+            ) / 100;
+            finalLow = Math.round(
+              (cdk.confidence_low * CDK_WEIGHT + branchConfLow * INTERNAL_WEIGHT) * 100,
+            ) / 100;
+            finalHigh = Math.round(
+              (cdk.confidence_high * CDK_WEIGHT + branchConfHigh * INTERNAL_WEIGHT) * 100,
+            ) / 100;
+            seeded = true;
+            results.blended_parts++;
+          }
+
+          const finalStockout = assessStockoutRisk(
+            finalPredicted,
+            branch.qty_on_hand,
+            rp?.reorder_point ?? null,
+          );
+
           forecastRows.push({
             workspace_id,
             part_number: part_number.toUpperCase(),
             branch_id: branch.branch_id,
             forecast_month: firstOfMonth(monthKey(forecastDate)),
-            predicted_qty: branchPredicted,
-            confidence_low: branchConfLow,
-            confidence_high: branchConfHigh,
+            predicted_qty: finalPredicted,
+            confidence_low: finalLow,
+            confidence_high: finalHigh,
             qty_on_hand_at_forecast: branch.qty_on_hand,
             reorder_point_at_forecast: rp?.reorder_point ?? null,
-            stockout_risk: stockoutRisk,
+            stockout_risk: finalStockout,
             drivers: {
               order_history: monthMap.size,
               base_velocity_per_month: Math.round(baseAvg * 100) / 100,
               seasonal_factor: Math.round(seasonalFactor * 100) / 100,
               fleet_uplift_factor: fleetFactor,
               monthly_std_dev: Math.round(sd * 100) / 100,
+              internal_prediction: branchPredicted,
+              cdk_prediction: cdk?.predicted_qty ?? null,
+              blend_weights: cdk ? { cdk: CDK_WEIGHT, internal: INTERNAL_WEIGHT } : null,
             },
+            input_sources: {
+              cdk_history_months: cdk ? 24 : 0,
+              internal_txn_months: LOOKBACK_MONTHS,
+              fleet_signals: fleetFactor > 1 ? 1 : 0,
+            },
+            seeded_from_history: seeded,
             model_version: MODEL_VERSION,
             computation_batch_id: batchId,
             computed_at: now.toISOString(),

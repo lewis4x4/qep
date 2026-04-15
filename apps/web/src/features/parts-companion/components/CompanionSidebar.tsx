@@ -8,6 +8,9 @@ import {
   LogOut,
   Bug,
   Settings,
+  Upload,
+  Brain,
+  Rocket,
 } from "lucide-react";
 import { IronAvatar } from "../../../lib/iron/IronAvatar";
 import { useAuth } from "../../../hooks/useAuth";
@@ -30,10 +33,13 @@ interface CompanionSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { key: "queue", label: "Queue", icon: Layers, badge: true, shortcut: null },
-  { key: "lookup", label: "Lookup", icon: Search, badge: false, shortcut: "/" },
-  { key: "machines", label: "Machines", icon: Truck, badge: false, shortcut: null },
-  { key: "arrivals", label: "Arrivals", icon: Package, badge: true, shortcut: null },
+  { key: "queue", label: "Queue", icon: Layers, badge: true, shortcut: null, adminOnly: false },
+  { key: "lookup", label: "Lookup", icon: Search, badge: false, shortcut: "/", adminOnly: false },
+  { key: "machines", label: "Machines", icon: Truck, badge: false, shortcut: null, adminOnly: false },
+  { key: "arrivals", label: "Arrivals", icon: Package, badge: true, shortcut: null, adminOnly: false },
+  { key: "intelligence", label: "Intelligence", icon: Brain, badge: false, shortcut: null, adminOnly: false },
+  { key: "predictive-plays", label: "Predictive", icon: Rocket, badge: false, shortcut: null, adminOnly: false },
+  { key: "import", label: "Import", icon: Upload, badge: false, shortcut: null, adminOnly: true },
 ];
 
 export function CompanionSidebar({
@@ -94,7 +100,11 @@ export function CompanionSidebar({
 
       {/* Nav Items */}
       <div className="flex-1 flex flex-col gap-0.5 p-2 mt-1">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => {
+          if (!item.adminOnly) return true;
+          const role = profile?.role ?? "";
+          return ["admin", "manager", "owner"].includes(role);
+        }).map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.key;
           return (
