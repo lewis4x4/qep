@@ -158,15 +158,24 @@ export async function runPredictivePrediction(lookaheadDays = 90): Promise<{
   };
 }
 
+export interface ActionPlayResult {
+  ok: boolean;
+  play_id: string;
+  status: string;
+  queue_action: "created" | "reused_existing" | "none";
+  queue_row_id: string | null;
+}
+
 export async function actionPlay(
   playId: string,
   action: "actioned" | "dismissed" | "fulfilled" | "open",
   note?: string,
-): Promise<void> {
-  const { error } = await supabase.rpc("action_predictive_play", {
+): Promise<ActionPlayResult> {
+  const { data, error } = await supabase.rpc("action_predictive_play", {
     p_play_id: playId,
     p_action: action,
     p_note: note ?? null,
   });
   if (error) throw error;
+  return data as ActionPlayResult;
 }

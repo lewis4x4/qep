@@ -97,6 +97,7 @@ export function PredictivePlaysPage() {
   const [recomputing, setRecomputing] = useState(false);
   const [filter, setFilter] = useState<"all" | "7d" | "needs_order" | "pre_positioned">("all");
   const [recomputeMsg, setRecomputeMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "info" | "error"; message: string } | null>(null);
 
   const { data, isLoading, error } = useQuery<PredictivePlaysSummary>({
     queryKey: ["predictive-plays"],
@@ -143,8 +144,24 @@ export function PredictivePlaysPage() {
   };
 
   const handleAction = async (playId: string, action: "actioned" | "dismissed" | "fulfilled") => {
-    await actionPlay(playId, action);
-    await queryClient.invalidateQueries({ queryKey: ["predictive-plays"] });
+    try {
+      const result = await actionPlay(playId, action);
+      if (action === "actioned") {
+        if (result.queue_action === "created") {
+          setToast({ type: "success", message: "PO drafted — parts manager will see it in the replenish queue." });
+        } else if (result.queue_action === "reused_existing") {
+          setToast({ type: "info", message: "Existing draft PO reused — nothing duplicated." });
+        } else {
+          setToast({ type: "info", message: "Play marked actioned. No PO drafted (no recommended quantity)." });
+        }
+      } else if (action === "dismissed") {
+        setToast({ type: "info", message: "Play dismissed." });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["predictive-plays"] });
+      setTimeout(() => setToast(null), 4500);
+    } catch (err) {
+      setToast({ type: "error", message: `Failed: ${(err as Error).message}` });
+    }
   };
 
   return (
@@ -215,6 +232,25 @@ export function PredictivePlaysPage() {
           >
             <Sparkles size={14} />
             {recomputeMsg}
+          </div>
+        )}
+
+        {/* Action toast — sticky top banner */}
+        {toast && (
+          <div
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-40 rounded-xl px-4 py-3 flex items-center gap-2 text-sm shadow-xl"
+            style={{
+              background: toast.type === "success" ? T.successBg : toast.type === "error" ? T.dangerBg : T.infoBg,
+              color: toast.type === "success" ? T.success : toast.type === "error" ? T.danger : T.info,
+              border: `1px solid ${toast.type === "success" ? T.success : toast.type === "error" ? T.danger : T.info}`,
+              maxWidth: 520,
+            }}
+          >
+            {toast.type === "success" ? <Check size={14} /> : toast.type === "error" ? <X size={14} /> : <Sparkles size={14} />}
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 opacity-70 hover:opacity-100">
+              <X size={12} />
+            </button>
           </div>
         )}
 
@@ -508,9 +544,9 @@ function PlayRow({
               onClick={() => onAction(play.id, "actioned")}
               className="text-xs px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1.5"
               style={{ background: T.orangeGlow, color: T.orange, border: `1px solid ${T.orange}` }}
-              title="Mark actioned"
+              title="Draft a PO in the replenish queue and mark this play handled"
             >
-              <Check size={11} /> Action
+              <Check size={11} /> Queue PO
             </button>
             <button
               onClick={() => onAction(play.id, "dismissed")}
