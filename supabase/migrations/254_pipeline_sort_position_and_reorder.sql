@@ -14,15 +14,18 @@
 
 -- 1. Column + index ─────────────────────────────────────────────────────────
 
-alter table public.crm_deals
+-- NOTE: Migration 170 renamed crm_deals -> qrm_deals and created crm_deals as
+-- a backwards-compat view. DDL must target qrm_deals; reads through the view
+-- continue to work transparently because it's `select *`.
+alter table public.qrm_deals
   add column if not exists sort_position integer;
 
-comment on column public.crm_deals.sort_position is
+comment on column public.qrm_deals.sort_position is
   'Intra-column order on the pipeline board. Lower values render first. NULL sorts last.';
 
 -- Partial index: skip NULLs (they fall to end, ordered by created_at in the app)
-create index if not exists idx_crm_deals_stage_sort_position
-  on public.crm_deals (stage_id, sort_position)
+create index if not exists idx_qrm_deals_stage_sort_position
+  on public.qrm_deals (stage_id, sort_position)
   where sort_position is not null and deleted_at is null;
 
 -- 2. Backfill ───────────────────────────────────────────────────────────────
@@ -38,11 +41,11 @@ with ranked as (
       partition by workspace_id, stage_id
       order by created_at asc, id asc
     ) as rn
-  from public.crm_deals
+  from public.qrm_deals
   where deleted_at is null
     and sort_position is null
 )
-update public.crm_deals d
+update public.qrm_deals d
    set sort_position = r.rn * 100
   from ranked r
  where d.id = r.id;
