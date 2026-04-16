@@ -18,6 +18,13 @@ export function PartsCompanionShell() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [newRequestOpen, setNewRequestOpen] = useState(false);
   const [voiceOpsOpen, setVoiceOpsOpen] = useState(false);
+
+  // Listen for custom "open-voice-ops" event from any child (e.g. mic icon in LookupPage)
+  useEffect(() => {
+    const handler = () => setVoiceOpsOpen(true);
+    window.addEventListener("open-voice-ops", handler);
+    return () => window.removeEventListener("open-voice-ops", handler);
+  }, []);
   const navigate = useNavigate();
   const location = useLocation();
 

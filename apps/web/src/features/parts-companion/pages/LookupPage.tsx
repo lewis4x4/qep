@@ -270,7 +270,8 @@ export function LookupPage() {
             <button
               className="p-1.5 rounded-md border-none cursor-pointer flex"
               style={{ background: T.bgElevated }}
-              title="Voice search"
+              title="Voice search (or press V)"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-voice-ops"))}
             >
               <Mic size={16} style={{ color: T.textMuted }} />
             </button>
