@@ -158,6 +158,32 @@ export async function runPredictivePrediction(lookaheadDays = 90): Promise<{
   };
 }
 
+export interface AiPredictionResult {
+  ok: boolean;
+  machines_processed: number;
+  plays_proposed: number;
+  plays_grounded: number;
+  plays_written: number;
+  llm_errors: number;
+  grounding_rejections: number;
+  cost_cents: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  elapsed_ms: number;
+  batch_id: string;
+}
+
+export async function runAiPredictions(maxMachines = 10): Promise<AiPredictionResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Not authenticated");
+  const { data, error } = await supabase.functions.invoke("parts-predictive-ai", {
+    body: { max_machines: maxMachines },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+  if (error) throw error;
+  return data as AiPredictionResult;
+}
+
 export interface ActionPlayResult {
   ok: boolean;
   play_id: string;

@@ -21,6 +21,7 @@ import {
 import {
   actionPlay,
   fetchPredictivePlays,
+  runAiPredictions,
   runPredictivePrediction,
   type PredictivePlay,
   type PredictivePlaysSummary,
@@ -129,6 +130,8 @@ export function PredictivePlaysPage() {
     return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
   }, [filtered]);
 
+  const [aiRunning, setAiRunning] = useState(false);
+
   const handleRecompute = async () => {
     setRecomputing(true);
     setRecomputeMsg(null);
@@ -140,6 +143,23 @@ export function PredictivePlaysPage() {
       setRecomputeMsg(`Failed: ${(err as Error).message}`);
     } finally {
       setRecomputing(false);
+    }
+  };
+
+  const handleAiPredict = async () => {
+    setAiRunning(true);
+    setRecomputeMsg("🧠 Asking Claude…");
+    try {
+      const r = await runAiPredictions(10);
+      const cost = (r.cost_cents / 100).toFixed(3);
+      setRecomputeMsg(
+        `🧠 Claude wrote ${r.plays_written} AI-inferred plays across ${r.machines_processed} machines · ${r.plays_grounded}/${r.plays_proposed} grounded · $${cost} · ${(r.elapsed_ms / 1000).toFixed(1)}s`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["predictive-plays"] });
+    } catch (err) {
+      setRecomputeMsg(`AI prediction failed: ${(err as Error).message}`);
+    } finally {
+      setAiRunning(false);
     }
   };
 
@@ -199,30 +219,57 @@ export function PredictivePlaysPage() {
               Every order timed to the right vendor's ordering day. This is genuinely impossible without the full stack we just built.
             </p>
           </div>
-          <button
-            onClick={handleRecompute}
-            disabled={recomputing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium disabled:opacity-60"
-            style={{
-              background: recomputing
-                ? T.bgElevated
-                : "linear-gradient(135deg, #E87722 0%, #A855F7 100%)",
-              color: "#fff",
-              boxShadow: recomputing ? "none" : "0 6px 16px rgba(168,85,247,0.35)",
-            }}
-          >
-            {recomputing ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" />
-                Predicting…
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} />
-                Run predictions
-              </>
-            )}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleAiPredict}
+              disabled={aiRunning || recomputing}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium disabled:opacity-60"
+              style={{
+                background: aiRunning
+                  ? T.bgElevated
+                  : "linear-gradient(135deg, #7c3aed 0%, #c026d3 100%)",
+                color: "#fff",
+                boxShadow: aiRunning ? "none" : "0 6px 16px rgba(124,58,237,0.4)",
+              }}
+              title="Ask Claude to reason over each customer's machine + order history and propose AI-inferred parts plays"
+            >
+              {aiRunning ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Claude is thinking…
+                </>
+              ) : (
+                <>
+                  🧠
+                  Ask Claude
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleRecompute}
+              disabled={recomputing || aiRunning}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium disabled:opacity-60"
+              style={{
+                background: recomputing
+                  ? T.bgElevated
+                  : "linear-gradient(135deg, #E87722 0%, #A855F7 100%)",
+                color: "#fff",
+                boxShadow: recomputing ? "none" : "0 6px 16px rgba(168,85,247,0.35)",
+              }}
+            >
+              {recomputing ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Predicting…
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  Run predictions
+                </>
+              )}
+            </button>
+          </div>
         </header>
 
         {recomputeMsg && (
@@ -478,6 +525,19 @@ function PlayRow({
             >
               {win.label}
             </span>
+            {play.signal_type === "ai_inferred" && (
+              <span
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                style={{
+                  background: "linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(192,38,211,0.2) 100%)",
+                  color: "#c026d3",
+                  border: "1px solid rgba(192,38,211,0.5)",
+                }}
+                title="This play was inferred by Claude based on usage patterns, seasonality, and order history"
+              >
+                🧠 Claude
+              </span>
+            )}
           </div>
           <div className="flex items-baseline gap-2 mb-1">
             <span className="font-mono text-base font-semibold">{play.part_number}</span>
