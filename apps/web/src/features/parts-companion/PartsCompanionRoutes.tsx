@@ -56,6 +56,11 @@ const PostSalePlaysPage = lazy(() =>
     default: m.PostSalePlaysPage,
   })),
 );
+const SupplierHealthPage = lazy(() =>
+  import("./pages/SupplierHealthPage").then((m) => ({
+    default: m.SupplierHealthPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -174,6 +179,14 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <PostSalePlaysPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="suppliers"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <SupplierHealthPage />
             </Suspense>
           }
         />
