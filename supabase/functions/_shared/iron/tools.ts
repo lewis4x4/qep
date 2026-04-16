@@ -325,39 +325,64 @@ async function toolLookupPartInventory(partNumber: string, ctx: ToolContext) {
   if (!partNumber) return { error: "part_number is required" };
   const trimmed = partNumber.trim().toUpperCase();
 
-  const { data: invRows, error: invErr } = await ctx.admin
+  // Check parts_catalog first (CDK-imported parts have on_hand here)
+  const { data: catalogRows, error: catErr } = await ctx.admin
+    .from("parts_catalog")
+    .select("id, part_number, description, manufacturer, vendor_code, list_price, cost_price, category, uom, on_hand, bin_location, branch_code")
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .or(`part_number.ilike.${trimmed},part_number.ilike.${trimmed}%,part_number.ilike.%${trimmed}%`)
+    .limit(5);
+
+  if (catErr) return { error: catErr.message };
+
+  // Also check parts_inventory (legacy path)
+  const { data: invRows } = await ctx.admin
     .from("parts_inventory")
-    .select("part_number, branch_id, qty_on_hand, bin_location, catalog_id")
-    .eq("part_number", trimmed)
+    .select("part_number, branch_id, qty_on_hand, bin_location")
+    .or(`part_number.eq.${trimmed},part_number.ilike.${trimmed}%`)
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null);
 
-  if (invErr) return { error: invErr.message };
-  if (!invRows || invRows.length === 0) {
-    return { found: false, part_number: trimmed, message: "No inventory rows found." };
+  // Merge: prefer catalog data (CDK source of truth), supplement with inventory
+  if ((!catalogRows || catalogRows.length === 0) && (!invRows || invRows.length === 0)) {
+    return { found: false, part_number: trimmed, message: `No results for "${trimmed}". Try a partial number or description via search_parts.` };
   }
 
-  // Pull catalog details (one query, one part)
-  const { data: catalogRows } = await ctx.admin
-    .from("parts_catalog")
-    .select("part_number, description, manufacturer, list_price, category, uom")
-    .eq("part_number", trimmed)
-    .eq("workspace_id", ctx.workspaceId)
-    .maybeSingle();
+  if (catalogRows && catalogRows.length > 0) {
+    const totalOnHand = catalogRows.reduce((sum, r) => sum + Number(r.on_hand ?? 0), 0);
+    return {
+      found: true,
+      part_number: catalogRows[0].part_number,
+      description: catalogRows[0].description ?? null,
+      manufacturer: catalogRows[0].manufacturer ?? catalogRows[0].vendor_code ?? null,
+      category: catalogRows[0].category ?? null,
+      list_price_usd: catalogRows[0].list_price ?? null,
+      cost_price_usd: catalogRows[0].cost_price ?? null,
+      unit_of_measure: catalogRows[0].uom ?? null,
+      total_on_hand: totalOnHand,
+      bin_location: catalogRows[0].bin_location ?? null,
+      branch_code: catalogRows[0].branch_code ?? null,
+      matches: catalogRows.length,
+      all_matches: catalogRows.map((r) => ({
+        part_number: r.part_number,
+        description: r.description,
+        on_hand: r.on_hand,
+        bin_location: r.bin_location,
+        branch_code: r.branch_code,
+        list_price: r.list_price,
+      })),
+    };
+  }
 
-  const total = invRows.reduce((sum, r) => sum + (r.qty_on_hand ?? 0), 0);
-
+  // Fallback: inventory-only (no catalog match)
+  const total = (invRows ?? []).reduce((sum, r) => sum + (r.qty_on_hand ?? 0), 0);
   return {
     found: true,
     part_number: trimmed,
-    description: catalogRows?.description ?? null,
-    manufacturer: catalogRows?.manufacturer ?? null,
-    category: catalogRows?.category ?? null,
-    list_price_usd: catalogRows?.list_price ?? null,
-    unit_of_measure: catalogRows?.uom ?? null,
     total_on_hand: total,
-    branch_count: invRows.length,
-    branches: invRows.map((r) => ({
+    branch_count: (invRows ?? []).length,
+    branches: (invRows ?? []).map((r) => ({
       branch_id: r.branch_id,
       qty: r.qty_on_hand,
       bin_location: r.bin_location,
@@ -372,12 +397,52 @@ async function toolSearchParts(
   ctx: ToolContext,
 ) {
   if (!query) return { error: "query is required" };
-  const term = query.trim().replace(/[%_]/g, "").slice(0, 80);
-  const orFilter = `description.ilike.%${term}%,manufacturer.ilike.%${term}%,part_number.ilike.%${term}%`;
+  const term = query.trim().slice(0, 80);
+
+  // Try semantic + FTS hybrid search first (Slice 3.1 match_parts_hybrid)
+  try {
+    const { embedText, formatVectorLiteral } = await import("../openai-embeddings.ts");
+    const embedding = await embedText(term);
+    const vectorLiteral = formatVectorLiteral(embedding);
+
+    const { data: hybridResults, error: hybridErr } = await ctx.admin.rpc("match_parts_hybrid", {
+      p_query_embedding: vectorLiteral,
+      p_query_text: term,
+      p_workspace: ctx.workspaceId,
+      p_manufacturer: null,
+      p_category: category ?? null,
+      p_alpha: 0.6,
+      p_match_count: Math.min(limit, 20),
+    });
+
+    if (!hybridErr && hybridResults && hybridResults.length > 0) {
+      return {
+        count: hybridResults.length,
+        search_method: "semantic_hybrid",
+        parts: hybridResults.map((p: Record<string, unknown>) => ({
+          part_number: p.part_number,
+          description: p.description,
+          manufacturer: p.manufacturer ?? p.vendor_code,
+          category: p.category,
+          list_price_usd: p.list_price,
+          on_hand: p.on_hand,
+          similarity: p.cosine_similarity,
+          hybrid_score: p.hybrid_score,
+        })),
+      };
+    }
+  } catch (embErr) {
+    // Embedding failed (OPENAI_API_KEY missing, network, etc.) — fall through to ilike
+    console.warn("[iron/tools] semantic search fallback:", (embErr as Error).message);
+  }
+
+  // Fallback: ilike search on parts_catalog (also checks on_hand from catalog, not parts_inventory)
+  const safeTerm = term.replace(/[%_]/g, "");
+  const orFilter = `description.ilike.%${safeTerm}%,manufacturer.ilike.%${safeTerm}%,vendor_code.ilike.%${safeTerm}%,part_number.ilike.%${safeTerm}%`;
 
   let q = ctx.admin
     .from("parts_catalog")
-    .select("part_number, description, manufacturer, category, list_price, uom")
+    .select("part_number, description, manufacturer, vendor_code, category, list_price, cost_price, uom, on_hand, bin_location")
     .eq("workspace_id", ctx.workspaceId)
     .is("deleted_at", null)
     .or(orFilter);
@@ -385,33 +450,18 @@ async function toolSearchParts(
 
   const { data, error } = await q.limit(Math.min(limit, 25));
   if (error) return { error: error.message };
-  if (!data || data.length === 0) return { count: 0, parts: [] };
-
-  // Pull total inventory for each found part
-  const partNumbers = data.map((p) => p.part_number).filter(Boolean);
-  const { data: invRows } = await ctx.admin
-    .from("parts_inventory")
-    .select("part_number, qty_on_hand")
-    .in("part_number", partNumbers)
-    .eq("workspace_id", ctx.workspaceId)
-    .is("deleted_at", null);
-
-  const totalsByPart = new Map<string, number>();
-  for (const inv of invRows ?? []) {
-    const cur = totalsByPart.get(inv.part_number) ?? 0;
-    totalsByPart.set(inv.part_number, cur + (inv.qty_on_hand ?? 0));
-  }
+  if (!data || data.length === 0) return { count: 0, parts: [], search_method: "ilike_fallback" };
 
   return {
     count: data.length,
+    search_method: "ilike_fallback",
     parts: data.map((p) => ({
       part_number: p.part_number,
       description: p.description,
-      manufacturer: p.manufacturer,
+      manufacturer: p.manufacturer ?? p.vendor_code,
       category: p.category,
       list_price_usd: p.list_price,
-      unit_of_measure: p.uom,
-      total_on_hand: totalsByPart.get(p.part_number) ?? 0,
+      on_hand: p.on_hand ?? 0,
     })),
   };
 }
