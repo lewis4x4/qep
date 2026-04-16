@@ -319,6 +319,9 @@ const PrimitivesPlaygroundPage = lazy(() =>
 const CommandCenterPage = lazy(() =>
   import("./features/exec/pages/CommandCenterPage").then((m) => ({ default: m.CommandCenterPage }))
 );
+const OwnerDashboardPage = lazy(() =>
+  import("./features/owner/pages/OwnerDashboardPage").then((m) => ({ default: m.OwnerDashboardPage }))
+);
 const OwnerBriefingPage = lazy(() =>
   import("./features/exec/pages/OwnerBriefingPage").then((m) => ({ default: m.OwnerBriefingPage }))
 );
@@ -1503,6 +1506,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <CommandCenterPage viewerRole={profile.role} viewerName={profile.full_name} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/owner"
+                element={
+                  profile.role === "owner" ? (
+                    <OwnerDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

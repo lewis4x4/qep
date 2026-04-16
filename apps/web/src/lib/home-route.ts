@@ -14,6 +14,7 @@ export function resolveHomeRoute(
 
   switch (normalizedRole) {
     case "owner":
+      return "/owner";
     case "admin":
     case "manager":
       return "/qrm";
