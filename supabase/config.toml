@@ -124,6 +124,9 @@ verify_jwt = false
 [functions.parts-embed-backfill]
 verify_jwt = false
 
+[functions.parts-predictive-ai]
+verify_jwt = false
+
 [functions.ai-parts-lookup]
 verify_jwt = false
 
