@@ -30,7 +30,13 @@ const CLAUDE_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 1024;
 const MAX_TEMPERATURE = 0.3;
 const ANTHROPIC_TIMEOUT_MS = 30_000;
-const GROUNDING_MIN_SIMILARITY = 0.55;
+// Grounding threshold — tuned for text-embedding-3-small against very terse
+// catalog descriptions (~10 char "OIL FILTER" vs Claude's longer phrasing).
+// Asymmetric text similarity sits in the 0.4-0.6 range even for obvious matches.
+// We check hybrid_score (semantic + FTS combined) so short-but-keyword-matching
+// descriptions still ground.
+const GROUNDING_MIN_HYBRID = 0.35;
+const GROUNDING_MIN_COSINE = 0.45;
 const SYSTEM_PROMPT_VERSION = "v1-2026-04-15";
 
 // Claude Sonnet 4.6 pricing ($ per MTok)
@@ -180,7 +186,14 @@ Deno.serve(async (req) => {
       let runPlaysGrounded = 0;
       let runPlaysWritten = 0;
       let rawResponse: unknown = null;
-      const groundingRejections: Array<{ hint: string; similarity: number | null }> = [];
+      const groundingRejections: Array<{
+        hint: string;
+        top_cosine: number | null;
+        top_hybrid: number | null;
+        top_match_source: string | null;
+        top_part_number: string | null;
+        candidate_count: number;
+      }> = [];
 
       try {
         totals.machines_processed++;
@@ -226,12 +239,25 @@ Deno.serve(async (req) => {
         // 2d. Ground each play via semantic search
         for (const play of parsed.plays) {
           try {
-            const groundedPartId = await groundPartHint(supabase, play.part_hint, fleet.make);
-            if (!groundedPartId) {
-              groundingRejections.push({ hint: play.part_hint, similarity: null });
+            const { grounded, debug } = await groundPartHint(
+              supabase,
+              play.part_hint,
+              fleet.make,
+              fleet.model,
+            );
+            if (!grounded) {
+              groundingRejections.push({
+                hint: play.part_hint,
+                top_cosine: debug.top_cosine,
+                top_hybrid: debug.top_hybrid,
+                top_match_source: debug.top_match_source,
+                top_part_number: debug.top_part_number,
+                candidate_count: debug.candidate_count,
+              });
               totals.grounding_rejections++;
               continue;
             }
+            const groundedPartId = grounded;
             runPlaysGrounded++;
 
             // 2e. Project due date from window
@@ -436,43 +462,99 @@ interface GroundedPart {
   part_id: string;
   part_number: string;
   description: string;
+  cosine_similarity: number;
+  hybrid_score: number;
+  match_source: string;
+}
+
+interface GroundingDebug {
+  top_cosine: number | null;
+  top_hybrid: number | null;
+  top_match_source: string | null;
+  top_part_number: string | null;
+  candidate_count: number;
+  passed: boolean;
 }
 
 async function groundPartHint(
   supabase: SupabaseClient,
   hint: string,
   manufacturerHint: string | null,
-): Promise<GroundedPart | null> {
+  modelHint: string | null,
+): Promise<{ grounded: GroundedPart | null; debug: GroundingDebug }> {
+  const debug: GroundingDebug = {
+    top_cosine: null,
+    top_hybrid: null,
+    top_match_source: null,
+    top_part_number: null,
+    candidate_count: 0,
+    passed: false,
+  };
   try {
-    const embedding = await embedText(hint);
+    const enrichedHint = [manufacturerHint, modelHint, hint]
+      .filter((x) => x && x.trim())
+      .join(" ")
+      .trim();
+
+    const embedding = await embedText(enrichedHint);
     const vectorLiteral = formatVectorLiteral(embedding);
 
     const { data, error } = await supabase.rpc("match_parts_hybrid", {
       p_query_embedding: vectorLiteral,
-      p_query_text: hint,
+      p_query_text: enrichedHint,
       p_workspace: null,
-      p_manufacturer: manufacturerHint,
+      p_manufacturer: null,
       p_category: null,
-      p_alpha: 0.7, // lean more semantic for LLM-generated hints
+      p_alpha: 0.6,
       p_match_count: 3,
     });
 
-    if (error || !data || data.length === 0) return null;
+    if (error) {
+      console.warn(`[grounding] RPC error for "${hint}":`, error.message);
+      return { grounded: null, debug };
+    }
+    if (!data || data.length === 0) {
+      return { grounded: null, debug };
+    }
+
     const top = data[0] as {
       part_id: string;
       part_number: string;
       description: string | null;
       cosine_similarity: number;
+      hybrid_score: number;
+      match_source: string;
     };
-    if (top.cosine_similarity < GROUNDING_MIN_SIMILARITY) return null;
+
+    debug.candidate_count = data.length;
+    debug.top_cosine = Number(top.cosine_similarity) || 0;
+    debug.top_hybrid = Number(top.hybrid_score) || 0;
+    debug.top_match_source = top.match_source;
+    debug.top_part_number = top.part_number;
+
+    const passes =
+      debug.top_hybrid >= GROUNDING_MIN_HYBRID ||
+      debug.top_cosine >= GROUNDING_MIN_COSINE ||
+      top.match_source === "both";
+
+    debug.passed = passes;
+    if (!passes) {
+      return { grounded: null, debug };
+    }
 
     return {
-      part_id: top.part_id,
-      part_number: top.part_number,
-      description: top.description ?? hint,
+      grounded: {
+        part_id: top.part_id,
+        part_number: top.part_number,
+        description: top.description ?? hint,
+        cosine_similarity: debug.top_cosine,
+        hybrid_score: debug.top_hybrid,
+        match_source: top.match_source,
+      },
+      debug,
     };
   } catch (err) {
     console.warn(`[parts-predictive-ai] grounding failed for hint "${hint}":`, err);
-    return null;
+    return { grounded: null, debug };
   }
 }
