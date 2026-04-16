@@ -51,6 +51,11 @@ const ReplenishPage = lazy(() =>
     default: m.ReplenishPage,
   })),
 );
+const PostSalePlaysPage = lazy(() =>
+  import("./pages/PostSalePlaysPage").then((m) => ({
+    default: m.PostSalePlaysPage,
+  })),
+);
 
 function CompanionFallback() {
   return (
@@ -161,6 +166,14 @@ export function PartsCompanionRoutes() {
           element={
             <Suspense fallback={<CompanionFallback />}>
               <ReplenishPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="post-sale"
+          element={
+            <Suspense fallback={<CompanionFallback />}>
+              <PostSalePlaysPage />
             </Suspense>
           }
         />

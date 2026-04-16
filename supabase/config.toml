@@ -147,3 +147,6 @@ verify_jwt = false
 
 [functions.owner-predictive-interventions]
 verify_jwt = false
+
+[functions.post-sale-parts-playbook]
+verify_jwt = false
