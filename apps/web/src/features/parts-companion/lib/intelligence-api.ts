@@ -176,12 +176,76 @@ export interface AiPredictionResult {
 export async function runAiPredictions(maxMachines = 10): Promise<AiPredictionResult> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error("Not authenticated");
-  const { data, error } = await supabase.functions.invoke("parts-predictive-ai", {
-    body: { max_machines: maxMachines },
-    headers: { Authorization: `Bearer ${session.access_token}` },
-  });
-  if (error) throw error;
-  return data as AiPredictionResult;
+
+  const startedAt = new Date(Date.now() - 2_000).toISOString();
+
+  try {
+    const { data, error } = await supabase.functions.invoke("parts-predictive-ai", {
+      body: { max_machines: maxMachines },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error) throw error;
+    return data as AiPredictionResult;
+  } catch (err) {
+    // The Supabase edge gateway sometimes drops the HTTP connection on calls
+    // that take 10-20s (Claude + embedding + grounding chain). The server
+    // actually completes successfully and writes to parts_llm_inference_runs.
+    // Poll that table for up to 60s to see if the run landed.
+    const msg = (err as Error).message || "";
+    const looksLikeTransportFailure =
+      msg.includes("Failed to send a request") ||
+      msg.includes("non-2xx") ||
+      msg.includes("network") ||
+      msg.includes("Edge Function");
+
+    if (!looksLikeTransportFailure) throw err;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise((r) => setTimeout(r, 2_000));
+      const { data: recentRuns } = await supabase
+        .from("parts_llm_inference_runs")
+        .select("plays_proposed, plays_grounded, plays_written, tokens_in, tokens_out, cost_usd_cents, elapsed_ms, status, fleet_id, created_at")
+        .gte("created_at", startedAt)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (recentRuns && recentRuns.length > 0) {
+        // Aggregate across any runs that landed in this window
+        const agg = recentRuns.reduce(
+          (acc: { machines: Set<string>; proposed: number; grounded: number; written: number; tokens_in: number; tokens_out: number; cost_cents: number; elapsed: number }, r: any) => {
+            if (r.fleet_id) acc.machines.add(r.fleet_id);
+            acc.proposed += r.plays_proposed ?? 0;
+            acc.grounded += r.plays_grounded ?? 0;
+            acc.written += r.plays_written ?? 0;
+            acc.tokens_in += r.tokens_in ?? 0;
+            acc.tokens_out += r.tokens_out ?? 0;
+            acc.cost_cents += Number(r.cost_usd_cents ?? 0);
+            acc.elapsed = Math.max(acc.elapsed, r.elapsed_ms ?? 0);
+            return acc;
+          },
+          { machines: new Set<string>(), proposed: 0, grounded: 0, written: 0, tokens_in: 0, tokens_out: 0, cost_cents: 0, elapsed: 0 },
+        );
+
+        return {
+          ok: true,
+          machines_processed: agg.machines.size,
+          plays_proposed: agg.proposed,
+          plays_grounded: agg.grounded,
+          plays_written: agg.written,
+          llm_errors: 0,
+          grounding_rejections: agg.proposed - agg.grounded,
+          cost_cents: agg.cost_cents,
+          total_tokens_in: agg.tokens_in,
+          total_tokens_out: agg.tokens_out,
+          elapsed_ms: agg.elapsed,
+          batch_id: "recovered-from-gateway-timeout",
+        } satisfies AiPredictionResult;
+      }
+    }
+
+    // Polled for 60s, nothing landed — surface the original transport error.
+    throw err;
+  }
 }
 
 export interface ActionPlayResult {
