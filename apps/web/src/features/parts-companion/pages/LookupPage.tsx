@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Copy,
   Mic,
+  Camera,
   Flame,
   History,
   Cpu,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { searchParts } from "../lib/companion-api";
 import { IntelliDealerBadge } from "../components/IntelliDealerBadge";
+import { VisualPartIdModal } from "../components/VisualPartIdModal";
 import type { SearchResponse, PartSearchResult, CrossReference } from "../lib/types";
 
 // ── Design Tokens ──────────────────────────────────────────
@@ -138,6 +140,7 @@ const SYMPTOM_PARTS = [
 
 export function LookupPage() {
   const [query, setQuery] = useState("");
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -270,6 +273,14 @@ export function LookupPage() {
             <button
               className="p-1.5 rounded-md border-none cursor-pointer flex"
               style={{ background: T.bgElevated }}
+              title="Visual parts ID (take photo)"
+              onClick={() => setPhotoOpen(true)}
+            >
+              <Camera size={16} style={{ color: T.textMuted }} />
+            </button>
+            <button
+              className="p-1.5 rounded-md border-none cursor-pointer flex"
+              style={{ background: T.bgElevated }}
               title="Voice search (or press V)"
               onClick={() => window.dispatchEvent(new CustomEvent("open-voice-ops"))}
             >
@@ -278,6 +289,15 @@ export function LookupPage() {
             <Kbd>/</Kbd>
           </div>
         </div>
+
+        <VisualPartIdModal
+          open={photoOpen}
+          onClose={() => setPhotoOpen(false)}
+          onPartSelected={(sku) => {
+            setQuery(sku);
+            searchMutation.mutate(sku);
+          }}
+        />
 
         {/* Quick Search Chips */}
         <div className="flex flex-wrap gap-2 mt-3">
