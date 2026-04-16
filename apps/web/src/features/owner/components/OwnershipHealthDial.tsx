@@ -6,14 +6,15 @@
  * Slice C so we can ship the skeleton now.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Gauge, ShieldCheck, AlertTriangle, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ShieldCheck, AlertTriangle, TrendingUp } from "lucide-react";
 import { fetchOwnershipHealthScore, type OwnershipHealthScore } from "../lib/owner-api";
 
-const TIER_STYLES: Record<OwnershipHealthScore["tier"], { label: string; ring: string; text: string; bg: string }> = {
-  excellent: { label: "Excellent", ring: "ring-emerald-400/40", text: "text-emerald-300", bg: "from-emerald-500/10" },
-  healthy:   { label: "Healthy",   ring: "ring-qep-orange/40", text: "text-qep-orange", bg: "from-orange-500/10" },
-  attention: { label: "Attention", ring: "ring-amber-400/40", text: "text-amber-300", bg: "from-amber-500/10" },
-  critical:  { label: "Critical",  ring: "ring-rose-500/50",  text: "text-rose-300",  bg: "from-rose-500/10" },
+const TIER_STYLES: Record<OwnershipHealthScore["tier"], { label: string; ring: string; text: string; stroke: string; bg: string }> = {
+  excellent: { label: "Excellent", ring: "ring-emerald-400/40", text: "text-emerald-300", stroke: "stroke-emerald-400", bg: "from-emerald-500/10" },
+  healthy:   { label: "Healthy",   ring: "ring-qep-orange/40", text: "text-qep-orange", stroke: "stroke-qep-orange", bg: "from-orange-500/10" },
+  attention: { label: "Attention", ring: "ring-amber-400/40", text: "text-amber-300", stroke: "stroke-amber-400", bg: "from-amber-500/10" },
+  critical:  { label: "Critical",  ring: "ring-rose-500/50",  text: "text-rose-300",  stroke: "stroke-rose-400", bg: "from-rose-500/10" },
 };
 
 export function OwnershipHealthDial() {
@@ -47,12 +48,8 @@ export function OwnershipHealthDial() {
       </div>
 
       <div className="mt-6 flex items-center gap-5">
-        <div className="relative grid h-32 w-32 place-items-center rounded-full border border-white/10 bg-black/30">
-          <Gauge className="absolute h-28 w-28 text-white/10" />
-          <span className={`relative text-5xl font-semibold tracking-tight ${style.text}`}>
-            {q.isLoading ? "…" : q.isError ? "!" : score ?? "—"}
-          </span>
-        </div>
+        <AnimatedArc score={score} strokeClass={style.stroke} textClass={style.text} loading={q.isLoading} errored={q.isError} />
+
         <div className="flex-1 space-y-2">
           {dims ? (
             (Object.entries(dims) as [keyof typeof dims, number][]).map(([k, v]) => (
@@ -67,6 +64,68 @@ export function OwnershipHealthDial() {
       <p className="mt-5 text-xs text-slate-400">
         Weighted across Parts · Sales · Service · Rental · Finance. Animated dial + trend arrow ship in Slice C.
       </p>
+    </div>
+  );
+}
+
+function AnimatedArc({
+  score,
+  strokeClass,
+  textClass,
+  loading,
+  errored,
+}: {
+  score: number | null;
+  strokeClass: string;
+  textClass: string;
+  loading: boolean;
+  errored: boolean;
+}) {
+  const [animated, setAnimated] = useState(0);
+  const target = Math.max(0, Math.min(100, score ?? 0));
+
+  useEffect(() => {
+    if (score == null) return;
+    // Ease-out animation from current `animated` → target over ~900ms
+    const start = performance.now();
+    const from = animated;
+    const duration = 900;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setAnimated(from + (target - from) * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  // SVG: 36-unit viewBox circle. circumference = 2πr. r=16 → c=100.53.
+  const r = 16;
+  const c = 2 * Math.PI * r;
+  const dashOffset = c * (1 - animated / 100);
+
+  return (
+    <div className="relative grid h-36 w-36 place-items-center">
+      <svg viewBox="0 0 36 36" className="h-36 w-36 -rotate-90" aria-hidden="true">
+        <circle cx="18" cy="18" r={r} className="fill-none stroke-white/8" strokeWidth="2.5" />
+        <circle
+          cx="18"
+          cy="18"
+          r={r}
+          className={`fill-none ${strokeClass}`}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={dashOffset}
+          style={{ transition: "stroke-dashoffset 200ms linear" }}
+        />
+      </svg>
+      <span className={`absolute text-5xl font-semibold tracking-tight tabular-nums ${textClass}`}>
+        {loading ? "…" : errored ? "!" : score != null ? Math.round(animated) : "—"}
+      </span>
     </div>
   );
 }

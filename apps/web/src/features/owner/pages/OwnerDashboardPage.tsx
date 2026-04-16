@@ -36,6 +36,7 @@ import { OwnerBriefCard } from "../components/OwnerBriefCard";
 import { AskAnythingBar } from "../components/AskAnythingBar";
 import { PredictiveInterventionPanel } from "../components/PredictiveInterventionPanel";
 import { BranchStackHeatmap } from "../components/BranchStackHeatmap";
+import { TeamSignalsGrid } from "../components/TeamSignalsGrid";
 import { useDashboardRealtime } from "@/features/dashboards/hooks/useDashboardRealtime";
 
 function fmtUsd(n: number | null | undefined, opts: { compact?: boolean } = {}): string {
@@ -146,16 +147,7 @@ export function OwnerDashboardPage() {
         {/* TIER 5 — Branch Stack + Team Signals ──────────────────────── */}
         <section className="mt-6 grid gap-5 lg:grid-cols-2">
           <BranchStackHeatmap />
-          <div className="rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.88))] p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-              Team Signals · coming in Slice F
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">Rep performance grid</h3>
-            <p className="mt-2 text-sm text-slate-400">
-              YTD bookings, close rate, deal velocity, and activity counts with outlier
-              highlighting. Hooks into existing rep/pipeline data.
-            </p>
-          </div>
+          <TeamSignalsGrid />
         </section>
       </div>
     </div>

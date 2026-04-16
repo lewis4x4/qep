@@ -195,3 +195,29 @@ export async function fetchPredictiveInterventions(): Promise<PredictiveInterven
   if (!data) throw new Error("owner-predictive-interventions: empty response");
   return data;
 }
+
+// ── RPC: owner_team_signals ──────────────────────────────────────────────
+export interface TeamSignalRep {
+  rep_name: string;
+  rep_id: string | null;
+  ytd_wins: number;
+  ytd_bookings: number;
+  open_deals: number;
+  close_rate_pct: number | null;
+  avg_close_days: number | null;
+}
+
+export interface TeamSignalsResponse {
+  generated_at: string;
+  workspace_id: string;
+  reps: TeamSignalRep[];
+}
+
+export async function fetchOwnerTeamSignals(limit = 12): Promise<TeamSignalsResponse> {
+  const { data, error } = await supabase.rpc("owner_team_signals", {
+    p_workspace: null,
+    p_limit: limit,
+  });
+  if (error) throw new Error(`owner_team_signals: ${error.message}`);
+  return data as TeamSignalsResponse;
+}
