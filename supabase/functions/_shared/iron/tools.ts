@@ -49,13 +49,13 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "lookup_part_inventory",
     description:
-      "Look up the on-hand quantity of a specific part across all branches. Returns inventory rows with branch_id, qty_on_hand, bin_location, and catalog details (description, manufacturer, list_price). USE THIS WHEN: the user asks 'how many of X do we have', 'is X in stock', 'where is X stored', or any question about a specific part number.",
+      "Look up a COMPLETE, exact part number in the catalog (e.g. '129A00-55730', 'BK-HYD-4951'). Returns description, list_price, cost_price, on_hand, bin_location, branch_code. USE ONLY WHEN the user gave you a full SKU with all suffix digits — CDK part numbers usually have dashes and multiple segments like '129A00-55730'. When exact lookup finds nothing, the response may include `candidates: [...]` with close matches from semantic search — present these to the user. DO NOT use this tool for partial numbers, fragments, or descriptions — use search_parts instead.",
     input_schema: {
       type: "object",
       properties: {
         part_number: {
           type: "string",
-          description: "The exact part number to look up, e.g. 'BLADE-EDGE-60' or 'SEAL-KIT-12'",
+          description: "The EXACT, COMPLETE part number (e.g. '129A00-55730'). Not a fragment.",
         },
       },
       required: ["part_number"],
@@ -64,11 +64,14 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "search_parts",
     description:
-      "Fuzzy search the parts catalog by description, manufacturer name, or part number prefix. Returns up to 20 candidates with their descriptions, manufacturers, list prices, and current total inventory. USE THIS WHEN: the user describes a part by what it is rather than its exact part number, e.g. 'do we have any hydraulic seals' or 'find me Caterpillar filters'.",
+      "SEMANTIC + FULL-TEXT hybrid search across the catalog. Finds parts by description, partial number, symptom, machine make/model, or fuzzy phrasing. Returns top candidates ranked by similarity + keyword match. ALWAYS USE THIS when the user gave anything less than a complete SKU — partials (e.g. '0703'), descriptions ('hydraulic filter for Yanmar'), symptoms ('chipper is stalling'), brand names ('Caterpillar filters'), or loose phrasing. Much more powerful than simple keyword matching — it understands meaning. DEFAULT TOOL for parts search.",
     input_schema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Free-text search term" },
+        query: {
+          type: "string",
+          description: "The user's raw phrasing (partial number, description, symptom, etc.). Include machine context if the user mentioned it.",
+        },
         category: { type: "string", description: "Optional category filter" },
         limit: { type: "number", description: "Max results (default 15)" },
       },
@@ -324,6 +327,7 @@ export async function executeIronTool(
 async function toolLookupPartInventory(partNumber: string, ctx: ToolContext) {
   if (!partNumber) return { error: "part_number is required" };
   const trimmed = partNumber.trim().toUpperCase();
+  console.log(`[iron/tools] lookup_part_inventory input="${trimmed}" workspace="${ctx.workspaceId}"`);
 
   // Check parts_catalog first (CDK-imported parts have on_hand here)
   const { data: catalogRows, error: catErr } = await ctx.admin
@@ -335,6 +339,7 @@ async function toolLookupPartInventory(partNumber: string, ctx: ToolContext) {
     .limit(5);
 
   if (catErr) return { error: catErr.message };
+  console.log(`[iron/tools] lookup_part_inventory exact_catalog_matches=${catalogRows?.length ?? 0}`);
 
   // Also check parts_inventory (legacy path)
   const { data: invRows } = await ctx.admin
@@ -346,7 +351,43 @@ async function toolLookupPartInventory(partNumber: string, ctx: ToolContext) {
 
   // Merge: prefer catalog data (CDK source of truth), supplement with inventory
   if ((!catalogRows || catalogRows.length === 0) && (!invRows || invRows.length === 0)) {
-    return { found: false, part_number: trimmed, message: `No results for "${trimmed}". Try a partial number or description via search_parts.` };
+    // Soft-fallback: try semantic search with the same string as a search query.
+    // This catches "0703" → finds "0703-144" / "0703-185" / etc.
+    let candidates: Array<Record<string, unknown>> = [];
+    try {
+      const { embedText, formatVectorLiteral } = await import("../openai-embeddings.ts");
+      const embedding = await embedText(trimmed);
+      const vectorLiteral = formatVectorLiteral(embedding);
+      const { data: hybridRows } = await ctx.admin.rpc("match_parts_hybrid", {
+        p_query_embedding: vectorLiteral,
+        p_query_text: trimmed,
+        p_workspace: ctx.workspaceId,
+        p_manufacturer: null,
+        p_category: null,
+        p_alpha: 0.4, // lean FTS-heavy for numeric lookups
+        p_match_count: 5,
+      });
+      candidates = (hybridRows ?? []).map((r: Record<string, unknown>) => ({
+        part_number: r.part_number,
+        description: r.description,
+        on_hand: r.on_hand,
+        list_price: r.list_price,
+        similarity: r.cosine_similarity,
+        hybrid_score: r.hybrid_score,
+      }));
+    } catch (err) {
+      console.warn(`[iron/tools] fallback semantic search failed: ${(err as Error).message}`);
+    }
+    console.log(`[iron/tools] lookup_part_inventory fallback_candidates=${candidates.length}`);
+    return {
+      found: false,
+      part_number: trimmed,
+      message: `No exact match for "${trimmed}".`,
+      candidates,
+      suggestion: candidates.length > 0
+        ? `Claude: present these candidates to the user and ask which one they meant. Do NOT invent a different part number.`
+        : `Claude: explain you couldn't find anything close and offer to search by description.`,
+    };
   }
 
   if (catalogRows && catalogRows.length > 0) {
@@ -398,6 +439,7 @@ async function toolSearchParts(
 ) {
   if (!query) return { error: "query is required" };
   const term = query.trim().slice(0, 80);
+  console.log(`[iron/tools] search_parts query="${term}" workspace="${ctx.workspaceId}" category="${category ?? "none"}"`);
 
   // Try semantic + FTS hybrid search first (Slice 3.1 match_parts_hybrid)
   try {
@@ -415,7 +457,12 @@ async function toolSearchParts(
       p_match_count: Math.min(limit, 20),
     });
 
+    if (hybridErr) {
+      console.warn(`[iron/tools] match_parts_hybrid RPC error: ${hybridErr.message}`);
+    }
+
     if (!hybridErr && hybridResults && hybridResults.length > 0) {
+      console.log(`[iron/tools] search_parts semantic_hybrid matches=${hybridResults.length}`);
       return {
         count: hybridResults.length,
         search_method: "semantic_hybrid",
@@ -450,7 +497,11 @@ async function toolSearchParts(
 
   const { data, error } = await q.limit(Math.min(limit, 25));
   if (error) return { error: error.message };
-  if (!data || data.length === 0) return { count: 0, parts: [], search_method: "ilike_fallback" };
+  if (!data || data.length === 0) {
+    console.log(`[iron/tools] search_parts ilike_fallback matches=0`);
+    return { count: 0, parts: [], search_method: "ilike_fallback", message: `No parts found for "${term}". Tell the user what you searched and ask them to try a different phrasing.` };
+  }
+  console.log(`[iron/tools] search_parts ilike_fallback matches=${data.length}`);
 
   return {
     count: data.length,
