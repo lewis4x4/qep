@@ -700,6 +700,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ar_credit_blocks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "ar_credit_blocks_override_approver_id_fkey"
             columns: ["override_approver_id"]
             isOneToOne: false
@@ -1086,6 +1093,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "campaign_recipients_conversion_deal_id_fkey"
+            columns: ["conversion_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "campaign_recipients_portal_customer_id_fkey"
             columns: ["portal_customer_id"]
             isOneToOne: false
@@ -1335,32 +1349,38 @@ export type Database = {
       chunks: {
         Row: {
           chunk_index: number
+          chunk_kind: string
           content: string
           created_at: string
           document_id: string
           embedding: string | null
           id: string
           metadata: Json | null
+          parent_chunk_id: string | null
           token_count: number | null
         }
         Insert: {
           chunk_index: number
+          chunk_kind?: string
           content: string
           created_at?: string
           document_id: string
           embedding?: string | null
           id?: string
           metadata?: Json | null
+          parent_chunk_id?: string | null
           token_count?: number | null
         }
         Update: {
           chunk_index?: number
+          chunk_kind?: string
           content?: string
           created_at?: string
           document_id?: string
           embedding?: string | null
           id?: string
           metadata?: Json | null
+          parent_chunk_id?: string | null
           token_count?: number | null
         }
         Relationships: [
@@ -1369,6 +1389,13 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chunks_parent_chunk_id_fkey"
+            columns: ["parent_chunk_id"]
+            isOneToOne: false
+            referencedRelation: "chunks"
             referencedColumns: ["id"]
           },
         ]
@@ -1469,6 +1496,364 @@ export type Database = {
           source_url?: string | null
           updated_at?: string
           year?: number | null
+        }
+        Relationships: []
+      }
+      counter_inquiries: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          inquiry_type: string
+          machine_description: string | null
+          machine_profile_id: string | null
+          match_type: string | null
+          outcome: string
+          query_text: string
+          result_parts: string[] | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          inquiry_type?: string
+          machine_description?: string | null
+          machine_profile_id?: string | null
+          match_type?: string | null
+          outcome?: string
+          query_text: string
+          result_parts?: string[] | null
+          user_id: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          inquiry_type?: string
+          machine_description?: string | null
+          machine_profile_id?: string | null
+          match_type?: string | null
+          outcome?: string
+          query_text?: string
+          result_parts?: string[] | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counter_inquiries_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_campaign_recipients: {
+        Row: {
+          activity_id: string | null
+          attempted_at: string | null
+          campaign_id: string
+          completed_at: string | null
+          contact_id: string
+          created_at: string
+          error_code: string | null
+          id: string
+          ineligibility_reason: string | null
+          metadata: Json
+          provider_message_id: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          attempted_at?: string | null
+          campaign_id: string
+          completed_at?: string | null
+          contact_id: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          ineligibility_reason?: string | null
+          metadata?: Json
+          provider_message_id?: string | null
+          status: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          activity_id?: string | null
+          attempted_at?: string | null
+          campaign_id?: string
+          completed_at?: string | null
+          contact_id?: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          ineligibility_reason?: string | null
+          metadata?: Json
+          provider_message_id?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_campaign_recipients_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "crm_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaign_recipients_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaign_recipients_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaign_recipients_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_campaigns: {
+        Row: {
+          audience_snapshot: Json
+          channel: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          execution_summary: Json
+          id: string
+          name: string
+          state: string
+          template_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          audience_snapshot?: Json
+          channel: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          execution_summary?: Json
+          id?: string
+          name: string
+          state?: string
+          template_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          audience_snapshot?: Json
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          execution_summary?: Json
+          id?: string
+          name?: string
+          state?: string
+          template_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "crm_activity_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_activity_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_communication_messages: {
+        Row: {
+          activity_id: string | null
+          body_preview: string | null
+          campaign_id: string | null
+          channel: string
+          contact_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          direction: string
+          failure_code: string | null
+          id: string
+          idempotency_key: string | null
+          metadata: Json
+          occurred_at: string
+          provider: string | null
+          provider_message_id: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          body_preview?: string | null
+          campaign_id?: string | null
+          channel: string
+          contact_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          direction: string
+          failure_code?: string | null
+          id?: string
+          idempotency_key?: string | null
+          metadata?: Json
+          occurred_at?: string
+          provider?: string | null
+          provider_message_id?: string | null
+          status: string
+          subject?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          activity_id?: string | null
+          body_preview?: string | null
+          campaign_id?: string | null
+          channel?: string
+          contact_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          direction?: string
+          failure_code?: string | null
+          id?: string
+          idempotency_key?: string | null
+          metadata?: Json
+          occurred_at?: string
+          provider?: string | null
+          provider_message_id?: string | null
+          status?: string
+          subject?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_communication_messages_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "crm_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_communication_messages_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_communication_messages_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "crm_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_communication_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_communication_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_communication_messages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_communication_webhook_receipts: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          metadata: Json
+          payload_hash: string | null
+          processed_at: string | null
+          provider: string
+          route_binding_key: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          metadata?: Json
+          payload_hash?: string | null
+          processed_at?: string | null
+          provider: string
+          route_binding_key?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          metadata?: Json
+          payload_hash?: string | null
+          processed_at?: string | null
+          provider?: string
+          route_binding_key?: string | null
+          updated_at?: string
+          workspace_id?: string
         }
         Relationships: []
       }
@@ -1794,6 +2179,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_fleet_purchase_deal_id_fkey"
+            columns: ["purchase_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       customer_invoice_line_items: {
@@ -1938,6 +2330,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "customer_invoices_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "customer_invoices_deal_id_fkey"
             columns: ["deal_id"]
             isOneToOne: false
@@ -1971,6 +2370,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_invoices_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "customer_invoices_parts_order_id_fkey"
@@ -2060,6 +2466,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_lifecycle_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "customer_lifecycle_events_customer_profile_id_fkey"
@@ -2159,6 +2572,13 @@ export type Database = {
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "customer_parts_intelligence_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       customer_profile_access_audit: {
@@ -2235,6 +2655,7 @@ export type Database = {
           budget_cycle_notes: string | null
           company_name: string | null
           created_at: string
+          crm_company_id: string | null
           customer_name: string
           fiscal_year_end_month: number | null
           fleet_size: number | null
@@ -2270,6 +2691,7 @@ export type Database = {
           budget_cycle_notes?: string | null
           company_name?: string | null
           created_at?: string
+          crm_company_id?: string | null
           customer_name: string
           fiscal_year_end_month?: number | null
           fleet_size?: number | null
@@ -2307,6 +2729,7 @@ export type Database = {
           budget_cycle_notes?: string | null
           company_name?: string | null
           created_at?: string
+          crm_company_id?: string | null
           customer_name?: string
           fiscal_year_end_month?: number | null
           fleet_size?: number | null
@@ -2334,6 +2757,61 @@ export type Database = {
           service_contract_rate?: number | null
           total_deals?: number | null
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_profiles_extended_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_profiles_extended_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_profiles_extended_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      daily_briefings: {
+        Row: {
+          briefing_content: Json
+          briefing_date: string
+          created_at: string
+          expires_at: string
+          generated_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing_content: Json
+          briefing_date?: string
+          created_at?: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing_content?: Json
+          briefing_date?: string
+          created_at?: string
+          expires_at?: string
+          generated_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -2399,6 +2877,7 @@ export type Database = {
           close_probability: number | null
           created_at: string
           customer_profile_id: string | null
+          deal_id: string | null
           discount_pct: number | null
           equipment_make: string
           equipment_model: string
@@ -2435,6 +2914,7 @@ export type Database = {
           close_probability?: number | null
           created_at?: string
           customer_profile_id?: string | null
+          deal_id?: string | null
           discount_pct?: number | null
           equipment_make: string
           equipment_model: string
@@ -2471,6 +2951,7 @@ export type Database = {
           close_probability?: number | null
           created_at?: string
           customer_profile_id?: string | null
+          deal_id?: string | null
           discount_pct?: number | null
           equipment_make?: string
           equipment_model?: string
@@ -2514,6 +2995,48 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "exec_health_movers"
             referencedColumns: ["customer_profile_id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "deal_scenarios_market_valuation_id_fkey"
@@ -2621,6 +3144,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deal_timing_alerts_actioned_deal_id_fkey"
+            columns: ["actioned_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "deal_timing_alerts_assigned_rep_id_fkey"
@@ -2875,6 +3405,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "demos_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "demos_equipment_id_fkey"
             columns: ["equipment_id"]
             isOneToOne: false
@@ -3022,10 +3559,230 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "deposits_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "deposits_verified_by_fkey"
             columns: ["verified_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dge_learning_events: {
+        Row: {
+          accuracy_delta: number | null
+          created_at: string
+          deal_id: string
+          deal_outcome: string | null
+          final_amount: number | null
+          final_margin_pct: number | null
+          id: string
+          outcome_at: string | null
+          scenario_type: Database["public"]["Enums"]["scenario_type"]
+          selected_at: string
+          selected_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          accuracy_delta?: number | null
+          created_at?: string
+          deal_id: string
+          deal_outcome?: string | null
+          final_amount?: number | null
+          final_margin_pct?: number | null
+          id?: string
+          outcome_at?: string | null
+          scenario_type: Database["public"]["Enums"]["scenario_type"]
+          selected_at?: string
+          selected_by?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          accuracy_delta?: number | null
+          created_at?: string
+          deal_id?: string
+          deal_outcome?: string | null
+          final_amount?: number | null
+          final_margin_pct?: number | null
+          id?: string
+          outcome_at?: string | null
+          scenario_type?: Database["public"]["Enums"]["scenario_type"]
+          selected_at?: string
+          selected_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "dge_learning_events_selected_by_fkey"
+            columns: ["selected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dge_refresh_jobs: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          dedupe_key: string
+          deleted_at: string | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          priority: number
+          request_payload: Json
+          requested_by: string | null
+          result_payload: Json
+          started_at: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          dedupe_key: string
+          deleted_at?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          priority?: number
+          request_payload?: Json
+          requested_by?: string | null
+          result_payload?: Json
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          dedupe_key?: string
+          deleted_at?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          priority?: number
+          request_payload?: Json
+          requested_by?: string | null
+          result_payload?: Json
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dge_refresh_jobs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dge_variable_breakdown: {
+        Row: {
+          created_at: string
+          deal_scenario_id: string
+          description: string | null
+          display_order: number
+          id: string
+          impact_direction: string
+          variable_name: string
+          variable_unit: string
+          variable_value: number | null
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string
+          deal_scenario_id: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          impact_direction: string
+          variable_name: string
+          variable_unit?: string
+          variable_value?: number | null
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string
+          deal_scenario_id?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          impact_direction?: string
+          variable_name?: string
+          variable_unit?: string
+          variable_value?: number | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dge_variable_breakdown_deal_scenario_id_fkey"
+            columns: ["deal_scenario_id"]
+            isOneToOne: false
+            referencedRelation: "deal_scenarios"
             referencedColumns: ["id"]
           },
         ]
@@ -3514,6 +4271,7 @@ export type Database = {
           sent_via: string | null
           status: string
           subject: string
+          to_email: string | null
           tone: string
           updated_at: string
           urgency_score: number | null
@@ -3535,6 +4293,7 @@ export type Database = {
           sent_via?: string | null
           status?: string
           subject: string
+          to_email?: string | null
           tone?: string
           updated_at?: string
           urgency_score?: number | null
@@ -3556,6 +4315,7 @@ export type Database = {
           sent_via?: string | null
           status?: string
           subject?: string
+          to_email?: string | null
           tone?: string
           updated_at?: string
           urgency_score?: number | null
@@ -3575,6 +4335,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_drafts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "email_drafts_contact_id_fkey"
@@ -3631,6 +4398,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "email_drafts_equipment_id_fkey"
@@ -4160,6 +4934,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "escalation_tickets_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "escalation_tickets_escalated_by_fkey"
             columns: ["escalated_by"]
             isOneToOne: false
@@ -4260,6 +5041,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      exec_data_quality_summary: {
+        Row: {
+          description: string
+          issue_class: string
+          open_count: number
+          severity: string
+          suggested_action: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          description: string
+          issue_class: string
+          open_count?: number
+          severity: string
+          suggested_action?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          description?: string
+          issue_class?: string
+          open_count?: number
+          severity?: string
+          suggested_action?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       exec_packet_runs: {
         Row: {
@@ -5376,6 +6187,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "follow_up_cadences_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       follow_up_sequences: {
@@ -5667,6 +6485,162 @@ export type Database = {
         }
         Relationships: []
       }
+      handoff_events: {
+        Row: {
+          composite_score: number | null
+          created_at: string
+          evidence: Json
+          from_iron_role: string
+          from_user_id: string
+          handoff_at: string
+          handoff_reason: string | null
+          id: string
+          info_completeness: number | null
+          outcome: string | null
+          outcome_alignment: number | null
+          recipient_readiness: number | null
+          scored_at: string | null
+          source_event_id: string | null
+          source_fingerprint: string | null
+          source_status_from: string | null
+          source_status_to: string | null
+          source_table: string | null
+          subject_id: string
+          subject_label: string | null
+          subject_type: string
+          to_iron_role: string
+          to_user_id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          composite_score?: number | null
+          created_at?: string
+          evidence?: Json
+          from_iron_role: string
+          from_user_id: string
+          handoff_at?: string
+          handoff_reason?: string | null
+          id?: string
+          info_completeness?: number | null
+          outcome?: string | null
+          outcome_alignment?: number | null
+          recipient_readiness?: number | null
+          scored_at?: string | null
+          source_event_id?: string | null
+          source_fingerprint?: string | null
+          source_status_from?: string | null
+          source_status_to?: string | null
+          source_table?: string | null
+          subject_id: string
+          subject_label?: string | null
+          subject_type: string
+          to_iron_role: string
+          to_user_id: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          composite_score?: number | null
+          created_at?: string
+          evidence?: Json
+          from_iron_role?: string
+          from_user_id?: string
+          handoff_at?: string
+          handoff_reason?: string | null
+          id?: string
+          info_completeness?: number | null
+          outcome?: string | null
+          outcome_alignment?: number | null
+          recipient_readiness?: number | null
+          scored_at?: string | null
+          source_event_id?: string | null
+          source_fingerprint?: string | null
+          source_status_from?: string | null
+          source_status_to?: string | null
+          source_table?: string | null
+          subject_id?: string
+          subject_label?: string | null
+          subject_type?: string
+          to_iron_role?: string
+          to_user_id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "handoff_events_from_user_id_fkey"
+            columns: ["from_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "handoff_events_to_user_id_fkey"
+            columns: ["to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      handoff_role_seam_scores: {
+        Row: {
+          avg_composite: number | null
+          avg_info_completeness: number | null
+          avg_outcome_alignment: number | null
+          avg_recipient_readiness: number | null
+          created_at: string
+          degraded_pct: number | null
+          from_iron_role: string
+          handoff_count: number
+          id: string
+          improved_pct: number | null
+          period_end: string
+          period_start: string
+          scored_count: number
+          to_iron_role: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          avg_composite?: number | null
+          avg_info_completeness?: number | null
+          avg_outcome_alignment?: number | null
+          avg_recipient_readiness?: number | null
+          created_at?: string
+          degraded_pct?: number | null
+          from_iron_role: string
+          handoff_count?: number
+          id?: string
+          improved_pct?: number | null
+          period_end: string
+          period_start: string
+          scored_count?: number
+          to_iron_role: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          avg_composite?: number | null
+          avg_info_completeness?: number | null
+          avg_outcome_alignment?: number | null
+          avg_recipient_readiness?: number | null
+          created_at?: string
+          degraded_pct?: number | null
+          from_iron_role?: string
+          handoff_count?: number
+          id?: string
+          improved_pct?: number | null
+          period_end?: string
+          period_start?: string
+          scored_count?: number
+          to_iron_role?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       health_score_history: {
         Row: {
           components: Json
@@ -5906,6 +6880,65 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "integration_status"
             referencedColumns: ["workspace_id", "integration_key"]
+          },
+        ]
+      }
+      intervention_memory: {
+        Row: {
+          alert_severity: string
+          alert_title_pattern: string
+          alert_type: string
+          created_at: string
+          id: string
+          last_recurred_at: string | null
+          recurrence_count: number
+          resolution_notes: string | null
+          resolution_type: string
+          resolved_at: string
+          resolved_by: string | null
+          time_to_resolve_minutes: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          alert_severity: string
+          alert_title_pattern: string
+          alert_type: string
+          created_at?: string
+          id?: string
+          last_recurred_at?: string | null
+          recurrence_count?: number
+          resolution_notes?: string | null
+          resolution_type: string
+          resolved_at?: string
+          resolved_by?: string | null
+          time_to_resolve_minutes?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          alert_severity?: string
+          alert_title_pattern?: string
+          alert_type?: string
+          created_at?: string
+          id?: string
+          last_recurred_at?: string | null
+          recurrence_count?: number
+          resolution_notes?: string | null
+          resolution_type?: string
+          resolved_at?: string
+          resolved_by?: string | null
+          time_to_resolve_minutes?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intervention_memory_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -6751,6 +7784,185 @@ export type Database = {
           },
         ]
       }
+      machine_parts_links: {
+        Row: {
+          association_strength: number
+          created_at: string
+          id: string
+          link_source: string
+          machine_id: string
+          notes: string | null
+          part_id: string
+          part_number: string
+          updated_at: string
+          usage_frequency: string | null
+          workspace_id: string
+        }
+        Insert: {
+          association_strength?: number
+          created_at?: string
+          id?: string
+          link_source: string
+          machine_id: string
+          notes?: string | null
+          part_id: string
+          part_number: string
+          updated_at?: string
+          usage_frequency?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          association_strength?: number
+          created_at?: string
+          id?: string
+          link_source?: string
+          machine_id?: string
+          notes?: string | null
+          part_id?: string
+          part_number?: string
+          updated_at?: string
+          usage_frequency?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_parts_links_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+        ]
+      }
+      machine_profiles: {
+        Row: {
+          category: string
+          common_wear_parts: Json
+          created_at: string
+          deleted_at: string | null
+          extraction_confidence: number | null
+          fluid_capacities: Json
+          id: string
+          maintenance_schedule: Json
+          manually_verified: boolean
+          manufacturer: string
+          model: string
+          model_family: string | null
+          notes: string | null
+          source_documents: string[] | null
+          specs: Json
+          updated_at: string
+          workspace_id: string
+          year_range_end: number | null
+          year_range_start: number | null
+        }
+        Insert: {
+          category: string
+          common_wear_parts?: Json
+          created_at?: string
+          deleted_at?: string | null
+          extraction_confidence?: number | null
+          fluid_capacities?: Json
+          id?: string
+          maintenance_schedule?: Json
+          manually_verified?: boolean
+          manufacturer: string
+          model: string
+          model_family?: string | null
+          notes?: string | null
+          source_documents?: string[] | null
+          specs?: Json
+          updated_at?: string
+          workspace_id?: string
+          year_range_end?: number | null
+          year_range_start?: number | null
+        }
+        Update: {
+          category?: string
+          common_wear_parts?: Json
+          created_at?: string
+          deleted_at?: string | null
+          extraction_confidence?: number | null
+          fluid_capacities?: Json
+          id?: string
+          maintenance_schedule?: Json
+          manually_verified?: boolean
+          manufacturer?: string
+          model?: string
+          model_family?: string | null
+          notes?: string | null
+          source_documents?: string[] | null
+          specs?: Json
+          updated_at?: string
+          workspace_id?: string
+          year_range_end?: number | null
+          year_range_start?: number | null
+        }
+        Relationships: []
+      }
       maintenance_schedules: {
         Row: {
           actual_cost: number | null
@@ -7395,6 +8607,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "needs_assessments_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "needs_assessments_verified_by_fkey"
             columns: ["verified_by"]
             isOneToOne: false
@@ -7409,6 +8628,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      offline_sync_queue: {
+        Row: {
+          action_type: string
+          created_at: string
+          error_message: string | null
+          id: string
+          payload: Json
+          queued_at: string
+          sync_status: string
+          synced_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          payload: Json
+          queued_at: string
+          sync_status?: string
+          synced_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          payload?: Json
+          queued_at?: string
+          sync_status?: string
+          synced_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       onedrive_sync_state: {
         Row: {
@@ -7557,6 +8812,69 @@ export type Database = {
           },
         ]
       }
+      owner_briefs: {
+        Row: {
+          brief_text: string
+          created_at: string
+          event_count: number | null
+          generated_at: string
+          model: string | null
+          tokens_in: number | null
+          tokens_out: number | null
+          workspace_id: string
+        }
+        Insert: {
+          brief_text: string
+          created_at?: string
+          event_count?: number | null
+          generated_at?: string
+          model?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          workspace_id: string
+        }
+        Update: {
+          brief_text?: string
+          created_at?: string
+          event_count?: number | null
+          generated_at?: string
+          model?: string | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      owner_predictive_interventions_cache: {
+        Row: {
+          created_at: string
+          generated_at: string
+          model: string | null
+          payload: Json
+          tokens_in: number | null
+          tokens_out: number | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          generated_at?: string
+          model?: string | null
+          payload: Json
+          tokens_in?: number | null
+          tokens_out?: number | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          generated_at?: string
+          model?: string | null
+          payload?: Json
+          tokens_in?: number | null
+          tokens_out?: number | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       parts_analytics_snapshots: {
         Row: {
           computation_batch_id: string | null
@@ -7628,22 +8946,37 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           branch_id: string
+          cdk_vendor_list_price: number | null
           computation_batch_id: string | null
           created_at: string
           economic_order_qty: number | null
+          edited_at: string | null
+          edited_by: string | null
           estimated_total: number | null
           estimated_unit_cost: number | null
           expires_at: string
+          forecast_covered_days: number | null
+          forecast_driven: boolean
           id: string
+          ordered_at: string | null
+          ordered_by: string | null
+          originating_play_id: string | null
           part_number: string
           parts_order_id: string | null
+          po_reference: string | null
+          potential_overpay_flag: boolean
           qty_on_hand: number
           recommended_qty: number
+          rejected_at: string | null
+          rejected_by: string | null
           rejection_reason: string | null
           reorder_point: number
+          scheduled_for: string | null
           selected_vendor_id: string | null
+          source_type: string | null
           status: string
           updated_at: string
+          vendor_price_corroborated: boolean
           vendor_score: number | null
           vendor_selection_reason: string | null
           workspace_id: string
@@ -7652,22 +8985,37 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           branch_id: string
+          cdk_vendor_list_price?: number | null
           computation_batch_id?: string | null
           created_at?: string
           economic_order_qty?: number | null
+          edited_at?: string | null
+          edited_by?: string | null
           estimated_total?: number | null
           estimated_unit_cost?: number | null
           expires_at?: string
+          forecast_covered_days?: number | null
+          forecast_driven?: boolean
           id?: string
+          ordered_at?: string | null
+          ordered_by?: string | null
+          originating_play_id?: string | null
           part_number: string
           parts_order_id?: string | null
+          po_reference?: string | null
+          potential_overpay_flag?: boolean
           qty_on_hand: number
           recommended_qty: number
+          rejected_at?: string | null
+          rejected_by?: string | null
           rejection_reason?: string | null
           reorder_point: number
+          scheduled_for?: string | null
           selected_vendor_id?: string | null
+          source_type?: string | null
           status?: string
           updated_at?: string
+          vendor_price_corroborated?: boolean
           vendor_score?: number | null
           vendor_selection_reason?: string | null
           workspace_id?: string
@@ -7676,22 +9024,37 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           branch_id?: string
+          cdk_vendor_list_price?: number | null
           computation_batch_id?: string | null
           created_at?: string
           economic_order_qty?: number | null
+          edited_at?: string | null
+          edited_by?: string | null
           estimated_total?: number | null
           estimated_unit_cost?: number | null
           expires_at?: string
+          forecast_covered_days?: number | null
+          forecast_driven?: boolean
           id?: string
+          ordered_at?: string | null
+          ordered_by?: string | null
+          originating_play_id?: string | null
           part_number?: string
           parts_order_id?: string | null
+          po_reference?: string | null
+          potential_overpay_flag?: boolean
           qty_on_hand?: number
           recommended_qty?: number
+          rejected_at?: string | null
+          rejected_by?: string | null
           rejection_reason?: string | null
           reorder_point?: number
+          scheduled_for?: string | null
           selected_vendor_id?: string | null
+          source_type?: string | null
           status?: string
           updated_at?: string
+          vendor_price_corroborated?: boolean
           vendor_score?: number | null
           vendor_selection_reason?: string | null
           workspace_id?: string
@@ -7712,11 +9075,53 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "parts_auto_replenish_queue_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_ordered_by_fkey"
+            columns: ["ordered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_originating_play_id_fkey"
+            columns: ["originating_play_id"]
+            isOneToOne: false
+            referencedRelation: "predicted_parts_plays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_originating_play_id_fkey"
+            columns: ["originating_play_id"]
+            isOneToOne: false
+            referencedRelation: "v_predictive_plays"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "parts_auto_replenish_queue_parts_order_id_fkey"
             columns: ["parts_order_id"]
             isOneToOne: false
             referencedRelation: "parts_orders"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
+            columns: ["selected_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
           },
           {
             foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
@@ -7729,54 +9134,313 @@ export type Database = {
       }
       parts_catalog: {
         Row: {
+          activity_code: string | null
+          asl_category: string | null
+          avatax_product_code: string | null
+          avatax_use_exemption: string | null
+          average_cost: number | null
+          average_inventory: number | null
+          back_ordered: number | null
+          bin_location: string | null
+          bin_location_manual_override: boolean
+          branch_code: string
           category: string | null
+          category_code: string | null
+          category_manual_override: boolean
+          class_code: string | null
+          class_code_manual_override: boolean
+          co_code: string
+          compatible_machines: string[] | null
           cost_price: number | null
           created_at: string
+          cross_references: Json
           deleted_at: string | null
           description: string | null
+          description_manual_override: boolean
+          div_code: string
+          dms_date_added: string | null
+          dms_last_modified: string | null
+          dms_last_ordered: string | null
+          dms_last_stock_ordered: string | null
+          dms_status: string | null
+          embedding: string | null
+          embedding_computed_at: string | null
+          embedding_model: string | null
+          embedding_text: string | null
+          eoq: number | null
+          eoq_manual_override: boolean
+          extraction_confidence: number | null
+          frequently_ordered_with: string[] | null
           id: string
+          intellidealer_part_id: string | null
           is_active: boolean
+          last_12mo_sales: number | null
+          last_count_date: string | null
+          last_import_run_id: string | null
+          last_known_price: number | null
+          last_po_number: string | null
+          last_sale_date: string | null
+          last_year_sales_dollars: number | null
+          last_year_sales_qty: number | null
+          lead_time_days: number | null
           list_price: number | null
+          list_price_manual_override: boolean
+          machine_code: string | null
+          manual_updated_at: string | null
+          manual_updated_by: string | null
+          manually_verified: boolean
           manufacturer: string | null
+          model_code: string | null
+          movement_code: string | null
+          on_hand: number | null
+          on_order: number | null
           part_number: string
+          parts_per_package: number | null
+          pkg_qty: number | null
+          previous_bin_location: string | null
+          price_updated_at: string | null
+          pricing_level_1: number | null
+          pricing_level_1_manual_override: boolean
+          pricing_level_2: number | null
+          pricing_level_2_manual_override: boolean
+          pricing_level_3: number | null
+          pricing_level_3_manual_override: boolean
+          pricing_level_4: number | null
+          pricing_level_4_manual_override: boolean
+          quantity_allocated: number | null
+          quantity_reserved: number | null
+          raw_dms_row: Json | null
+          region_last_12mo_sales: number | null
+          reorder_point: number | null
+          reorder_point_manual_override: boolean
+          safety_stock_manual_override: boolean
+          safety_stock_qty: number | null
+          source_documents: string[] | null
+          source_of_supply: string | null
+          stocking_code: string | null
+          superseded_by: string | null
+          supersedes: string | null
           uom: string | null
           updated_at: string
+          vendor_code: string | null
           weight_lb: number | null
+          weight_lbs: number | null
           workspace_id: string
+          ytd_sales_dollars: number | null
         }
         Insert: {
+          activity_code?: string | null
+          asl_category?: string | null
+          avatax_product_code?: string | null
+          avatax_use_exemption?: string | null
+          average_cost?: number | null
+          average_inventory?: number | null
+          back_ordered?: number | null
+          bin_location?: string | null
+          bin_location_manual_override?: boolean
+          branch_code?: string
           category?: string | null
+          category_code?: string | null
+          category_manual_override?: boolean
+          class_code?: string | null
+          class_code_manual_override?: boolean
+          co_code?: string
+          compatible_machines?: string[] | null
           cost_price?: number | null
           created_at?: string
+          cross_references?: Json
           deleted_at?: string | null
           description?: string | null
+          description_manual_override?: boolean
+          div_code?: string
+          dms_date_added?: string | null
+          dms_last_modified?: string | null
+          dms_last_ordered?: string | null
+          dms_last_stock_ordered?: string | null
+          dms_status?: string | null
+          embedding?: string | null
+          embedding_computed_at?: string | null
+          embedding_model?: string | null
+          embedding_text?: string | null
+          eoq?: number | null
+          eoq_manual_override?: boolean
+          extraction_confidence?: number | null
+          frequently_ordered_with?: string[] | null
           id?: string
+          intellidealer_part_id?: string | null
           is_active?: boolean
+          last_12mo_sales?: number | null
+          last_count_date?: string | null
+          last_import_run_id?: string | null
+          last_known_price?: number | null
+          last_po_number?: string | null
+          last_sale_date?: string | null
+          last_year_sales_dollars?: number | null
+          last_year_sales_qty?: number | null
+          lead_time_days?: number | null
           list_price?: number | null
+          list_price_manual_override?: boolean
+          machine_code?: string | null
+          manual_updated_at?: string | null
+          manual_updated_by?: string | null
+          manually_verified?: boolean
           manufacturer?: string | null
+          model_code?: string | null
+          movement_code?: string | null
+          on_hand?: number | null
+          on_order?: number | null
           part_number: string
+          parts_per_package?: number | null
+          pkg_qty?: number | null
+          previous_bin_location?: string | null
+          price_updated_at?: string | null
+          pricing_level_1?: number | null
+          pricing_level_1_manual_override?: boolean
+          pricing_level_2?: number | null
+          pricing_level_2_manual_override?: boolean
+          pricing_level_3?: number | null
+          pricing_level_3_manual_override?: boolean
+          pricing_level_4?: number | null
+          pricing_level_4_manual_override?: boolean
+          quantity_allocated?: number | null
+          quantity_reserved?: number | null
+          raw_dms_row?: Json | null
+          region_last_12mo_sales?: number | null
+          reorder_point?: number | null
+          reorder_point_manual_override?: boolean
+          safety_stock_manual_override?: boolean
+          safety_stock_qty?: number | null
+          source_documents?: string[] | null
+          source_of_supply?: string | null
+          stocking_code?: string | null
+          superseded_by?: string | null
+          supersedes?: string | null
           uom?: string | null
           updated_at?: string
+          vendor_code?: string | null
           weight_lb?: number | null
+          weight_lbs?: number | null
           workspace_id?: string
+          ytd_sales_dollars?: number | null
         }
         Update: {
+          activity_code?: string | null
+          asl_category?: string | null
+          avatax_product_code?: string | null
+          avatax_use_exemption?: string | null
+          average_cost?: number | null
+          average_inventory?: number | null
+          back_ordered?: number | null
+          bin_location?: string | null
+          bin_location_manual_override?: boolean
+          branch_code?: string
           category?: string | null
+          category_code?: string | null
+          category_manual_override?: boolean
+          class_code?: string | null
+          class_code_manual_override?: boolean
+          co_code?: string
+          compatible_machines?: string[] | null
           cost_price?: number | null
           created_at?: string
+          cross_references?: Json
           deleted_at?: string | null
           description?: string | null
+          description_manual_override?: boolean
+          div_code?: string
+          dms_date_added?: string | null
+          dms_last_modified?: string | null
+          dms_last_ordered?: string | null
+          dms_last_stock_ordered?: string | null
+          dms_status?: string | null
+          embedding?: string | null
+          embedding_computed_at?: string | null
+          embedding_model?: string | null
+          embedding_text?: string | null
+          eoq?: number | null
+          eoq_manual_override?: boolean
+          extraction_confidence?: number | null
+          frequently_ordered_with?: string[] | null
           id?: string
+          intellidealer_part_id?: string | null
           is_active?: boolean
+          last_12mo_sales?: number | null
+          last_count_date?: string | null
+          last_import_run_id?: string | null
+          last_known_price?: number | null
+          last_po_number?: string | null
+          last_sale_date?: string | null
+          last_year_sales_dollars?: number | null
+          last_year_sales_qty?: number | null
+          lead_time_days?: number | null
           list_price?: number | null
+          list_price_manual_override?: boolean
+          machine_code?: string | null
+          manual_updated_at?: string | null
+          manual_updated_by?: string | null
+          manually_verified?: boolean
           manufacturer?: string | null
+          model_code?: string | null
+          movement_code?: string | null
+          on_hand?: number | null
+          on_order?: number | null
           part_number?: string
+          parts_per_package?: number | null
+          pkg_qty?: number | null
+          previous_bin_location?: string | null
+          price_updated_at?: string | null
+          pricing_level_1?: number | null
+          pricing_level_1_manual_override?: boolean
+          pricing_level_2?: number | null
+          pricing_level_2_manual_override?: boolean
+          pricing_level_3?: number | null
+          pricing_level_3_manual_override?: boolean
+          pricing_level_4?: number | null
+          pricing_level_4_manual_override?: boolean
+          quantity_allocated?: number | null
+          quantity_reserved?: number | null
+          raw_dms_row?: Json | null
+          region_last_12mo_sales?: number | null
+          reorder_point?: number | null
+          reorder_point_manual_override?: boolean
+          safety_stock_manual_override?: boolean
+          safety_stock_qty?: number | null
+          source_documents?: string[] | null
+          source_of_supply?: string | null
+          stocking_code?: string | null
+          superseded_by?: string | null
+          supersedes?: string | null
           uom?: string | null
           updated_at?: string
+          vendor_code?: string | null
           weight_lb?: number | null
+          weight_lbs?: number | null
           workspace_id?: string
+          ytd_sales_dollars?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "parts_catalog_last_import_run_fk"
+            columns: ["last_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "parts_import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_catalog_last_import_run_fk"
+            columns: ["last_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["last_import_run_id"]
+          },
+          {
+            foreignKeyName: "parts_catalog_manual_updated_by_fkey"
+            columns: ["manual_updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       parts_cross_references: {
         Row: {
@@ -7864,11 +9528,13 @@ export type Database = {
           drivers: Json
           forecast_month: string
           id: string
+          input_sources: Json
           model_version: string
           part_number: string
           predicted_qty: number
           qty_on_hand_at_forecast: number | null
           reorder_point_at_forecast: number | null
+          seeded_from_history: boolean
           stockout_risk: string
           updated_at: string
           workspace_id: string
@@ -7883,11 +9549,13 @@ export type Database = {
           drivers?: Json
           forecast_month: string
           id?: string
+          input_sources?: Json
           model_version?: string
           part_number: string
           predicted_qty?: number
           qty_on_hand_at_forecast?: number | null
           reorder_point_at_forecast?: number | null
+          seeded_from_history?: boolean
           stockout_risk?: string
           updated_at?: string
           workspace_id?: string
@@ -7902,11 +9570,13 @@ export type Database = {
           drivers?: Json
           forecast_month?: string
           id?: string
+          input_sources?: Json
           model_version?: string
           part_number?: string
           predicted_qty?: number
           qty_on_hand_at_forecast?: number | null
           reorder_point_at_forecast?: number | null
+          seeded_from_history?: boolean
           stockout_risk?: string
           updated_at?: string
           workspace_id?: string
@@ -7986,6 +9656,396 @@ export type Database = {
         }
         Relationships: []
       }
+      parts_history_monthly: {
+        Row: {
+          bin_trips: number
+          created_at: string
+          demands: number
+          id: string
+          month_offset: number
+          part_id: string
+          period_end: string | null
+          sales_qty: number
+          source_import_run_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          bin_trips?: number
+          created_at?: string
+          demands?: number
+          id?: string
+          month_offset: number
+          part_id: string
+          period_end?: string | null
+          sales_qty?: number
+          source_import_run_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          bin_trips?: number
+          created_at?: string
+          demands?: number
+          id?: string
+          month_offset?: number
+          part_id?: string
+          period_end?: string | null
+          sales_qty?: number
+          source_import_run_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_run_fk"
+            columns: ["source_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "parts_import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_history_monthly_run_fk"
+            columns: ["source_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["last_import_run_id"]
+          },
+        ]
+      }
+      parts_import_conflicts: {
+        Row: {
+          created_at: string
+          current_set_at: string | null
+          current_set_by: string | null
+          current_value: Json | null
+          field_label: string | null
+          field_name: string
+          id: string
+          incoming_source: string | null
+          incoming_value: Json | null
+          notes: string | null
+          part_id: string
+          part_number: string
+          priority: Database["public"]["Enums"]["parts_import_conflict_priority"]
+          resolution:
+            | Database["public"]["Enums"]["parts_import_conflict_resolution"]
+            | null
+          resolution_value: Json | null
+          resolved_at: string | null
+          resolved_by: string | null
+          run_id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_set_at?: string | null
+          current_set_by?: string | null
+          current_value?: Json | null
+          field_label?: string | null
+          field_name: string
+          id?: string
+          incoming_source?: string | null
+          incoming_value?: Json | null
+          notes?: string | null
+          part_id: string
+          part_number: string
+          priority?: Database["public"]["Enums"]["parts_import_conflict_priority"]
+          resolution?:
+            | Database["public"]["Enums"]["parts_import_conflict_resolution"]
+            | null
+          resolution_value?: Json | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          run_id: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          current_set_at?: string | null
+          current_set_by?: string | null
+          current_value?: Json | null
+          field_label?: string | null
+          field_name?: string
+          id?: string
+          incoming_source?: string | null
+          incoming_value?: Json | null
+          notes?: string | null
+          part_id?: string
+          part_number?: string
+          priority?: Database["public"]["Enums"]["parts_import_conflict_priority"]
+          resolution?:
+            | Database["public"]["Enums"]["parts_import_conflict_resolution"]
+            | null
+          resolution_value?: Json | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          run_id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_import_conflicts_current_set_by_fkey"
+            columns: ["current_set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "parts_import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_conflicts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["last_import_run_id"]
+          },
+        ]
+      }
+      parts_import_runs: {
+        Row: {
+          branch_scope: string | null
+          completed_at: string | null
+          created_at: string
+          error_log: Json | null
+          file_type: Database["public"]["Enums"]["parts_import_file_type"]
+          id: string
+          options: Json
+          preview_diff: Json | null
+          row_count: number
+          rows_conflicted: number
+          rows_errored: number
+          rows_inserted: number
+          rows_skipped: number
+          rows_updated: number
+          source_file_hash: string
+          source_file_name: string
+          source_storage_path: string | null
+          started_at: string
+          status: Database["public"]["Enums"]["parts_import_status"]
+          updated_at: string
+          uploaded_by: string | null
+          vendor_code: string | null
+          vendor_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          branch_scope?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          file_type?: Database["public"]["Enums"]["parts_import_file_type"]
+          id?: string
+          options?: Json
+          preview_diff?: Json | null
+          row_count?: number
+          rows_conflicted?: number
+          rows_errored?: number
+          rows_inserted?: number
+          rows_skipped?: number
+          rows_updated?: number
+          source_file_hash: string
+          source_file_name: string
+          source_storage_path?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["parts_import_status"]
+          updated_at?: string
+          uploaded_by?: string | null
+          vendor_code?: string | null
+          vendor_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          branch_scope?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          file_type?: Database["public"]["Enums"]["parts_import_file_type"]
+          id?: string
+          options?: Json
+          preview_diff?: Json | null
+          row_count?: number
+          rows_conflicted?: number
+          rows_errored?: number
+          rows_inserted?: number
+          rows_skipped?: number
+          rows_updated?: number
+          source_file_hash?: string
+          source_file_name?: string
+          source_storage_path?: string | null
+          started_at?: string
+          status?: Database["public"]["Enums"]["parts_import_status"]
+          updated_at?: string
+          uploaded_by?: string | null
+          vendor_code?: string | null
+          vendor_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_import_runs_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_import_runs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "parts_import_runs_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parts_inventory: {
         Row: {
           bin_location: string | null
@@ -8029,6 +10089,169 @@ export type Database = {
             columns: ["catalog_id"]
             isOneToOne: false
             referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+        ]
+      }
+      parts_llm_inference_runs: {
+        Row: {
+          cost_usd_cents: number | null
+          created_at: string
+          elapsed_ms: number | null
+          error_message: string | null
+          fleet_id: string | null
+          grounding_rejections: Json | null
+          id: string
+          machine_profile_id: string | null
+          max_tokens: number | null
+          model: string
+          plays_grounded: number
+          plays_proposed: number
+          plays_written: number
+          portal_customer_id: string | null
+          raw_response: Json | null
+          status: string
+          system_prompt_version: string
+          temperature: number | null
+          tokens_in: number | null
+          tokens_out: number | null
+          user_context: Json | null
+          user_context_hash: string | null
+          workspace_id: string
+        }
+        Insert: {
+          cost_usd_cents?: number | null
+          created_at?: string
+          elapsed_ms?: number | null
+          error_message?: string | null
+          fleet_id?: string | null
+          grounding_rejections?: Json | null
+          id?: string
+          machine_profile_id?: string | null
+          max_tokens?: number | null
+          model: string
+          plays_grounded?: number
+          plays_proposed?: number
+          plays_written?: number
+          portal_customer_id?: string | null
+          raw_response?: Json | null
+          status?: string
+          system_prompt_version: string
+          temperature?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          user_context?: Json | null
+          user_context_hash?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          cost_usd_cents?: number | null
+          created_at?: string
+          elapsed_ms?: number | null
+          error_message?: string | null
+          fleet_id?: string | null
+          grounding_rejections?: Json | null
+          id?: string
+          machine_profile_id?: string | null
+          max_tokens?: number | null
+          model?: string
+          plays_grounded?: number
+          plays_proposed?: number
+          plays_written?: number
+          portal_customer_id?: string | null
+          raw_response?: Json | null
+          status?: string
+          system_prompt_version?: string
+          temperature?: number | null
+          tokens_in?: number | null
+          tokens_out?: number | null
+          user_context?: Json | null
+          user_context_hash?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_llm_inference_runs_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "customer_fleet"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_llm_inference_runs_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "portal_trade_in_opportunities"
+            referencedColumns: ["fleet_id"]
+          },
+          {
+            foreignKeyName: "parts_llm_inference_runs_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_llm_inference_runs_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
             referencedColumns: ["id"]
           },
         ]
@@ -8137,6 +10360,62 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "parts_catalog"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_order_lines_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
           },
           {
             foreignKeyName: "parts_order_lines_parts_order_id_fkey"
@@ -8290,6 +10569,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "parts_orders_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "parts_orders_fleet_id_fkey"
             columns: ["fleet_id"]
             isOneToOne: false
@@ -8426,6 +10712,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "parts_predictive_kits_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "parts_predictive_kits_fleet_id_fkey"
             columns: ["fleet_id"]
             isOneToOne: false
@@ -8445,6 +10738,416 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "parts_orders"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      parts_preferences: {
+        Row: {
+          created_at: string
+          dark_mode: boolean
+          default_queue_filter: string
+          id: string
+          keyboard_shortcuts_enabled: boolean
+          queue_panel_collapsed: boolean
+          show_fulfilled_requests: boolean
+          sound_notifications: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dark_mode?: boolean
+          default_queue_filter?: string
+          id?: string
+          keyboard_shortcuts_enabled?: boolean
+          queue_panel_collapsed?: boolean
+          show_fulfilled_requests?: boolean
+          sound_notifications?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dark_mode?: boolean
+          default_queue_filter?: string
+          id?: string
+          keyboard_shortcuts_enabled?: boolean
+          queue_panel_collapsed?: boolean
+          show_fulfilled_requests?: boolean
+          sound_notifications?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      parts_pricing_audit: {
+        Row: {
+          applied_at: string
+          applied_by: string | null
+          created_at: string
+          delta_dollars: number | null
+          delta_pct: number | null
+          id: string
+          new_price: number
+          note: string | null
+          old_price: number | null
+          part_id: string | null
+          part_number: string
+          price_target: Database["public"]["Enums"]["pricing_level_target"]
+          rule_id: string | null
+          source: string
+          suggestion_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          applied_at?: string
+          applied_by?: string | null
+          created_at?: string
+          delta_dollars?: number | null
+          delta_pct?: number | null
+          id?: string
+          new_price: number
+          note?: string | null
+          old_price?: number | null
+          part_id?: string | null
+          part_number: string
+          price_target: Database["public"]["Enums"]["pricing_level_target"]
+          rule_id?: string | null
+          source: string
+          suggestion_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          applied_at?: string
+          applied_by?: string | null
+          created_at?: string
+          delta_dollars?: number | null
+          delta_pct?: number | null
+          id?: string
+          new_price?: number
+          note?: string | null
+          old_price?: number | null
+          part_id?: string | null
+          part_number?: string
+          price_target?: Database["public"]["Enums"]["pricing_level_target"]
+          rule_id?: string | null
+          source?: string
+          suggestion_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_pricing_audit_applied_by_fkey"
+            columns: ["applied_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_audit_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+        ]
+      }
+      parts_pricing_rules: {
+        Row: {
+          auto_apply: boolean
+          created_at: string
+          created_by: string | null
+          description: string | null
+          effective_from: string
+          effective_until: string | null
+          id: string
+          is_active: boolean
+          markup_floor_cents: number | null
+          markup_multiplier: number | null
+          min_margin_pct: number | null
+          name: string
+          price_target: Database["public"]["Enums"]["pricing_level_target"]
+          priority: number
+          rule_type: Database["public"]["Enums"]["pricing_rule_type"]
+          scope_type: Database["public"]["Enums"]["pricing_rule_scope_type"]
+          scope_value: string | null
+          target_margin_pct: number | null
+          tolerance_pct: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          auto_apply?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effective_from?: string
+          effective_until?: string | null
+          id?: string
+          is_active?: boolean
+          markup_floor_cents?: number | null
+          markup_multiplier?: number | null
+          min_margin_pct?: number | null
+          name: string
+          price_target?: Database["public"]["Enums"]["pricing_level_target"]
+          priority?: number
+          rule_type: Database["public"]["Enums"]["pricing_rule_type"]
+          scope_type: Database["public"]["Enums"]["pricing_rule_scope_type"]
+          scope_value?: string | null
+          target_margin_pct?: number | null
+          tolerance_pct?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          auto_apply?: boolean
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          effective_from?: string
+          effective_until?: string | null
+          id?: string
+          is_active?: boolean
+          markup_floor_cents?: number | null
+          markup_multiplier?: number | null
+          min_margin_pct?: number | null
+          name?: string
+          price_target?: Database["public"]["Enums"]["pricing_level_target"]
+          priority?: number
+          rule_type?: Database["public"]["Enums"]["pricing_rule_type"]
+          scope_type?: Database["public"]["Enums"]["pricing_rule_scope_type"]
+          scope_value?: string | null
+          target_margin_pct?: number | null
+          tolerance_pct?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_pricing_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parts_pricing_suggestions: {
+        Row: {
+          applied_at: string | null
+          computation_batch_id: string | null
+          created_at: string
+          current_cost: number | null
+          current_margin_pct: number | null
+          current_sell: number | null
+          delta_dollars: number | null
+          delta_pct: number | null
+          id: string
+          part_id: string
+          part_number: string
+          reason: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          rule_id: string | null
+          signal: string | null
+          status: Database["public"]["Enums"]["pricing_suggestion_status"]
+          suggested_margin_pct: number | null
+          suggested_sell: number
+          target_price: Database["public"]["Enums"]["pricing_level_target"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          computation_batch_id?: string | null
+          created_at?: string
+          current_cost?: number | null
+          current_margin_pct?: number | null
+          current_sell?: number | null
+          delta_dollars?: number | null
+          delta_pct?: number | null
+          id?: string
+          part_id: string
+          part_number: string
+          reason: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          rule_id?: string | null
+          signal?: string | null
+          status?: Database["public"]["Enums"]["pricing_suggestion_status"]
+          suggested_margin_pct?: number | null
+          suggested_sell: number
+          target_price: Database["public"]["Enums"]["pricing_level_target"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          applied_at?: string | null
+          computation_batch_id?: string | null
+          created_at?: string
+          current_cost?: number | null
+          current_margin_pct?: number | null
+          current_sell?: number | null
+          delta_dollars?: number | null
+          delta_pct?: number | null
+          id?: string
+          part_id?: string
+          part_number?: string
+          reason?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          rule_id?: string | null
+          signal?: string | null
+          status?: Database["public"]["Enums"]["pricing_suggestion_status"]
+          suggested_margin_pct?: number | null
+          suggested_sell?: number
+          target_price?: Database["public"]["Enums"]["pricing_level_target"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "parts_pricing_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_pricing_suggestions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["rule_id"]
           },
         ]
       }
@@ -8561,6 +11264,143 @@ export type Database = {
         }
         Relationships: []
       }
+      parts_request_activity: {
+        Row: {
+          action: string
+          created_at: string
+          from_value: string | null
+          id: string
+          metadata: Json | null
+          notes: string | null
+          request_id: string
+          to_value: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          from_value?: string | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          request_id: string
+          to_value?: string | null
+          user_id: string
+          workspace_id?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          from_value?: string | null
+          id?: string
+          metadata?: Json | null
+          notes?: string | null
+          request_id?: string
+          to_value?: string | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_request_activity_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "parts_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_request_activity_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parts_requests: {
+        Row: {
+          assigned_to: string | null
+          auto_escalated: boolean
+          bay_number: string | null
+          cancelled_at: string | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          escalated_at: string | null
+          estimated_completion: string | null
+          fulfilled_at: string | null
+          id: string
+          items: Json
+          machine_description: string | null
+          machine_profile_id: string | null
+          notes: string | null
+          priority: string
+          request_source: string
+          requested_by: string
+          status: string
+          updated_at: string
+          work_order_number: string | null
+          workspace_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          auto_escalated?: boolean
+          bay_number?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          escalated_at?: string | null
+          estimated_completion?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          items?: Json
+          machine_description?: string | null
+          machine_profile_id?: string | null
+          notes?: string | null
+          priority?: string
+          request_source: string
+          requested_by: string
+          status?: string
+          updated_at?: string
+          work_order_number?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          auto_escalated?: boolean
+          bay_number?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          escalated_at?: string | null
+          estimated_completion?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          items?: Json
+          machine_description?: string | null
+          machine_profile_id?: string | null
+          notes?: string | null
+          priority?: string
+          request_source?: string
+          requested_by?: string
+          status?: string
+          updated_at?: string
+          work_order_number?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_requests_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parts_transfer_recommendations: {
         Row: {
           approved_at: string | null
@@ -8656,6 +11496,89 @@ export type Database = {
           },
         ]
       }
+      parts_vendor_prices: {
+        Row: {
+          created_at: string
+          currency: string
+          description: string | null
+          description_fr: string | null
+          effective_date: string
+          id: string
+          list_price: number | null
+          part_number: string
+          product_code: string | null
+          source_file: string | null
+          source_import_run_id: string | null
+          updated_at: string
+          vendor_code: string | null
+          vendor_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          description_fr?: string | null
+          effective_date?: string
+          id?: string
+          list_price?: number | null
+          part_number: string
+          product_code?: string | null
+          source_file?: string | null
+          source_import_run_id?: string | null
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_id: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          description_fr?: string | null
+          effective_date?: string
+          id?: string
+          list_price?: number | null
+          part_number?: string
+          product_code?: string | null
+          source_file?: string | null
+          source_import_run_id?: string | null
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_vendor_prices_run_fk"
+            columns: ["source_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "parts_import_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_prices_run_fk"
+            columns: ["source_import_run_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["last_import_run_id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_prices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_prices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_validations: {
         Row: {
           amount: number
@@ -8741,6 +11664,65 @@ export type Database = {
           },
         ]
       }
+      portal_customer_notifications: {
+        Row: {
+          body: string
+          category: string
+          channel: string
+          created_at: string
+          dedupe_key: string
+          event_type: string
+          id: string
+          metadata: Json
+          portal_customer_id: string
+          related_entity_id: string | null
+          related_entity_type: string | null
+          sent_at: string
+          title: string
+          workspace_id: string
+        }
+        Insert: {
+          body: string
+          category: string
+          channel: string
+          created_at?: string
+          dedupe_key: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          portal_customer_id: string
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          sent_at?: string
+          title: string
+          workspace_id?: string
+        }
+        Update: {
+          body?: string
+          category?: string
+          channel?: string
+          created_at?: string
+          dedupe_key?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          portal_customer_id?: string
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          sent_at?: string
+          title?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_customer_notifications_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_customers: {
         Row: {
           auth_user_id: string | null
@@ -8813,6 +11795,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "portal_customers_crm_contact_id_fkey"
@@ -8904,8 +11893,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "portal_payment_intents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "portal_payment_intents_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_quote_review_versions: {
+        Row: {
+          created_at: string
+          customer_request_snapshot: string | null
+          dealer_message: string | null
+          id: string
+          is_current: boolean
+          portal_quote_review_id: string
+          published_at: string
+          published_by: string | null
+          quote_data: Json
+          quote_pdf_url: string | null
+          revision_summary: string | null
+          version_number: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_request_snapshot?: string | null
+          dealer_message?: string | null
+          id?: string
+          is_current?: boolean
+          portal_quote_review_id: string
+          published_at?: string
+          published_by?: string | null
+          quote_data?: Json
+          quote_pdf_url?: string | null
+          revision_summary?: string | null
+          version_number: number
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          customer_request_snapshot?: string | null
+          dealer_message?: string | null
+          id?: string
+          is_current?: boolean
+          portal_quote_review_id?: string
+          published_at?: string
+          published_by?: string | null
+          quote_data?: Json
+          quote_pdf_url?: string | null
+          revision_summary?: string | null
+          version_number?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_quote_review_versions_portal_quote_review_id_fkey"
+            columns: ["portal_quote_review_id"]
+            isOneToOne: false
+            referencedRelation: "portal_quote_reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_review_versions_published_by_fkey"
+            columns: ["published_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -9007,6 +12066,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "portal_quote_reviews_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "portal_quote_reviews_portal_customer_id_fkey"
             columns: ["portal_customer_id"]
             isOneToOne: false
@@ -9018,6 +12084,144 @@ export type Database = {
             columns: ["service_quote_id"]
             isOneToOne: false
             referencedRelation: "service_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_quote_revision_drafts: {
+        Row: {
+          approved_by: string | null
+          compare_snapshot: Json | null
+          created_at: string
+          customer_request_snapshot: string | null
+          deal_id: string
+          dealer_message: string | null
+          id: string
+          portal_quote_review_id: string
+          prepared_by: string | null
+          published_at: string | null
+          quote_data: Json
+          quote_package_id: string
+          quote_pdf_url: string | null
+          revision_summary: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          approved_by?: string | null
+          compare_snapshot?: Json | null
+          created_at?: string
+          customer_request_snapshot?: string | null
+          deal_id: string
+          dealer_message?: string | null
+          id?: string
+          portal_quote_review_id: string
+          prepared_by?: string | null
+          published_at?: string | null
+          quote_data?: Json
+          quote_package_id: string
+          quote_pdf_url?: string | null
+          revision_summary?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          approved_by?: string | null
+          compare_snapshot?: Json | null
+          created_at?: string
+          customer_request_snapshot?: string | null
+          deal_id?: string
+          dealer_message?: string | null
+          id?: string
+          portal_quote_review_id?: string
+          prepared_by?: string | null
+          published_at?: string | null
+          quote_data?: Json
+          quote_package_id?: string
+          quote_pdf_url?: string | null
+          revision_summary?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_quote_revision_drafts_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_portal_quote_review_id_fkey"
+            columns: ["portal_quote_review_id"]
+            isOneToOne: false
+            referencedRelation: "portal_quote_reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_prepared_by_fkey"
+            columns: ["prepared_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "portal_quote_revision_drafts_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
             referencedColumns: ["id"]
           },
         ]
@@ -9098,6 +12302,396 @@ export type Database = {
             columns: ["resolved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_sale_parts_playbooks: {
+        Row: {
+          accepted_at: string | null
+          assigned_rep_id: string | null
+          company_id: string | null
+          created_at: string
+          deal_id: string
+          deleted_at: string | null
+          equipment_id: string | null
+          generated_by: string | null
+          generation_batch_id: string | null
+          id: string
+          machine_profile_id: string | null
+          payload: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sent_at: string | null
+          sent_to_email: string | null
+          status: string
+          tokens_in: number | null
+          tokens_out: number | null
+          total_revenue: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          assigned_rep_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          deal_id: string
+          deleted_at?: string | null
+          equipment_id?: string | null
+          generated_by?: string | null
+          generation_batch_id?: string | null
+          id?: string
+          machine_profile_id?: string | null
+          payload?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sent_at?: string | null
+          sent_to_email?: string | null
+          status?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          total_revenue?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          assigned_rep_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          deal_id?: string
+          deleted_at?: string | null
+          equipment_id?: string | null
+          generated_by?: string | null
+          generation_batch_id?: string | null
+          id?: string
+          machine_profile_id?: string | null
+          payload?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sent_at?: string | null
+          sent_to_email?: string | null
+          status?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          total_revenue?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_sale_parts_playbooks_assigned_rep_id_fkey"
+            columns: ["assigned_rep_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_sale_parts_playbooks_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      predicted_parts_plays: {
+        Row: {
+          action_note: string | null
+          actioned_at: string | null
+          actioned_by: string | null
+          computation_batch_id: string | null
+          created_at: string
+          current_on_hand: number | null
+          fleet_id: string | null
+          id: string
+          input_signals: Json
+          llm_cost_usd_cents: number | null
+          llm_model: string | null
+          llm_reasoning: string | null
+          machine_profile_id: string | null
+          part_description: string | null
+          part_id: string | null
+          part_number: string
+          portal_customer_id: string
+          probability: number
+          projected_due_date: string
+          projected_revenue: number | null
+          projection_window: string
+          reason: string
+          recommended_order_qty: number | null
+          signal_type: string
+          status: string
+          suggested_order_by: string | null
+          suggested_vendor_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          action_note?: string | null
+          actioned_at?: string | null
+          actioned_by?: string | null
+          computation_batch_id?: string | null
+          created_at?: string
+          current_on_hand?: number | null
+          fleet_id?: string | null
+          id?: string
+          input_signals?: Json
+          llm_cost_usd_cents?: number | null
+          llm_model?: string | null
+          llm_reasoning?: string | null
+          machine_profile_id?: string | null
+          part_description?: string | null
+          part_id?: string | null
+          part_number: string
+          portal_customer_id: string
+          probability?: number
+          projected_due_date: string
+          projected_revenue?: number | null
+          projection_window: string
+          reason: string
+          recommended_order_qty?: number | null
+          signal_type: string
+          status?: string
+          suggested_order_by?: string | null
+          suggested_vendor_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          action_note?: string | null
+          actioned_at?: string | null
+          actioned_by?: string | null
+          computation_batch_id?: string | null
+          created_at?: string
+          current_on_hand?: number | null
+          fleet_id?: string | null
+          id?: string
+          input_signals?: Json
+          llm_cost_usd_cents?: number | null
+          llm_model?: string | null
+          llm_reasoning?: string | null
+          machine_profile_id?: string | null
+          part_description?: string | null
+          part_id?: string | null
+          part_number?: string
+          portal_customer_id?: string
+          probability?: number
+          projected_due_date?: string
+          projected_revenue?: number | null
+          projection_window?: string
+          reason?: string
+          recommended_order_qty?: number | null
+          signal_type?: string
+          status?: string
+          suggested_order_by?: string | null
+          suggested_vendor_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predicted_parts_plays_actioned_by_fkey"
+            columns: ["actioned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "customer_fleet"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "portal_trade_in_opportunities"
+            referencedColumns: ["fleet_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_suggested_vendor_id_fkey"
+            columns: ["suggested_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_suggested_vendor_id_fkey"
+            columns: ["suggested_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -9241,6 +12835,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      profile_role_blend: {
+        Row: {
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          iron_role: string
+          profile_id: string
+          reason: string | null
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          iron_role: string
+          profile_id: string
+          reason?: string | null
+          updated_at?: string
+          weight: number
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          iron_role?: string
+          profile_id?: string
+          reason?: string | null
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_role_blend_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profile_workspaces: {
         Row: {
@@ -9461,6 +13099,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "prospecting_visits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "prospecting_visits_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -9510,6 +13155,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "prospecting_visits_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "prospecting_visits_rep_id_fkey"
             columns: ["rep_id"]
             isOneToOne: false
@@ -9524,6 +13176,1375 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      qb_attachments: {
+        Row: {
+          acquired_at: string | null
+          active: boolean
+          attachment_type: string | null
+          brand_id: string | null
+          category: string | null
+          compatible_model_ids: string[] | null
+          created_at: string
+          deleted_at: string | null
+          freight_cents: number | null
+          id: string
+          list_price_cents: number
+          name: string
+          part_number: string
+          specs: Json | null
+          universal: boolean
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          acquired_at?: string | null
+          active?: boolean
+          attachment_type?: string | null
+          brand_id?: string | null
+          category?: string | null
+          compatible_model_ids?: string[] | null
+          created_at?: string
+          deleted_at?: string | null
+          freight_cents?: number | null
+          id?: string
+          list_price_cents: number
+          name: string
+          part_number: string
+          specs?: Json | null
+          universal?: boolean
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          acquired_at?: string | null
+          active?: boolean
+          attachment_type?: string | null
+          brand_id?: string | null
+          category?: string | null
+          compatible_model_ids?: string[] | null
+          created_at?: string
+          deleted_at?: string | null
+          freight_cents?: number | null
+          id?: string
+          list_price_cents?: number
+          name?: string
+          part_number?: string
+          specs?: Json | null
+          universal?: boolean
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_attachments_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_attachments_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_brands: {
+        Row: {
+          attachment_markup_pct: number
+          category: string | null
+          code: string
+          created_at: string
+          dealer_discount_pct: number
+          default_markup_pct: number
+          discount_configured: boolean
+          good_faith_pct: number
+          id: string
+          markup_floor_pct: number
+          name: string
+          notes: string | null
+          pdi_default_cents: number
+          tariff_pct: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attachment_markup_pct?: number
+          category?: string | null
+          code: string
+          created_at?: string
+          dealer_discount_pct?: number
+          default_markup_pct: number
+          discount_configured?: boolean
+          good_faith_pct?: number
+          id?: string
+          markup_floor_pct?: number
+          name: string
+          notes?: string | null
+          pdi_default_cents?: number
+          tariff_pct?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          attachment_markup_pct?: number
+          category?: string | null
+          code?: string
+          created_at?: string
+          dealer_discount_pct?: number
+          default_markup_pct?: number
+          discount_configured?: boolean
+          good_faith_pct?: number
+          id?: string
+          markup_floor_pct?: number
+          name?: string
+          notes?: string | null
+          pdi_default_cents?: number
+          tariff_pct?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      qb_brands_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_deals: {
+        Row: {
+          applied_program_ids: string[] | null
+          close_date: string | null
+          commission_cents: number | null
+          commission_paid: boolean
+          commission_paid_at: string | null
+          commission_rate_pct: number
+          company_id: string
+          created_at: string
+          crm_deal_id: string | null
+          deal_number: string
+          deleted_at: string | null
+          delivery_date: string | null
+          gross_margin_cents: number
+          gross_margin_pct: number
+          id: string
+          invoice_number: string | null
+          lost_reason: string | null
+          quote_id: string | null
+          rebate_filed_at: string | null
+          rebate_filed_by: string | null
+          rebate_filing_due_date: string | null
+          salesman_id: string
+          status: string
+          total_cost_cents: number
+          total_revenue_cents: number
+          updated_at: string
+          warranty_registration_date: string | null
+          won_reason: string | null
+          workspace_id: string
+        }
+        Insert: {
+          applied_program_ids?: string[] | null
+          close_date?: string | null
+          commission_cents?: number | null
+          commission_paid?: boolean
+          commission_paid_at?: string | null
+          commission_rate_pct?: number
+          company_id: string
+          created_at?: string
+          crm_deal_id?: string | null
+          deal_number?: string
+          deleted_at?: string | null
+          delivery_date?: string | null
+          gross_margin_cents: number
+          gross_margin_pct: number
+          id?: string
+          invoice_number?: string | null
+          lost_reason?: string | null
+          quote_id?: string | null
+          rebate_filed_at?: string | null
+          rebate_filed_by?: string | null
+          rebate_filing_due_date?: string | null
+          salesman_id: string
+          status?: string
+          total_cost_cents: number
+          total_revenue_cents: number
+          updated_at?: string
+          warranty_registration_date?: string | null
+          won_reason?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          applied_program_ids?: string[] | null
+          close_date?: string | null
+          commission_cents?: number | null
+          commission_paid?: boolean
+          commission_paid_at?: string | null
+          commission_rate_pct?: number
+          company_id?: string
+          created_at?: string
+          crm_deal_id?: string | null
+          deal_number?: string
+          deleted_at?: string | null
+          delivery_date?: string | null
+          gross_margin_cents?: number
+          gross_margin_pct?: number
+          id?: string
+          invoice_number?: string | null
+          lost_reason?: string | null
+          quote_id?: string | null
+          rebate_filed_at?: string | null
+          rebate_filed_by?: string | null
+          rebate_filing_due_date?: string | null
+          salesman_id?: string
+          status?: string
+          total_cost_cents?: number
+          total_revenue_cents?: number
+          updated_at?: string
+          warranty_registration_date?: string | null
+          won_reason?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deals_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "qb_deals_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_deals_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_equipment_models: {
+        Row: {
+          active: boolean
+          aged_inventory_model_year: number | null
+          brand_id: string
+          created_at: string
+          deleted_at: string | null
+          family: string | null
+          horsepower: number | null
+          id: string
+          list_price_cents: number
+          model_code: string
+          model_year: number | null
+          name_display: string
+          series: string | null
+          specs: Json | null
+          standard_config: string | null
+          updated_at: string
+          weight_lbs: number | null
+          workspace_id: string
+        }
+        Insert: {
+          active?: boolean
+          aged_inventory_model_year?: number | null
+          brand_id: string
+          created_at?: string
+          deleted_at?: string | null
+          family?: string | null
+          horsepower?: number | null
+          id?: string
+          list_price_cents: number
+          model_code: string
+          model_year?: number | null
+          name_display: string
+          series?: string | null
+          specs?: Json | null
+          standard_config?: string | null
+          updated_at?: string
+          weight_lbs?: number | null
+          workspace_id?: string
+        }
+        Update: {
+          active?: boolean
+          aged_inventory_model_year?: number | null
+          brand_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          family?: string | null
+          horsepower?: number | null
+          id?: string
+          list_price_cents?: number
+          model_code?: string
+          model_year?: number | null
+          name_display?: string
+          series?: string | null
+          specs?: Json | null
+          standard_config?: string | null
+          updated_at?: string
+          weight_lbs?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_equipment_models_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_equipment_models_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_freight_zones: {
+        Row: {
+          brand_id: string
+          created_at: string
+          effective_from: string | null
+          effective_to: string | null
+          freight_large_cents: number
+          freight_small_cents: number
+          id: string
+          state_codes: string[]
+          workspace_id: string
+          zone_name: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          freight_large_cents: number
+          freight_small_cents: number
+          id?: string
+          state_codes: string[]
+          workspace_id?: string
+          zone_name: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          freight_large_cents?: number
+          freight_small_cents?: number
+          id?: string
+          state_codes?: string[]
+          workspace_id?: string
+          zone_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_freight_zones_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_price_sheet_items: {
+        Row: {
+          action: string
+          applied_at: string | null
+          confidence: number | null
+          created_at: string
+          extracted: Json
+          id: string
+          item_type: string
+          price_sheet_id: string
+          proposed_attachment_id: string | null
+          proposed_model_id: string | null
+          review_status: string
+          reviewer_notes: string | null
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          extracted: Json
+          id?: string
+          item_type: string
+          price_sheet_id: string
+          proposed_attachment_id?: string | null
+          proposed_model_id?: string | null
+          review_status?: string
+          reviewer_notes?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          action?: string
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          extracted?: Json
+          id?: string
+          item_type?: string
+          price_sheet_id?: string
+          proposed_attachment_id?: string | null
+          proposed_model_id?: string | null
+          review_status?: string
+          reviewer_notes?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_price_sheet_items_price_sheet_id_fkey"
+            columns: ["price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheet_items_proposed_attachment_id_fkey"
+            columns: ["proposed_attachment_id"]
+            isOneToOne: false
+            referencedRelation: "qb_attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheet_items_proposed_model_id_fkey"
+            columns: ["proposed_model_id"]
+            isOneToOne: false
+            referencedRelation: "qb_equipment_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_price_sheets: {
+        Row: {
+          brand_id: string | null
+          created_at: string
+          effective_from: string | null
+          effective_to: string | null
+          extraction_metadata: Json | null
+          file_type: string | null
+          file_url: string
+          filename: string
+          id: string
+          notes: string | null
+          published_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          supersedes_price_sheet_id: string | null
+          updated_at: string
+          uploaded_at: string
+          uploaded_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          extraction_metadata?: Json | null
+          file_type?: string | null
+          file_url: string
+          filename: string
+          id?: string
+          notes?: string | null
+          published_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          supersedes_price_sheet_id?: string | null
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string
+          effective_from?: string | null
+          effective_to?: string | null
+          extraction_metadata?: Json | null
+          file_type?: string | null
+          file_url?: string
+          filename?: string
+          id?: string
+          notes?: string | null
+          published_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          supersedes_price_sheet_id?: string | null
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_price_sheets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheets_supersedes_price_sheet_id_fkey"
+            columns: ["supersedes_price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_price_sheets_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_program_stacking_rules: {
+        Row: {
+          can_combine: boolean
+          created_at: string
+          id: string
+          notes: string | null
+          program_type_a: string
+          program_type_b: string
+        }
+        Insert: {
+          can_combine: boolean
+          created_at?: string
+          id?: string
+          notes?: string | null
+          program_type_a: string
+          program_type_b: string
+        }
+        Update: {
+          can_combine?: boolean
+          created_at?: string
+          id?: string
+          notes?: string | null
+          program_type_a?: string
+          program_type_b?: string
+        }
+        Relationships: []
+      }
+      qb_programs: {
+        Row: {
+          active: boolean
+          brand_id: string
+          created_at: string
+          deleted_at: string | null
+          details: Json
+          effective_from: string
+          effective_to: string
+          id: string
+          name: string
+          program_code: string
+          program_type: string
+          source_document_url: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          active?: boolean
+          brand_id: string
+          created_at?: string
+          deleted_at?: string | null
+          details: Json
+          effective_from: string
+          effective_to: string
+          id?: string
+          name: string
+          program_code: string
+          program_type: string
+          source_document_url?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          active?: boolean
+          brand_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          details?: Json
+          effective_from?: string
+          effective_to?: string
+          id?: string
+          name?: string
+          program_code?: string
+          program_type?: string
+          source_document_url?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_programs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_programs_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_quote_line_items: {
+        Row: {
+          attachment_id: string | null
+          created_at: string
+          description: string
+          discount_pct: number
+          display_order: number
+          extended_price_cents: number
+          id: string
+          line_type: string
+          list_price_cents: number | null
+          quantity: number
+          quote_id: string
+          unit_price_cents: number
+          workspace_id: string
+        }
+        Insert: {
+          attachment_id?: string | null
+          created_at?: string
+          description: string
+          discount_pct?: number
+          display_order?: number
+          extended_price_cents: number
+          id?: string
+          line_type: string
+          list_price_cents?: number | null
+          quantity?: number
+          quote_id: string
+          unit_price_cents: number
+          workspace_id?: string
+        }
+        Update: {
+          attachment_id?: string | null
+          created_at?: string
+          description?: string
+          discount_pct?: number
+          display_order?: number
+          extended_price_cents?: number
+          id?: string
+          line_type?: string
+          list_price_cents?: number | null
+          quantity?: number
+          quote_id?: string
+          unit_price_cents?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_quote_line_items_attachment_id_fkey"
+            columns: ["attachment_id"]
+            isOneToOne: false
+            referencedRelation: "qb_attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_line_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_quotes: {
+        Row: {
+          applied_program_ids: string[] | null
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          attachments_cost_cents: number
+          attachments_list_price_cents: number
+          attachments_markup_cents: number
+          attachments_sales_price_cents: number
+          baseline_sales_price_cents: number
+          cil_amount_cents: number
+          company_id: string | null
+          contact_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_equipment_id: string | null
+          customer_type: string
+          customer_type_details: Json | null
+          dealer_discount_cents: number
+          dealer_discount_pct: number
+          delivery_date: string | null
+          doc_fee_cents: number
+          equipment_cost_cents: number
+          equipment_model_id: string | null
+          financing_scenario: Json | null
+          freight_cents: number
+          good_faith_cents: number
+          good_faith_pct: number
+          gross_margin_cents: number | null
+          gross_margin_pct: number | null
+          id: string
+          internal_notes: string | null
+          list_price_cents: number
+          markup_achieved_pct: number | null
+          markup_cents: number
+          markup_pct: number
+          notes: string | null
+          parent_quote_id: string | null
+          pdf_url: string | null
+          pdi_cents: number
+          quote_number: string
+          rebate_total_cents: number
+          requires_approval: boolean
+          salesman_id: string
+          sent_at: string | null
+          status: string
+          subtotal_cents: number
+          tariff_cents: number
+          tariff_pct: number
+          tax_cents: number
+          tax_rate_pct: number | null
+          total_cents: number
+          trade_in_allowance_cents: number
+          trade_in_book_value_cents: number
+          updated_at: string
+          valid_until: string | null
+          version: number
+          workspace_id: string
+        }
+        Insert: {
+          applied_program_ids?: string[] | null
+          approval_reason?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          attachments_cost_cents?: number
+          attachments_list_price_cents?: number
+          attachments_markup_cents?: number
+          attachments_sales_price_cents?: number
+          baseline_sales_price_cents: number
+          cil_amount_cents?: number
+          company_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_equipment_id?: string | null
+          customer_type?: string
+          customer_type_details?: Json | null
+          dealer_discount_cents: number
+          dealer_discount_pct: number
+          delivery_date?: string | null
+          doc_fee_cents?: number
+          equipment_cost_cents: number
+          equipment_model_id?: string | null
+          financing_scenario?: Json | null
+          freight_cents: number
+          good_faith_cents: number
+          good_faith_pct: number
+          gross_margin_cents?: number | null
+          gross_margin_pct?: number | null
+          id?: string
+          internal_notes?: string | null
+          list_price_cents: number
+          markup_achieved_pct?: number | null
+          markup_cents: number
+          markup_pct: number
+          notes?: string | null
+          parent_quote_id?: string | null
+          pdf_url?: string | null
+          pdi_cents: number
+          quote_number?: string
+          rebate_total_cents?: number
+          requires_approval?: boolean
+          salesman_id: string
+          sent_at?: string | null
+          status?: string
+          subtotal_cents: number
+          tariff_cents: number
+          tariff_pct: number
+          tax_cents?: number
+          tax_rate_pct?: number | null
+          total_cents: number
+          trade_in_allowance_cents?: number
+          trade_in_book_value_cents?: number
+          updated_at?: string
+          valid_until?: string | null
+          version?: number
+          workspace_id?: string
+        }
+        Update: {
+          applied_program_ids?: string[] | null
+          approval_reason?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          attachments_cost_cents?: number
+          attachments_list_price_cents?: number
+          attachments_markup_cents?: number
+          attachments_sales_price_cents?: number
+          baseline_sales_price_cents?: number
+          cil_amount_cents?: number
+          company_id?: string | null
+          contact_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_equipment_id?: string | null
+          customer_type?: string
+          customer_type_details?: Json | null
+          dealer_discount_cents?: number
+          dealer_discount_pct?: number
+          delivery_date?: string | null
+          doc_fee_cents?: number
+          equipment_cost_cents?: number
+          equipment_model_id?: string | null
+          financing_scenario?: Json | null
+          freight_cents?: number
+          good_faith_cents?: number
+          good_faith_pct?: number
+          gross_margin_cents?: number | null
+          gross_margin_pct?: number | null
+          id?: string
+          internal_notes?: string | null
+          list_price_cents?: number
+          markup_achieved_pct?: number | null
+          markup_cents?: number
+          markup_pct?: number
+          notes?: string | null
+          parent_quote_id?: string | null
+          pdf_url?: string | null
+          pdi_cents?: number
+          quote_number?: string
+          rebate_total_cents?: number
+          requires_approval?: boolean
+          salesman_id?: string
+          sent_at?: string | null
+          status?: string
+          subtotal_cents?: number
+          tariff_cents?: number
+          tariff_pct?: number
+          tax_cents?: number
+          tax_rate_pct?: number | null
+          total_cents?: number
+          trade_in_allowance_cents?: number
+          trade_in_book_value_cents?: number
+          updated_at?: string
+          valid_until?: string | null
+          version?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_quotes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_customer_equipment_id_fkey"
+            columns: ["customer_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_customer_equipment_id_fkey"
+            columns: ["customer_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_customer_equipment_id_fkey"
+            columns: ["customer_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_equipment_model_id_fkey"
+            columns: ["equipment_model_id"]
+            isOneToOne: false
+            referencedRelation: "qb_equipment_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_parent_quote_id_fkey"
+            columns: ["parent_quote_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_quotes_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          snapshot: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          snapshot?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_trade_ins: {
+        Row: {
+          allowance_cents: number
+          approved_at: string | null
+          approved_by: string | null
+          book_value_cents: number | null
+          created_at: string
+          crm_equipment_id: string | null
+          deal_id: string | null
+          disposition: string | null
+          hours: number | null
+          id: string
+          make: string
+          model: string
+          notes: string | null
+          over_under_cents: number | null
+          quote_id: string | null
+          serial: string | null
+          updated_at: string
+          valuation_source: string | null
+          workspace_id: string
+          year: number | null
+        }
+        Insert: {
+          allowance_cents: number
+          approved_at?: string | null
+          approved_by?: string | null
+          book_value_cents?: number | null
+          created_at?: string
+          crm_equipment_id?: string | null
+          deal_id?: string | null
+          disposition?: string | null
+          hours?: number | null
+          id?: string
+          make: string
+          model: string
+          notes?: string | null
+          over_under_cents?: number | null
+          quote_id?: string | null
+          serial?: string | null
+          updated_at?: string
+          valuation_source?: string | null
+          workspace_id?: string
+          year?: number | null
+        }
+        Update: {
+          allowance_cents?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          book_value_cents?: number | null
+          created_at?: string
+          crm_equipment_id?: string | null
+          deal_id?: string | null
+          disposition?: string | null
+          hours?: number | null
+          id?: string
+          make?: string
+          model?: string
+          notes?: string | null
+          over_under_cents?: number | null
+          quote_id?: string | null
+          serial?: string | null
+          updated_at?: string
+          valuation_source?: string | null
+          workspace_id?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_trade_ins_crm_equipment_id_fkey"
+            columns: ["crm_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_trade_ins_crm_equipment_id_fkey"
+            columns: ["crm_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "qb_trade_ins_crm_equipment_id_fkey"
+            columns: ["crm_equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_trade_ins_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qb_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_trade_ins_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "qb_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qrm_absence_engine_rep_snapshots: {
+        Row: {
+          absence_score: number
+          created_at: string
+          deal_count: number
+          id: string
+          iron_role: string | null
+          missing_amount: number
+          missing_close_date: number
+          missing_company: number
+          missing_contact: number
+          rep_id: string | null
+          rep_name: string
+          run_id: string
+          snapshot_date: string
+          workspace_id: string
+        }
+        Insert: {
+          absence_score?: number
+          created_at?: string
+          deal_count?: number
+          id?: string
+          iron_role?: string | null
+          missing_amount?: number
+          missing_close_date?: number
+          missing_company?: number
+          missing_contact?: number
+          rep_id?: string | null
+          rep_name: string
+          run_id: string
+          snapshot_date: string
+          workspace_id?: string
+        }
+        Update: {
+          absence_score?: number
+          created_at?: string
+          deal_count?: number
+          id?: string
+          iron_role?: string | null
+          missing_amount?: number
+          missing_close_date?: number
+          missing_company?: number
+          missing_contact?: number
+          rep_id?: string | null
+          rep_name?: string
+          run_id?: string
+          snapshot_date?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qrm_absence_engine_rep_snapshots_rep_id_fkey"
+            columns: ["rep_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_absence_engine_rep_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_absence_engine_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qrm_absence_engine_runs: {
+        Row: {
+          generated_at: string
+          id: string
+          snapshot_date: string
+          top_gap_count: number
+          workspace_id: string
+          worst_fields: Json
+        }
+        Insert: {
+          generated_at?: string
+          id?: string
+          snapshot_date?: string
+          top_gap_count?: number
+          workspace_id?: string
+          worst_fields?: Json
+        }
+        Update: {
+          generated_at?: string
+          id?: string
+          snapshot_date?: string
+          top_gap_count?: number
+          workspace_id?: string
+          worst_fields?: Json
+        }
+        Relationships: []
       }
       qrm_activities: {
         Row: {
@@ -9587,6 +14608,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_activities_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -9641,6 +14669,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
         ]
       }
@@ -9757,17 +14792,26 @@ export type Database = {
           address_line_2: string | null
           assigned_rep_id: string | null
           city: string | null
+          classification: string | null
           country: string | null
+          county: string | null
           created_at: string
+          dba: string | null
           deleted_at: string | null
           hubspot_company_id: string | null
           id: string
+          legal_name: string | null
           metadata: Json
           name: string
+          notes: string | null
           parent_company_id: string | null
+          phone: string | null
           postal_code: string | null
           state: string | null
+          status: string | null
+          territory_code: string | null
           updated_at: string
+          website: string | null
           workspace_id: string
         }
         Insert: {
@@ -9775,17 +14819,26 @@ export type Database = {
           address_line_2?: string | null
           assigned_rep_id?: string | null
           city?: string | null
+          classification?: string | null
           country?: string | null
+          county?: string | null
           created_at?: string
+          dba?: string | null
           deleted_at?: string | null
           hubspot_company_id?: string | null
           id?: string
+          legal_name?: string | null
           metadata?: Json
           name: string
+          notes?: string | null
           parent_company_id?: string | null
+          phone?: string | null
           postal_code?: string | null
           state?: string | null
+          status?: string | null
+          territory_code?: string | null
           updated_at?: string
+          website?: string | null
           workspace_id?: string
         }
         Update: {
@@ -9793,17 +14846,26 @@ export type Database = {
           address_line_2?: string | null
           assigned_rep_id?: string | null
           city?: string | null
+          classification?: string | null
           country?: string | null
+          county?: string | null
           created_at?: string
+          dba?: string | null
           deleted_at?: string | null
           hubspot_company_id?: string | null
           id?: string
+          legal_name?: string | null
           metadata?: Json
           name?: string
+          notes?: string | null
           parent_company_id?: string | null
+          phone?: string | null
           postal_code?: string | null
           state?: string | null
+          status?: string | null
+          territory_code?: string | null
           updated_at?: string
+          website?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -9827,6 +14889,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -9938,6 +15007,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contact_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_contact_companies_contact_id_fkey"
@@ -10076,6 +15152,9 @@ export type Database = {
           metadata: Json
           phone: string | null
           primary_company_id: string | null
+          sms_opt_in: boolean
+          sms_opt_in_at: string | null
+          sms_opt_in_source: string | null
           title: string | null
           updated_at: string
           workspace_id: string
@@ -10094,6 +15173,9 @@ export type Database = {
           metadata?: Json
           phone?: string | null
           primary_company_id?: string | null
+          sms_opt_in?: boolean
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           title?: string | null
           updated_at?: string
           workspace_id?: string
@@ -10112,6 +15194,9 @@ export type Database = {
           metadata?: Json
           phone?: string | null
           primary_company_id?: string | null
+          sms_opt_in?: boolean
+          sms_opt_in_at?: string | null
+          sms_opt_in_source?: string | null
           title?: string | null
           updated_at?: string
           workspace_id?: string
@@ -10165,6 +15250,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_primary_company_id_fkey"
+            columns: ["primary_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -10332,6 +15424,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_deal_equipment_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "crm_deal_equipment_equipment_id_fkey"
             columns: ["equipment_id"]
             isOneToOne: false
@@ -10432,6 +15531,7 @@ export type Database = {
           net_contribution_after_load: number | null
           next_follow_up_at: string | null
           primary_contact_id: string | null
+          selected_scenario: Database["public"]["Enums"]["scenario_type"] | null
           sla_deadline_at: string | null
           sla_started_at: string | null
           sort_position: number | null
@@ -10471,6 +15571,9 @@ export type Database = {
           net_contribution_after_load?: number | null
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
+          selected_scenario?:
+            | Database["public"]["Enums"]["scenario_type"]
+            | null
           sla_deadline_at?: string | null
           sla_started_at?: string | null
           sort_position?: number | null
@@ -10510,6 +15613,9 @@ export type Database = {
           net_contribution_after_load?: number | null
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
+          selected_scenario?:
+            | Database["public"]["Enums"]["scenario_type"]
+            | null
           sla_deadline_at?: string | null
           sla_started_at?: string | null
           sort_position?: number | null
@@ -10538,6 +15644,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_deals_needs_assessment_id_fkey"
@@ -10722,7 +15835,9 @@ export type Database = {
           ownership: Database["public"]["Enums"]["crm_equipment_ownership"]
           photo_urls: Json
           primary_contact_id: string | null
+          purchase_date: string | null
           purchase_price: number | null
+          purchased_from_qep: boolean | null
           readiness_blocker_reason: string | null
           readiness_status: string | null
           replacement_cost: number | null
@@ -10771,7 +15886,9 @@ export type Database = {
           ownership?: Database["public"]["Enums"]["crm_equipment_ownership"]
           photo_urls?: Json
           primary_contact_id?: string | null
+          purchase_date?: string | null
           purchase_price?: number | null
+          purchased_from_qep?: boolean | null
           readiness_blocker_reason?: string | null
           readiness_status?: string | null
           replacement_cost?: number | null
@@ -10820,7 +15937,9 @@ export type Database = {
           ownership?: Database["public"]["Enums"]["crm_equipment_ownership"]
           photo_urls?: Json
           primary_contact_id?: string | null
+          purchase_date?: string | null
           purchase_price?: number | null
+          purchased_from_qep?: boolean | null
           readiness_blocker_reason?: string | null
           readiness_status?: string | null
           replacement_cost?: number | null
@@ -10848,6 +15967,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_equipment_primary_contact_id_fkey"
@@ -10964,6 +16090,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_geofences_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_geofences_linked_deal_id_fkey"
             columns: ["linked_deal_id"]
             isOneToOne: false
@@ -10998,7 +16131,152 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_geofences_linked_deal_id_fkey"
+            columns: ["linked_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
+      }
+      qrm_honesty_daily: {
+        Row: {
+          created_at: string
+          honesty_index: number
+          id: string
+          probe_breakdown: Json
+          rollup_date: string
+          total_discrepancy: number
+          total_observations: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          honesty_index: number
+          id?: string
+          probe_breakdown?: Json
+          rollup_date: string
+          total_discrepancy?: number
+          total_observations?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          honesty_index?: number
+          id?: string
+          probe_breakdown?: Json
+          rollup_date?: string
+          total_discrepancy?: number
+          total_observations?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      qrm_honesty_observations: {
+        Row: {
+          actual_state: string
+          assigned_owner_id: string
+          attributed_user_id: string | null
+          created_at: string
+          discrepancy_score: number
+          entity_id: string | null
+          entity_type: string | null
+          expected_state: string
+          id: string
+          metadata: Json
+          observation_type: string
+          observed_at: string
+          probe_id: string
+          workspace_id: string
+        }
+        Insert: {
+          actual_state: string
+          assigned_owner_id?: string
+          attributed_user_id?: string | null
+          created_at?: string
+          discrepancy_score: number
+          entity_id?: string | null
+          entity_type?: string | null
+          expected_state: string
+          id?: string
+          metadata?: Json
+          observation_type: string
+          observed_at?: string
+          probe_id: string
+          workspace_id?: string
+        }
+        Update: {
+          actual_state?: string
+          assigned_owner_id?: string
+          attributed_user_id?: string | null
+          created_at?: string
+          discrepancy_score?: number
+          entity_id?: string | null
+          entity_type?: string | null
+          expected_state?: string
+          id?: string
+          metadata?: Json
+          observation_type?: string
+          observed_at?: string
+          probe_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qrm_honesty_observations_attributed_user_id_fkey"
+            columns: ["attributed_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_honesty_observations_probe_id_fkey"
+            columns: ["probe_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_honesty_probes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qrm_honesty_probes: {
+        Row: {
+          created_at: string
+          depends_on: string | null
+          description: string | null
+          id: string
+          is_enabled: boolean
+          probe_name: string
+          probe_type: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          depends_on?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          probe_name: string
+          probe_type: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          depends_on?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          probe_name?: string
+          probe_type?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: []
       }
       qrm_hubspot_import_errors: {
         Row: {
@@ -11268,6 +16546,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_in_app_notifications_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "crm_in_app_notifications_reminder_instance_id_fkey"
             columns: ["reminder_instance_id"]
             isOneToOne: false
@@ -11419,6 +16704,7 @@ export type Database = {
           prediction_kind: string
           rationale: Json
           rationale_hash: string
+          role_blend: Json
           score: number
           signals_hash: string
           subject_id: string
@@ -11440,6 +16726,7 @@ export type Database = {
           prediction_kind: string
           rationale?: Json
           rationale_hash: string
+          role_blend?: Json
           score: number
           signals_hash: string
           subject_id: string
@@ -11461,6 +16748,7 @@ export type Database = {
           prediction_kind?: string
           rationale?: Json
           rationale_hash?: string
+          role_blend?: Json
           score?: number
           signals_hash?: string
           subject_id?: string
@@ -11618,6 +16906,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_reminder_instances_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "crm_reminder_instances_task_activity_id_fkey"
             columns: ["task_activity_id"]
             isOneToOne: false
@@ -11650,6 +16945,110 @@ export type Database = {
           source_migration?: string
         }
         Relationships: []
+      }
+      qrm_stage_transitions: {
+        Row: {
+          at: string
+          created_at: string
+          deal_id: string
+          from_stage_id: string | null
+          id: string
+          source: string
+          to_stage_id: string
+          workspace_id: string
+        }
+        Insert: {
+          at?: string
+          created_at?: string
+          deal_id: string
+          from_stage_id?: string | null
+          id?: string
+          source?: string
+          to_stage_id: string
+          workspace_id?: string
+        }
+        Update: {
+          at?: string
+          created_at?: string
+          deal_id?: string
+          from_stage_id?: string | null
+          id?: string
+          source?: string
+          to_stage_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_elevated_full"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_rep_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deals_weighted"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_deal_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "exec_pipeline_stage_summary_v"
+            referencedColumns: ["stage_id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "mv_exec_pipeline_stage_summary"
+            referencedColumns: ["stage_id"]
+          },
+          {
+            foreignKeyName: "qrm_stage_transitions_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_deal_stages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       qrm_tags: {
         Row: {
@@ -11883,6 +17282,10 @@ export type Database = {
           created_at: string
           created_by: string | null
           credit_app_url: string | null
+          customer_company: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
           deal_id: string
           discount_total: number | null
           entry_mode: string | null
@@ -11898,6 +17301,7 @@ export type Database = {
           pdf_generated_at: string | null
           pdf_url: string | null
           photos_included: Json | null
+          quote_number: string | null
           requires_requote: boolean | null
           requote_draft_email_id: string | null
           requote_reason: string | null
@@ -11910,6 +17314,7 @@ export type Database = {
           trade_in_valuation_id: string | null
           updated_at: string
           video_url: string | null
+          viewed_at: string | null
           workspace_id: string
         }
         Insert: {
@@ -11921,6 +17326,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           credit_app_url?: string | null
+          customer_company?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           deal_id: string
           discount_total?: number | null
           entry_mode?: string | null
@@ -11936,6 +17345,7 @@ export type Database = {
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
+          quote_number?: string | null
           requires_requote?: boolean | null
           requote_draft_email_id?: string | null
           requote_reason?: string | null
@@ -11948,6 +17358,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          viewed_at?: string | null
           workspace_id?: string
         }
         Update: {
@@ -11959,6 +17370,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           credit_app_url?: string | null
+          customer_company?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           deal_id?: string
           discount_total?: number | null
           entry_mode?: string | null
@@ -11974,6 +17389,7 @@ export type Database = {
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
+          quote_number?: string | null
           requires_requote?: boolean | null
           requote_draft_email_id?: string | null
           requote_reason?: string | null
@@ -11986,6 +17402,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          viewed_at?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -12044,6 +17461,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_packages_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "quote_packages_requote_draft_email_id_fkey"
@@ -12145,6 +17569,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_signatures_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "quote_signatures_quote_package_id_fkey"
@@ -12375,6 +17806,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "quotes_crm_deal_id_fkey"
+            columns: ["crm_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       rate_limit_log: {
@@ -12397,6 +17835,342 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      rental_contract_extensions: {
+        Row: {
+          additional_charge: number | null
+          approved_by: string | null
+          approved_end_date: string | null
+          created_at: string
+          customer_reason: string | null
+          dealer_response: string | null
+          id: string
+          payment_invoice_id: string | null
+          payment_status: string | null
+          rental_contract_id: string
+          requested_by: string | null
+          requested_end_date: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          additional_charge?: number | null
+          approved_by?: string | null
+          approved_end_date?: string | null
+          created_at?: string
+          customer_reason?: string | null
+          dealer_response?: string | null
+          id?: string
+          payment_invoice_id?: string | null
+          payment_status?: string | null
+          rental_contract_id: string
+          requested_by?: string | null
+          requested_end_date: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          additional_charge?: number | null
+          approved_by?: string | null
+          approved_end_date?: string | null
+          created_at?: string
+          customer_reason?: string | null
+          dealer_response?: string | null
+          id?: string
+          payment_invoice_id?: string | null
+          payment_status?: string | null
+          rental_contract_id?: string
+          requested_by?: string | null
+          requested_end_date?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_contract_extensions_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_payment_invoice_id_fkey"
+            columns: ["payment_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contract_extensions_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_contracts: {
+        Row: {
+          agreed_daily_rate: number | null
+          agreed_monthly_rate: number | null
+          agreed_weekly_rate: number | null
+          approved_end_date: string | null
+          approved_start_date: string | null
+          assignment_status: string
+          branch_id: string | null
+          created_at: string
+          customer_notes: string | null
+          dealer_notes: string | null
+          dealer_response: string | null
+          delivery_location: string | null
+          delivery_mode: string
+          deposit_amount: number | null
+          deposit_invoice_id: string | null
+          deposit_required: boolean
+          deposit_status: string | null
+          equipment_id: string | null
+          estimate_daily_rate: number | null
+          estimate_monthly_rate: number | null
+          estimate_weekly_rate: number | null
+          id: string
+          portal_customer_id: string
+          request_type: string
+          requested_category: string | null
+          requested_end_date: string
+          requested_make: string | null
+          requested_model: string | null
+          requested_start_date: string
+          signed_terms_url: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          agreed_daily_rate?: number | null
+          agreed_monthly_rate?: number | null
+          agreed_weekly_rate?: number | null
+          approved_end_date?: string | null
+          approved_start_date?: string | null
+          assignment_status?: string
+          branch_id?: string | null
+          created_at?: string
+          customer_notes?: string | null
+          dealer_notes?: string | null
+          dealer_response?: string | null
+          delivery_location?: string | null
+          delivery_mode?: string
+          deposit_amount?: number | null
+          deposit_invoice_id?: string | null
+          deposit_required?: boolean
+          deposit_status?: string | null
+          equipment_id?: string | null
+          estimate_daily_rate?: number | null
+          estimate_monthly_rate?: number | null
+          estimate_weekly_rate?: number | null
+          id?: string
+          portal_customer_id: string
+          request_type?: string
+          requested_category?: string | null
+          requested_end_date: string
+          requested_make?: string | null
+          requested_model?: string | null
+          requested_start_date: string
+          signed_terms_url?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          agreed_daily_rate?: number | null
+          agreed_monthly_rate?: number | null
+          agreed_weekly_rate?: number | null
+          approved_end_date?: string | null
+          approved_start_date?: string | null
+          assignment_status?: string
+          branch_id?: string | null
+          created_at?: string
+          customer_notes?: string | null
+          dealer_notes?: string | null
+          dealer_response?: string | null
+          delivery_location?: string | null
+          delivery_mode?: string
+          deposit_amount?: number | null
+          deposit_invoice_id?: string | null
+          deposit_required?: boolean
+          deposit_status?: string | null
+          equipment_id?: string | null
+          estimate_daily_rate?: number | null
+          estimate_monthly_rate?: number | null
+          estimate_weekly_rate?: number | null
+          id?: string
+          portal_customer_id?: string
+          request_type?: string
+          requested_category?: string | null
+          requested_end_date?: string
+          requested_make?: string | null
+          requested_model?: string | null
+          requested_start_date?: string
+          signed_terms_url?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_contracts_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_deposit_invoice_id_fkey"
+            columns: ["deposit_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "customer_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_contracts_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_rate_rules: {
+        Row: {
+          branch_id: string | null
+          category: string | null
+          created_at: string
+          customer_id: string | null
+          daily_rate: number | null
+          equipment_id: string | null
+          id: string
+          is_active: boolean
+          make: string | null
+          minimum_days: number | null
+          model: string | null
+          monthly_rate: number | null
+          notes: string | null
+          priority_rank: number
+          season_end: string | null
+          season_start: string | null
+          updated_at: string
+          weekly_rate: number | null
+          workspace_id: string
+        }
+        Insert: {
+          branch_id?: string | null
+          category?: string | null
+          created_at?: string
+          customer_id?: string | null
+          daily_rate?: number | null
+          equipment_id?: string | null
+          id?: string
+          is_active?: boolean
+          make?: string | null
+          minimum_days?: number | null
+          model?: string | null
+          monthly_rate?: number | null
+          notes?: string | null
+          priority_rank?: number
+          season_end?: string | null
+          season_start?: string | null
+          updated_at?: string
+          weekly_rate?: number | null
+          workspace_id?: string
+        }
+        Update: {
+          branch_id?: string | null
+          category?: string | null
+          created_at?: string
+          customer_id?: string | null
+          daily_rate?: number | null
+          equipment_id?: string | null
+          id?: string
+          is_active?: boolean
+          make?: string | null
+          minimum_days?: number | null
+          model?: string | null
+          monthly_rate?: number | null
+          notes?: string | null
+          priority_rank?: number
+          season_end?: string | null
+          season_start?: string | null
+          updated_at?: string
+          weekly_rate?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_rate_rules_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "equipment_status_canonical"
+            referencedColumns: ["equipment_id"]
+          },
+          {
+            foreignKeyName: "rental_rate_rules_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_equipment"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rental_returns: {
         Row: {
@@ -12422,6 +18196,7 @@ export type Database = {
           refund_check_turnaround: string | null
           refund_method: string | null
           refund_status: string | null
+          rental_contract_id: string | null
           rental_contract_reference: string | null
           status: string
           updated_at: string
@@ -12451,6 +18226,7 @@ export type Database = {
           refund_check_turnaround?: string | null
           refund_method?: string | null
           refund_status?: string | null
+          rental_contract_id?: string | null
           rental_contract_reference?: string | null
           status?: string
           updated_at?: string
@@ -12480,6 +18256,7 @@ export type Database = {
           refund_check_turnaround?: string | null
           refund_method?: string | null
           refund_status?: string | null
+          rental_contract_id?: string | null
           rental_contract_reference?: string | null
           status?: string
           updated_at?: string
@@ -12522,7 +18299,44 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "rental_returns_rental_contract_id_fkey"
+            columns: ["rental_contract_id"]
+            isOneToOne: false
+            referencedRelation: "rental_contracts"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      rep_preferences: {
+        Row: {
+          created_at: string
+          dark_mode: boolean
+          default_pipeline_filter: string
+          id: string
+          notifications_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dark_mode?: boolean
+          default_pipeline_filter?: string
+          id?: string
+          notifications_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dark_mode?: boolean
+          default_pipeline_filter?: string
+          id?: string
+          notifications_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       replacement_cost_curves: {
         Row: {
@@ -12689,6 +18503,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "revenue_attribution_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       scheduled_follow_ups: {
@@ -12778,6 +18599,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "scheduled_follow_ups_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "scheduled_follow_ups_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -12832,6 +18660,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_follow_ups_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "scheduled_follow_ups_voice_capture_id_fkey"
@@ -12932,6 +18767,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "section_179_scenarios_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
         ]
       }
@@ -13519,6 +19361,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "service_jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "service_jobs_fulfillment_run_id_fkey"
             columns: ["fulfillment_run_id"]
             isOneToOne: false
@@ -13736,6 +19585,13 @@ export type Database = {
             foreignKeyName: "spa_vendor_fk"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "spa_vendor_fk"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendor_profiles"
             referencedColumns: ["id"]
           },
@@ -13867,6 +19723,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "service_jobs"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spr_vendor_fk"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
           },
           {
             foreignKeyName: "spr_vendor_fk"
@@ -15179,6 +21042,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tax_exemption_certificates_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "tax_exemption_certificates_customer_profile_id_fkey"
             columns: ["customer_profile_id"]
             isOneToOne: false
@@ -15627,6 +21497,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "trade_valuations_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       traffic_tickets: {
@@ -15797,6 +21674,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "traffic_tickets_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "traffic_tickets_demo_id_fkey"
             columns: ["demo_id"]
             isOneToOne: false
@@ -15891,6 +21775,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vendor_contacts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
           {
             foreignKeyName: "vendor_contacts_vendor_id_fkey"
             columns: ["vendor_id"]
@@ -15992,6 +21883,73 @@ export type Database = {
             foreignKeyName: "vendor_escalations_vendor_id_fkey"
             columns: ["vendor_id"]
             isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "vendor_escalations_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_order_schedules: {
+        Row: {
+          branch_code: string
+          created_at: string
+          cutoff_time: string | null
+          day_of_week: string | null
+          frequency: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          updated_at: string
+          vendor_code: string | null
+          vendor_id: string
+          workspace_id: string
+        }
+        Insert: {
+          branch_code?: string
+          created_at?: string
+          cutoff_time?: string | null
+          day_of_week?: string | null
+          frequency: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_id: string
+          workspace_id?: string
+        }
+        Update: {
+          branch_code?: string
+          created_at?: string
+          cutoff_time?: string | null
+          day_of_week?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          updated_at?: string
+          vendor_code?: string | null
+          vendor_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_order_schedules_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "vendor_order_schedules_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
             referencedRelation: "vendor_profiles"
             referencedColumns: ["id"]
           },
@@ -16038,6 +21996,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vendor_part_catalog_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
           {
             foreignKeyName: "vendor_part_catalog_vendor_id_fkey"
             columns: ["vendor_id"]
@@ -16196,6 +22161,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "voice_captures_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "voice_captures_linked_contact_id_fkey"
             columns: ["linked_contact_id"]
             isOneToOne: false
@@ -16243,6 +22215,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_captures_linked_deal_id_fkey"
+            columns: ["linked_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "voice_captures_user_id_fkey"
@@ -16321,6 +22300,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "voice_extracted_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "voice_extracted_equipment_crm_equipment_id_fkey"
             columns: ["crm_equipment_id"]
             isOneToOne: false
@@ -16377,10 +22363,91 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "voice_extracted_equipment_linked_deal_id_fkey"
+            columns: ["linked_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "voice_extracted_equipment_voice_capture_id_fkey"
             columns: ["voice_capture_id"]
             isOneToOne: false
             referencedRelation: "voice_captures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voice_interactions: {
+        Row: {
+          client_context: Json | null
+          cost_usd_cents: number | null
+          created_at: string
+          elapsed_ms: number | null
+          error_message: string | null
+          id: string
+          intent: Database["public"]["Enums"]["voice_intent"] | null
+          intent_confidence: number | null
+          model: string | null
+          response_spoken: boolean
+          response_text: string | null
+          success: boolean
+          tokens_in: number | null
+          tokens_out: number | null
+          tool_calls: Json
+          transcript: string
+          transcript_confidence: number | null
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          client_context?: Json | null
+          cost_usd_cents?: number | null
+          created_at?: string
+          elapsed_ms?: number | null
+          error_message?: string | null
+          id?: string
+          intent?: Database["public"]["Enums"]["voice_intent"] | null
+          intent_confidence?: number | null
+          model?: string | null
+          response_spoken?: boolean
+          response_text?: string | null
+          success?: boolean
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json
+          transcript: string
+          transcript_confidence?: number | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          client_context?: Json | null
+          cost_usd_cents?: number | null
+          created_at?: string
+          elapsed_ms?: number | null
+          error_message?: string | null
+          id?: string
+          intent?: Database["public"]["Enums"]["voice_intent"] | null
+          intent_confidence?: number | null
+          model?: string | null
+          response_spoken?: boolean
+          response_text?: string | null
+          success?: boolean
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json
+          transcript?: string
+          transcript_confidence?: number | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -16493,6 +22560,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "voice_qrm_results_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "voice_qrm_results_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -16540,6 +22614,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voice_qrm_results_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "voice_qrm_results_needs_assessment_id_fkey"
@@ -16743,6 +22824,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_activities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_activities_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -16797,6 +22885,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
         ]
       }
@@ -16917,17 +23012,26 @@ export type Database = {
           address_line_2: string | null
           assigned_rep_id: string | null
           city: string | null
+          classification: string | null
           country: string | null
+          county: string | null
           created_at: string | null
+          dba: string | null
           deleted_at: string | null
           hubspot_company_id: string | null
           id: string | null
+          legal_name: string | null
           metadata: Json | null
           name: string | null
+          notes: string | null
           parent_company_id: string | null
+          phone: string | null
           postal_code: string | null
           state: string | null
+          status: string | null
+          territory_code: string | null
           updated_at: string | null
+          website: string | null
           workspace_id: string | null
         }
         Insert: {
@@ -16935,17 +23039,26 @@ export type Database = {
           address_line_2?: string | null
           assigned_rep_id?: string | null
           city?: string | null
+          classification?: string | null
           country?: string | null
+          county?: string | null
           created_at?: string | null
+          dba?: string | null
           deleted_at?: string | null
           hubspot_company_id?: string | null
           id?: string | null
+          legal_name?: string | null
           metadata?: Json | null
           name?: string | null
+          notes?: string | null
           parent_company_id?: string | null
+          phone?: string | null
           postal_code?: string | null
           state?: string | null
+          status?: string | null
+          territory_code?: string | null
           updated_at?: string | null
+          website?: string | null
           workspace_id?: string | null
         }
         Update: {
@@ -16953,17 +23066,26 @@ export type Database = {
           address_line_2?: string | null
           assigned_rep_id?: string | null
           city?: string | null
+          classification?: string | null
           country?: string | null
+          county?: string | null
           created_at?: string | null
+          dba?: string | null
           deleted_at?: string | null
           hubspot_company_id?: string | null
           id?: string | null
+          legal_name?: string | null
           metadata?: Json | null
           name?: string | null
+          notes?: string | null
           parent_company_id?: string | null
+          phone?: string | null
           postal_code?: string | null
           state?: string | null
+          status?: string | null
+          territory_code?: string | null
           updated_at?: string | null
+          website?: string | null
           workspace_id?: string | null
         }
         Relationships: [
@@ -16987,6 +23109,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_companies_parent_company_id_fkey"
+            columns: ["parent_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
         ]
       }
@@ -17029,6 +23158,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contact_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_contact_companies_contact_id_fkey"
@@ -17257,6 +23393,13 @@ export type Database = {
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_contacts_primary_company_id_fkey"
+            columns: ["primary_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       crm_custom_field_definitions: {
@@ -17433,6 +23576,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deal_equipment_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "crm_deal_equipment_equipment_id_fkey"
@@ -17634,6 +23784,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_deals_needs_assessment_id_fkey"
             columns: ["needs_assessment_id"]
             isOneToOne: false
@@ -17777,6 +23934,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_deals_primary_contact_id_fkey"
             columns: ["primary_contact_id"]
             isOneToOne: false
@@ -17828,13 +23992,18 @@ export type Database = {
           company_id: string | null
           created_at: string | null
           deleted_at: string | null
+          deposit_amount: number | null
+          deposit_status: string | null
           expected_close_on: string | null
           hubspot_deal_id: string | null
           id: string | null
           last_activity_at: string | null
+          margin_pct: number | null
           name: string | null
           next_follow_up_at: string | null
           primary_contact_id: string | null
+          sla_deadline_at: string | null
+          sort_position: number | null
           stage_id: string | null
           updated_at: string | null
           workspace_id: string | null
@@ -17846,13 +24015,18 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          deposit_amount?: number | null
+          deposit_status?: string | null
           expected_close_on?: string | null
           hubspot_deal_id?: string | null
           id?: string | null
           last_activity_at?: string | null
+          margin_pct?: number | null
           name?: string | null
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
+          sla_deadline_at?: string | null
+          sort_position?: number | null
           stage_id?: string | null
           updated_at?: string | null
           workspace_id?: string | null
@@ -17864,13 +24038,18 @@ export type Database = {
           company_id?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          deposit_amount?: number | null
+          deposit_status?: string | null
           expected_close_on?: string | null
           hubspot_deal_id?: string | null
           id?: string | null
           last_activity_at?: string | null
+          margin_pct?: number | null
           name?: string | null
           next_follow_up_at?: string | null
           primary_contact_id?: string | null
+          sla_deadline_at?: string | null
+          sort_position?: number | null
           stage_id?: string | null
           updated_at?: string | null
           workspace_id?: string | null
@@ -17896,6 +24075,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_deals_primary_contact_id_fkey"
@@ -17983,6 +24169,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_deals_primary_contact_id_fkey"
@@ -18134,6 +24327,7 @@ export type Database = {
       }
       crm_equipment: {
         Row: {
+          aging_bucket: string | null
           asset_tag: string | null
           availability:
             | Database["public"]["Enums"]["crm_equipment_availability"]
@@ -18150,6 +24344,7 @@ export type Database = {
           engine_hours: number | null
           fuel_type: string | null
           id: string | null
+          intake_stage: number | null
           last_inspection_at: string | null
           latitude: number | null
           location_description: string | null
@@ -18168,8 +24363,13 @@ export type Database = {
             | null
           photo_urls: Json | null
           primary_contact_id: string | null
+          purchase_date: string | null
           purchase_price: number | null
+          purchased_from_qep: boolean | null
+          readiness_blocker_reason: string | null
+          readiness_status: string | null
           replacement_cost: number | null
+          sale_ready_at: string | null
           serial_number: string | null
           updated_at: string | null
           vin_pin: string | null
@@ -18180,6 +24380,7 @@ export type Database = {
           year: number | null
         }
         Insert: {
+          aging_bucket?: string | null
           asset_tag?: string | null
           availability?:
             | Database["public"]["Enums"]["crm_equipment_availability"]
@@ -18198,6 +24399,7 @@ export type Database = {
           engine_hours?: number | null
           fuel_type?: string | null
           id?: string | null
+          intake_stage?: number | null
           last_inspection_at?: string | null
           latitude?: number | null
           location_description?: string | null
@@ -18216,8 +24418,13 @@ export type Database = {
             | null
           photo_urls?: Json | null
           primary_contact_id?: string | null
+          purchase_date?: string | null
           purchase_price?: number | null
+          purchased_from_qep?: boolean | null
+          readiness_blocker_reason?: string | null
+          readiness_status?: string | null
           replacement_cost?: number | null
+          sale_ready_at?: string | null
           serial_number?: string | null
           updated_at?: string | null
           vin_pin?: string | null
@@ -18228,6 +24435,7 @@ export type Database = {
           year?: number | null
         }
         Update: {
+          aging_bucket?: string | null
           asset_tag?: string | null
           availability?:
             | Database["public"]["Enums"]["crm_equipment_availability"]
@@ -18246,6 +24454,7 @@ export type Database = {
           engine_hours?: number | null
           fuel_type?: string | null
           id?: string | null
+          intake_stage?: number | null
           last_inspection_at?: string | null
           latitude?: number | null
           location_description?: string | null
@@ -18264,8 +24473,13 @@ export type Database = {
             | null
           photo_urls?: Json | null
           primary_contact_id?: string | null
+          purchase_date?: string | null
           purchase_price?: number | null
+          purchased_from_qep?: boolean | null
+          readiness_blocker_reason?: string | null
+          readiness_status?: string | null
           replacement_cost?: number | null
+          sale_ready_at?: string | null
           serial_number?: string | null
           updated_at?: string | null
           vin_pin?: string | null
@@ -18289,6 +24503,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "crm_equipment_primary_contact_id_fkey"
@@ -18405,6 +24626,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_geofences_linked_company_id_fkey"
+            columns: ["linked_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+          {
             foreignKeyName: "crm_geofences_linked_deal_id_fkey"
             columns: ["linked_deal_id"]
             isOneToOne: false
@@ -18438,6 +24666,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_geofences_linked_deal_id_fkey"
+            columns: ["linked_deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
         ]
       }
@@ -18632,6 +24867,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_in_app_notifications_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
           },
           {
             foreignKeyName: "crm_in_app_notifications_reminder_instance_id_fkey"
@@ -18859,6 +25101,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "crm_reminder_instances_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
+          {
             foreignKeyName: "crm_reminder_instances_task_activity_id_fkey"
             columns: ["task_activity_id"]
             isOneToOne: false
@@ -19014,6 +25263,13 @@ export type Database = {
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "crm_equipment_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
         ]
       }
       exec_branch_comparison: {
@@ -19022,14 +25278,6 @@ export type Database = {
           branch_id: string | null
           closed: number | null
           overdue: number | null
-          workspace_id: string | null
-        }
-        Relationships: []
-      }
-      exec_data_quality_summary: {
-        Row: {
-          issue_class: string | null
-          open_count: number | null
           workspace_id: string | null
         }
         Relationships: []
@@ -19234,6 +25482,28 @@ export type Database = {
         }
         Relationships: []
       }
+      margin_analytics_view: {
+        Row: {
+          avg_margin_pct: number | null
+          deal_count: number | null
+          equipment_category: string | null
+          flagged_deal_count: number | null
+          month_bucket: string | null
+          rep_id: string | null
+          rep_name: string | null
+          total_pipeline: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_deals_assigned_rep_id_fkey"
+            columns: ["rep_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mv_exec_deposits_aging: {
         Row: {
           ar_exposure_dollars: number | null
@@ -19400,6 +25670,62 @@ export type Database = {
             referencedRelation: "parts_catalog"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "parts_inventory_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
         ]
       }
       portal_trade_in_opportunities: {
@@ -19441,6 +25767,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "qrm_companies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_customers_crm_company_id_fkey"
+            columns: ["crm_company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "portal_customers_crm_contact_id_fkey"
@@ -19520,6 +25853,13 @@ export type Database = {
             referencedRelation: "qrm_deals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "quote_packages_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_pipeline"
+            referencedColumns: ["deal_id"]
+          },
         ]
       }
       revenue_by_make_model: {
@@ -19568,8 +25908,794 @@ export type Database = {
         }
         Relationships: []
       }
+      v_branch_stack_ranking: {
+        Row: {
+          at_reorder_count: number | null
+          branch_code: string | null
+          dead_parts: number | null
+          dead_parts_quartile_asc: number | null
+          dead_pct: number | null
+          inventory_quartile: number | null
+          inventory_value: number | null
+          parts_count: number | null
+          reorder_quartile_asc: number | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_machine_parts_connections: {
+        Row: {
+          association_strength: number | null
+          branch_code: string | null
+          cost_price: number | null
+          daily_velocity: number | null
+          history_12mo_sales: number | null
+          link_source: string | null
+          list_price: number | null
+          machine_category: string | null
+          machine_id: string | null
+          manufacturer: string | null
+          model: string | null
+          model_family: string | null
+          on_hand: number | null
+          part_description: string | null
+          part_id: string | null
+          part_number: string | null
+          usage_frequency: string | null
+          velocity_class: string | null
+          vendor_code: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_parts_links_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "machine_parts_links_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+        ]
+      }
+      v_parts_dead_capital: {
+        Row: {
+          branch_code: string | null
+          capital_on_hand: number | null
+          cost_price: number | null
+          dead_pattern: string | null
+          description: string | null
+          on_hand: number | null
+          part_id: string | null
+          part_number: string | null
+          velocity_class: string | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_parts_embedding_backlog: {
+        Row: {
+          backlog_reason: string | null
+          category: string | null
+          category_code: string | null
+          description: string | null
+          embedding_computed_at: string | null
+          id: string | null
+          machine_code: string | null
+          manufacturer: string | null
+          model_code: string | null
+          part_number: string | null
+          updated_at: string | null
+          vendor_code: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          backlog_reason?: never
+          category?: string | null
+          category_code?: string | null
+          description?: string | null
+          embedding_computed_at?: string | null
+          id?: string | null
+          machine_code?: string | null
+          manufacturer?: string | null
+          model_code?: string | null
+          part_number?: string | null
+          updated_at?: string | null
+          vendor_code?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          backlog_reason?: never
+          category?: string | null
+          category_code?: string | null
+          description?: string | null
+          embedding_computed_at?: string | null
+          id?: string | null
+          machine_code?: string | null
+          manufacturer?: string | null
+          model_code?: string | null
+          part_number?: string | null
+          updated_at?: string | null
+          vendor_code?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
+      v_parts_import_drift: {
+        Row: {
+          bin_location_moved: boolean | null
+          branch_code: string | null
+          co_code: string | null
+          current_bin_location: string | null
+          current_cost_price: number | null
+          current_list_price: number | null
+          current_on_hand: number | null
+          description: string | null
+          div_code: string | null
+          inventory_swing_over_50pct: boolean | null
+          last_import_run_id: string | null
+          last_imported_at: string | null
+          part_id: string | null
+          part_number: string | null
+          previous_bin_location: string | null
+          previous_on_hand_approx: number | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_parts_intelligence: {
+        Row: {
+          average_cost: number | null
+          branch_code: string | null
+          capital_on_hand: number | null
+          class_code: string | null
+          co_code: string | null
+          cost_price: number | null
+          daily_velocity: number | null
+          days_of_stock: number | null
+          description: string | null
+          div_code: string | null
+          forecast_90d_qty: number | null
+          forecast_stockout_risk: string | null
+          history_12mo_active_months: number | null
+          history_12mo_sales: number | null
+          latest_forecast_month: string | null
+          list_price: number | null
+          margin_pct_on_cost: number | null
+          margin_pct_on_vendor_list: number | null
+          on_hand: number | null
+          part_id: string | null
+          part_number: string | null
+          potential_overpay: boolean | null
+          reorder_point: number | null
+          stockout_risk: string | null
+          velocity_class: string | null
+          vendor_code: string | null
+          vendor_list_price: number | null
+          workspace_id: string | null
+          yoy_growth_pct: number | null
+        }
+        Relationships: []
+      }
+      v_parts_margin_signal: {
+        Row: {
+          average_cost: number | null
+          branch_code: string | null
+          co_code: string | null
+          cost_price: number | null
+          description: string | null
+          div_code: string | null
+          list_price: number | null
+          margin_pct_on_cost: number | null
+          margin_pct_on_vendor_list: number | null
+          on_hand: number | null
+          part_id: string | null
+          part_number: string | null
+          potential_overpay: boolean | null
+          reorder_point: number | null
+          vendor_code: string | null
+          vendor_list_price: number | null
+          vendor_price_date: string | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_parts_pricing_drift: {
+        Row: {
+          auto_apply: boolean | null
+          class_code: string | null
+          cost_price: number | null
+          current_margin_pct: number | null
+          current_sell_price: number | null
+          delta_dollars: number | null
+          delta_pct: number | null
+          out_of_tolerance: boolean | null
+          part_id: string | null
+          part_number: string | null
+          rule_id: string | null
+          rule_name: string | null
+          rule_type: Database["public"]["Enums"]["pricing_rule_type"] | null
+          target_margin_pct: number | null
+          target_sell_price: number | null
+          tolerance_pct: number | null
+          vendor_code: string | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_parts_queue: {
+        Row: {
+          age_minutes: number | null
+          assigned_to: string | null
+          assignee_name: string | null
+          auto_escalated: boolean | null
+          bay_number: string | null
+          cancelled_at: string | null
+          created_at: string | null
+          customer_id: string | null
+          customer_name: string | null
+          escalated_at: string | null
+          estimated_completion: string | null
+          fulfilled_at: string | null
+          id: string | null
+          is_overdue: boolean | null
+          items: Json | null
+          machine_category: string | null
+          machine_description: string | null
+          machine_manufacturer: string | null
+          machine_model: string | null
+          machine_profile_id: string | null
+          notes: string | null
+          priority: string | null
+          priority_sort: number | null
+          request_source: string | null
+          requested_by: string | null
+          requester_name: string | null
+          status: string | null
+          updated_at: string | null
+          work_order_number: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_requests_machine_profile_id_fkey"
+            columns: ["machine_profile_id"]
+            isOneToOne: false
+            referencedRelation: "machine_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_parts_stockout_risk: {
+        Row: {
+          branch_code: string | null
+          capital_on_hand: number | null
+          daily_velocity: number | null
+          days_of_stock: number | null
+          description: string | null
+          list_price: number | null
+          on_hand: number | null
+          part_id: string | null
+          part_number: string | null
+          reorder_point: number | null
+          stockout_risk: string | null
+          velocity_class: string | null
+          vendor_code: string | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_parts_velocity: {
+        Row: {
+          activity_code: string | null
+          average_cost: number | null
+          branch_code: string | null
+          capital_on_hand: number | null
+          class_code: string | null
+          co_code: string | null
+          cost_price: number | null
+          daily_velocity: number | null
+          description: string | null
+          div_code: string | null
+          history_12mo_active_months: number | null
+          history_12mo_bin_trips: number | null
+          history_12mo_demands: number | null
+          history_12mo_sales: number | null
+          history_13_24mo_sales: number | null
+          list_price: number | null
+          movement_code: string | null
+          on_hand: number | null
+          part_id: string | null
+          part_number: string | null
+          recorded_last_12mo_sales: number | null
+          reorder_point: number | null
+          velocity_class: string | null
+          vendor_code: string | null
+          workspace_id: string | null
+          yoy_growth_pct: number | null
+        }
+        Relationships: []
+      }
+      v_predictive_plays: {
+        Row: {
+          current_on_hand_across_branches: number | null
+          customer_name: string | null
+          days_until_due: number | null
+          fleet_id: string | null
+          forecast_stockout_risk: string | null
+          id: string | null
+          machine_hours: number | null
+          machine_make: string | null
+          machine_model: string | null
+          machine_serial: string | null
+          machine_year: number | null
+          part_description: string | null
+          part_id: string | null
+          part_number: string | null
+          portal_customer_id: string | null
+          probability: number | null
+          projected_due_date: string | null
+          projected_revenue: number | null
+          projection_window: string | null
+          reason: string | null
+          recommended_order_qty: number | null
+          signal_type: string | null
+          status: string | null
+          suggested_order_by: string | null
+          suggested_vendor_name: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predicted_parts_plays_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "customer_fleet"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_fleet_id_fkey"
+            columns: ["fleet_id"]
+            isOneToOne: false
+            referencedRelation: "portal_trade_in_opportunities"
+            referencedColumns: ["fleet_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "parts_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_dead_capital"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_embedding_backlog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_import_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_intelligence"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_margin_signal"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_pricing_drift"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_stockout_risk"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "v_parts_velocity"
+            referencedColumns: ["part_id"]
+          },
+          {
+            foreignKeyName: "predicted_parts_plays_portal_customer_id_fkey"
+            columns: ["portal_customer_id"]
+            isOneToOne: false
+            referencedRelation: "portal_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_profile_active_role_blend: {
+        Row: {
+          effective_from: string | null
+          effective_to: string | null
+          id: string | null
+          iron_role: string | null
+          iron_role_display: string | null
+          profile_id: string | null
+          reason: string | null
+          weight: number | null
+        }
+        Insert: {
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string | null
+          iron_role?: string | null
+          iron_role_display?: never
+          profile_id?: string | null
+          reason?: string | null
+          weight?: number | null
+        }
+        Update: {
+          effective_from?: string | null
+          effective_to?: string | null
+          id?: string | null
+          iron_role?: string | null
+          iron_role_display?: never
+          profile_id?: string | null
+          reason?: string | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_role_blend_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_rep_customers: {
+        Row: {
+          active_quotes: number | null
+          city: string | null
+          company_name: string | null
+          customer_id: string | null
+          days_since_contact: number | null
+          last_interaction: string | null
+          open_deals: number | null
+          opportunity_score: number | null
+          primary_contact_email: string | null
+          primary_contact_name: string | null
+          primary_contact_phone: string | null
+          state: string | null
+        }
+        Relationships: []
+      }
+      v_rep_pipeline: {
+        Row: {
+          amount: number | null
+          company_id: string | null
+          created_at: string | null
+          customer_name: string | null
+          days_since_activity: number | null
+          deal_id: string | null
+          deal_name: string | null
+          deal_score: number | null
+          expected_close_on: string | null
+          heat_status: string | null
+          last_activity_at: string | null
+          next_follow_up_at: string | null
+          primary_contact_name: string | null
+          primary_contact_phone: string | null
+          stage: string | null
+          stage_sort: number | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "crm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "qrm_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_deals_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "v_rep_customers"
+            referencedColumns: ["customer_id"]
+          },
+        ]
+      }
+      v_replenish_queue_enriched: {
+        Row: {
+          approved_at: string | null
+          branch_id: string | null
+          cdk_vendor_list_price: number | null
+          computation_batch_id: string | null
+          created_at: string | null
+          current_list_price: number | null
+          customer_machine_hours: number | null
+          customer_machine_make: string | null
+          customer_machine_model: string | null
+          customer_name: string | null
+          economic_order_qty: number | null
+          edited_at: string | null
+          edited_by: string | null
+          estimated_total: number | null
+          estimated_unit_cost: number | null
+          forecast_covered_days: number | null
+          forecast_driven: boolean | null
+          id: string | null
+          live_on_hand: number | null
+          ordered_at: string | null
+          ordered_by: string | null
+          originating_play_id: string | null
+          part_description: string | null
+          part_number: string | null
+          part_vendor_code: string | null
+          play_part_description: string | null
+          play_probability: number | null
+          play_projected_due: string | null
+          play_reason: string | null
+          po_reference: string | null
+          potential_overpay_flag: boolean | null
+          qty_on_hand: number | null
+          recommended_qty: number | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          reorder_point: number | null
+          scheduled_for: string | null
+          selected_vendor_id: string | null
+          source_type: string | null
+          status: string | null
+          updated_at: string | null
+          vendor_lead_time_hours: number | null
+          vendor_name: string | null
+          vendor_price_corroborated: boolean | null
+          vendor_score: number | null
+          vendor_selection_reason: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_parts_auto_replenish_queue_branch"
+            columns: ["workspace_id", "branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["workspace_id", "slug"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_ordered_by_fkey"
+            columns: ["ordered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_originating_play_id_fkey"
+            columns: ["originating_play_id"]
+            isOneToOne: false
+            referencedRelation: "predicted_parts_plays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_originating_play_id_fkey"
+            columns: ["originating_play_id"]
+            isOneToOne: false
+            referencedRelation: "v_predictive_plays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
+            columns: ["selected_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
+            columns: ["selected_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_supplier_fill_rate: {
+        Row: {
+          avg_approve_to_order_hours: number | null
+          fill_rate_pct: number | null
+          items_90d: number | null
+          items_approved: number | null
+          items_expired: number | null
+          items_ordered: number | null
+          items_rejected: number | null
+          vendor_id: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "parts_auto_replenish_queue_selected_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_supplier_health_scorecard: {
+        Row: {
+          avg_approve_to_order_hours: number | null
+          avg_lead_time_hours: number | null
+          catalog_parts: number | null
+          days_since_last_price_file: number | null
+          fill_rate_pct_90d: number | null
+          health_tier: string | null
+          last_price_file_at: string | null
+          parts_compared: number | null
+          parts_up: number | null
+          parts_up_more_than_5pct: number | null
+          price_change_pct_yoy: number | null
+          price_competitiveness: number | null
+          profile_composite_score: number | null
+          profile_fill_rate: number | null
+          replenish_items_90d: number | null
+          replenish_items_ordered: number | null
+          responsiveness_score: number | null
+          supplier_type: string | null
+          vendor_id: string | null
+          vendor_name: string | null
+          workspace_id: string | null
+        }
+        Relationships: []
+      }
+      v_supplier_price_creep: {
+        Row: {
+          max_current_price: number | null
+          max_prior_price: number | null
+          parts_compared: number | null
+          parts_down: number | null
+          parts_up: number | null
+          parts_up_more_than_5pct: number | null
+          vendor_code: string | null
+          vendor_id: string | null
+          weighted_change_pct: number | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parts_vendor_prices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "v_supplier_health_scorecard"
+            referencedColumns: ["vendor_id"]
+          },
+          {
+            foreignKeyName: "parts_vendor_prices_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      action_predictive_play: {
+        Args: { p_action: string; p_note?: string; p_play_id: string }
+        Returns: Json
+      }
       adjust_parts_inventory_delta: {
         Args: {
           p_branch_id: string
@@ -19639,6 +26765,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      approve_replenish_rows: { Args: { p_ids: string[] }; Returns: Json }
       archive_crm_company: { Args: { p_company_id: string }; Returns: Json }
       archive_crm_contact: { Args: { p_contact_id: string }; Returns: Json }
       archive_crm_deal: { Args: { p_deal_id: string }; Returns: Json }
@@ -19649,10 +26776,22 @@ export type Database = {
           inserted_count: number
         }[]
       }
+      backfill_profile: {
+        Args: {
+          p_email: string
+          p_full_name?: string
+          p_id: string
+          p_iron_role?: string
+          p_role?: string
+          p_workspace?: string
+        }
+        Returns: undefined
+      }
       batch_apply_follow_up_touchpoint_ai: {
         Args: { p_rows: Json }
         Returns: number
       }
+      bulk_update_parts_embeddings: { Args: { p_updates: Json }; Returns: Json }
       calculate_deposit_tier: {
         Args: { p_equipment_value: number }
         Returns: Json
@@ -19689,6 +26828,26 @@ export type Database = {
         }
         Returns: boolean
       }
+      claim_dge_refresh_job: {
+        Args: { p_lease_seconds?: number }
+        Returns: {
+          attempt_count: number
+          dedupe_key: string
+          job_id: string
+          job_type: string
+          request_payload: Json
+          workspace_id: string
+        }[]
+      }
+      complete_dge_refresh_job: {
+        Args: {
+          p_job_id: string
+          p_last_error?: string
+          p_result_payload?: Json
+          p_status: string
+        }
+        Returns: undefined
+      }
       compute_customer_health_score: {
         Args: { p_customer_profile_id: string }
         Returns: number
@@ -19696,6 +26855,22 @@ export type Database = {
       compute_deal_timing_alerts: {
         Args: { p_workspace_id: string }
         Returns: number
+      }
+      compute_handoff_seam_scores: {
+        Args: {
+          p_period_end: string
+          p_period_start: string
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
+      compute_ownership_health_score: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
+      compute_seeded_forecast: {
+        Args: { p_forecast_months?: number; p_workspace?: string }
+        Returns: Json
       }
       create_post_sale_cadence: {
         Args: {
@@ -19763,6 +26938,10 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: number
       }
+      crm_reorder_pipeline_deals: {
+        Args: { p_ordered_deal_ids: string[]; p_stage_id: string }
+        Returns: undefined
+      }
       crm_rep_can_access_activity: {
         Args: { p_activity_id: string }
         Returns: boolean
@@ -19799,6 +26978,10 @@ export type Database = {
         Args: { p_fleet_id: string; p_subscription_id: string }
         Returns: boolean
       }
+      customer_fleet_llm_context: {
+        Args: { p_fleet_id: string }
+        Returns: Json
+      }
       decide_flow_approval: {
         Args: { p_approval_id: string; p_decision: string; p_reason?: string }
         Returns: undefined
@@ -19809,6 +26992,19 @@ export type Database = {
           p_role: string
         }
         Returns: boolean
+      }
+      eligible_deals_for_playbook: {
+        Args: { p_limit?: number; p_workspace?: string }
+        Returns: {
+          assigned_rep_id: string
+          closed_at: string
+          company_id: string
+          deal_id: string
+          equipment_id: string
+          make: string
+          model: string
+          workspace_id: string
+        }[]
       }
       emit_event:
         | {
@@ -19883,6 +27079,21 @@ export type Database = {
             }
             Returns: string
           }
+      enqueue_dge_refresh_job: {
+        Args: {
+          p_dedupe_key: string
+          p_job_type: string
+          p_priority?: number
+          p_request_payload?: Json
+          p_requested_by?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          enqueued: boolean
+          job_id: string
+          job_status: string
+        }[]
+      }
       enqueue_exception: {
         Args: {
           p_detail?: string
@@ -19903,6 +27114,14 @@ export type Database = {
           p_run_id: string
           p_workflow_slug: string
         }
+        Returns: string
+      }
+      exec_suppress_override_update: {
+        Args: { p_part_id: string; p_payload: Json }
+        Returns: Json
+      }
+      extract_portal_quote_version_text: {
+        Args: { p_key_a: string; p_key_b: string; p_quote_data: Json }
         Returns: string
       }
       find_duplicate_companies: {
@@ -20003,6 +27222,8 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: number
       }
+      generate_qb_deal_number: { Args: never; Returns: string }
+      generate_qb_quote_number: { Args: never; Returns: string }
       get_account_360: { Args: { p_company_id: string }; Returns: Json }
       get_asset_24h_activity: {
         Args: { p_equipment_id: string }
@@ -20025,6 +27246,17 @@ export type Database = {
           target: number
           tone: string
           unit: string
+        }[]
+      }
+      get_auth_user_metadata: {
+        Args: never
+        Returns: {
+          banned_until: string
+          email: string
+          email_confirmed_at: string
+          id: string
+          last_sign_in_at: string
+          raw_user_meta_data: Json
         }[]
       }
       get_branch_by_slug: {
@@ -20320,9 +27552,63 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      lookup_intervention_history: {
+        Args: { p_alert_title: string; p_alert_type: string; p_limit?: number }
+        Returns: {
+          alert_type: string
+          id: string
+          recurrence_count: number
+          resolution_notes: string
+          resolution_type: string
+          resolved_at: string
+          resolved_by: string
+          time_to_resolve_minutes: number
+        }[]
+      }
+      machine_parts_graph_refresh: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
+      machine_parts_intel: {
+        Args: { p_limit?: number; p_machine_id: string }
+        Returns: Json
+      }
       mark_event_consumed: {
         Args: { p_event_id: string; p_run_id: string }
         Returns: undefined
+      }
+      mark_replenish_ordered: {
+        Args: { p_ids: string[]; p_po_reference?: string }
+        Returns: Json
+      }
+      match_parts_hybrid: {
+        Args: {
+          p_alpha?: number
+          p_category?: string
+          p_manufacturer?: string
+          p_match_count?: number
+          p_query_embedding: string
+          p_query_text: string
+          p_workspace?: string
+        }
+        Returns: {
+          category: string
+          cosine_similarity: number
+          cost_price: number
+          description: string
+          fts_norm: number
+          fts_rank: number
+          hybrid_score: number
+          list_price: number
+          machine_code: string
+          manufacturer: string
+          match_source: string
+          model_code: string
+          on_hand: number
+          part_id: string
+          part_number: string
+          vendor_code: string
+        }[]
       }
       match_quote_incentives: {
         Args: { p_quote_package_id: string }
@@ -20403,13 +27689,54 @@ export type Database = {
         }
         Returns: Json
       }
+      next_vendor_order_date: {
+        Args: { p_branch?: string; p_from_date?: string; p_vendor_id: string }
+        Returns: string
+      }
       normalize_knowledge_gap_question: {
         Args: { p_question: string }
         Returns: string
       }
+      owner_dashboard_summary: { Args: { p_workspace?: string }; Returns: Json }
+      owner_event_feed: {
+        Args: { p_hours_back?: number; p_workspace?: string }
+        Returns: Json
+      }
+      owner_team_signals: {
+        Args: { p_limit?: number; p_workspace?: string }
+        Returns: Json
+      }
+      parts_import_dashboard_stats: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
+      parts_import_drift_summary: { Args: { p_run_id?: string }; Returns: Json }
+      parts_intelligence_summary: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
+      parts_replenish_queue_summary: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
       pick_profile_active_workspace: {
         Args: { target_profile_id: string }
         Returns: string
+      }
+      pipeline_velocity_rpc: {
+        Args: { p_threshold_days?: number }
+        Returns: {
+          avg_days_in_stage: number
+          is_bottleneck: boolean
+          max_days_in_stage: number
+          open_deal_count: number
+          raw_pipeline: number
+          sort_order: number
+          stage_id: string
+          stage_name: string
+          threshold_days: number
+          weighted_pipeline: number
+        }[]
       }
       portal_get_service_job_timeline: {
         Args: { p_service_request_id: string }
@@ -20424,6 +27751,32 @@ export type Database = {
         }
         Returns: Json
       }
+      post_sale_playbook_summary: {
+        Args: { p_limit?: number; p_workspace?: string }
+        Returns: Json
+      }
+      predict_parts_needs: {
+        Args: { p_lookahead_days?: number; p_workspace?: string }
+        Returns: Json
+      }
+      predictive_plays_summary: {
+        Args: { p_workspace?: string }
+        Returns: Json
+      }
+      pricing_rules_preview: { Args: { p_rule_id: string }; Returns: Json }
+      pricing_rules_summary: { Args: never; Returns: Json }
+      pricing_suggestions_apply: {
+        Args: { p_note?: string; p_suggestion_ids: string[] }
+        Returns: Json
+      }
+      pricing_suggestions_dismiss: {
+        Args: { p_note?: string; p_suggestion_ids: string[] }
+        Returns: Json
+      }
+      pricing_suggestions_generate: {
+        Args: { p_rule_id?: string }
+        Returns: Json
+      }
       qrm_company_fk_columns: {
         Args: never
         Returns: {
@@ -20432,8 +27785,90 @@ export type Database = {
           table_name: string
         }[]
       }
+      qrm_stage_age: { Args: { p_deal_id: string }; Returns: number }
+      qrm_time_balance: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          days_in_stage: number
+          deal_id: string
+          stage_age_days: number
+          stage_name: string
+        }[]
+      }
+      qrm_time_bank: {
+        Args: { p_default_budget_days?: number; p_workspace_id: string }
+        Returns: {
+          assigned_rep_id: string
+          assigned_rep_name: string
+          budget_days: number
+          company_id: string
+          company_name: string
+          days_in_stage: number
+          deal_id: string
+          deal_name: string
+          has_explicit_budget: boolean
+          is_over: boolean
+          pct_used: number
+          remaining_days: number
+          stage_age_days: number
+          stage_id: string
+          stage_name: string
+        }[]
+      }
       qrm_undo_company_merge: { Args: { p_audit_id: string }; Returns: Json }
+      recent_orders_for_part: {
+        Args: {
+          p_customer_name?: string
+          p_limit?: number
+          p_part_number: string
+        }
+        Returns: Json
+      }
+      recompute_health_score_for_company: {
+        Args: { p_company_id: string }
+        Returns: undefined
+      }
+      record_handoff_event: {
+        Args: {
+          p_from_user_id: string
+          p_handoff_at?: string
+          p_handoff_reason: string
+          p_source_event_id?: string
+          p_source_fingerprint?: string
+          p_source_status_from?: string
+          p_source_status_to?: string
+          p_source_table?: string
+          p_subject_id: string
+          p_subject_label?: string
+          p_subject_type: string
+          p_to_user_id: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
+      record_portal_customer_notification: {
+        Args: {
+          p_body: string
+          p_category: string
+          p_channel: string
+          p_dedupe_key?: string
+          p_event_type: string
+          p_metadata?: Json
+          p_portal_customer_id: string
+          p_related_entity_id?: string
+          p_related_entity_type?: string
+          p_sent_at?: string
+          p_title: string
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
       refresh_exec_materialized_views: { Args: never; Returns: undefined }
+      reject_replenish_rows: {
+        Args: { p_ids: string[]; p_reason?: string }
+        Returns: Json
+      }
+      replenish_queue_summary_v2: { Args: never; Returns: Json }
       request_flow_approval: {
         Args: {
           p_assigned_role?: string
@@ -20449,6 +27884,19 @@ export type Database = {
         }
         Returns: string
       }
+      resolve_parts_import_conflicts_bulk: {
+        Args: {
+          p_field_names: string[]
+          p_notes?: string
+          p_resolution: Database["public"]["Enums"]["parts_import_conflict_resolution"]
+          p_run_id: string
+        }
+        Returns: number
+      }
+      resolve_parts_order_company_id: {
+        Args: { p_crm_company_id: string; p_portal_customer_id: string }
+        Returns: string
+      }
       retrieve_document_evidence: {
         Args: {
           keyword_query: string
@@ -20460,8 +27908,13 @@ export type Database = {
         }
         Returns: {
           access_class: string
+          chunk_kind: string
           confidence: number
+          context_excerpt: string
           excerpt: string
+          page_number: number
+          parent_chunk_id: string
+          section_title: string
           source_id: string
           source_title: string
           source_type: string
@@ -20516,8 +27969,6 @@ export type Database = {
         Returns: Json
       }
       set_active_workspace: { Args: { target: string }; Returns: string }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       signature_in_my_workspace: {
         Args: { p_package_id: string }
         Returns: boolean
@@ -20534,9 +27985,14 @@ export type Database = {
         Args: { p_sub_id: string }
         Returns: boolean
       }
+      supplier_health_summary: { Args: { p_workspace?: string }; Returns: Json }
       touchpoint_in_my_workspace: {
         Args: { p_cadence_id: string }
         Returns: boolean
+      }
+      update_replenish_qty: {
+        Args: { p_id: string; p_new_qty: number }
+        Returns: Json
       }
       user_owns_conversation: {
         Args: { p_conversation_id: string }
@@ -20552,6 +28008,25 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: Json
+      }
+      write_ai_inferred_play: {
+        Args: {
+          p_batch_id: string
+          p_fleet_id: string
+          p_llm_model: string
+          p_llm_reasoning: string
+          p_machine_profile_id: string
+          p_part_description: string
+          p_part_id: string
+          p_part_number: string
+          p_portal_customer_id: string
+          p_probability: number
+          p_projected_due_date: string
+          p_projection_window: string
+          p_reason: string
+          p_workspace: string
+        }
+        Returns: string
       }
       write_kpi_snapshot: {
         Args: {
@@ -20701,6 +28176,26 @@ export type Database = {
         | "sent"
         | "deferred"
         | "dismissed"
+      parts_import_conflict_priority: "high" | "normal" | "low"
+      parts_import_conflict_resolution:
+        | "keep_current"
+        | "take_incoming"
+        | "custom"
+      parts_import_file_type:
+        | "partmast"
+        | "vendor_price"
+        | "vendor_contacts"
+        | "unknown"
+      parts_import_status:
+        | "pending"
+        | "parsing"
+        | "previewing"
+        | "awaiting_conflicts"
+        | "committing"
+        | "committed"
+        | "failed"
+        | "rolled_back"
+        | "cancelled"
       parts_xref_relationship:
         | "interchangeable"
         | "supersedes"
@@ -20709,11 +28204,36 @@ export type Database = {
         | "oem_equivalent"
         | "kit_component"
         | "kit_parent"
+      pricing_level_target:
+        | "list_price"
+        | "pricing_level_1"
+        | "pricing_level_2"
+        | "pricing_level_3"
+        | "pricing_level_4"
+        | "all_levels"
       pricing_persona:
         | "value_driven"
         | "relationship_loyal"
         | "budget_constrained"
         | "urgency_buyer"
+      pricing_rule_scope_type:
+        | "global"
+        | "vendor"
+        | "class"
+        | "category"
+        | "machine_code"
+        | "part"
+      pricing_rule_type:
+        | "min_margin_pct"
+        | "target_margin_pct"
+        | "markup_multiplier"
+        | "markup_with_floor"
+      pricing_suggestion_status:
+        | "pending"
+        | "approved"
+        | "applied"
+        | "dismissed"
+        | "expired"
       scenario_type: "max_margin" | "balanced" | "win_the_deal"
       service_parts_action_type:
         | "pick"
@@ -20777,6 +28297,12 @@ export type Database = {
         | "manual"
       user_role: "rep" | "admin" | "manager" | "owner"
       voice_capture_status: "pending" | "processing" | "synced" | "failed"
+      voice_intent:
+        | "lookup"
+        | "stock_check"
+        | "add_to_order"
+        | "history"
+        | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -21044,6 +28570,29 @@ export const Constants = {
         "demo_mode",
       ],
       outreach_status: ["pending", "approved", "sent", "deferred", "dismissed"],
+      parts_import_conflict_priority: ["high", "normal", "low"],
+      parts_import_conflict_resolution: [
+        "keep_current",
+        "take_incoming",
+        "custom",
+      ],
+      parts_import_file_type: [
+        "partmast",
+        "vendor_price",
+        "vendor_contacts",
+        "unknown",
+      ],
+      parts_import_status: [
+        "pending",
+        "parsing",
+        "previewing",
+        "awaiting_conflicts",
+        "committing",
+        "committed",
+        "failed",
+        "rolled_back",
+        "cancelled",
+      ],
       parts_xref_relationship: [
         "interchangeable",
         "supersedes",
@@ -21053,11 +28602,40 @@ export const Constants = {
         "kit_component",
         "kit_parent",
       ],
+      pricing_level_target: [
+        "list_price",
+        "pricing_level_1",
+        "pricing_level_2",
+        "pricing_level_3",
+        "pricing_level_4",
+        "all_levels",
+      ],
       pricing_persona: [
         "value_driven",
         "relationship_loyal",
         "budget_constrained",
         "urgency_buyer",
+      ],
+      pricing_rule_scope_type: [
+        "global",
+        "vendor",
+        "class",
+        "category",
+        "machine_code",
+        "part",
+      ],
+      pricing_rule_type: [
+        "min_margin_pct",
+        "target_margin_pct",
+        "markup_multiplier",
+        "markup_with_floor",
+      ],
+      pricing_suggestion_status: [
+        "pending",
+        "approved",
+        "applied",
+        "dismissed",
+        "expired",
       ],
       scenario_type: ["max_margin", "balanced", "win_the_deal"],
       service_parts_action_type: [
@@ -21128,6 +28706,13 @@ export const Constants = {
       ],
       user_role: ["rep", "admin", "manager", "owner"],
       voice_capture_status: ["pending", "processing", "synced", "failed"],
+      voice_intent: [
+        "lookup",
+        "stock_check",
+        "add_to_order",
+        "history",
+        "other",
+      ],
     },
   },
 } as const
