@@ -5,6 +5,7 @@ import { CompanionSidebar } from "./components/CompanionSidebar";
 import { CompanionTopBar } from "./components/CompanionTopBar";
 import { AiAssistantPanel } from "./components/AiAssistantPanel";
 import { NewRequestFlow } from "./components/NewRequestFlow";
+import { VoiceOpsModal } from "./components/VoiceOpsModal";
 import { IronAvatar } from "../../lib/iron/IronAvatar";
 
 /**
@@ -16,6 +17,7 @@ export function PartsCompanionShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [newRequestOpen, setNewRequestOpen] = useState(false);
+  const [voiceOpsOpen, setVoiceOpsOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -84,8 +86,17 @@ export function PartsCompanionShell() {
             setNewRequestOpen(true);
           }
           break;
+        case "v":
+        case "V":
+          if (!e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            setVoiceOpsOpen((prev) => !prev);
+          }
+          break;
         case "Escape":
-          if (newRequestOpen) {
+          if (voiceOpsOpen) {
+            setVoiceOpsOpen(false);
+          } else if (newRequestOpen) {
             setNewRequestOpen(false);
           } else if (aiPanelOpen) {
             setAiPanelOpen(false);
@@ -173,6 +184,12 @@ export function PartsCompanionShell() {
       {newRequestOpen && (
         <NewRequestFlow onClose={() => setNewRequestOpen(false)} />
       )}
+
+      {/* Voice Ops Modal (Slice 3.2 — press 'V' or click mic) */}
+      <VoiceOpsModal
+        open={voiceOpsOpen}
+        onClose={() => setVoiceOpsOpen(false)}
+      />
     </div>
   );
 }
