@@ -27,7 +27,7 @@ enabled = true
 enabled = true
 site_url = "http://localhost:5173"
 additional_redirect_urls = ["https://qep.blackrockai.co"]
-jwt_expiry = 3600
+jwt_expiry = 28800  # 8 hours — full shift without hitting token expiry during long ops
 enable_refresh_token_rotation = true
 
 [auth.email]

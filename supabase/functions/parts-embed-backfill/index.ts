@@ -155,28 +155,24 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Write back — one UPDATE per row (Supabase REST upsert won't hit vector literal)
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const vector = vectors[i];
-        const literal = formatVectorLiteral(vector);
+      // Single-RPC bulk update (50 rows per RPC call vs 50 round-trips per batch)
+      const updatesPayload = rows.map((row, i) => ({
+        part_id: row.id,
+        embedding_literal: formatVectorLiteral(vectors[i]),
+        embedding_text: texts[i],
+        embedding_model: OPENAI_EMBEDDING_MODEL,
+      }));
 
-        const { error: updErr } = await supabase
-          .from("parts_catalog")
-          .update({
-            embedding: literal,
-            embedding_text: texts[i],
-            embedding_model: OPENAI_EMBEDDING_MODEL,
-            embedding_computed_at: new Date().toISOString(),
-          })
-          .eq("id", row.id);
+      const { data: bulkResult, error: bulkErr } = await supabase.rpc(
+        "bulk_update_parts_embeddings",
+        { p_updates: updatesPayload },
+      );
 
-        if (updErr) {
-          console.warn(`update failed for ${row.part_number}: ${updErr.message}`);
-          stats.rows_errored++;
-        } else {
-          stats.rows_embedded++;
-        }
+      if (bulkErr) {
+        console.warn(`bulk update failed for batch: ${bulkErr.message}`);
+        stats.rows_errored += rows.length;
+      } else {
+        stats.rows_embedded += (bulkResult as { rows_updated?: number })?.rows_updated ?? rows.length;
       }
 
       stats.batches++;

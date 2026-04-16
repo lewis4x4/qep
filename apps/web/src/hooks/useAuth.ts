@@ -251,7 +251,30 @@ export function useAuth(): AuthState {
       }, 0);
     });
 
-    return () => subscription.unsubscribe();
+    // ── Session heartbeat ─────────────────────────────────────────
+    // Proactively refresh the JWT every 15 min so long-running operations
+    // (e.g. the parts embedding backfill loop) never race token expiry.
+    // Supabase-js does its own refresh on a timer, but long foreground
+    // requests can block it and push the JWT past exp before it renews.
+    const heartbeatId = setInterval(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        // Only refresh if < 10 min of life remaining
+        const expiresAt = session.expires_at ?? 0;
+        const msUntilExpiry = expiresAt * 1000 - Date.now();
+        if (msUntilExpiry > 0 && msUntilExpiry < 10 * 60 * 1000) {
+          await supabase.auth.refreshSession();
+        }
+      } catch {
+        // Swallow — don't kill the session on a transient refresh failure
+      }
+    }, 15 * 60 * 1000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(heartbeatId);
+    };
   }, []);
 
   return state;

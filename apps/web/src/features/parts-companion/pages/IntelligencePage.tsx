@@ -121,14 +121,31 @@ export function IntelligencePage() {
 
   const handleEmbedBackfill = async () => {
     setEmbedding(true);
-    setLastComputeResult(null);
+    setLastComputeResult("Starting…");
+    let totalEmbedded = 0;
+    let totalBatches = 0;
+    const startedAt = Date.now();
     try {
-      const r = await runEmbedBackfill(100);
+      // Auto-loop: each call processes up to 20 batches (~20-30s, well under
+      // edge function + auth timeouts). Repeat until remaining hits 0.
+      // Max 20 iterations (guardrail against runaway).
+      for (let iter = 0; iter < 20; iter++) {
+        const r = await runEmbedBackfill(20);
+        totalEmbedded += r.rows_embedded;
+        totalBatches += r.batches;
+        const remaining = r.rows_remaining ?? 0;
+        setLastComputeResult(
+          `Embedding… ${totalEmbedded} done · ${remaining} remaining · ${totalBatches} batches · ${((Date.now() - startedAt) / 1000).toFixed(0)}s elapsed`,
+        );
+        if (remaining === 0 || r.batches === 0) break;
+      }
       setLastComputeResult(
-        `Embedded ${r.rows_embedded} part${r.rows_embedded === 1 ? "" : "s"} in ${r.batches} batch${r.batches === 1 ? "" : "es"} (${r.elapsed_ms.toFixed(0)}ms). ${r.rows_remaining ?? 0} remaining.`,
+        `✅ Embedded ${totalEmbedded} parts in ${totalBatches} batches (${((Date.now() - startedAt) / 1000).toFixed(0)}s). Semantic search is live.`,
       );
     } catch (err) {
-      setLastComputeResult(`Embedding backfill failed: ${(err as Error).message}`);
+      setLastComputeResult(
+        `Embedding backfill failed after ${totalEmbedded} parts: ${(err as Error).message}. Click again to resume — backfill is idempotent.`,
+      );
     } finally {
       setEmbedding(false);
     }
