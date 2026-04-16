@@ -106,3 +106,29 @@ verify_jwt = false
 
 [functions.integration-test-connection]
 verify_jwt = true
+
+# Parts Intelligence Engine (Phase 1+2+3). Each function validates JWT + role
+# via _shared/service-auth.ts (requireServiceUser). Gateway verify_jwt is off
+# so ES256-signed user sessions (Supabase's newer asymmetric JWT keys) are
+# forwarded to the function's own auth check — the gateway's built-in
+# verifier rejects ES256 with UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM.
+[functions.parts-bulk-import]
+verify_jwt = false
+
+[functions.parts-predictive-failure]
+verify_jwt = false
+
+[functions.parts-pricing-autocorrect]
+verify_jwt = false
+
+[functions.parts-embed-backfill]
+verify_jwt = false
+
+[functions.ai-parts-lookup]
+verify_jwt = false
+
+[functions.parts-auto-replenish]
+verify_jwt = false
+
+[functions.parts-demand-forecast]
+verify_jwt = false
