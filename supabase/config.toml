@@ -138,3 +138,12 @@ verify_jwt = false
 
 [functions.parts-demand-forecast]
 verify_jwt = false
+
+[functions.owner-morning-brief]
+verify_jwt = false
+
+[functions.owner-ask-anything]
+verify_jwt = false
+
+[functions.owner-predictive-interventions]
+verify_jwt = false
