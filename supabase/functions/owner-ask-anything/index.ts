@@ -322,31 +322,67 @@ async function executeTool(
   }
 
   if (name === "list_deals") {
+    // qrm_deals has stage_id (FK to qrm_deal_stages) + closed_at + assigned_rep_id.
+    // We resolve stage names via the join so the owner's LLM gets readable status.
     const limit = Math.min(25, Math.max(1, Number(input.limit ?? 10)));
-    const status = input.status as string | undefined;
+    const statusFilter = input.status as string | undefined;
     const minAmount = input.min_amount as number | undefined;
     const staleDays = input.stale_days as number | undefined;
 
     let q = supabase
       .from("qrm_deals")
-      .select("id, name, amount, status, created_at, updated_at, owner_id, company_id")
+      .select(
+        `id, name, amount, closed_at, created_at, updated_at,
+         assigned_rep_id, company_id, stage_id,
+         qrm_deal_stages ( name, is_closed_won, is_closed_lost )`,
+      )
       .is("deleted_at", null)
       .order("amount", { ascending: false })
-      .limit(limit);
+      .limit(limit * 3); // over-fetch for post-filter
 
-    if (status === "open") {
-      q = q.not("status", "in", "(closed_won,closed_lost)");
-    } else if (status) {
-      q = q.eq("status", status);
-    }
     if (typeof minAmount === "number") q = q.gte("amount", minAmount);
     if (typeof staleDays === "number") {
       const cutoff = new Date(Date.now() - staleDays * 86400_000).toISOString();
       q = q.lt("updated_at", cutoff);
     }
+    if (statusFilter === "open") {
+      q = q.is("closed_at", null);
+    }
+
     const { data, error } = await q;
     if (error) throw error;
-    return { deals: data ?? [] };
+
+    const rows = (data ?? []).map((d: Record<string, unknown>) => {
+      const stage = (d.qrm_deal_stages as Record<string, unknown> | null) ?? null;
+      const derived =
+        stage?.is_closed_won ? "closed_won"
+        : stage?.is_closed_lost ? "closed_lost"
+        : d.closed_at ? "closed"
+        : "open";
+      return {
+        id: d.id,
+        name: d.name,
+        amount: d.amount,
+        status: derived,
+        stage_name: stage?.name ?? null,
+        closed_at: d.closed_at,
+        created_at: d.created_at,
+        updated_at: d.updated_at,
+        assigned_rep_id: d.assigned_rep_id,
+        company_id: d.company_id,
+      };
+    });
+
+    const filtered =
+      statusFilter === "closed_won"
+        ? rows.filter((r) => r.status === "closed_won")
+        : statusFilter === "closed_lost"
+        ? rows.filter((r) => r.status === "closed_lost")
+        : statusFilter === "open"
+        ? rows.filter((r) => r.status === "open")
+        : rows;
+
+    return { deals: filtered.slice(0, limit) };
   }
 
   if (name === "recent_predictive_plays") {

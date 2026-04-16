@@ -162,11 +162,16 @@ Deno.serve(async (req) => {
         .eq("status", "open")
         .order("projected_revenue", { ascending: false })
         .limit(10),
+      // qrm_deals uses stage_id (FK to qrm_deal_stages) + closed_at, not status.
+      // "Stalled" = not closed AND not updated in 14+ days.
       supabase
         .from("qrm_deals")
-        .select("id, name, amount, status, updated_at")
-        .not("status", "in", "(closed_won,closed_lost)")
+        .select(
+          `id, name, amount, updated_at, closed_at,
+           qrm_deal_stages ( name, is_closed_won, is_closed_lost )`,
+        )
         .is("deleted_at", null)
+        .is("closed_at", null)
         .lt("updated_at", new Date(Date.now() - 14 * 86400_000).toISOString())
         .order("amount", { ascending: false })
         .limit(10),
