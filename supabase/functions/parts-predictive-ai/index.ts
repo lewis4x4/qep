@@ -108,10 +108,10 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!supabaseUrl || !serviceKey) {
-      return safeJsonError(origin, 500, "Missing SUPABASE_URL / SERVICE_ROLE_KEY");
+      return safeJsonError("Missing SUPABASE_URL / SERVICE_ROLE_KEY", 500, origin);
     }
     if (!anthropicKey) {
-      return safeJsonError(origin, 500, "ANTHROPIC_API_KEY not configured");
+      return safeJsonError("ANTHROPIC_API_KEY not configured", 500, origin);
     }
 
     let supabase: SupabaseClient;
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       const auth = await requireServiceUser(authHeader, origin);
       if (!auth.ok) return auth.response;
       if (!["admin", "manager", "owner"].includes(auth.role)) {
-        return safeJsonError(origin, 403, "admin/manager/owner role required");
+        return safeJsonError("admin/manager/owner role required", 403, origin);
       }
       supabase = createClient(supabaseUrl, serviceKey);
       calledBy = `user:${auth.userId}`;
@@ -149,13 +149,13 @@ Deno.serve(async (req) => {
     const { data: fleets, error: fleetErr } = await fleetQuery;
     if (fleetErr) throw new Error(`fleet fetch failed: ${fleetErr.message}`);
     if (!fleets || fleets.length === 0) {
-      return safeJsonOk(origin, {
+      return safeJsonOk({
         ok: true,
         called_by: calledBy,
         elapsed_ms: Date.now() - startMs,
         machines_processed: 0,
         message: "No eligible fleet rows (need is_active=true + current_hours)",
-      });
+      }, origin);
     }
 
     const totals = {
@@ -351,16 +351,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       ok: true,
       called_by: calledBy,
       elapsed_ms: Date.now() - startMs,
       batch_id: batchId,
       ...totals,
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-predictive-ai" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });
 

@@ -197,22 +197,22 @@ Deno.serve(async (req) => {
     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
     if (!auth.ok) return auth.response;
     if (!["rep", "admin", "manager", "owner"].includes(auth.role)) {
-      return safeJsonError(origin, 403, "voice ops requires rep/admin/manager/owner");
+      return safeJsonError("voice ops requires rep/admin/manager/owner", 403, origin);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!anthropicKey) return safeJsonError(origin, 500, "ANTHROPIC_API_KEY not set");
+    if (!anthropicKey) return safeJsonError("ANTHROPIC_API_KEY not set", 500, origin);
 
     const supabase = createClient(supabaseUrl, serviceKey);
     const body = (await req.json()) as RequestBody;
 
     if (!body.transcript || body.transcript.trim().length === 0) {
-      return safeJsonError(origin, 400, "transcript is required");
+      return safeJsonError("transcript is required", 400, origin);
     }
     if (body.transcript.length > 600) {
-      return safeJsonError(origin, 400, "transcript too long (>600 chars)");
+      return safeJsonError("transcript too long (>600 chars)", 400, origin);
     }
 
     const contextLines: string[] = [];
@@ -326,7 +326,7 @@ Deno.serve(async (req) => {
       console.warn("[parts-voice-ops] audit log failed:", logErr);
     }
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       ok: true,
       spoken_text: spokenText,
       intent,
@@ -335,10 +335,10 @@ Deno.serve(async (req) => {
       tokens_in: totalTokensIn,
       tokens_out: totalTokensOut,
       cost_usd_cents: costCents,
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-voice-ops" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });
 
@@ -508,3 +508,4 @@ async function callClaude(
     tokens_out: Number(usage.output_tokens ?? 0),
   };
 }
+

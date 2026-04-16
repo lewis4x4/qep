@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     if (!supabaseUrl || !serviceKey) {
-      return safeJsonError(origin, 500, "Missing SUPABASE_URL / SERVICE_ROLE_KEY");
+      return safeJsonError("Missing SUPABASE_URL / SERVICE_ROLE_KEY", 500, origin);
     }
 
     let supabase: SupabaseClient;
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       const auth = await requireServiceUser(authHeader, origin);
       if (!auth.ok) return auth.response;
       if (!["admin", "manager", "owner"].includes(auth.role)) {
-        return safeJsonError(origin, 403, "predictive failure requires admin/manager/owner role");
+        return safeJsonError("predictive failure requires admin/manager/owner role", 403, origin);
       }
       // Service client for the heavy RPC writes
       supabase = createClient(supabaseUrl, serviceKey);
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       });
 
     if (predictErr) {
-      return safeJsonError(origin, 500, `predict_parts_needs failed: ${predictErr.message}`);
+      return safeJsonError(`predict_parts_needs failed: ${predictErr.message}`, 500, origin);
     }
 
     // ── 2. Optionally chain into auto-replenish ──────────────────────────
@@ -128,16 +128,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       ok: true,
       called_by: calledBy,
       elapsed_ms: elapsedMs,
       predict: predictResult,
       replenish: replenishResult,
       summary,
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-predictive-failure" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });

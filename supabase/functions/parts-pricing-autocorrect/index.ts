@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     if (!supabaseUrl || !serviceKey) {
-      return safeJsonError(origin, 500, "Missing SUPABASE_URL / SERVICE_ROLE_KEY");
+      return safeJsonError("Missing SUPABASE_URL / SERVICE_ROLE_KEY", 500, origin);
     }
 
     let supabase: SupabaseClient;
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       const auth = await requireServiceUser(authHeader, origin);
       if (!auth.ok) return auth.response;
       if (!["admin", "manager", "owner"].includes(auth.role)) {
-        return safeJsonError(origin, 403, "pricing autocorrect requires admin/manager/owner role");
+        return safeJsonError("pricing autocorrect requires admin/manager/owner role", 403, origin);
       }
       supabase = createClient(supabaseUrl, serviceKey);
       calledBy = `user:${auth.userId}`;
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
       .rpc("pricing_suggestions_generate", { p_rule_id: body.rule_id ?? null });
 
     if (genErr) {
-      return safeJsonError(origin, 500, `pricing_suggestions_generate failed: ${genErr.message}`);
+      return safeJsonError(`pricing_suggestions_generate failed: ${genErr.message}`, 500, origin);
     }
 
     // ── 2. For auto_apply rules, fetch pending and apply them ────────────
@@ -107,16 +107,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       ok: true,
       called_by: calledBy,
       elapsed_ms: elapsedMs,
       generate: genResult,
       auto_applied_count: autoAppliedCount,
       summary,
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-pricing-autocorrect" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });

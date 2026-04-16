@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
     if (!auth.ok) return auth.response;
     if (!["admin", "manager", "owner"].includes(auth.role)) {
-      return safeJsonError(origin, 403, "parts bulk import requires admin/manager/owner role");
+      return safeJsonError("parts bulk import requires admin/manager/owner role", 403, origin);
     }
 
     const body = (await req.json()) as RequestBody;
@@ -97,11 +97,11 @@ Deno.serve(async (req) => {
       case "status":
         return await handleStatus(supabase, body, origin);
       default:
-        return safeJsonError(origin, 400, `unknown action: ${body.action}`);
+        return safeJsonError(`unknown action: ${body.action}`, 400, origin);
     }
   } catch (err) {
     captureEdgeException(err, { fn: "parts-bulk-import" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });
 
@@ -166,7 +166,7 @@ async function handlePreview(
   origin: string | null,
 ): Promise<Response> {
   if (!body.storage_path || !body.source_file_name) {
-    return safeJsonError(origin, 400, "storage_path and source_file_name required");
+    return safeJsonError("storage_path and source_file_name required", 400, origin);
   }
 
   const workspaceId = await getWorkspace(supabase, actorId);
@@ -204,7 +204,7 @@ async function handlePreview(
     .single();
 
   if (runErr || !runRow) {
-    return safeJsonError(origin, 500, `failed to create import run: ${runErr?.message}`);
+    return safeJsonError(`failed to create import run: ${runErr?.message}`, 500, origin);
   }
   const runId = runRow.id;
 
@@ -232,7 +232,7 @@ async function handlePreview(
         .from("parts_import_runs")
         .update({ status: "failed" as PartsImportStatus, error_log: { reason: "unknown file type" }, completed_at: new Date().toISOString() })
         .eq("id", runId);
-      return safeJsonError(origin, 422, "could not detect file type — please set file_type_hint");
+      return safeJsonError("could not detect file type — please set file_type_hint", 422, origin);
     }
 
     const newStatus: PartsImportStatus = stats.rows_conflicted > 0 ? "awaiting_conflicts" : "previewing";
@@ -281,7 +281,7 @@ async function handlePreview(
     // Stash parsed plan in storage for commit phase (avoids re-parsing 3MB file).
     await stashPlan(body.storage_path, runId, { fileType, plan });
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       run_id: runId,
       status: newStatus,
       file_type: fileType,
@@ -289,7 +289,7 @@ async function handlePreview(
       file_hash: hash,
       stats,
       duplicate_of: priorRuns?.find((r) => r.status === "committed" && r.id !== runId) ?? null,
-    });
+    }, origin);
   } catch (err) {
     await supabase
       .from("parts_import_runs")
@@ -311,7 +311,7 @@ async function handleCommit(
   actorId: string,
   origin: string | null,
 ): Promise<Response> {
-  if (!body.run_id) return safeJsonError(origin, 400, "run_id required for commit");
+  if (!body.run_id) return safeJsonError("run_id required for commit", 400, origin);
 
   const workspaceId = await getWorkspace(supabase, actorId);
 
@@ -322,9 +322,9 @@ async function handleCommit(
     .eq("workspace_id", workspaceId)
     .single();
 
-  if (runErr || !run) return safeJsonError(origin, 404, "import run not found");
+  if (runErr || !run) return safeJsonError("import run not found", 404, origin);
   if (!["previewing", "awaiting_conflicts"].includes(run.status)) {
-    return safeJsonError(origin, 409, `run is in status '${run.status}' — cannot commit`);
+    return safeJsonError(`run is in status '${run.status}' — cannot commit`, 409, origin);
   }
 
   // Block commit if unresolved high-priority conflicts remain
@@ -374,12 +374,12 @@ async function handleCommit(
       })
       .eq("id", run.id);
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       run_id: run.id,
       status: "committed",
       rows_inserted: inserted,
       rows_updated: updated,
-    });
+    }, origin);
   } catch (err) {
     await supabase
       .from("parts_import_runs")
@@ -398,14 +398,14 @@ async function handleCancel(
   body: RequestBody,
   origin: string | null,
 ): Promise<Response> {
-  if (!body.run_id) return safeJsonError(origin, 400, "run_id required");
+  if (!body.run_id) return safeJsonError("run_id required", 400, origin);
   const { error } = await supabase
     .from("parts_import_runs")
     .update({ status: "cancelled" as PartsImportStatus, completed_at: new Date().toISOString() })
     .eq("id", body.run_id)
     .in("status", ["pending", "parsing", "previewing", "awaiting_conflicts"]);
-  if (error) return safeJsonError(origin, 500, error.message);
-  return safeJsonOk(origin, { run_id: body.run_id, status: "cancelled" });
+  if (error) return safeJsonError(error.message, 500, origin);
+  return safeJsonOk({ run_id: body.run_id, status: "cancelled" }, origin);
 }
 
 async function handleStatus(
@@ -413,14 +413,14 @@ async function handleStatus(
   body: RequestBody,
   origin: string | null,
 ): Promise<Response> {
-  if (!body.run_id) return safeJsonError(origin, 400, "run_id required");
+  if (!body.run_id) return safeJsonError("run_id required", 400, origin);
   const { data, error } = await supabase
     .from("parts_import_runs")
     .select("*")
     .eq("id", body.run_id)
     .single();
-  if (error || !data) return safeJsonError(origin, 404, "run not found");
-  return safeJsonOk(origin, { run: data });
+  if (error || !data) return safeJsonError("run not found", 404, origin);
+  return safeJsonOk({ run: data }, origin);
 }
 
 // ── parsers ─────────────────────────────────────────────────────────────────

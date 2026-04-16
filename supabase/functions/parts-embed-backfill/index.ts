@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     if (!supabaseUrl || !serviceKey) {
-      return safeJsonError(origin, 500, "Missing SUPABASE_URL / SERVICE_ROLE_KEY");
+      return safeJsonError("Missing SUPABASE_URL / SERVICE_ROLE_KEY", 500, origin);
     }
 
     let supabase: SupabaseClient;
@@ -199,16 +199,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    return safeJsonOk(origin, {
+    return safeJsonOk({
       ok: true,
       called_by: calledBy,
       elapsed_ms: elapsedMs,
       ...stats,
       rows_remaining: remaining ?? null,
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "parts-embed-backfill" });
-    return safeJsonError(origin, 500, (err as Error).message);
+    return safeJsonError((err as Error).message, 500, origin);
   }
 });
 
