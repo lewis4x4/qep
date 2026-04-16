@@ -18,12 +18,9 @@ import {
   Activity,
   AlertTriangle,
   Boxes,
-  Calendar,
   DollarSign,
   LineChart,
-  Sparkles,
   Target,
-  Truck,
   Wrench,
 } from "lucide-react";
 import {
@@ -248,5 +245,3 @@ function buildTiles(
   ];
 }
 
-// Re-exports so the page owns public surface
-export { Truck, Sparkles, Calendar };

@@ -511,6 +511,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "System",
   },
   {
+    label: "Owner Cockpit",
+    href: "/owner",
+    icon: Gauge,
+    roles: ["owner"],
+    utility: true,
+    sectionLabel: "System",
+  },
+  {
     label: "Executive",
     href: "/executive",
     icon: Gauge,
