@@ -21,7 +21,7 @@ import type {
   AppliedProgram,
   FinancingScenario,
   ProgramFixture,
-} from "./types";
+} from "./types.ts";
 
 interface ApplyProgramsInput {
   request: PriceQuoteRequest;

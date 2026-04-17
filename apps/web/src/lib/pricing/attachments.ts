@@ -13,8 +13,8 @@ import type {
   AttachmentsResult,
   PricedAttachment,
   PricedBrand,
-} from "./types";
-import { PricingError } from "./errors";
+} from "./types.ts";
+import { PricingError } from "./errors.ts";
 
 interface PriceAttachmentsInput {
   brand: PricedBrand;

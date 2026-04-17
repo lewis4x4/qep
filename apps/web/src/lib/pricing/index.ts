@@ -6,7 +6,7 @@
  * implementation details; only the types and top-level entry point are public.
  */
 
-export { calculateQuote, ENGINE_VERSION } from "./calculator";
+export { calculateQuote, ENGINE_VERSION } from "./calculator.ts";
 
 export type {
   PriceQuoteRequest,
@@ -23,7 +23,7 @@ export type {
   MarginResult,
   QuoteContext,
   ProgramFixture,
-} from "./types";
+} from "./types.ts";
 
-export { PricingError } from "./errors";
-export type { PricingErrorCode } from "./errors";
+export { PricingError } from "./errors.ts";
+export type { PricingErrorCode } from "./errors.ts";

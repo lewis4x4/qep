@@ -26,7 +26,7 @@ import type {
   ProgramsResult,
   MarginResult,
   PriceQuoteRequest,
-} from "./types";
+} from "./types.ts";
 
 interface ComputeMarginInput {
   equipmentResult: EquipmentResult;

@@ -14,8 +14,8 @@
  * No floats. Every division boundary uses Math.round().
  */
 
-import type { EquipmentResult, PricedBrand, PricedModel } from "./types";
-import { PricingError } from "./errors";
+import type { EquipmentResult, PricedBrand, PricedModel } from "./types.ts";
+import { PricingError } from "./errors.ts";
 
 interface ComputeEquipmentCostInput {
   model: PricedModel;

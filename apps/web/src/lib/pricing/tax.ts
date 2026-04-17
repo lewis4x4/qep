@@ -13,7 +13,7 @@
  * No floats. Math.round at the multiplication boundary.
  */
 
-import type { TaxResult } from "./types";
+import type { TaxResult } from "./types.ts";
 
 /**
  * @param ratePct  Decimal tax rate (e.g. 0.07 for 7%)

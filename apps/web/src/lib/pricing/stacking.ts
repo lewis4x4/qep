@@ -12,7 +12,7 @@
  * Slice 03: switch to reading qb_program_stacking_rules from the DB.
  */
 
-import type { StackingResult, ProgramFixture } from "./types";
+import type { StackingResult, ProgramFixture } from "./types.ts";
 
 interface ValidateStackingInput {
   financingProgramId?: string;

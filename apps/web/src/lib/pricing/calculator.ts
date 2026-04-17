@@ -36,14 +36,14 @@ import type {
   TaxResult,
   MarginResult,
   QuoteContext,
-} from "./types";
-import { computeEquipmentCost } from "./equipment";
-import { priceAttachments } from "./attachments";
-import { validateStacking } from "./stacking";
-import { applyPrograms } from "./programs";
-import { lookupTax } from "./tax";
-import { computeMargin } from "./margin";
-import { PricingError } from "./errors";
+} from "./types.ts";
+import { computeEquipmentCost } from "./equipment.ts";
+import { priceAttachments } from "./attachments.ts";
+import { validateStacking } from "./stacking.ts";
+import { applyPrograms } from "./programs.ts";
+import { lookupTax } from "./tax.ts";
+import { computeMargin } from "./margin.ts";
+import { PricingError } from "./errors.ts";
 
 export const ENGINE_VERSION = "qep-pricing-engine@1.0.0";
 
