@@ -66,26 +66,25 @@ export function computeEquipmentCost(
   const equipmentCostCents = subtotalWithFreight + tariffCents;
 
   // Step 7: Markup
-  // GMU path: customer price is capped at 8% off list. The equipment cost path
-  // still runs normally; the markup is applied such that the final customer price
-  // does not exceed the GMU cap. If dealerCost × (1 + markup) > cap, flag approval.
+  // GMU path: customer price is fixed at 8% off list (a government pricing tier).
+  // The full cost chain (Steps 2–6) runs normally. We then derive the implied
+  // markup from the difference between the GMU price and equipment cost.
+  // Standard path: apply target markup (or override).
   let markupPct: number;
+  let markupCents: number;
+  let baselineSalesPriceCents: number;
 
   if (customerType === "gmu") {
-    // GMU gives customer 8% off list — it's a customer-facing price tier, not a rebate.
-    // Compute what markup would result in the GMU cap price:
-    const gmuCustomerCap = Math.round(listPriceCents * (1 - 0.08));
-    // Compute implied markup: (cap / cost) - 1
-    const impliedMarkup = gmuCustomerCap / equipmentCostCents - 1;
-    // We still apply the target markup in the breakdown; GMU cap comparison happens in margin.ts
-    markupPct = markupOverride?.markupPct ?? brand.markupTargetPct;
-    void impliedMarkup; // used in margin.ts for approval check
+    // GMU price = list × 0.92 (8% off list, per government pricing tier)
+    const gmuPriceCents = Math.round(listPriceCents * 0.92);
+    markupCents = gmuPriceCents - equipmentCostCents;
+    markupPct = equipmentCostCents > 0 ? markupCents / equipmentCostCents : 0;
+    baselineSalesPriceCents = gmuPriceCents;
   } else {
     markupPct = markupOverride?.markupPct ?? brand.markupTargetPct;
+    markupCents = Math.round(equipmentCostCents * markupPct);
+    baselineSalesPriceCents = equipmentCostCents + markupCents;
   }
-
-  const markupCents = Math.round(equipmentCostCents * markupPct);
-  const baselineSalesPriceCents = equipmentCostCents + markupCents;
 
   return {
     breakdown: {
