@@ -10,14 +10,17 @@
  * No LLM calls. Pure DB + deterministic eligibility logic.
  */
 
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types.ts";
 import type { QuoteContext, ProgramRecommendation } from "./types.ts";
+
+/** Minimal duck-type for a Supabase client — avoids a bare npm import in Deno. */
+interface SupabaseLike {
+  from: (table: string) => any;
+}
 import { isEligible } from "./eligibility.ts";
 
 export async function recommendPrograms(
   context: QuoteContext,
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseLike,
 ): Promise<ProgramRecommendation[]> {
   // Single query: all active programs for this brand that overlap with dealDate.
   // The eligibility function handles the fine-grained date check in TS so we

@@ -11,9 +11,12 @@
  * Rules are bidirectional: if (A, B) is stored, we check both (A,B) and (B,A).
  */
 
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types.ts";
 import type { StackingResult } from "./types.ts";
+
+/** Minimal duck-type for a Supabase client — avoids a bare npm import in Deno. */
+interface SupabaseLike {
+  from: (table: string) => any;
+}
 
 interface StackingInput {
   /** All program IDs the rep has selected */
@@ -36,7 +39,7 @@ interface StackingRuleRow {
 
 export async function validateStackingFromDB(
   input: StackingInput,
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseLike,
 ): Promise<StackingResult> {
   const { programIds, customerType } = input;
 

@@ -16,9 +16,12 @@
  *   overdue — 0 or fewer days (missed the deadline)
  */
 
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types.ts";
 import type { RebateDeadline } from "./types.ts";
+
+/** Minimal duck-type for a Supabase client — avoids a bare npm import in Deno. */
+interface SupabaseLike {
+  from: (table: string) => any;
+}
 
 interface GetDeadlinesParams {
   /** How many days ahead to look. Default 30. */
@@ -29,7 +32,7 @@ interface GetDeadlinesParams {
 
 export async function getUpcomingRebateDeadlines(
   params: GetDeadlinesParams,
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseLike,
 ): Promise<RebateDeadline[]> {
   const daysAhead = params.daysAhead ?? 30;
 
@@ -128,7 +131,7 @@ export async function getUpcomingRebateDeadlines(
  */
 export async function enrichWithProgramDetails(
   deadlines: RebateDeadline[],
-  supabase: ReturnType<typeof createClient<Database>>,
+  supabase: SupabaseLike,
 ): Promise<RebateDeadline[]> {
   // Collect all unique program IDs (currently stored as UUIDs in programs[].name)
   const allIds = [...new Set(deadlines.flatMap((d) => d.programs.map((p) => p.name)))].filter(
@@ -143,7 +146,7 @@ export async function enrichWithProgramDetails(
     .in("id", allIds);
 
   const programMap = new Map(
-    (programRows ?? []).map((p) => [p.id, p]),
+    ((programRows ?? []) as any[]).map((p) => [p.id, p]),
   );
 
   return deadlines.map((d) => {

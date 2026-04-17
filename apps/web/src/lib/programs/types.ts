@@ -11,7 +11,34 @@
  *  - dealDate is a Date object; program.effective_from / effective_to are date strings.
  */
 
-import type { QbProgram, QbProgramType } from "@/types/quote-builder.ts";
+// Inlined from @/types/quote-builder.ts to avoid @/ path alias in Deno edge functions.
+// Keep in sync with QbProgramType in apps/web/src/types/quote-builder.ts.
+export type QbProgramType =
+  | "cash_in_lieu"
+  | "low_rate_financing"
+  | "gmu_rebate"
+  | "aged_inventory"
+  | "bridge_rent_to_sales"
+  | "additional_rebate"
+  | "other";
+
+/** Minimal shape of a qb_programs DB row — only the fields the engine needs. */
+export interface QbProgram {
+  id: string;
+  workspace_id: string;
+  brand_id: string;
+  program_code: string;
+  program_type: string;
+  name: string;
+  effective_from: string; // ISO date string
+  effective_to: string;   // ISO date string
+  details: Record<string, unknown>;
+  source_document_url: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
 
 // ── Context passed to every eligibility / recommender call ───────────────────
 
@@ -127,5 +154,4 @@ export interface StackingResult {
   warnings: string[];
 }
 
-// Re-export the DB row type so callers import from one place
-export type { QbProgram };
+// QbProgram is defined above — no re-export needed.
