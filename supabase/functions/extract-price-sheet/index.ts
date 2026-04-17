@@ -208,7 +208,7 @@ Deno.serve(async (req: Request) => {
   // ── Load price sheet record ───────────────────────────────────────────────
   const { data: sheet, error: sheetErr } = await supabase
     .from("qb_price_sheets")
-    .select("id, brand_id, file_url, file_type, sheet_type, status")
+    .select("id, brand_id, file_url, file_type, sheet_type, status, workspace_id")
     .eq("id", priceSheetId)
     .single();
 
@@ -332,7 +332,7 @@ Deno.serve(async (req: Request) => {
       for (const item of (data.models ?? []) as ExtractedModel[]) {
         const actionResult = await detectModelAction(item, sheet.brand_id, serviceClient as any);
         await serviceClient.from("qb_price_sheet_items").insert({
-          workspace_id: "default",
+          workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
           item_type: "model",
           extracted: item,
@@ -350,7 +350,7 @@ Deno.serve(async (req: Request) => {
       for (const item of (data.attachments ?? []) as ExtractedAttachment[]) {
         const actionResult = await detectAttachmentAction(item, sheet.brand_id, serviceClient as any);
         await serviceClient.from("qb_price_sheet_items").insert({
-          workspace_id: "default",
+          workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
           item_type: "attachment",
           extracted: item,
@@ -368,7 +368,7 @@ Deno.serve(async (req: Request) => {
       for (const item of (data.freight_zones ?? []) as ExtractedFreightZone[]) {
         const actionResult = await detectFreightZoneAction(item, sheet.brand_id, serviceClient as any);
         await serviceClient.from("qb_price_sheet_items").insert({
-          workspace_id: "default",
+          workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
           item_type: "freight",
           extracted: item,
@@ -384,7 +384,7 @@ Deno.serve(async (req: Request) => {
       // Notes
       for (const note of (data.notes ?? []) as string[]) {
         await serviceClient.from("qb_price_sheet_items").insert({
-          workspace_id: "default",
+          workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
           item_type: "note",
           extracted: { note },
@@ -421,7 +421,7 @@ Deno.serve(async (req: Request) => {
         const action = existingProg ? "update" : "create";
 
         await serviceClient.from("qb_price_sheet_programs").insert({
-          workspace_id: "default",
+          workspace_id: sheet.workspace_id as string,
           price_sheet_id: priceSheetId,
           program_code: prog.program_code,
           program_type: prog.program_type,

@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 293: QB Price Sheet Programs — RLS
+-- Migration 296: QB Price Sheet Programs — RLS
 --
 -- RLS on qb_price_sheet_programs (new table from migration 292).
 -- Pattern matches existing qb_price_sheets policies in migration 289:

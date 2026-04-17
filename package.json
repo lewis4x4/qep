@@ -14,6 +14,8 @@
     "build:web": "bun run --filter @qep/web build",
     "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts",
     "dge:mixed-load": "bun ./scripts/dge/mixed-load.ts",
+    "test": "bun test",
+    "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
     "demo:plan": "bun ./scripts/demo/crm-demo-data.mjs plan",
     "demo:seed": "bun ./scripts/demo/crm-demo-data.mjs seed",

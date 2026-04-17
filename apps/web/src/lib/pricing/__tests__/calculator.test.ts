@@ -451,3 +451,104 @@ describe("Fixture 6 — Yanmar ViO55: 7% markup override below 10% floor", () =>
     });
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F6 REGRESSION: commissionCents must never be negative
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("F6 regression — commission is 0 when gross margin is negative", () => {
+  // Construct a degenerate context where equipment cost > sales price:
+  // GMU pricing (8% off list) with a very high freight that pushes cost above price.
+  // list = $10,000 → GMU price = $9,200; inflate freight to $5,000 → cost > $9,200.
+  const ctx: import("../types.ts").QuoteContext = {
+    model: {
+      id: "model-neg",
+      model_code: "NEG-TEST",
+      name_display: "Negative Margin Test Unit",
+      list_price_cents: 1_000_000,
+      frame_size: "large",
+      workspace_id: "default",
+      brand: {
+        id: "brand-neg",
+        code: "NEG",
+        name: "Negative Brand",
+        discount_configured: true,
+        dealer_discount_pct: 0.10,   // small discount
+        markup_target_pct: 0.12,
+        markup_floor_pct: 0.10,
+        tariff_pct: 0.05,
+        pdi_default_cents: 50_000,
+        good_faith_pct: 0.01,
+        attachment_markup_pct: 0.20,
+      },
+    },
+    freightCents: 500_000,  // $5,000 freight — pushes cost well above GMU price
+    freightZone: "FAR_ZONE",
+    taxRatePct: 0.07,
+    programs: [],
+    catalogAttachments: [],
+  };
+
+  const req: import("../types.ts").PriceQuoteRequest = {
+    equipmentModelId: "model-neg",
+    customerType: "gmu",
+    gmuDetails: { agencyType: "state" },
+    deliveryState: "FL",
+    taxExempt: true,
+  };
+
+  const result = calculateQuote(req, ctx);
+
+  it("grossMarginCents is negative in this scenario", () => {
+    expect(result.grossMarginCents).toBeLessThan(0);
+  });
+
+  it("commissionCents is 0, not negative (F6 fix)", () => {
+    expect(result.commissionCents).toBe(0);
+  });
+
+  it("requiresApproval is true (markup below floor)", () => {
+    expect(result.requiresApproval).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F11: DISCOUNT_NOT_CONFIGURED guard — must throw PricingError for unconfigured brands
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("F11 — DISCOUNT_NOT_CONFIGURED guard", () => {
+  // Forestry brands ship with discount_configured = false until Angela sets rates.
+  // The Bandit CTX4 fixture overrides to true for pricing tests; here we flip it back.
+  const unconfiguredCtx: import("../types").QuoteContext = {
+    ...CTX4,
+    model: {
+      ...CTX4.model,
+      brand: {
+        ...CTX4.model.brand,
+        discount_configured: false,
+      },
+    },
+  };
+
+  it("throws a PricingError with code DISCOUNT_NOT_CONFIGURED", () => {
+    expect(() => calculateQuote(REQ4, unconfiguredCtx)).toThrow();
+  });
+
+  it("error code is exactly DISCOUNT_NOT_CONFIGURED", () => {
+    try {
+      calculateQuote(REQ4, unconfiguredCtx);
+      throw new Error("Expected calculateQuote to throw");
+    } catch (err: unknown) {
+      // PricingError exposes .code as a property
+      expect((err as { code?: string }).code).toBe("DISCOUNT_NOT_CONFIGURED");
+    }
+  });
+
+  it("error message mentions the brand name", () => {
+    try {
+      calculateQuote(REQ4, unconfiguredCtx);
+    } catch (err: unknown) {
+      expect((err as Error).message).toMatch(/Bandit/);
+    }
+  });
+});

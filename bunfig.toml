@@ -1,0 +1,15 @@
+# bunfig.toml — Bun configuration for QEP monorepo
+#
+# F12 fix: bare `bun test` from the repo root was hanging because Bun walked
+# supabase/functions/_shared/*.test.ts, which import Deno-only APIs (Deno.env,
+# Deno.serve, jsr: imports). Bun doesn't provide Deno globals — the import
+# chain blocks without a clear error.
+#
+# Solution: scope bun test to apps/ by default. Edge function tests require
+# Deno and must be run via `bun run test:edge:*` scripts (which delegate to deno).
+#
+# To run ALL scoped tests: bun test (uses this root config)
+# To run edge function tests: bun run test:edge:dge (or equivalent deno commands)
+
+[test]
+root = "apps"

@@ -220,7 +220,7 @@ export function applyPrograms(input: ApplyProgramsInput): ProgramsResult {
 
 /**
  * Monthly payment in cents.
- * At 0%: simple division (floor per Slice 02 spec "For 0%: payment = financed / term_months").
+ * At 0%: simple division (Math.round per Slice 02 spec "For 0%: payment = financed / term_months").
  * At non-0%: standard amortization — P × r / (1 − (1+r)^−n), where r = monthly rate.
  * Always Math.round — never a float in the output.
  */

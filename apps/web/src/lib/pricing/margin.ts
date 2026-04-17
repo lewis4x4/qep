@@ -62,8 +62,10 @@ export function computeMargin(input: ComputeMarginInput): MarginResult {
   const markupAchievedPct =
     dealerCostTotalCents > 0 ? grossMarginCents / dealerCostTotalCents : 0;
 
-  // Commission — always floor (spec: "never overpay")
-  const commissionCents = Math.floor(grossMarginCents * 0.15);
+  // Commission — always floor (spec: "never overpay"). Clamped at 0: a negative
+  // gross margin means the deal loses money; commission is $0, not negative.
+  // F6 fix: Math.max(0, ...) prevents negative commission display in the UI.
+  const commissionCents = Math.max(0, Math.floor(grossMarginCents * 0.15));
 
   // ── Approval checks ──────────────────────────────────────────────────────
   const approvalReasons: string[] = [];
