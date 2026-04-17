@@ -156,11 +156,16 @@ Deno.serve(async (req: Request) => {
         : freightZone.large_frame_cents;
 
     // ── 3. Active programs for this brand ─────────────────────────────────
+    // F1 fix: qb_programs uses `active` (not `is_active`), `effective_from`/`effective_to` (not start_date/end_date).
+    // F4 fix: add date-window filter so expired or future programs are excluded from quotes.
+    const today = new Date().toISOString().slice(0, 10);
     const { data: programRows, error: progErr } = await supabase
       .from("qb_programs")
-      .select("id, program_type, name, brand_id, is_active, start_date, end_date, details")
+      .select("id, program_type, name, brand_id, active, effective_from, effective_to, details")
       .eq("brand_id", brand.id)
-      .eq("is_active", true)
+      .eq("active", true)
+      .lte("effective_from", today)
+      .or(`effective_to.is.null,effective_to.gte.${today}`)
       .is("deleted_at", null);
 
     if (progErr) {
@@ -176,9 +181,9 @@ Deno.serve(async (req: Request) => {
       programType: r.program_type as ProgramFixture["programType"],
       name: r.name as string,
       brandId: r.brand_id as string,
-      isActive: r.is_active as boolean,
-      startDate: r.start_date as string,
-      endDate: r.end_date as string | null,
+      isActive: r.active as boolean,
+      startDate: r.effective_from as string,
+      endDate: r.effective_to as string | null,
       details: (r.details ?? {}) as Record<string, unknown>,
     }));
 

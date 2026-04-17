@@ -263,6 +263,50 @@ async function applyFreight(
 }
 
 /** Apply a single program to the catalog. */
+/**
+ * F5 fix: normalize `low_rate_financing` program details from the nested-array
+ * shape that Claude extracts (details.terms[], details.lenders[]) to the flat
+ * scalar shape that the pricing engine reads (term_months, rate_pct,
+ * dealer_participation_pct, lender_name). The original arrays are preserved
+ * under details.all_terms and details.all_lenders so nothing is lost.
+ *
+ * Selection rule: pick the term with the lowest rate_pct; break ties by
+ * preferring term months closest to 60. This gives the "headline" term for
+ * calculator display while all terms remain available for the UI.
+ */
+function normalizeFinancingDetails(raw: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(raw.terms) || raw.terms.length === 0) return raw;
+
+  const terms = raw.terms as Array<{
+    months?: number;
+    rate_pct?: number;
+    dealer_participation_pct?: number;
+  }>;
+
+  // Sort: lowest rate first; tie-break by closest to 60 months
+  const sorted = [...terms].sort((a, b) => {
+    const rateDiff = (a.rate_pct ?? 0) - (b.rate_pct ?? 0);
+    if (rateDiff !== 0) return rateDiff;
+    return Math.abs((a.months ?? 60) - 60) - Math.abs((b.months ?? 60) - 60);
+  });
+  const primary = sorted[0];
+
+  const lenders = Array.isArray(raw.lenders) ? raw.lenders : [];
+  const primaryLender = (lenders[0] as Record<string, unknown> | undefined) ?? {};
+
+  return {
+    ...raw,
+    // Flat scalars the calculator reads:
+    term_months: primary.months ?? 60,
+    rate_pct: primary.rate_pct ?? 0,
+    dealer_participation_pct: primary.dealer_participation_pct ?? 0,
+    lender_name: (primaryLender.name as string | undefined) ?? "Manufacturer Financing",
+    // Preserve originals so nothing is lost:
+    all_terms: terms,
+    all_lenders: lenders,
+  };
+}
+
 async function applyProgram(
   prog: PriceSheetProgram,
   sheet: PriceSheetRow,
@@ -275,6 +319,12 @@ async function applyProgram(
     sheet.effective_to ??
     new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  // Normalize details: flatten financing term arrays → scalar fields the calculator needs
+  let details: Record<string, unknown> = ext.details ?? {};
+  if (prog.program_type === "low_rate_financing") {
+    details = normalizeFinancingDetails(details);
+  }
+
   if (prog.action === "create") {
     const { data, error } = await serviceClient
       .from("qb_programs")
@@ -286,7 +336,7 @@ async function applyProgram(
         name: ext.name ?? prog.program_code,
         effective_from: effectiveFrom,
         effective_to: effectiveTo,
-        details: ext.details ?? {},
+        details,
         active: true,
       })
       .select("id")
@@ -302,7 +352,7 @@ async function applyProgram(
       active: true,
     };
     if (ext.name) updates.name = ext.name;
-    if (ext.details) updates.details = ext.details;
+    if (ext.details) updates.details = details; // use normalized details
 
     const { error } = await serviceClient
       .from("qb_programs")
@@ -352,20 +402,28 @@ Deno.serve(async (req: Request) => {
     return safeJsonError(`Price sheet not found: ${priceSheetId}`, 404, origin);
   }
 
-  if (sheet.status !== "extracted") {
+  // F3 fix: replace two-step status-check + flip (TOCTOU race) with a single
+  // conditional UPDATE. Only one concurrent caller can win the CAS; the other
+  // will see 0 rows updated and receive 409 without ever touching the catalog.
+  const { data: claim, error: claimErr } = await supabase
+    .from("qb_price_sheets")
+    .update({ status: "extracting" })
+    .eq("id", priceSheetId)
+    .eq("status", "extracted")
+    .select("id")
+    .maybeSingle();
+
+  if (claimErr) {
+    return safeJsonError(`Failed to claim publish slot: ${claimErr.message}`, 500, origin);
+  }
+  if (!claim) {
+    // Either already publishing or not in 'extracted' state — safe 409.
     return safeJsonError(
-      `Sheet status must be 'extracted' to publish; current status: '${sheet.status}'`,
+      `Sheet is not in 'extracted' state or a publish is already in flight for sheet ${priceSheetId}`,
       409,
       origin,
     );
   }
-
-  // Optimistic in-progress guard: flip status to 'extracting' so a second
-  // concurrent publish request sees a non-'extracted' status and returns 409.
-  await supabase
-    .from("qb_price_sheets")
-    .update({ status: "extracting" })
-    .eq("id", priceSheetId);
 
   // Service client for catalog writes (bypasses RLS)
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

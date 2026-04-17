@@ -41,20 +41,29 @@ interface BridgeDetails {
 export function isEligible(program: QbProgram, context: QuoteContext): EligibilityResult {
   // ── Date window ─────────────────────────────────────────────────────────────
   const from = new Date(program.effective_from);
-  const to   = new Date(program.effective_to);
-  // effective_to is inclusive — set time to end of day for comparison
-  to.setUTCHours(23, 59, 59, 999);
-
-  if (context.dealDate < from || context.dealDate > to) {
-    const fromStr = program.effective_from;
-    const toStr   = program.effective_to;
+  if (context.dealDate < from) {
     return {
       eligible: false,
       reasons: [
-        `This program ran from ${fromStr} to ${toStr} — it's not active on ` +
+        `This program doesn't start until ${program.effective_from} — it's not active on ` +
         `${context.dealDate.toISOString().split("T")[0]}. Ask Angela about the current quarter's programs.`,
       ],
     };
+  }
+  // effective_to null = open-ended program; skip end-date check
+  if (program.effective_to !== null) {
+    const to = new Date(program.effective_to);
+    // effective_to is inclusive — set time to end of day for comparison
+    to.setUTCHours(23, 59, 59, 999);
+    if (context.dealDate > to) {
+      return {
+        eligible: false,
+        reasons: [
+          `This program ran from ${program.effective_from} to ${program.effective_to} — it's not active on ` +
+          `${context.dealDate.toISOString().split("T")[0]}. Ask Angela about the current quarter's programs.`,
+        ],
+      };
+    }
   }
 
   // ── Brand match ─────────────────────────────────────────────────────────────

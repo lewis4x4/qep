@@ -33,7 +33,7 @@ export async function recommendPrograms(
     .eq("brand_id", context.brandId)
     .eq("active", true)
     .lte("effective_from", dealIso)
-    .gte("effective_to", dealIso);
+    .or(`effective_to.is.null,effective_to.gte.${dealIso}`);
 
   if (error) {
     throw new Error(`Failed to load programs for brand ${context.brandId}: ${error.message}`);
