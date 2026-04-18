@@ -13177,6 +13177,72 @@ export type Database = {
           },
         ]
       }
+      qb_ai_request_log: {
+        Row: {
+          confidence: Json | null
+          created_at: string
+          customer_type: string | null
+          delivery_state: string | null
+          error: string | null
+          id: string
+          latency_ms: number | null
+          model_candidates: Json | null
+          prompt_source: string
+          raw_prompt: string
+          resolved_brand_id: string | null
+          resolved_model_id: string | null
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          confidence?: Json | null
+          created_at?: string
+          customer_type?: string | null
+          delivery_state?: string | null
+          error?: string | null
+          id?: string
+          latency_ms?: number | null
+          model_candidates?: Json | null
+          prompt_source?: string
+          raw_prompt: string
+          resolved_brand_id?: string | null
+          resolved_model_id?: string | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          confidence?: Json | null
+          created_at?: string
+          customer_type?: string | null
+          delivery_state?: string | null
+          error?: string | null
+          id?: string
+          latency_ms?: number | null
+          model_candidates?: Json | null
+          prompt_source?: string
+          raw_prompt?: string
+          resolved_brand_id?: string | null
+          resolved_model_id?: string | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_ai_request_log_resolved_brand_id_fkey"
+            columns: ["resolved_brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_ai_request_log_resolved_model_id_fkey"
+            columns: ["resolved_model_id"]
+            isOneToOne: false
+            referencedRelation: "qb_equipment_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_attachments: {
         Row: {
           acquired_at: string | null
@@ -13285,6 +13351,7 @@ export type Database = {
           default_markup_pct: number
           discount_configured: boolean
           good_faith_pct: number
+          has_inbound_freight_key: boolean
           id: string
           markup_floor_pct: number
           name: string
@@ -13303,6 +13370,7 @@ export type Database = {
           default_markup_pct: number
           discount_configured?: boolean
           good_faith_pct?: number
+          has_inbound_freight_key?: boolean
           id?: string
           markup_floor_pct?: number
           name: string
@@ -13321,6 +13389,7 @@ export type Database = {
           default_markup_pct?: number
           discount_configured?: boolean
           good_faith_pct?: number
+          has_inbound_freight_key?: boolean
           id?: string
           markup_floor_pct?: number
           name?: string
@@ -13707,13 +13776,96 @@ export type Database = {
           },
         ]
       }
+      qb_internal_freight_rules: {
+        Row: {
+          created_at: string
+          distance_from_miles: number | null
+          distance_to_miles: number | null
+          id: string
+          priority: number
+          rate_amount_cents: number
+          rate_type: string
+          updated_at: string
+          weight_from_lbs: number | null
+          weight_to_lbs: number | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          distance_from_miles?: number | null
+          distance_to_miles?: number | null
+          id?: string
+          priority?: number
+          rate_amount_cents: number
+          rate_type: string
+          updated_at?: string
+          weight_from_lbs?: number | null
+          weight_to_lbs?: number | null
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          distance_from_miles?: number | null
+          distance_to_miles?: number | null
+          id?: string
+          priority?: number
+          rate_amount_cents?: number
+          rate_type?: string
+          updated_at?: string
+          weight_from_lbs?: number | null
+          weight_to_lbs?: number | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
+      qb_notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          read_at: string | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          read_at?: string | null
+          title: string
+          type: string
+          updated_at?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          read_at?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       qb_price_sheet_items: {
         Row: {
           action: string
           applied_at: string | null
           confidence: number | null
           created_at: string
+          diff: Json | null
           extracted: Json
+          extraction_metadata: Json | null
           id: string
           item_type: string
           price_sheet_id: string
@@ -13728,7 +13880,9 @@ export type Database = {
           applied_at?: string | null
           confidence?: number | null
           created_at?: string
+          diff?: Json | null
           extracted: Json
+          extraction_metadata?: Json | null
           id?: string
           item_type: string
           price_sheet_id: string
@@ -13743,7 +13897,9 @@ export type Database = {
           applied_at?: string | null
           confidence?: number | null
           created_at?: string
+          diff?: Json | null
           extracted?: Json
+          extraction_metadata?: Json | null
           id?: string
           item_type?: string
           price_sheet_id?: string
@@ -13777,6 +13933,75 @@ export type Database = {
           },
         ]
       }
+      qb_price_sheet_programs: {
+        Row: {
+          action: string
+          applied_at: string | null
+          confidence: number | null
+          created_at: string
+          diff: Json | null
+          extracted: Json
+          extraction_metadata: Json | null
+          id: string
+          price_sheet_id: string
+          program_code: string
+          program_type: string
+          proposed_program_id: string | null
+          review_status: string
+          reviewer_notes: string | null
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          diff?: Json | null
+          extracted: Json
+          extraction_metadata?: Json | null
+          id?: string
+          price_sheet_id: string
+          program_code: string
+          program_type: string
+          proposed_program_id?: string | null
+          review_status?: string
+          reviewer_notes?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          action?: string
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          diff?: Json | null
+          extracted?: Json
+          extraction_metadata?: Json | null
+          id?: string
+          price_sheet_id?: string
+          program_code?: string
+          program_type?: string
+          proposed_program_id?: string | null
+          review_status?: string
+          reviewer_notes?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_price_sheet_programs_price_sheet_id_fkey"
+            columns: ["price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheet_programs_proposed_program_id_fkey"
+            columns: ["proposed_program_id"]
+            isOneToOne: false
+            referencedRelation: "qb_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_price_sheets: {
         Row: {
           brand_id: string | null
@@ -13792,6 +14017,7 @@ export type Database = {
           published_at: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          sheet_type: string | null
           status: string
           supersedes_price_sheet_id: string | null
           updated_at: string
@@ -13813,6 +14039,7 @@ export type Database = {
           published_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          sheet_type?: string | null
           status?: string
           supersedes_price_sheet_id?: string | null
           updated_at?: string
@@ -13834,6 +14061,7 @@ export type Database = {
           published_at?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          sheet_type?: string | null
           status?: string
           supersedes_price_sheet_id?: string | null
           updated_at?: string
@@ -14345,6 +14573,30 @@ export type Database = {
           id?: string
           record_id?: string
           snapshot?: Json | null
+        }
+        Relationships: []
+      }
+      qb_service_credit_config: {
+        Row: {
+          category: string
+          credit_cents: number
+          travel_budget_cents: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          category: string
+          credit_cents: number
+          travel_budget_cents: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          category?: string
+          credit_cents?: number
+          travel_budget_cents?: number
+          updated_at?: string
+          workspace_id?: string
         }
         Relationships: []
       }
@@ -27577,6 +27829,10 @@ export type Database = {
         Args: { p_event_id: string; p_run_id: string }
         Returns: undefined
       }
+      mark_notification_read: {
+        Args: { p_notification_id: string }
+        Returns: undefined
+      }
       mark_replenish_ordered: {
         Args: { p_ids: string[]; p_po_reference?: string }
         Returns: Json
@@ -27776,6 +28032,21 @@ export type Database = {
       pricing_suggestions_generate: {
         Args: { p_rule_id?: string }
         Returns: Json
+      }
+      qb_search_equipment_fuzzy: {
+        Args: { p_brand_id?: string; p_limit?: number; p_query: string }
+        Returns: {
+          brand_code: string
+          brand_id: string
+          brand_name: string
+          family: string
+          id: string
+          list_price_cents: number
+          model_code: string
+          model_year: number
+          name_display: string
+          similarity: number
+        }[]
       }
       qrm_company_fk_columns: {
         Args: never
@@ -28716,5 +28987,5 @@ export const Constants = {
     },
   },
 } as const
-
-export type UserRole = Database["public"]["Enums"]["user_role"]
+A new version of Supabase CLI is available: v2.90.0 (currently installed v2.84.2)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
