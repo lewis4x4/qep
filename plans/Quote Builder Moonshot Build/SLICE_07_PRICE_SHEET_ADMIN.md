@@ -1,386 +1,109 @@
 # SLICE 07 — Price Sheet Admin + Freight Zones + Discount Cleanup
 
-**Status:** Planned. Awaiting owner Q&A before execution.
+**Status:** Planned — owner Q&A resolved 2026-04-18. Ready for execution on GO.
 
-**Depends on:** Slice 06 (Admin UI Polish) — shipped 2026-04-18 at `ebed3f4`. PR #2 merged.  
-Post-PR cleanup commit: `b4cdea4` (migration allowlist, main branch).
+**Depends on:** Slice 06 (Admin UI Polish) — shipped 2026-04-18 at `ebed3f4`. PR #2 merged.
+Post-PR cleanup: `b4cdea4` (migration allowlist, main).
 
 **Branch:** `claude/qep-qb-07-price-sheet-admin`
+**Next migration:** 301
 
-**Source of truth:** This document reflects repo state after Slice 06 landed and a thorough
-read-only audit run on 2026-04-18. All table names, column names, and component paths are
-verified against the live codebase. Next migration number: **301**.
-
----
-
-## Scope Questions — Need Answer Before Execution
-
-Mark each resolved answer below before execution starts.
-
-| # | Question | Stakes | Resolution |
-|---|---|---|---|
-| Q1 | **Price sheet page scope: read-only dashboard or full upload+review pipeline?** See §Q1 | Scope size 2x difference | Pending |
-| Q2 | **Freight zone UI depth: read-only viewer or full CRUD?** See §Q2 | Scope size | Pending |
-| Q3 | **`discount_configured` fix approach: error-message-only vs. expose toggle in UI?** See §Q3 | 1 day vs. 3 days | Pending |
-| Q4 | **`qb_quotes.originating_log_id` FK — ship in Slice 07 or defer?** See §Q4 | Minimal schema + wire-up | Pending |
-| Q5 | **Who reviews extracted price sheet items and approves publish?** See §Q5 | Gating and UX design | Pending |
+**Source of truth:** All table names, column names, and component paths verified against the
+live codebase. Owner Q&A resolved 2026-04-18 (answers folded in below).
 
 ---
 
-## Q&A Detail
+## Resolved Q&A
 
-### Q1 — Price sheet page scope
-
-**Background:**  
-`PriceSheetsPage.tsx` **does not exist**. The Slice 06 plan's Q6 resolution said "extend the
-existing PriceSheetsPage.tsx — no new page," but the page was never built in Slice 04 either.
-The existing infrastructure (created in Slice 04) is:
-
-- `apps/web/src/lib/pricing/price-sheet-reminders.ts` — computes per-brand freshness urgency
-  from `qb_price_sheets` where `status='published'`. Covers ASV (quarterly programs + annual
-  price book), YANMAR (quarterly programs), DEVELON (quarterly programs), all others (6-month).
-- `supabase/functions/extract-price-sheet/` — edge function: receives file + brand_id, sends
-  to Claude for extraction, writes `qb_price_sheet_items` / `qb_price_sheet_programs` rows
-  with `review_status='pending'`.
-- `supabase/functions/publish-price-sheet/` — edge function: applies approved items to catalog
-  (`qb_equipment_models`, `qb_attachments`, `qb_freight_zones`, `qb_programs`), marks sheet
-  `status='published'`.
-
-**Option A — Read-only freshness dashboard (smallest scope, ~2 days):**  
-Build `PriceSheetsPage.tsx` showing a table of all 13 brands with: brand name, category,
-sheet type (price_book / retail_programs), last published date, urgency badge
-(overdue / upcoming / current). Uses `getPendingUpdates()` from `price-sheet-reminders.ts`.
-No upload UI. Angela sees the status board and uploads sheets via Supabase dashboard or a
-future slice's upload UI.
-
-**Option B — Status dashboard + file upload trigger (~4 days):**  
-Option A plus a drag-drop file upload component per brand that calls `extract-price-sheet`
-and creates a `qb_price_sheets` row with `status='pending_review'`. No review UI yet —
-Angela still approves via Supabase dashboard.
-
-**Option C — Full pipeline: upload + review + publish (~8 days):**  
-Option B plus a review/approval UI for `qb_price_sheet_items` and
-`qb_price_sheet_programs`: paginated table of extracted rows, approve/reject/modify per
-row, bulk-approve-all, then publish. This is the complete admin experience.
-
-**Recommended:** Option A for Slice 07 (unblocks the metric visibility Brian asked for),
-Option B+C planned for Slice 08. But owner decides.
-
----
-
-### Q2 — Freight zone UI depth
-
-**Background:**  
-`qb_freight_zones` schema (migration 284):
-
-```
-brand_id         uuid  → qb_brands.id
-zone_name        text  (e.g. "FL")
-state_codes      text[] (e.g. ['FL'])
-freight_large_cents  bigint
-freight_small_cents  bigint
-effective_from   date
-effective_to     date
-```
-
-Currently **1 row**: ASV / FL / $1,942 large / $777 small / effective 2026-01-01.
-
-The `FALLBACK_FREIGHT_CENTS = 194200` hardcode in `supabase/functions/qb-ai-scenarios/index.ts`
-is not a fake stub — it IS the real ASV FL rate from seed data. The fallback fires when
-`qb_freight_zones` has no matching row for a given brand+state combination. As Angela uploads
-more brands' price sheets (Yanmar, Develon, etc.), new zones are written by `publish-price-sheet`.
-The hardcode becomes less relevant over time but is never wrong for ASV/FL.
-
-**Option A — Read-only zone viewer (~0.5 days):**  
-A table within PriceSheetsPage (or DealEconomicsPage tab) showing current zones:
-brand, zone name, states, large rate, small rate, effective dates. No add/edit/delete.
-Admin can see what's seeded. Useful for audit but not for Angela entering zones manually.
-
-**Option B — Full CRUD UI (~2 days):**  
-Add/edit/delete freight zones per brand. Includes a state-codes multi-select, rate inputs
-in dollars (convert to cents), effective date range. RLS already supports write for
-admin/manager/owner (migration 289). DELETE RLS was flagged as unverified in Slice 06 R3 —
-confirm before enabling delete in UI.
-
-**Note on DELETE RLS (Slice 06 R3 carry-forward):** `289_qb_rls.sql` policy for
-`qb_freight_zones` uses `FOR ALL` for the write policy (line 83-84), which covers DELETE
-at the Postgres policy level. Verify in `289_qb_rls.sql` before enabling UI delete.
-
-**Recommended:** Option A is sufficient for Slice 07 if upload pipeline is also deferred.
-Option B ships alongside or after the upload pipeline (once zones are being created by
-published price sheets, Angela needs to edit/correct them).
-
----
-
-### Q3 — `discount_configured` cleanup
-
-**Background:**  
-`qb_brands.discount_configured boolean` — 3 construction brands = true, 10 forestry/other = false.
-
-**Readers (verified):**
-- `apps/web/src/lib/pricing/calculator.ts:70` — throws `DISCOUNT_NOT_CONFIGURED` error
-- `supabase/functions/qb-calculate/index.ts:236` — passes flag to calculator
-- `supabase/functions/qb-ai-scenarios/index.ts:315` — surfaces non-fatal error if false
-- `apps/web/src/lib/pricing/types.ts:323` — type definition
-- `apps/web/src/lib/database.types.ts:13352` — generated type
-
-**The flag is still semantically correct.** It gates brands where QEP has not yet configured
-their pricing inputs. Slice 06 replaced the *label* (discount % → deal economics) but the
-*guard* is still needed — Angela hasn't set up forestry brand rate inputs yet.
-
-**The problem:** The error message `DISCOUNT_NOT_CONFIGURED` and the column name are
-confusing to anyone reading the code post-Slice 06. The Slice 06 plan flagged this
-(R2) but explicitly deferred.
-
-**Option A — Error message update only (~0.5 days, cheapest):**  
-No migration. Update error message in `qb-calculate` and `qb-ai-scenarios` from
-"Discount not configured for this brand" → "Deal engine not yet configured for this brand
-(contact admin)". Optionally add `COMMENT ON COLUMN` in migration 301. No rename of
-column or error code. No UI surface.
-
-**Option B — Column rename to `deal_engine_enabled` (~2 days):**  
-Migration 301: `ALTER TABLE qb_brands RENAME COLUMN discount_configured TO deal_engine_enabled`.
-Update 10 callsites: `calculator.ts`, `qb-calculate`, `qb-ai-scenarios`, `types.ts`,
-`database.types.ts`, 7 test fixtures. High change count, zero functional gain. Not recommended.
-
-**Option C — Add toggle to DealEconomicsPage > new "Brand Engine Status" tab (~1.5 days):**  
-Keep column name as-is. Add a fourth tab to the existing `DealEconomicsPage` (which already
-has Service Credits / Internal Freight Rules / Brand Freight Keys tabs). New tab shows
-all 13 brands with a toggle: "Deal engine enabled" (backed by `discount_configured`).
-Angela can flip forestry brands to `true` once she has configured their pricing inputs.
-This is the highest operator value of the three options — it surfaces the flag as a product
-concept rather than leaving it buried.
-
-**Recommended:** Option A + Option C. Ship Option A immediately (error message), Option C
-as part of the DealEconomicsPage extension in this slice.
-
----
-
-### Q4 — `qb_quotes.originating_log_id` FK
-
-**Background:**  
-Slice 06 R4 identified this gap: `qb_ai_request_log` has no FK to `qb_quotes`, so
-`AiRequestLogPage` cannot compute accurate "time from AI parse to quote sent" — it would
-require heuristic correlation (wrong). The clean fix is:
-
-```sql
--- In migration 301:
-alter table public.qb_quotes
-  add column if not exists originating_log_id uuid
-    references public.qb_ai_request_log(id) on delete set null;
-```
-
-`qb-ai-scenarios` writes this when it creates/updates a quote from a scenario.
-
-**Option A — Ship in Slice 07 (schema only, ~0.5 days):**  
-Add the column in migration 301. Wire `qb-ai-scenarios` to set `originating_log_id` when
-a quote is created from a session. `AiRequestLogPage` can then show a "→ Quote" link and
-compute time-to-quote accurately. No UI change needed beyond adding a column to the log table.
-
-**Option B — Defer to Slice 08:**  
-AiRequestLogPage shows "—" for time-to-quote (already the documented behavior). No migration.
-
-**Recommended:** Option A — it's a small schema change that pays off immediately in
-the log UI without complicating this slice.
-
----
-
-### Q5 — Who reviews extracted price sheet items?
-
-**Background:**  
-When Angela uploads a price sheet and `extract-price-sheet` runs, it populates
-`qb_price_sheet_items` and `qb_price_sheet_programs` with `review_status='pending'`.
-`publish-price-sheet` requires items to be approved before applying them. Currently no
-frontend review UI exists — approval requires direct DB access.
-
-**Question:** Who approves? Angela alone? Any admin/manager/owner? Is there a need for a
-review UI in Slice 07, or is Supabase dashboard access sufficient for now?
-
-This question gates whether Option B or C in Q1 is the right scope for the pipeline.
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Price sheet pipeline depth | **B — upload UI + auto-publish.** Angela drag-drops a file; `extract-price-sheet` runs; extracted items auto-approve (`review_status='approved'`); `publish-price-sheet` runs immediately. No human review UI this slice. |
+| Q2 | Freight zone UI depth | **B — full CRUD.** Add/edit/delete zones per brand. Lives as a tab within `PriceSheetsPage`. Matches Slice 06 Deal Economics editability pattern. |
+| Q3 | `discount_configured` cleanup | **A + C.** Update error messages in both edge functions AND add "Brand Engine Status" tab to `DealEconomicsPage`. **Column name stays `discount_configured`** — grepping shows 14 product-code files reference it, above the 10-file rename threshold. UI label = "Deal Engine Enabled". |
+| Q4 | `qb_quotes.originating_log_id` FK | **Yes.** Ship in migration 301. Wire `qb-ai-scenarios` to populate it. Unlocks real time-to-quote in AiRequestLogPage. |
+| Q5 | Review UI for extracted items | **Skip.** `publish-price-sheet` auto-approves all extracted items on publish. Revisit if extraction quality requires eval data. |
 
 ---
 
 ## Objective
 
-Build the admin UI layer that makes the Quote Builder's data pipeline observable and
-manageable by Angela/Rylee without requiring database access. Slice 06 delivered deal
-economics configuration. Slice 07 delivers visibility and control over:
+Build the admin UI that makes the Quote Builder pipeline observable and self-serviceable
+by Angela/Rylee without Supabase dashboard access. Three gaps closed:
 
-1. Price sheet freshness — which brands are current, overdue, or missing
-2. Freight zone data — what inbound freight rates exist per brand
-3. Deal engine enablement — which brands are ready for the quote engine
+1. **Price sheet pipeline surface** — upload a file, extraction + publish happen automatically,
+   freshness status is visible per brand.
+2. **Freight zone CRUD** — Angela can add/edit/delete inbound freight rates per brand as new
+   price sheets are ingested.
+3. **Deal engine enablement** — the 10 forestry/other brands blocked from quoting get a
+   visible toggle; error messages no longer say "discount not configured."
 
 ---
 
 ## Why This Slice
 
-The pipeline built in Slices 01–06 is operationally dark:
-- Angela cannot see which brand price sheets are current or overdue without querying the DB
-- There is no UI to upload price sheets and trigger the Claude extraction pipeline
-- The 10 forestry/other brands are silently blocked from quoting with no clear admin path to unblock them
-- `qb_freight_zones` has 1 row (ASV/FL); every other brand falls back to a hardcoded rate
-- The `qb_ai_request_log` "time-to-quote" metric shows "—" for all rows
+Slices 01–06 built a complete backend pipeline (extract → review → publish) and deal
+economics configuration, but the pipeline is entirely dark to Angela:
+
+- `PriceSheetsPage.tsx` **does not exist** (Slice 04 never built it; Slice 06 deferred it).
+- No UI to upload a price sheet and trigger Claude extraction.
+- `qb_freight_zones` has 1 row (ASV/FL); every non-ASV, non-FL quote falls back to a
+  hardcoded $1,942 rate.
+- 10 brands are silently blocked from quoting with a confusing "DISCOUNT_NOT_CONFIGURED"
+  error that references a concept QEP doesn't use.
+- `AiRequestLogPage` shows "—" for time-to-quote because no FK links log rows to quotes.
 
 ---
 
-## In-Scope Items (pending Q&A resolution)
+## Key Design Decisions (locked)
 
-### Item 1 — `PriceSheetsPage.tsx` (new page, admin-gated)
+### Auto-publish pipeline (Q1=B, Q5=skip)
 
-**Route:** `/admin/price-sheets`  
-**Role gate:** `["admin", "manager", "owner"]` (matches pattern in `App.tsx:2296`)  
-**File:** `apps/web/src/features/admin/pages/PriceSheetsPage.tsx`
+Upload flow:
+1. Angela drags a file onto a brand's upload zone in `PriceSheetsPage`.
+2. Frontend calls `extract-price-sheet` (existing edge function) → creates a
+   `qb_price_sheets` row (`status='pending_review'`), streams extraction.
+3. Frontend polls `qb_price_sheets.status` until `status='extracted'`.
+4. Frontend calls `publish-price-sheet` with an `auto_approve=true` flag.
+5. `publish-price-sheet` sets all associated `qb_price_sheet_items` /
+   `qb_price_sheet_programs` rows to `review_status='approved'`, then applies them
+   to the catalog (`qb_equipment_models`, `qb_attachments`, `qb_freight_zones`, `qb_programs`)
+   and marks `status='published'`.
 
-**Minimum viable (Option A from Q1):**
+`publish-price-sheet` already handles the apply logic. The only new behavior is the
+`auto_approve` flag that skips the human review gate.
 
-A table of all brands tracked in `CADENCE_RULES` plus any brand with an existing
-`qb_price_sheets` row, showing:
+### Column rename decision (Q3)
 
-| Column | Source |
-|---|---|
-| Brand | `qb_brands.name` |
-| Category | `qb_brands.category` |
-| Sheet type | `retail_programs` / `price_book` / `both` |
-| Last published | `qb_price_sheets.published_at` (most recent where status='published') |
-| Urgency badge | `computeUrgency()` from `price-sheet-reminders.ts` |
-| Expected period | Q2 2026 / Annual 2026 / etc. |
+`discount_configured` touches **14 product-code files** (2 edge functions, 3 source files,
+1 type file, 1 errors file, 1 test file, 6 test fixtures) — above the 10-file threshold.
+**No rename.** The column stays `discount_configured`; the UI surfaces it as
+"Deal Engine Enabled". Error code `DISCOUNT_NOT_CONFIGURED` in `errors.ts` stays;
+only the human-readable message strings in the two edge functions change.
 
-Urgency badge colors:
-- `overdue` → destructive/red
-- `upcoming` → warning/amber  
-- `current` → success/green
-- No data → muted/gray ("Never uploaded")
+### Freight zone CRUD placement
 
-**Acceptance criteria:**
-- [ ] Page renders at `/admin/price-sheets`, gated to admin/manager/owner
-- [ ] All 13 brands visible (not just those with cadence rules — include brands with no rules using 6-month fallback)
-- [ ] Urgency badges compute correctly (use `getPendingUpdates()` + a supplementary all-brands query)
-- [ ] "Last published" shows relative date ("3 months ago") with full ISO date in tooltip
-- [ ] Empty state: "No price sheets uploaded yet" for brands with no rows
-- [ ] Route registered in `App.tsx` following the `/admin/deal-economics` pattern
-- [ ] Nav link added to admin section in sidebar/AppLayout
-
-**Component tree:**
-```
-PriceSheetsPage.tsx
-  └── PriceSheetStatusTable.tsx       ← brand-freshness table
-        └── UrgencyBadge.tsx          ← reusable badge (overdue/upcoming/current/none)
-```
-
-**API adapter:** `apps/web/src/features/admin/lib/price-sheets-api.ts`  
-Queries `qb_brands` joined to `qb_price_sheets` (latest published per brand per sheet_type).
+Lives as the second tab within `PriceSheetsPage` (not a separate route). Matches how
+DealEconomicsPage uses tabs for related configuration surfaces. Route: `/admin/price-sheets`,
+tab: "Freight Zones".
 
 ---
 
-### Item 2 — Freight Zone Viewer (sub-tab of PriceSheetsPage)
+## Checkpoint Plan
 
-**Minimum viable (Option A from Q2):**
+### CP1 — Migration 301
 
-A second tab or section within `PriceSheetsPage` showing current `qb_freight_zones`:
-
-| Column | Source |
-|---|---|
-| Brand | `qb_brands.name` via brand_id FK |
-| Zone name | `qb_freight_zones.zone_name` |
-| States | `qb_freight_zones.state_codes` (comma-joined) |
-| Large freight | `freight_large_cents / 100` formatted as USD |
-| Small freight | `freight_small_cents / 100` formatted as USD |
-| Effective from | `effective_from` |
-| Effective to | `effective_to` or "—" |
-
-**Acceptance criteria:**
-- [ ] ASV/FL zone ($1,942 large / $777 small) visible
-- [ ] Brands with no zones show "No freight zones configured"
-- [ ] Data is read-only (no add/edit/delete in Option A)
-- [ ] If CRUD is approved (Q2 Option B), add/edit form with state-code multi-select and dollar inputs (convert on save: `Math.round(dollars * 100)`)
-
----
-
-### Item 3 — `discount_configured` cleanup
-
-**Sub-item 3a — Error message update (no migration needed):**
-
-Update error messages in two edge functions:
-
-- `supabase/functions/qb-calculate/index.ts` — update the human-readable message surfaced on 400 response from "Discount not configured" to "Deal engine not yet configured for this brand. Contact admin to enable it."
-- `supabase/functions/qb-ai-scenarios/index.ts:315` — update the non-fatal error event message similarly.
-
-No column rename. No `database.types.ts` change. Error code `DISCOUNT_NOT_CONFIGURED` can stay as-is in `apps/web/src/lib/pricing/errors.ts` (it's an internal code, not user-visible).
-
-**Sub-item 3b — Deal engine toggle tab in DealEconomicsPage (pending Q3 decision):**
-
-Add a fourth tab "Brand Engine Status" to `apps/web/src/features/admin/pages/DealEconomicsPage.tsx`.
-
-Component: `apps/web/src/features/admin/components/DealEconomics/BrandEngineStatusForm.tsx`
-
-Shows all 13 brands as rows with:
-- Brand name + category badge
-- Toggle: "Deal engine enabled" (reads/writes `qb_brands.discount_configured`)
-- Warning on toggle-to-false if any open quotes reference this brand (future safety; can skip for now)
-
-**Acceptance criteria (3a):**
-- [ ] `qb-calculate` returns updated message on 400 for unconfigured brands
-- [ ] `qb-ai-scenarios` SSE stream emits updated error event text
-- [ ] No test fixtures need updating (internal error code unchanged)
-
-**Acceptance criteria (3b):**
-- [ ] All 13 brands visible in the tab with correct `discount_configured` state
-- [ ] Toggle writes to `qb_brands.discount_configured` via upsert
-- [ ] Only admin/manager/owner can see the tab (inherited from DealEconomicsPage gate)
-- [ ] Optimistic update with rollback on error
-
----
-
-### Item 4 — `qb_quotes.originating_log_id` schema addition (pending Q4 decision)
-
-**Migration 301 addition:**
+**Files:** `supabase/migrations/301_qb_slice07_schema.sql`
 
 ```sql
-alter table public.qb_quotes
-  add column if not exists originating_log_id uuid
-    references public.qb_ai_request_log(id) on delete set null;
-
-create index idx_qb_quotes_originating_log
-  on public.qb_quotes(originating_log_id)
-  where originating_log_id is not null;
-
-comment on column public.qb_quotes.originating_log_id is
-  'FK to the qb_ai_request_log row that triggered this quote via the Conversational Deal Engine. '
-  'Null for manually-created quotes. Used to compute time-from-AI-parse-to-quote-sent in AiRequestLogPage.';
-```
-
-**Wire-up:** `supabase/functions/qb-ai-scenarios/index.ts` — when creating/updating a `qb_quotes`
-row from a scenario session, set `originating_log_id` to the current session's log row ID.
-
-**Frontend:** `apps/web/src/features/admin/pages/AiRequestLogPage.tsx` — replace the `—`
-placeholder in the "Time to quote" column with the actual duration when the FK is set.
-
-**Acceptance criteria:**
-- [ ] Migration 301 applies cleanly (`bun run migrations:check` passes)
-- [ ] New quotes created via `qb-ai-scenarios` have `originating_log_id` set
-- [ ] `AiRequestLogPage` shows elapsed time (e.g. "4m 23s") when `originating_log_id` is
-  linked to a quote with a `created_at`
-
----
-
-## Data Model Changes
-
-### Migration 301 (`301_qb_slice07_schema.sql`)
-
-All items below are additive; no destructive changes.
-
-```sql
--- ── Item 3a: column comment (cosmetic, no functional change) ─────────────────
-
+-- 1. Column comment: update qb_brands.discount_configured semantics
 comment on column public.qb_brands.discount_configured is
-  'True when this brand is fully configured for the deal engine '
-  '(service credit rates, freight key, pricing inputs confirmed by admin). '
-  'False for forestry and other brands pending Angela''s configuration. '
-  'Previously named conceptually as "discount_configured" — the guard is still '
-  'valid; the terminology shifted to Deal Economics in Slice 06.';
+  'True when this brand is fully configured for the deal engine. '
+  'False for forestry and other brands pending admin configuration. '
+  'Surfaced in UI as "Deal Engine Enabled". '
+  'Column name predates Slice 06 Deal Economics reframe — name unchanged '
+  'to avoid blast-radius rename (14 files).';
 
--- ── Item 4: originating_log_id FK on qb_quotes ───────────────────────────────
-
+-- 2. originating_log_id FK on qb_quotes
 alter table public.qb_quotes
   add column if not exists originating_log_id uuid
     references public.qb_ai_request_log(id) on delete set null;
@@ -392,178 +115,397 @@ create index idx_qb_quotes_originating_log
 comment on column public.qb_quotes.originating_log_id is
   'FK to the qb_ai_request_log row that triggered this quote via the '
   'Conversational Deal Engine. Null for manually-created quotes. '
-  'Used to compute time-from-AI-parse-to-quote-sent in AiRequestLogPage.';
+  'Enables time-from-AI-parse-to-quote-sent metric in AiRequestLogPage.';
 ```
 
-No new RLS policies needed: `qb_quotes` and `qb_ai_request_log` RLS already in place
-(migrations 289, 298).
+No new RLS needed: `qb_quotes` RLS (migration 289) and `qb_ai_request_log` RLS (migration 298)
+already cover this column.
 
-**If Q2 Option B approved — add to migration 301:**
-
-```sql
--- Confirm DELETE is covered by existing qb_freight_zones_write policy
--- (289_qb_rls.sql:83 uses FOR ALL which includes DELETE — verified)
--- No new policy needed; document that DELETE is intentionally permitted.
-comment on table public.qb_freight_zones is
-  'Geography-based inbound freight lookup per brand. '
-  'Admin/manager/owner: full CRUD (SELECT/INSERT/UPDATE/DELETE) via RLS. '
-  'Service role: unrestricted (edge functions). '
-  'Reps: SELECT only.';
-```
+**Acceptance criteria:**
+- [ ] `bun run migrations:check` passes with 301 in sequence
+- [ ] Column exists in staging: `\d qb_quotes` shows `originating_log_id`
+- [ ] `database.types.ts` regenerated and committed
 
 ---
 
-## API / Service Changes
+### CP2 — Error message cleanup
 
-### New: `apps/web/src/features/admin/lib/price-sheets-api.ts`
+**Files:**
+- `supabase/functions/qb-calculate/index.ts`
+- `supabase/functions/qb-ai-scenarios/index.ts`
+
+Update every human-readable message on the `discount_configured = false` path:
+
+| Location | Old text | New text |
+|---|---|---|
+| `qb-calculate` 400 response body | *(existing "Discount not configured" variant)* | `"Deal engine not yet configured for this brand. Contact admin to enable it."` |
+| `qb-ai-scenarios` non-fatal error event | *(existing "Discount not configured" variant)* | `"Deal engine not yet configured for this brand. Contact admin to enable it."` |
+
+Error code `DISCOUNT_NOT_CONFIGURED` in `apps/web/src/lib/pricing/errors.ts` stays
+unchanged (internal code, not user-visible).
+
+**Acceptance criteria:**
+- [ ] `qb-calculate` returns new message string in 400 body for unconfigured brand
+- [ ] `qb-ai-scenarios` SSE stream emits new error event text
+- [ ] No test fixtures need updating (error code unchanged; tests assert code, not message)
+- [ ] Edge function contract tests updated if they assert the old message string
+
+---
+
+### CP3 — Service layer: `price-sheets-api.ts`
+
+**File:** `apps/web/src/features/admin/lib/price-sheets-api.ts`
+
+Exports:
 
 ```typescript
-// Exports:
-getPriceSheetStatusByBrand(supabase): Promise<BrandSheetStatus[]>
-// Joins qb_brands → qb_price_sheets (latest published per brand per sheet_type)
-// Returns all 13 brands, even those with no price sheet rows.
+/** All 13 brands with latest published sheet per sheet_type and computed urgency. */
+getBrandSheetStatus(supabase: SupabaseClient): Promise<BrandSheetStatus[]>
 
-getFreightZones(supabase): Promise<FreightZoneRow[]>
-// Selects all qb_freight_zones joined to qb_brands.name
+/** All freight zones joined to brand name, ordered by brand then zone. */
+getFreightZones(supabase: SupabaseClient): Promise<FreightZoneRow[]>
+
+/** Upsert a freight zone (insert or update by id). */
+upsertFreightZone(supabase: SupabaseClient, zone: FreightZoneInput): Promise<FreightZoneRow>
+
+/** Delete a freight zone by id. */
+deleteFreightZone(supabase: SupabaseClient, id: string): Promise<void>
 ```
 
-### Modified: `supabase/functions/qb-calculate/index.ts`
-- Update human-readable error message on DISCOUNT_NOT_CONFIGURED path.
+`getBrandSheetStatus` must cover **all 13 brands**, not just those in `CADENCE_RULES`.
+Brands not listed in `CADENCE_RULES` use the 6-month cadence fallback, computed in
+the service layer using `computeUrgency('6mo', lastPublishedAt, new Date())`.
 
-### Modified: `supabase/functions/qb-ai-scenarios/index.ts`
-- Update non-fatal error event message on `!brand.discount_configured` path.
-- (If Q4 approved) Set `originating_log_id` when writing `qb_quotes` row.
+**Test file:** `apps/web/src/features/admin/lib/__tests__/price-sheets-api.test.ts`
 
-### Modified: `apps/web/src/features/admin/pages/DealEconomicsPage.tsx` (if Q3 Option C approved)
-- Add fourth tab "Brand Engine Status"
+**Acceptance criteria:**
+- [ ] `getBrandSheetStatus` returns all 13 brands, including those with no `qb_price_sheets` rows
+- [ ] Brands with no published sheet return `lastPublishedAt: null`, urgency `"overdue"`
+- [ ] Urgency computed correctly for quarterly, annual, and 6-month cadences
+- [ ] `upsertFreightZone` converts dollar inputs to cents before write
+- [ ] Test coverage: brand with no sheets, brand with published sheet, freight zone CRUD
 
 ---
 
-## UI Surfaces
+### CP4 — `PriceSheetsPage.tsx` — freshness dashboard
 
-| Page | Route | File | Role gate |
-|---|---|---|---|
-| Price Sheet Status | `/admin/price-sheets` | `features/admin/pages/PriceSheetsPage.tsx` | admin, manager, owner |
-| Deal Economics (extended) | `/admin/deal-economics` | `features/admin/pages/DealEconomicsPage.tsx` | admin, manager, owner |
+**New files:**
+- `apps/web/src/features/admin/pages/PriceSheetsPage.tsx`
+- `apps/web/src/features/admin/components/PriceSheets/BrandFreshnessTable.tsx`
+- `apps/web/src/features/admin/components/PriceSheets/UrgencyBadge.tsx`
 
-**Route registration pattern** (matches existing admin pages in `App.tsx`):
+**Modified files:**
+- `apps/web/src/App.tsx` — add lazy import + route
+- `apps/web/src/components/AppLayout.tsx` (or wherever admin nav links live) — add nav link
 
-```tsx
-const PriceSheetsPage = lazy(() =>
-  import("./features/admin/pages/PriceSheetsPage").then((m) => ({ default: m.PriceSheetsPage }))
-);
+**Route:** `/admin/price-sheets`, gate: `["admin", "manager", "owner"]`
 
-// In AnimatedRoutes:
-<Route
-  path="/admin/price-sheets"
-  element={
-    ["admin", "manager", "owner"].includes(profile.role) ? (
-      <PriceSheetsPage />
-    ) : (
-      <Navigate to="/dashboard" replace />
-    )
-  }
-/>
-```
+**Page structure:** `<Tabs defaultValue="freshness">` with two tabs:
+- "Price Sheets" — `BrandFreshnessTable`
+- "Freight Zones" — placeholder (CP7 fills it)
 
----
+**`BrandFreshnessTable` columns:**
 
-## Test Coverage Required
-
-| Test file | What to cover |
+| Column | Detail |
 |---|---|
-| `apps/web/src/lib/pricing/__tests__/reminders.test.ts` | Already has coverage; verify `getPendingUpdates()` is exercised — no new tests needed unless query shape changes |
-| `apps/web/src/features/admin/lib/__tests__/price-sheets-api.test.ts` | `getPriceSheetStatusByBrand()` — brand with no sheets returns `lastPublishedAt: null`; brand with published sheet returns correct date; urgency computed correctly |
-| Edge function tests | `qb-calculate`: 400 response body updated message asserted; `qb-ai-scenarios`: error event message asserted |
-| Migration smoke test | `migrations:check` passes with 301 in sequence |
+| Brand | `qb_brands.name` |
+| Category | Badge: construction / forestry / other |
+| Sheet type | `price_book` / `retail_programs` / `both` |
+| Last published | Relative date ("3 months ago") with ISO tooltip |
+| Urgency | `UrgencyBadge`: overdue (red) / upcoming (amber) / current (green) / never (muted) |
+
+**Acceptance criteria:**
+- [ ] Route `/admin/price-sheets` renders, redirects `rep` role to `/dashboard`
+- [ ] All 13 brands shown (including those with no sheets)
+- [ ] Urgency badges match `computeUrgency()` output
+- [ ] "Never uploaded" state renders for brands with no published sheet
+- [ ] Nav link present in admin sidebar/menu
+- [ ] `bun run build` in `apps/web` passes
 
 ---
 
-## Build / Release Gates
+### CP5 — Upload UI + `extract-price-sheet` invocation
 
-Per CLAUDE.md, before closing this slice:
+**New files:**
+- `apps/web/src/features/admin/components/PriceSheets/UploadDrawer.tsx`
 
-1. `bun run migrations:check` — migration 301 in sequence, no gaps
+**Modified files:**
+- `apps/web/src/features/admin/components/PriceSheets/BrandFreshnessTable.tsx` — add "Upload" button per brand row that opens `UploadDrawer`
+
+**Upload drawer behavior:**
+1. Pre-populated with brand name and a `sheet_type` selector (`price_book` / `retail_programs` / `both`).
+2. Drag-drop or click-to-browse file input. Accepts: `pdf`, `xlsx`, `xls`, `csv`.
+3. On submit: upload file to Supabase Storage → call `extract-price-sheet` edge function with `{ brand_id, file_url, sheet_type }`.
+4. Drawer shows an in-progress state ("Extracting… this takes 15–60 seconds").
+5. Frontend polls `qb_price_sheets` row by id until `status = 'extracted'` or `status = 'rejected'`.
+6. On `extracted`: proceed to CP6 auto-publish step.
+7. On `rejected`: show extraction error from `extraction_metadata.error`.
+
+**Acceptance criteria:**
+- [ ] File upload to Supabase Storage succeeds and returns a URL
+- [ ] `extract-price-sheet` called with correct payload
+- [ ] In-progress state shown during extraction (spinner + "Extracting…")
+- [ ] Polling terminates on `extracted`, `rejected`, or after 120s timeout
+- [ ] Error state shown on `rejected` with message from `extraction_metadata`
+- [ ] Accepted file types enforced in the input (`accept=".pdf,.xlsx,.xls,.csv"`)
+
+---
+
+### CP6 — Auto-publish on extraction complete
+
+**Modified files:**
+- `supabase/functions/publish-price-sheet/index.ts` — add `auto_approve` boolean request param
+- `apps/web/src/features/admin/components/PriceSheets/UploadDrawer.tsx` — call publish after extraction
+
+**`publish-price-sheet` change:**
+
+When `auto_approve: true` is passed:
+1. Before applying items, run:
+   ```sql
+   UPDATE qb_price_sheet_items
+     SET review_status = 'approved'
+   WHERE price_sheet_id = $1 AND review_status = 'pending';
+
+   UPDATE qb_price_sheet_programs
+     SET review_status = 'approved'
+   WHERE price_sheet_id = $1 AND review_status = 'pending';
+   ```
+2. Then proceed with existing publish logic (apply approved items, mark `status='published'`).
+
+**Frontend (UploadDrawer) flow after CP5 polling resolves to `extracted`:**
+1. Call `publish-price-sheet` with `{ price_sheet_id, auto_approve: true }`.
+2. Show "Publishing…" state.
+3. On success: show "Published ✓ — [N] models, [M] programs updated." Close drawer after 2s.
+4. Invalidate `getBrandSheetStatus` query so freshness table refreshes.
+
+**Acceptance criteria:**
+- [ ] `publish-price-sheet` with `auto_approve: true` sets all pending items to `approved` before applying
+- [ ] `publish-price-sheet` with `auto_approve: false` (default) behaves exactly as before — no regression
+- [ ] After successful publish, `qb_price_sheets.status = 'published'` and `published_at` is set
+- [ ] Freshness table refreshes after upload+publish cycle
+- [ ] Summary count shown in success state ("3 models, 1 program updated")
+- [ ] If publish fails, drawer shows error and does not close
+
+---
+
+### CP7 — Freight zone CRUD tab
+
+**New files:**
+- `apps/web/src/features/admin/components/PriceSheets/FreightZonesTab.tsx`
+- `apps/web/src/features/admin/components/PriceSheets/FreightZoneForm.tsx`
+
+**Modified files:**
+- `apps/web/src/features/admin/pages/PriceSheetsPage.tsx` — wire "Freight Zones" tab
+
+**`FreightZonesTab` behavior:**
+- Table of all `qb_freight_zones` grouped by brand, columns:
+  Brand | Zone name | States | Large freight | Small freight | Effective from | Effective to | Actions
+- "Add zone" button opens `FreightZoneForm` in a dialog.
+- Edit/delete actions per row.
+- Dollar inputs in the form (converted to cents on save: `Math.round(dollars * 100)`).
+- `state_codes` field: comma-separated input or multi-select of US state codes.
+- `effective_to` optional (blank = open-ended).
+
+**Delete behavior:** Confirm dialog ("Delete this freight zone? This will affect live quote
+calculations for [Brand] in [States]."). No soft-delete — hard delete via RLS-permitted
+`DELETE` (verified: `289_qb_rls.sql` `FOR ALL` policy covers DELETE for admin/manager/owner).
+
+**Acceptance criteria:**
+- [ ] Existing ASV/FL zone ($1,942 / $777) visible in the table
+- [ ] "No freight zones configured" empty state per brand section
+- [ ] Add zone: form validates required fields, saves, table refreshes
+- [ ] Edit zone: form pre-populated, saves patch, table refreshes
+- [ ] Delete zone: confirm dialog shown, zone removed on confirm
+- [ ] Dollar inputs convert correctly to cents (e.g. "19.42" → 1942)
+- [ ] Only admin/manager/owner can see the tab (inherited from page gate)
+
+---
+
+### CP8 — `originating_log_id` wire-up
+
+**Modified files:**
+- `supabase/functions/qb-ai-scenarios/index.ts` — set `originating_log_id` on quote write
+- `apps/web/src/features/admin/pages/AiRequestLogPage.tsx` — replace "—" with real duration
+
+**`qb-ai-scenarios` change:**
+When the function creates or upserts a `qb_quotes` row from a scenario session, include:
+```typescript
+originating_log_id: logRowId  // the qb_ai_request_log.id for this session
+```
+
+**`AiRequestLogPage` change:**
+Join `qb_ai_request_log` to `qb_quotes` on `originating_log_id`. For rows where the
+join succeeds, compute `qb_quotes.created_at - qb_ai_request_log.created_at` and display
+as `"Xm Ys"`. For rows with no linked quote, continue showing "—".
+
+**Acceptance criteria:**
+- [ ] New quotes created via `qb-ai-scenarios` have `originating_log_id` set
+- [ ] `AiRequestLogPage` shows elapsed time (e.g. "4m 23s") when FK is populated
+- [ ] Rows with no linked quote still show "—" (no regression)
+- [ ] Duration is non-negative (guard against clock skew producing negative values — show "—" if negative)
+
+---
+
+### CP9 — DealEconomicsPage: "Brand Engine Status" tab
+
+**New files:**
+- `apps/web/src/features/admin/components/DealEconomics/BrandEngineStatusForm.tsx`
+
+**Modified files:**
+- `apps/web/src/features/admin/pages/DealEconomicsPage.tsx` — add fourth tab
+
+**Tab: "Brand Engine Status"**
+
+Table of all 13 brands with columns:
+
+| Column | Detail |
+|---|---|
+| Brand | `qb_brands.name` |
+| Category | Badge: construction / forestry / other |
+| Deal Engine Enabled | Toggle (reads/writes `qb_brands.discount_configured`) |
+| Status | "Ready" (green) / "Not configured" (muted) |
+
+Toggle behavior:
+- Optimistic update (toggle flips immediately in UI).
+- Writes `PATCH qb_brands SET discount_configured = $1 WHERE id = $2`.
+- On error: rollback toggle + toast error.
+- Toggle-to-false shows a confirmation: "Disabling the deal engine for [Brand] will block
+  all quotes for this brand. Continue?" (on-to-off only, per Slice 06 R7 pattern).
+
+**Acceptance criteria:**
+- [ ] All 13 brands visible with correct current `discount_configured` state
+- [ ] Toggle writes to DB and reflects persisted state on page refresh
+- [ ] Confirmation shown on toggle-to-false
+- [ ] Optimistic update rolls back on error
+- [ ] Tab is fourth in `DealEconomicsPage` tabs list; existing three tabs unaffected
+
+---
+
+### CP10 — Build gates + smoke tests
+
+**Checks to pass before closing slice:**
+
+1. `bun run migrations:check` — 301 in sequence, no gaps
 2. `bun run build` from repo root
 3. `bun run build` in `apps/web`
-4. Edge function contract tests for `qb-calculate` and `qb-ai-scenarios` (error message paths)
-5. Role/workspace security check: verify `/admin/price-sheets` returns 403/redirect for `rep` role
+4. Edge function contract tests:
+   - `qb-calculate`: 400 body contains new message string
+   - `qb-ai-scenarios`: non-fatal error event contains new message string
+   - `publish-price-sheet`: `auto_approve=true` path sets items to `approved` before applying
+5. Role/workspace security spot-checks:
+   - `GET /admin/price-sheets` as `rep` role → redirects to `/dashboard`
+   - Freight zone DELETE as `rep` → RLS blocks (403)
+   - `discount_configured` PATCH as `rep` → RLS blocks
+
+**Acceptance criteria:**
+- [ ] All three builds pass with zero new TypeScript errors
+- [ ] Migration check passes
+- [ ] Contract test suite green
+- [ ] Role-gate checks pass
 
 ---
 
-## Open Scope Questions (Owner-Facing)
+## Data Model Summary
 
-These are the questions Brian/Angela need to answer before execution begins.
+### Migration 301 (`301_qb_slice07_schema.sql`)
 
-**Q1 — How much of the price sheet pipeline ships in Slice 07?**  
-Option A: read-only freshness dashboard only (see which brands are current/overdue).  
-Option B: A + file upload UI (drag-drop a PDF/Excel to trigger Claude extraction).  
-Option C: A + B + review/approve extracted items before publish.  
-Recommend starting with A; the pipeline edge functions already exist.
+| Change | Type | Table | Detail |
+|---|---|---|---|
+| Column comment | cosmetic | `qb_brands.discount_configured` | Updates semantics description |
+| Add column | additive | `qb_quotes.originating_log_id` | `uuid FK → qb_ai_request_log(id) on delete set null` |
+| Add index | additive | `qb_quotes` | `idx_qb_quotes_originating_log` (partial, where not null) |
 
-**Q2 — Freight zone UI: view-only or editable?**  
-Option A: show current zones in a table (read-only).  
-Option B: full add/edit/delete UI per brand.  
-If Angela will be entering zones manually (not just waiting for publish-price-sheet to write them), Option B is needed.
+No new tables. No RLS additions. No destructive changes.
 
-**Q3 — How should `discount_configured` surface to Angela?**  
-Option A: just update the error messages (no UI).  
-Option C: add a "Brand Engine Status" tab to Deal Economics so Angela can toggle brands ready/not-ready with a visible list.  
-The tab is the highest operator value since it gives Angela a dashboard of which brands she still needs to configure.
+### `publish-price-sheet` behavior change (no migration)
 
-**Q4 — Should the `qb_quotes.originating_log_id` FK ship in Slice 07?**  
-It's a small additive migration (~30 lines) that unlocks accurate time-to-quote metrics in AiRequestLogPage. Low risk. Recommend yes.
-
-**Q5 — Who reviews extracted price sheet items before publish?**  
-Currently no frontend review UI exists — the extraction pipeline runs but items sit in
-`qb_price_sheet_items` with `review_status='pending'` indefinitely. Is Supabase dashboard
-access sufficient for Angela to approve items in the short term, or does Slice 07 need to
-include the review/approval UI (which is Option C in Q1)?
+New `auto_approve: boolean` request parameter (default `false`). When true, bulk-updates
+`qb_price_sheet_items` and `qb_price_sheet_programs` to `review_status='approved'` before
+applying. Existing callers passing no flag are unaffected.
 
 ---
 
-## Out of Scope (Explicit Punts)
+## File Map
+
+| File | Status | CP |
+|---|---|---|
+| `supabase/migrations/301_qb_slice07_schema.sql` | new | CP1 |
+| `supabase/functions/qb-calculate/index.ts` | modified | CP2 |
+| `supabase/functions/qb-ai-scenarios/index.ts` | modified | CP2, CP8 |
+| `supabase/functions/publish-price-sheet/index.ts` | modified | CP6 |
+| `apps/web/src/features/admin/lib/price-sheets-api.ts` | new | CP3 |
+| `apps/web/src/features/admin/lib/__tests__/price-sheets-api.test.ts` | new | CP3 |
+| `apps/web/src/features/admin/pages/PriceSheetsPage.tsx` | new | CP4 |
+| `apps/web/src/features/admin/components/PriceSheets/BrandFreshnessTable.tsx` | new | CP4 |
+| `apps/web/src/features/admin/components/PriceSheets/UrgencyBadge.tsx` | new | CP4 |
+| `apps/web/src/features/admin/components/PriceSheets/UploadDrawer.tsx` | new | CP5, CP6 |
+| `apps/web/src/features/admin/components/PriceSheets/FreightZonesTab.tsx` | new | CP7 |
+| `apps/web/src/features/admin/components/PriceSheets/FreightZoneForm.tsx` | new | CP7 |
+| `apps/web/src/features/admin/components/DealEconomics/BrandEngineStatusForm.tsx` | new | CP9 |
+| `apps/web/src/features/admin/pages/DealEconomicsPage.tsx` | modified | CP9 |
+| `apps/web/src/features/admin/pages/AiRequestLogPage.tsx` | modified | CP8 |
+| `apps/web/src/App.tsx` | modified | CP4 |
+| `apps/web/src/components/AppLayout.tsx` (or nav file) | modified | CP4 |
+
+---
+
+## Scope Estimate
+
+| Checkpoint | Effort |
+|---|---|
+| CP1 — Migration 301 | 0.5 day |
+| CP2 — Error messages | 0.5 day |
+| CP3 — Service layer + tests | 0.5 day |
+| CP4 — Freshness dashboard | 1.0 day |
+| CP5 — Upload UI + extract invocation | 1.5 days |
+| CP6 — Auto-publish pipeline | 1.0 day |
+| CP7 — Freight zone CRUD | 1.5 days |
+| CP8 — `originating_log_id` wire-up | 0.5 day |
+| CP9 — Brand Engine Status tab | 1.0 day |
+| CP10 — Build gates + smoke | 0.5 day |
+| **Total** | **~8.5 days** |
+
+---
+
+## Risks
+
+**R1 — `extract-price-sheet` is async; polling interval unknown.**
+The edge function triggers a Claude extraction pass that may take 15–120 seconds. The
+frontend polling loop must use a reasonable interval (3–5s) and a hard timeout (120s)
+to avoid hanging sessions. If the function currently returns synchronously (waiting for
+Claude), re-evaluate whether polling is even needed.
+
+**R2 — `publish-price-sheet` atomicity with auto_approve.**
+The `auto_approve` bulk UPDATE must run inside the same transaction (or at minimum before
+any item-apply logic) so a partial failure leaves items in `pending` not `approved`. Verify
+the function's transaction semantics before shipping CP6.
+
+**R3 — `PriceSheetsPage` must cover all 13 brands, not just cadence-rule brands.**
+`getPendingUpdates()` in `price-sheet-reminders.ts` only returns brands listed in
+`CADENCE_RULES` (4 rules, 3 brands). The service layer (`price-sheets-api.ts`) must
+run a separate `qb_brands` query to ensure all 13 brands appear in the table, computing
+6-month urgency for the unlisted ones.
+
+**R4 — Supabase Storage bucket for price sheet files.**
+`extract-price-sheet` receives a `file_url`. A Supabase Storage bucket must exist for
+uploaded files. Verify the bucket exists (likely `price-sheets` or `documents`) before
+CP5 — if not, add a bucket creation step to CP1.
+
+**R5 — Mobile layout with 4 tabs in DealEconomicsPage.**
+Adding a fourth tab may cause overflow on narrow screens. Use `overflow-x-auto` on
+`TabsList` in CP9 if needed.
+
+---
+
+## Out of Scope
 
 | Item | Reason |
 |---|---|
-| Full price sheet review/approval UI (`qb_price_sheet_items` / `qb_price_sheet_programs` table editor) | Significant scope; plan as Slice 08 once Q5 is answered |
-| `discount_configured` column rename to `deal_engine_enabled` | High change count (10+ files), zero functional gain — not worth it |
-| Freight zone CRUD (if Q2 Option A chosen) | Defer until Angela is actively uploading multi-brand price sheets |
-| Notification / reminder emails for overdue price sheets | Infrastructure exists (`qb_notifications`) but trigger + email template is a separate workstream |
-| `qb_programs` freshness tracking | Programs are ingested with price sheets; no separate cadence logic needed yet |
-| Removal of `FALLBACK_FREIGHT_CENTS = 194200` from `qb-ai-scenarios` | It's the real ASV/FL rate, not a fake stub — leave it; add a comment clarifying provenance |
-
----
-
-## Risks and Known Unknowns
-
-**R1 — `PriceSheetsPage.tsx` must be created from scratch.**  
-The Slice 06 Q6 resolution said "extend the existing PriceSheetsPage.tsx" but the page
-was never built. This slice must create it. No existing patterns to copy for the price sheet
-domain — use `DealEconomicsPage.tsx` as the structural template.
-
-**R2 — `getPendingUpdates()` only covers 4 cadence rules (ASV×2, YANMAR, DEVELON).**  
-The remaining 9 brands (BARKO, PRINOTH, LAMTRAC, BANDIT, SHEAREX, DENIS_CIMAF, SUPERTRAK,
-CMI, SERCO, DIAMOND_Z) fall under the generic "6-month" fallback in `CADENCE_RULES` — but
-this fallback is not currently in `CADENCE_RULES` at all. The function only returns items
-for brands explicitly listed. The status page needs a supplementary `qb_brands` query to
-show ALL brands, then compute the 6-month urgency for unlisted brands in the frontend.
-
-**R3 — `qb_price_sheets.status` enum vs. actual published-at semantics.**  
-The reminders library filters `status='published'` to find freshness dates. A sheet with
-`status='superseded'` is NOT counted as the latest — which is correct. But a sheet that
-was uploaded and extracted but never reviewed/published shows as "Never uploaded" even
-though a file exists. This is acceptable UX (unpublished = not official) but worth noting.
-
-**R4 — `qb_freight_zones` delete RLS (Slice 06 R3 carry-forward).**  
-`289_qb_rls.sql` line 83: `create policy "qb_freight_zones_write" on public.qb_freight_zones for all`.
-`FOR ALL` in Postgres RLS covers SELECT/INSERT/UPDATE/DELETE. Verified: DELETE is permitted
-for admin/manager/owner. Safe to expose in CRUD UI if Q2 Option B approved.
-
-**R5 — DealEconomicsPage tab count.**  
-Adding a fourth tab ("Brand Engine Status") to `DealEconomicsPage` brings the tab count
-to 4. On mobile the `TabsList` may overflow. Use `overflow-x-auto` on `TabsList` or
-consolidate into a sidebar nav if tabs grow further.
+| Human review UI for `qb_price_sheet_items` / `qb_price_sheet_programs` | Q5 answered skip; revisit with extraction eval data |
+| `discount_configured` column rename to `deal_engine_enabled` | 14 product-code files > 10-file threshold; UI label handles it |
+| Notification emails for overdue price sheets | Separate workstream; infrastructure exists (`qb_notifications`) |
+| `qb_programs` freshness tracking | No separate cadence logic needed yet |
+| Removal of `FALLBACK_FREIGHT_CENTS = 194200` hardcode | Real ASV/FL rate, not a fake stub — leave with clarifying comment |
 
 ---
 
@@ -572,9 +514,13 @@ consolidate into a sidebar nav if tabs grow further.
 - Branch: `claude/qep-qb-07-price-sheet-admin`
 - Commit prefix: `[QEP-QB-07]`
 - Example commits:
-  - `[QEP-QB-07] Migration 301: qb_brands column comment + qb_quotes.originating_log_id FK`
-  - `[QEP-QB-07] PriceSheetsPage: brand freshness dashboard at /admin/price-sheets`
-  - `[QEP-QB-07] Freight zone viewer tab in PriceSheetsPage`
-  - `[QEP-QB-07] DealEconomicsPage: Brand Engine Status tab (discount_configured toggle)`
-  - `[QEP-QB-07] qb-calculate + qb-ai-scenarios: update deal-engine error messages`
-  - `[QEP-QB-07] AiRequestLogPage: wire originating_log_id time-to-quote column`
+  - `[QEP-QB-07] Migration 301: column comment + originating_log_id FK`
+  - `[QEP-QB-07] Error message update: deal engine not configured`
+  - `[QEP-QB-07] price-sheets-api: getBrandSheetStatus + freight zone CRUD`
+  - `[QEP-QB-07] PriceSheetsPage: freshness dashboard + route`
+  - `[QEP-QB-07] UploadDrawer: file upload + extract-price-sheet invocation`
+  - `[QEP-QB-07] Auto-publish: publish-price-sheet auto_approve flag + frontend flow`
+  - `[QEP-QB-07] Freight zones CRUD tab`
+  - `[QEP-QB-07] originating_log_id wire-up: qb-ai-scenarios + AiRequestLogPage`
+  - `[QEP-QB-07] DealEconomicsPage: Brand Engine Status tab`
+  - `[QEP-QB-07] Build gates + smoke tests`
