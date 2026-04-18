@@ -14333,6 +14333,7 @@ export type Database = {
           markup_cents: number
           markup_pct: number
           notes: string | null
+          originating_log_id: string | null
           parent_quote_id: string | null
           pdf_url: string | null
           pdi_cents: number
@@ -14392,6 +14393,7 @@ export type Database = {
           markup_cents: number
           markup_pct: number
           notes?: string | null
+          originating_log_id?: string | null
           parent_quote_id?: string | null
           pdf_url?: string | null
           pdi_cents: number
@@ -14451,6 +14453,7 @@ export type Database = {
           markup_cents?: number
           markup_pct?: number
           notes?: string | null
+          originating_log_id?: string | null
           parent_quote_id?: string | null
           pdf_url?: string | null
           pdi_cents?: number
@@ -14535,6 +14538,13 @@ export type Database = {
             columns: ["equipment_model_id"]
             isOneToOne: false
             referencedRelation: "qb_equipment_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quotes_originating_log_id_fkey"
+            columns: ["originating_log_id"]
+            isOneToOne: false
+            referencedRelation: "qb_ai_request_log"
             referencedColumns: ["id"]
           },
           {
