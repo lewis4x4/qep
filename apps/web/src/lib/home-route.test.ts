@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { canUseElevatedQrmScopes, resolveHomeRoute } from "./home-route";
 
 describe("resolveHomeRoute", () => {
-  test("sends owner, admin, and manager users to QRM", () => {
-    expect(resolveHomeRoute("owner")).toBe("/qrm");
+  test("sends owner to /owner dashboard, admin and manager to QRM", () => {
+    expect(resolveHomeRoute("owner")).toBe("/owner");
     expect(resolveHomeRoute("admin")).toBe("/qrm");
     expect(resolveHomeRoute("manager")).toBe("/qrm");
   });

@@ -175,6 +175,12 @@ const CatalogImportPage = lazy(() =>
 const RentalPricingPage = lazy(() =>
   import("./features/admin/pages/RentalPricingPage").then((m) => ({ default: m.RentalPricingPage }))
 );
+const DealEconomicsPage = lazy(() =>
+  import("./features/admin/pages/DealEconomicsPage").then((m) => ({ default: m.DealEconomicsPage }))
+);
+const AiRequestLogPage = lazy(() =>
+  import("./features/admin/pages/AiRequestLogPage").then((m) => ({ default: m.AiRequestLogPage }))
+);
 const FleetRadarPage = lazy(() =>
   import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
 );
@@ -2281,6 +2287,26 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <BranchManagementPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/deal-economics"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <DealEconomicsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/ai-request-log"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <AiRequestLogPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
