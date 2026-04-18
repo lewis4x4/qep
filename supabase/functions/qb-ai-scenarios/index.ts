@@ -316,8 +316,7 @@ Deno.serve(async (req: Request) => {
           emit({
             type:    "error",
             fatal:   false,
-            message: `The ${brand.name} brand doesn't have discount rates configured yet. ` +
-              `Ask Angela to set them up in the admin catalog before quoting this machine.`,
+            message: `${brand.name} not yet configured for deal engine.`,
           });
           emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs });
           controller.close();
