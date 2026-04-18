@@ -32,6 +32,8 @@ const {
   createFreightRule,
   updateFreightRule,
   deleteFreightRule,
+  getBrandFreightKeys,
+  setBrandFreightKey,
 } = await import("../deal-economics-api");
 
 describe("deal-economics-api", () => {
@@ -135,5 +137,34 @@ describe("deal-economics-api", () => {
     expect(mockFrom).toHaveBeenCalledWith("qb_internal_freight_rules");
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(eqMock).toHaveBeenCalledWith("id", "rule-xyz-999");
+  });
+
+  // ── Brand freight keys ─────────────────────────────────────────────────────
+
+  test("getBrandFreightKeys selects from qb_brands ordered by name", async () => {
+    await getBrandFreightKeys();
+    expect(mockFrom).toHaveBeenCalledWith("qb_brands");
+    expect(mockSelect).toHaveBeenCalledTimes(1);
+    expect(mockOrder).toHaveBeenCalledWith("name", { ascending: true });
+  });
+
+  test("setBrandFreightKey sends .update({ has_inbound_freight_key }).eq('id', brandId)", async () => {
+    const eqMock = mock(() => Promise.resolve({ error: null }));
+    mockUpdate.mockImplementationOnce(() => ({ eq: eqMock }));
+
+    const result = await setBrandFreightKey("brand-uuid", true);
+
+    expect(mockFrom).toHaveBeenCalledWith("qb_brands");
+    expect(mockUpdate).toHaveBeenCalledWith({ has_inbound_freight_key: true });
+    expect(eqMock).toHaveBeenCalledWith("id", "brand-uuid");
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("setBrandFreightKey returns { error } on DB failure — does not throw", async () => {
+    const eqMock = mock(() => Promise.resolve({ error: { message: "permission denied" } }));
+    mockUpdate.mockImplementationOnce(() => ({ eq: eqMock }));
+
+    const result = await setBrandFreightKey("brand-uuid", false);
+    expect(result).toEqual({ error: "permission denied" });
   });
 });

@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ServiceCreditsForm } from "../components/DealEconomics/ServiceCreditsForm";
 import { InternalFreightRulesForm } from "../components/DealEconomics/InternalFreightRulesForm";
-import { BrandFreightKeysPlaceholder } from "../components/DealEconomics/BrandFreightKeysPlaceholder";
+import { BrandFreightKeysForm } from "../components/DealEconomics/BrandFreightKeysForm";
 
 export function DealEconomicsPage() {
   return (
@@ -29,7 +29,7 @@ export function DealEconomicsPage() {
         </TabsContent>
 
         <TabsContent value="brand-freight-keys" className="mt-4">
-          <BrandFreightKeysPlaceholder />
+          <BrandFreightKeysForm />
         </TabsContent>
       </Tabs>
     </div>

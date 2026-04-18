@@ -100,3 +100,35 @@ export async function deleteFreightRule(
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+// ── Brand freight keys ───────────────────────────────────────────────────────
+
+export interface BrandFreightKeyRow {
+  id: string;
+  code: string;
+  name: string;
+  has_inbound_freight_key: boolean;
+}
+
+export async function getBrandFreightKeys(): Promise<BrandFreightKeyRow[]> {
+  const { data, error } = await supabase
+    .from("qb_brands")
+    .select("id, code, name, has_inbound_freight_key")
+    .order("name", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []) as BrandFreightKeyRow[];
+}
+
+export async function setBrandFreightKey(
+  brandId: string,
+  enabled: boolean
+): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase
+    .from("qb_brands")
+    .update({ has_inbound_freight_key: enabled })
+    .eq("id", brandId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
