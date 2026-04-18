@@ -49,6 +49,11 @@ import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import {
+  ConversationalDealEngine,
+  DealAssistantTrigger,
+  type ScenarioSelection,
+} from "../components/ConversationalDealEngine";
+import {
   PortalSignaturePad,
   signatureDataUrlToRawBase64,
   type PortalSignaturePadHandle,
@@ -107,6 +112,7 @@ export function QuoteBuilderV2Page() {
   });
   const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
+  const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [signerName, setSignerName] = useState("");
   const [dealerMessage, setDealerMessage] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
@@ -301,6 +307,42 @@ export function QuoteBuilderV2Page() {
     },
   });
 
+  // ── Deal Assistant (Slice 05) ─────────────────────────────────────────────
+  // Pre-populate form state when rep selects an AI-generated scenario.
+  // Behavior: (a) set equipment from resolved model, (b) store prompt as
+  // voiceSummary, (c) advance to equipment step for review — never auto-save.
+  const handleScenarioSelection = (selection: ScenarioSelection) => {
+    const { scenario, resolvedModelId, deliveryState, customerType, prompt } = selection;
+    setDealAssistantOpen(false);
+
+    // Build equipment line from the resolved model embedded in the SSE complete event.
+    // The resolved model data is in selection.scenario but we only have scenario economics,
+    // not model metadata. Re-use the prompt to set voiceSummary so IntelligencePanel renders.
+    setDraft((current) => ({
+      ...current,
+      voiceSummary: prompt,
+      // If no equipment yet and we have a resolved model ID, add a placeholder.
+      // The rep confirms/refines in the equipment step.
+      ...(resolvedModelId && current.equipment.length === 0
+        ? {
+            equipment: [{
+              kind:      "equipment" as const,
+              id:        resolvedModelId,
+              title:     `AI-matched machine (${resolvedModelId.slice(0, 8)}…)`,
+              make:      "",
+              model:     "",
+              year:      null,
+              quantity:  1,
+              // customerOutOfPocketCents is the scenario price in cents — convert to dollars
+              unitPrice: Math.round(scenario.customerOutOfPocketCents / 100),
+            }],
+          }
+        : {}),
+    }));
+
+    setStep("equipment");
+  };
+
   const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
   const firstEquipment = draft.equipment[0];
 
@@ -357,7 +399,13 @@ export function QuoteBuilderV2Page() {
             Build quotes with voice, AI chat, or manual entry. Zero-blocking and commercial-grade.
           </p>
         </div>
-        <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
+        <div className="flex items-center gap-2">
+          <DealAssistantTrigger
+            onClick={() => setDealAssistantOpen(true)}
+            active={dealAssistantOpen}
+          />
+          <AskIronAdvisorButton contextType="quote" contextId={draft.dealId || undefined} variant="inline" />
+        </div>
         </div>
 
         <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
@@ -982,6 +1030,14 @@ export function QuoteBuilderV2Page() {
       <aside className="hidden w-80 shrink-0 lg:block">
         <div className="sticky top-4">{intelligencePanel}</div>
       </aside>
+
+      {/* Deal Assistant panel (Slice 05) */}
+      <ConversationalDealEngine
+        open={dealAssistantOpen}
+        onClose={() => setDealAssistantOpen(false)}
+        onScenarioSelect={handleScenarioSelection}
+        dealId={dealId || undefined}
+      />
     </div>
   );
 }
