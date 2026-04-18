@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/database.types";
 
+// ── Service credits ──────────────────────────────────────────────────────────
+
 export type ServiceCreditRow =
   Database["public"]["Tables"]["qb_service_credit_config"]["Row"];
 export type ServiceCreditInput =
@@ -38,6 +40,62 @@ export async function upsertServiceCredits(
   const { error } = await supabase
     .from("qb_service_credit_config")
     .upsert(rows);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+// ── Internal freight rules ───────────────────────────────────────────────────
+
+export type FreightRuleRow =
+  Database["public"]["Tables"]["qb_internal_freight_rules"]["Row"];
+export type FreightRuleInput =
+  Database["public"]["Tables"]["qb_internal_freight_rules"]["Insert"];
+
+export async function getFreightRules(): Promise<FreightRuleRow[]> {
+  const { data, error } = await supabase
+    .from("qb_internal_freight_rules")
+    .select("*")
+    .order("priority", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return data ?? [];
+}
+
+export async function createFreightRule(
+  input: FreightRuleInput
+): Promise<{ ok: true; id: string } | { error: string }> {
+  const { data, error } = await supabase
+    .from("qb_internal_freight_rules")
+    .insert(input)
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+  return { ok: true, id: data.id };
+}
+
+export async function updateFreightRule(
+  id: string,
+  input: FreightRuleInput
+): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase
+    .from("qb_internal_freight_rules")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+export async function deleteFreightRule(
+  id: string
+): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase
+    .from("qb_internal_freight_rules")
+    .delete()
+    .eq("id", id);
 
   if (error) return { error: error.message };
   return { ok: true };

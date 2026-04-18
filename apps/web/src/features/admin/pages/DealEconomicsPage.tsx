@@ -1,6 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ServiceCreditsForm } from "../components/DealEconomics/ServiceCreditsForm";
-import { InternalFreightRulesPlaceholder } from "../components/DealEconomics/InternalFreightRulesPlaceholder";
+import { InternalFreightRulesForm } from "../components/DealEconomics/InternalFreightRulesForm";
 import { BrandFreightKeysPlaceholder } from "../components/DealEconomics/BrandFreightKeysPlaceholder";
 
 export function DealEconomicsPage() {
@@ -25,7 +25,7 @@ export function DealEconomicsPage() {
         </TabsContent>
 
         <TabsContent value="freight-rules" className="mt-4">
-          <InternalFreightRulesPlaceholder />
+          <InternalFreightRulesForm />
         </TabsContent>
 
         <TabsContent value="brand-freight-keys" className="mt-4">
