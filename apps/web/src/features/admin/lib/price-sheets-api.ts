@@ -186,3 +186,149 @@ export async function deleteFreightZone(
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+// ── Upload + extract pipeline (CP5) ──────────────────────────────────────────
+
+export type UploadSheetInput = {
+  brandId: string;
+  brandCode: string;
+  file: File;
+  sheetType: "price_book" | "retail_programs" | "both";
+  workspaceId: string;
+  uploadedBy: string;
+};
+
+export type UploadSheetResult =
+  | {
+      ok: true;
+      priceSheetId: string;
+      itemsWritten: number;
+      programsWritten: number;
+    }
+  | {
+      error: string;
+      /** Present when insert succeeded but extraction failed — user can retry. */
+      priceSheetId?: string;
+    };
+
+const STORAGE_BUCKET = "price-sheets";
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB — Anthropic PDF limit
+
+const ALLOWED_EXTENSIONS = new Set(["pdf", "xlsx", "xls", "csv"]);
+
+function fileExtension(filename: string): string {
+  const idx = filename.lastIndexOf(".");
+  return idx === -1 ? "" : filename.slice(idx + 1).toLowerCase();
+}
+
+function fileTypeFromName(filename: string): "pdf" | "excel" | "csv" {
+  const ext = fileExtension(filename);
+  if (ext === "pdf") return "pdf";
+  if (ext === "csv") return "csv";
+  return "excel";
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function yearMonthUtc(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+/**
+ * Full upload → DB insert → edge-fn extraction pipeline.
+ *
+ * Order of operations (each failure point leaves predictable state):
+ *   1. Validate file size + extension client-side  → never leaves browser on fail
+ *   2. supabase.storage.upload                      → no DB row yet
+ *   3. INSERT qb_price_sheets (status=pending_review)
+ *   4. invoke extract-price-sheet                   → row stays; status moves to
+ *                                                      extracted / rejected server-side
+ *
+ * On step 4 failure we return the priceSheetId so the caller can offer a retry
+ * without re-uploading.
+ */
+export async function uploadAndExtractSheet(
+  input: UploadSheetInput,
+): Promise<UploadSheetResult> {
+  const { brandId, brandCode, file, sheetType, workspaceId, uploadedBy } = input;
+
+  // 1. Client-side validation
+  if (file.size > MAX_FILE_BYTES) {
+    return { error: `File exceeds 25 MB (actual: ${(file.size / 1024 / 1024).toFixed(1)} MB)` };
+  }
+  const ext = fileExtension(file.name);
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return { error: `Unsupported file type: .${ext}. Use pdf, xlsx, xls, or csv.` };
+  }
+
+  // 2. Storage upload
+  const brandDir = brandCode.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  const period = yearMonthUtc(new Date());
+  const storagePath = `${brandDir}/${period}/${Date.now()}-${sanitizeFileName(file.name)}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(storagePath, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (uploadErr) {
+    return { error: `Upload failed: ${uploadErr.message}` };
+  }
+
+  const fileUrl = `${STORAGE_BUCKET}/${storagePath}`;
+
+  // 3. Insert qb_price_sheets row
+  const { data: sheetRow, error: insertErr } = await supabase
+    .from("qb_price_sheets")
+    .insert({
+      workspace_id: workspaceId,
+      brand_id:     brandId,
+      filename:     file.name,
+      file_url:     fileUrl,
+      file_type:    fileTypeFromName(file.name),
+      sheet_type:   sheetType,
+      status:       "pending_review",
+      uploaded_by:  uploadedBy,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr || !sheetRow) {
+    return { error: `Could not create sheet record: ${insertErr?.message ?? "unknown"}` };
+  }
+
+  const priceSheetId = sheetRow.id as string;
+
+  // 4. Invoke extract-price-sheet edge function
+  type ExtractResponse = {
+    priceSheetId: string;
+    status: string;
+    itemsWritten: number;
+    programsWritten: number;
+  };
+
+  const { data: extractData, error: extractErr } = await supabase.functions.invoke<ExtractResponse>(
+    "extract-price-sheet",
+    { body: { priceSheetId } },
+  );
+
+  if (extractErr || !extractData) {
+    return {
+      error: `Extraction failed: ${extractErr?.message ?? "no response"}`,
+      priceSheetId,
+    };
+  }
+
+  return {
+    ok: true,
+    priceSheetId:    extractData.priceSheetId,
+    itemsWritten:    extractData.itemsWritten,
+    programsWritten: extractData.programsWritten,
+  };
+}

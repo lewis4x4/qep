@@ -1,23 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandFreshnessTable } from "../components/BrandFreshnessTable";
+import { UploadDrawer } from "../components/UploadDrawer";
 import { getBrandSheetStatus, type BrandSheetStatus } from "../lib/price-sheets-api";
 
 type Tab = "overview";
+
+type SelectedBrand = { id: string; code: string; name: string } | null;
 
 export function PriceSheetsPage() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<BrandSheetStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [_tab] = useState<Tab>("overview");
+  const [uploadBrand, setUploadBrand] = useState<SelectedBrand>(null);
 
   if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     let cancelled = false;
     setLoading(true);
     getBrandSheetStatus().then((data: BrandSheetStatus[]) => {
@@ -29,6 +33,10 @@ export function PriceSheetsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    return refetch();
+  }, [refetch]);
+
   // Aggregate stats
   const totalBrands = rows.length;
   const missingSheet = rows.filter((r) => !r.has_active_sheet).length;
@@ -39,11 +47,11 @@ export function PriceSheetsPage() {
   }).length;
   const noFreight = rows.filter((r) => r.freight_zone_count === 0).length;
 
-  const handleUpload = (_brandId: string) => {
-    // CP5: UploadDrawer will be wired here
+  const handleUpload = (brandId: string, brandCode: string, brandName: string) => {
+    setUploadBrand({ id: brandId, code: brandCode, name: brandName });
   };
 
-  const handleManageZones = (_brandId: string) => {
+  const handleManageZones = (_brandId: string, _brandCode: string, _brandName: string) => {
     // CP7: FreightZonesTab will be wired here
   };
 
@@ -95,6 +103,18 @@ export function PriceSheetsPage() {
           )}
         </CardContent>
       </Card>
+
+      <UploadDrawer
+        open={uploadBrand !== null}
+        onClose={() => setUploadBrand(null)}
+        brandId={uploadBrand?.id ?? null}
+        brandName={uploadBrand?.name ?? null}
+        brandCode={uploadBrand?.code ?? null}
+        onSuccess={() => {
+          setUploadBrand(null);
+          refetch();
+        }}
+      />
     </div>
   );
 }

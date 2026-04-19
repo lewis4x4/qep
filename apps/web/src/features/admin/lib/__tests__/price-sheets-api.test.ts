@@ -50,8 +50,31 @@ const mockFrom = mock((table: string) =>
   makeChain(tableData[table] ?? { data: [], error: null })
 );
 
+// Storage + functions mocks for upload pipeline (CP5)
+type StorageResult = { data: unknown; error: null | { message: string } };
+type FnResult      = { data: unknown; error: null | { message: string } };
+
+const storageState: { upload: StorageResult } = {
+  upload: { data: { path: "stub" }, error: null },
+};
+const fnState: { invoke: FnResult } = {
+  invoke: { data: null, error: null },
+};
+
+const mockStorageUpload = mock((_path: string, _file: unknown, _opts?: unknown) =>
+  Promise.resolve(storageState.upload),
+);
+const mockStorageFrom = mock((_bucket: string) => ({ upload: mockStorageUpload }));
+const mockFunctionsInvoke = mock((_name: string, _opts?: unknown) =>
+  Promise.resolve(fnState.invoke),
+);
+
 mock.module("@/lib/supabase", () => ({
-  supabase: { from: mockFrom },
+  supabase: {
+    from:      mockFrom,
+    storage:   { from: mockStorageFrom },
+    functions: { invoke: mockFunctionsInvoke },
+  },
 }));
 
 const {
@@ -59,6 +82,7 @@ const {
   getFreightZones,
   upsertFreightZone,
   deleteFreightZone,
+  uploadAndExtractSheet,
 } = await import("../price-sheets-api");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -249,4 +273,125 @@ describe("price-sheets-api", () => {
     expect(zones[0].freight_large_cents).toBe(194200);
     expect(zones[0].freight_small_cents).toBe(77700);
   });
+
+  // ── Upload pipeline (CP5) ────────────────────────────────────────────────
+
+  function makeFile(name = "asv-q1.pdf", size = 1024, type = "application/pdf"): File {
+    // Build a File; Bun supports the File constructor.
+    const content = new Uint8Array(size);
+    return new File([content], name, { type });
+  }
+
+  const UPLOAD_INPUT = {
+    brandId:     "brand-asv-uuid",
+    brandCode:   "ASV",
+    sheetType:   "price_book" as const,
+    workspaceId: "ws-1",
+    uploadedBy:  "user-1",
+  };
+
+  // ── Test 6: uploadAndExtractSheet happy path ─────────────────────────────
+
+  test("uploadAndExtractSheet: happy path uploads, inserts row, invokes extract-price-sheet", async () => {
+    mockStorageUpload.mockClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
+    fnState.invoke      = {
+      data: { priceSheetId: "ps-new", status: "extracted", itemsWritten: 42, programsWritten: 3 },
+      error: null,
+    };
+
+    // qb_price_sheets insert returns the new row id
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) {
+      insertChain[m] = () => insertChain;
+    }
+    insertChain["single"] = () => Promise.resolve({ data: { id: "ps-new" }, error: null });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({
+      ok: true,
+      priceSheetId:    "ps-new",
+      itemsWritten:    42,
+      programsWritten: 3,
+    });
+    expect(mockStorageUpload).toHaveBeenCalled();
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+      "extract-price-sheet",
+      { body: { priceSheetId: "ps-new" } },
+    );
+  });
+
+  // ── Test 7: uploadAndExtractSheet — storage failure aborts before DB ─────
+
+  test("uploadAndExtractSheet: storage upload failure returns error without inserting row", async () => {
+    mockStorageUpload.mockClear();
+    mockFromClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: null, error: { message: "bucket not found" } };
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({ error: expect.stringContaining("Upload failed") });
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockFunctionsInvoke).not.toHaveBeenCalled();
+  });
+
+  // ── Test 8: extraction failure — returns priceSheetId for retry ──────────
+
+  test("uploadAndExtractSheet: extraction 4xx returns priceSheetId so user can retry", async () => {
+    mockStorageUpload.mockClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
+    fnState.invoke      = { data: null, error: { message: "Claude JSON parse failed" } };
+
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) {
+      insertChain[m] = () => insertChain;
+    }
+    insertChain["single"] = () => Promise.resolve({ data: { id: "ps-failed" }, error: null });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({
+      priceSheetId: "ps-failed",
+      error: expect.stringContaining("Extraction failed"),
+    });
+  });
+
+  // ── Test 9: client-side validation rejects oversized files ───────────────
+
+  test("uploadAndExtractSheet: rejects files over 25 MB before hitting storage", async () => {
+    mockStorageUpload.mockClear();
+    mockFunctionsInvoke.mockClear();
+    mockFromClear();
+
+    const huge = makeFile("big.pdf", 26 * 1024 * 1024);
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: huge });
+
+    expect(result).toMatchObject({ error: expect.stringContaining("25 MB") });
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  // ── Test 10: client-side validation rejects unsupported extensions ───────
+
+  test("uploadAndExtractSheet: rejects unsupported file extensions", async () => {
+    mockStorageUpload.mockClear();
+    const exe = makeFile("malware.exe", 1024, "application/octet-stream");
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: exe });
+
+    expect(result).toMatchObject({ error: expect.stringContaining("Unsupported file type") });
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+  });
 });
+
+// Helper used by CP5 tests; must come after mockFrom is declared.
+function mockFromClear() {
+  // mock.mockClear() doesn't reset the implementation registered via mock.module,
+  // so we only clear call history. The default implementation remains active.
+  mockFrom.mockClear();
+}

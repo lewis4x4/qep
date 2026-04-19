@@ -4,8 +4,8 @@ import type { BrandSheetStatus } from "../lib/price-sheets-api";
 
 interface BrandFreshnessTableProps {
   rows: BrandSheetStatus[];
-  onUpload: (brandId: string) => void;
-  onManageZones: (brandId: string) => void;
+  onUpload: (brandId: string, brandCode: string, brandName: string) => void;
+  onManageZones: (brandId: string, brandCode: string, brandName: string) => void;
 }
 
 export function BrandFreshnessTable({ rows, onUpload, onManageZones }: BrandFreshnessTableProps) {
@@ -61,13 +61,13 @@ export function BrandFreshnessTable({ rows, onUpload, onManageZones }: BrandFres
               <td className="py-3">
                 <div className="flex gap-2">
                   <button
-                    onClick={() => onUpload(row.brand_id)}
+                    onClick={() => onUpload(row.brand_id, row.brand_code, row.brand_name)}
                     className="text-xs text-primary hover:underline"
                   >
                     Upload
                   </button>
                   <button
-                    onClick={() => onManageZones(row.brand_id)}
+                    onClick={() => onManageZones(row.brand_id, row.brand_code, row.brand_name)}
                     className="text-xs text-primary hover:underline"
                   >
                     Zones
