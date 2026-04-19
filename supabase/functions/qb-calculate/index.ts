@@ -144,7 +144,7 @@ Deno.serve(async (req: Request) => {
     }
     if (!freightZone) {
       return safeJsonError(
-        `No freight rate configured for ${brand.name} to ${request.deliveryState}. Ask Angela to add one.`,
+        `No freight rate configured for ${brand.name} to ${request.deliveryState}. Add a freight zone in Admin → Price Sheets.`,
         400,
         origin,
       );

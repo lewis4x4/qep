@@ -181,6 +181,9 @@ const DealEconomicsPage = lazy(() =>
 const AiRequestLogPage = lazy(() =>
   import("./features/admin/pages/AiRequestLogPage").then((m) => ({ default: m.AiRequestLogPage }))
 );
+const PriceSheetsPage = lazy(() =>
+  import("./features/admin/pages/PriceSheetsPage").then((m) => ({ default: m.PriceSheetsPage }))
+);
 const FleetRadarPage = lazy(() =>
   import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
 );
@@ -2287,6 +2290,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <BranchManagementPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/price-sheets"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <PriceSheetsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

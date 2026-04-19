@@ -41,6 +41,7 @@ import {
   TrendingUp,
   Lightbulb,
   Activity,
+  FileSpreadsheet,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -539,6 +540,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     href: "/admin/integrations",
     icon: Plug,
     roles: ["admin", "owner"],
+    utility: true,
+    sectionLabel: "Admin",
+  },
+  {
+    label: "Price Sheets",
+    href: "/admin/price-sheets",
+    icon: FileSpreadsheet,
+    roles: ["admin", "manager", "owner"],
     utility: true,
     sectionLabel: "Admin",
   },
