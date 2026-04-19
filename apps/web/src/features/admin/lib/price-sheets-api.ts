@@ -187,6 +187,107 @@ export async function deleteFreightZone(
   return { ok: true };
 }
 
+// ── Coverage analysis (CP7) ──────────────────────────────────────────────────
+
+import { US_STATE_CODES, type StateCode } from "./us-states";
+
+export type FreightCoverage = {
+  /** State codes with at least one zone. */
+  covered: StateCode[];
+  /** State codes with zero zones. */
+  uncovered: StateCode[];
+  /** States claimed by 2+ zones for this brand. */
+  overlaps: Array<{
+    state_code: StateCode;
+    zone_ids: string[];
+  }>;
+};
+
+/**
+ * Pure analysis over an array of freight zones for one brand.
+ * Surfaces coverage gaps (states with no zone) and overlaps (states in
+ * multiple zones) so the admin UI can highlight them visually.
+ *
+ * Defensive: dedups state_codes within a single zone so a zone that
+ * accidentally contains ["FL", "FL"] doesn't create a false "overlap".
+ */
+export function analyzeFreightCoverage(zones: FreightZone[]): FreightCoverage {
+  const zonesPerState = new Map<StateCode, Set<string>>();
+
+  for (const zone of zones) {
+    const states = (zone.state_codes ?? []) as StateCode[];
+    const seenInThisZone = new Set<StateCode>();
+    for (const state of states) {
+      if (seenInThisZone.has(state)) continue;
+      seenInThisZone.add(state);
+
+      const existing = zonesPerState.get(state);
+      if (existing) {
+        existing.add(zone.id);
+      } else {
+        zonesPerState.set(state, new Set([zone.id]));
+      }
+    }
+  }
+
+  const covered: StateCode[] = [];
+  const uncovered: StateCode[] = [];
+  const overlaps: FreightCoverage["overlaps"] = [];
+
+  for (const code of US_STATE_CODES) {
+    const zoneSet = zonesPerState.get(code);
+    if (!zoneSet || zoneSet.size === 0) {
+      uncovered.push(code);
+    } else {
+      covered.push(code);
+      if (zoneSet.size > 1) {
+        overlaps.push({ state_code: code, zone_ids: [...zoneSet] });
+      }
+    }
+  }
+
+  return { covered, uncovered, overlaps };
+}
+
+// ── Dollar / cents conversion (CP7) ──────────────────────────────────────────
+
+/**
+ * Parse a user-facing dollar string → integer cents.
+ * Accepts: "$1,942.00", "1942", "1,942", "1942.5", ".50", "" (→ null).
+ * Rejects: negative, non-numeric tails, more than two decimal places.
+ * Returns null for empty/invalid input.
+ */
+export function parseDollarInput(raw: string): number | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+
+  // Strip $ and commas; keep digits + one period
+  const cleaned = trimmed.replace(/[$,]/g, "");
+
+  // Must be digits (optionally with one decimal point with up to 2 digits after)
+  if (!/^\d+(\.\d{1,2})?$|^\.\d{1,2}$/.test(cleaned)) return null;
+
+  const [whole = "0", fraction = ""] = cleaned.split(".");
+  const wholeCents = Number(whole) * 100;
+  const fractionCents = Number((fraction + "00").slice(0, 2)); // right-pad then take 2
+  return wholeCents + fractionCents;
+}
+
+/**
+ * Format integer cents → display dollar string.
+ * 194200 → "1,942.00"  ·  0 → "0.00"  ·  null/undefined → ""
+ * Does NOT include the $ prefix — caller adds it when composing the UI.
+ */
+export function formatCentsAsDollars(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  const whole = Math.floor(Math.abs(cents) / 100);
+  const fraction = String(Math.abs(cents) % 100).padStart(2, "0");
+  const wholeStr = whole.toLocaleString("en-US");
+  const sign = cents < 0 ? "-" : "";
+  return `${sign}${wholeStr}.${fraction}`;
+}
+
 // ── Upload + extract pipeline (CP5) ──────────────────────────────────────────
 
 export type UploadSheetInput = {

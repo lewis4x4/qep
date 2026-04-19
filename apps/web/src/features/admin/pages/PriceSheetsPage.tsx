@@ -4,6 +4,7 @@ import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandFreshnessTable } from "../components/BrandFreshnessTable";
 import { UploadDrawer } from "../components/UploadDrawer";
+import { FreightZoneDrawer } from "../components/FreightZoneDrawer";
 import { getBrandSheetStatus, type BrandSheetStatus } from "../lib/price-sheets-api";
 
 type Tab = "overview";
@@ -16,6 +17,7 @@ export function PriceSheetsPage() {
   const [loading, setLoading] = useState(true);
   const [_tab] = useState<Tab>("overview");
   const [uploadBrand, setUploadBrand] = useState<SelectedBrand>(null);
+  const [zonesBrand,  setZonesBrand]  = useState<SelectedBrand>(null);
 
   if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
     return <Navigate to="/dashboard" replace />;
@@ -51,8 +53,8 @@ export function PriceSheetsPage() {
     setUploadBrand({ id: brandId, code: brandCode, name: brandName });
   };
 
-  const handleManageZones = (_brandId: string, _brandCode: string, _brandName: string) => {
-    // CP7: FreightZonesTab will be wired here
+  const handleManageZones = (brandId: string, brandCode: string, brandName: string) => {
+    setZonesBrand({ id: brandId, code: brandCode, name: brandName });
   };
 
   return (
@@ -114,6 +116,18 @@ export function PriceSheetsPage() {
           setUploadBrand(null);
           refetch();
         }}
+      />
+
+      <FreightZoneDrawer
+        open={zonesBrand !== null}
+        onClose={() => {
+          setZonesBrand(null);
+          refetch();
+        }}
+        brandId={zonesBrand?.id ?? null}
+        brandName={zonesBrand?.name ?? null}
+        workspaceId={profile.active_workspace_id}
+        onMutated={refetch}
       />
     </div>
   );
