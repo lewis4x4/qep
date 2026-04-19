@@ -1,0 +1,9 @@
+# apps/web/bunfig.toml — Bun configuration when cwd is apps/web/
+#
+# Slice 08 CP6: duplicates the happy-dom preload so integration tests
+# work whether `bun test` is invoked from the repo root or from apps/web/.
+# (The root-level bunfig.toml also defines preload, but its path is
+# cwd-relative — not bunfig-relative — so we need one entry per cwd.)
+
+[test]
+preload = ["./test-setup/happy-dom.ts"]
