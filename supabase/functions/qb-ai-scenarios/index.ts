@@ -316,7 +316,7 @@ Deno.serve(async (req: Request) => {
           emit({
             type:    "error",
             fatal:   false,
-            message: `${brand.name} not yet configured for deal engine.`,
+            message: `${brand.name} not yet configured for Deal Engine.`,
           });
           emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs, logId });
           controller.close();

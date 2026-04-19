@@ -138,7 +138,7 @@ export async function setBrandFreightKey(
 // UI label: "Deal Engine Enabled". DB column is discount_configured (retained
 // to avoid a 14-callsite rename). When true, the brand is fully configured and
 // quote scenarios can be generated for it. When false, qb-ai-scenarios returns
-// "not yet configured for deal engine" and skips scenario generation.
+// "not yet configured for Deal Engine" and skips scenario generation.
 
 export interface BrandEngineStatusRow {
   id: string;

@@ -70,7 +70,7 @@ export function calculateQuote(
   if (!brand.discount_configured) {
     throw new PricingError(
       "DISCOUNT_NOT_CONFIGURED",
-      `${brand.name} not yet configured for deal engine.`,
+      `${brand.name} not yet configured for Deal Engine.`,
       { brandId: brand.id, brandCode: brand.code },
     );
   }

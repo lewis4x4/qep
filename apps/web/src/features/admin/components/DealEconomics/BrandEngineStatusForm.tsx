@@ -83,7 +83,7 @@ export function BrandEngineStatusForm() {
       });
     } else {
       toast({
-        title: `${brand.name} deal engine ${enabled ? "enabled" : "disabled"}`,
+        title: `${brand.name} Deal Engine ${enabled ? "enabled" : "disabled"}`,
       });
     }
   }
