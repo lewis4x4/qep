@@ -64,7 +64,13 @@ const fnState: { invoke: FnResult } = {
 const mockStorageUpload = mock((_path: string, _file: unknown, _opts?: unknown) =>
   Promise.resolve(storageState.upload),
 );
-const mockStorageFrom = mock((_bucket: string) => ({ upload: mockStorageUpload }));
+const mockStorageRemove = mock((_paths: string[]) =>
+  Promise.resolve({ data: [], error: null }),
+);
+const mockStorageFrom = mock((_bucket: string) => ({
+  upload: mockStorageUpload,
+  remove: mockStorageRemove,
+}));
 const mockFunctionsInvoke = mock((_name: string, _opts?: unknown) =>
   Promise.resolve(fnState.invoke),
 );
@@ -83,6 +89,8 @@ const {
   upsertFreightZone,
   deleteFreightZone,
   uploadAndExtractSheet,
+  retryExtract,
+  retryPublish,
 } = await import("../price-sheets-api");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -422,6 +430,9 @@ describe("price-sheets-api", () => {
       priceSheetId: "ps-x",
       error: expect.stringContaining("Publish failed"),
       phase: "publish",
+      // Fix H1: publish-failure result now carries the extract counts forward
+      // so a retryPublish() call can restore them on the final success banner.
+      extractCounts: { itemsWritten: 10, programsWritten: 0 },
     });
     // Both edge fns should have been called
     expect(mockFunctionsInvoke.mock.calls).toHaveLength(2);
@@ -452,6 +463,191 @@ describe("price-sheets-api", () => {
 
     expect(result).toMatchObject({ error: expect.stringContaining("Unsupported file type") });
     expect(mockStorageUpload).not.toHaveBeenCalled();
+  });
+
+  // ── Fix M1: storage cleanup on DB insert failure ────────────────────────
+
+  test("uploadAndExtractSheet: when qb_price_sheets insert fails, orphaned storage object is removed", async () => {
+    mockStorageUpload.mockClear();
+    mockStorageRemove.mockClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
+
+    // Make the insert fail
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) {
+      insertChain[m] = () => insertChain;
+    }
+    insertChain["single"] = () => Promise.resolve({
+      data: null,
+      error: { message: "duplicate key violates constraint" },
+    });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({
+      error: expect.stringContaining("Could not create sheet record"),
+    });
+    // Storage upload should have fired
+    expect(mockStorageUpload).toHaveBeenCalled();
+    // And now the orphan cleanup must have fired — exactly one path in the array
+    expect(mockStorageRemove).toHaveBeenCalled();
+    const removeArgs = mockStorageRemove.mock.calls[0]?.[0];
+    expect(Array.isArray(removeArgs)).toBe(true);
+    expect(removeArgs).toHaveLength(1);
+    // No extract or publish should have been attempted
+    expect(mockFunctionsInvoke).not.toHaveBeenCalled();
+  });
+
+  test("uploadAndExtractSheet: storage cleanup failure does not mask the insert error", async () => {
+    mockStorageUpload.mockClear();
+    mockStorageRemove.mockClear();
+    storageState.upload = { data: { path: "x" }, error: null };
+    // Storage remove rejects — caller should still see the DB error, not the
+    // cleanup error
+    mockStorageRemove.mockImplementationOnce(() =>
+      Promise.reject(new Error("remove failed")),
+    );
+
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) {
+      insertChain[m] = () => insertChain;
+    }
+    insertChain["single"] = () => Promise.resolve({
+      data: null,
+      error: { message: "row-level security policy blocked insert" },
+    });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({
+      error: expect.stringContaining("row-level security policy"),
+    });
+  });
+
+  // ── Fix H1: retry helpers ────────────────────────────────────────────────
+
+  test("retryExtract: invokes extract → publish for an existing priceSheetId without re-uploading", async () => {
+    mockStorageUpload.mockClear();
+    mockStorageRemove.mockClear();
+    mockFrom.mockClear();
+    mockFunctionsInvoke.mockClear();
+
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({
+        data: { priceSheetId: "ps-retry", status: "extracted", itemsWritten: 15, programsWritten: 1 },
+        error: null,
+      }),
+    );
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({
+        data: {
+          priceSheetId: "ps-retry",
+          status: "published",
+          itemsApplied: 15,
+          itemsSkipped: 0,
+          programsApplied: 1,
+          programsSkipped: 0,
+        },
+        error: null,
+      }),
+    );
+
+    const result = await retryExtract("ps-retry");
+
+    expect(result).toMatchObject({
+      ok: true,
+      priceSheetId: "ps-retry",
+      itemsWritten: 15,
+      programsWritten: 1,
+      itemsApplied: 15,
+      programsApplied: 1,
+    });
+    // Critical: NO storage upload, NO DB insert, NO storage remove
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockStorageRemove).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+    // Both edge fns called in order
+    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("extract-price-sheet");
+    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
+    expect(mockFunctionsInvoke.mock.calls[1]?.[1]).toEqual({
+      body: { priceSheetId: "ps-retry", auto_approve: true },
+    });
+  });
+
+  test("retryPublish: invokes only publish-price-sheet and restores extract counts", async () => {
+    mockStorageUpload.mockClear();
+    mockFrom.mockClear();
+    mockFunctionsInvoke.mockClear();
+
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({
+        data: {
+          priceSheetId: "ps-pub-retry",
+          status: "published",
+          itemsApplied: 22,
+          itemsSkipped: 2,
+          programsApplied: 3,
+          programsSkipped: 0,
+        },
+        error: null,
+      }),
+    );
+
+    const result = await retryPublish("ps-pub-retry", {
+      itemsWritten: 24,
+      programsWritten: 3,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      priceSheetId: "ps-pub-retry",
+      itemsWritten: 24,         // preserved from extractCounts
+      programsWritten: 3,        // preserved from extractCounts
+      itemsApplied: 22,          // from this publish
+      programsApplied: 3,
+    });
+    // Only publish was invoked — no re-extract
+    expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
+    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("publish-price-sheet");
+    // Still no storage / insert
+    expect(mockStorageUpload).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  test("retryExtract: propagates extract failure with phase='extract'", async () => {
+    mockFunctionsInvoke.mockClear();
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({ data: null, error: { message: "claude timeout" } }),
+    );
+
+    const result = await retryExtract("ps-err");
+
+    expect(result).toMatchObject({
+      priceSheetId: "ps-err",
+      error: expect.stringContaining("Extraction failed"),
+      phase: "extract",
+    });
+    // Publish should NOT have been attempted
+    expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
+  });
+
+  test("retryPublish: propagates publish failure with phase='publish' and preserves counts", async () => {
+    mockFunctionsInvoke.mockClear();
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({ data: null, error: { message: "rls denied" } }),
+    );
+
+    const result = await retryPublish("ps-err", { itemsWritten: 7, programsWritten: 0 });
+
+    expect(result).toMatchObject({
+      priceSheetId: "ps-err",
+      error: expect.stringContaining("Publish failed"),
+      phase: "publish",
+      extractCounts: { itemsWritten: 7, programsWritten: 0 },
+    });
   });
 });
 

@@ -12,6 +12,8 @@ import { AlertCircle, CheckCircle2, FileUp, Loader2, Upload } from "lucide-react
 import { useAuth } from "@/hooks/useAuth";
 import {
   uploadAndExtractSheet,
+  retryExtract,
+  retryPublish,
   type UploadSheetInput,
   type UploadSheetResult,
 } from "../lib/price-sheets-api";
@@ -36,6 +38,9 @@ type Phase =
       message: string;
       priceSheetId?: string;
       failedPhase?: "extract" | "publish";
+      /** Extraction counts captured when publish fails (phase="publish") —
+       *  retryPublish() needs these to restore them to the success banner. */
+      extractedCounts?: { itemsWritten: number; programsWritten: number };
     };
 
 const SHEET_TYPE_OPTIONS: Array<{ value: SheetType; label: string; description: string }> = [
@@ -139,25 +144,73 @@ export function UploadDrawer({
     setPhase({ kind: "idle" });
   }
 
+  /**
+   * Render the async result into the phase state machine. Shared by the
+   * fresh-upload handler and the retry paths so success/failure UI is
+   * identical across entry points.
+   */
+  function handleResult(result: UploadSheetResult) {
+    if ("error" in result) {
+      setPhase({
+        kind: "failed",
+        message: result.error,
+        priceSheetId: result.priceSheetId,
+        failedPhase: result.phase,
+        extractedCounts: result.extractCounts,
+      });
+      return;
+    }
+    setPhase({
+      kind: "success",
+      itemsWritten:    result.itemsWritten,
+      programsWritten: result.programsWritten,
+      itemsApplied:    result.itemsApplied,
+      programsApplied: result.programsApplied,
+    });
+  }
+
+  /**
+   * Kick off the pipeline with a shared set of phase timers. Returns a cleanup
+   * function the caller must invoke after awaiting the pipeline so timers
+   * don't leak past the drawer lifecycle.
+   *
+   * `startAt` lets retry paths skip the upload/creating_record phases when the
+   * file+row already exist on the server.
+   */
+  function startPhaseTimers(
+    startAt: "uploading" | "extracting",
+  ): () => void {
+    if (startAt === "uploading") {
+      setPhase({ kind: "uploading" });
+    } else {
+      setPhase({ kind: "extracting" });
+    }
+
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
+    if (startAt === "uploading") {
+      // Mid-pipeline phase transitions: uploading → creating_record → extracting.
+      // There's no mid-progress signal from a single Promise so we approximate
+      // by time. Claude extract dominates the wait (30–90s).
+      timers.push(setTimeout(() => {
+        setPhase((p) => (p.kind === "uploading" ? { kind: "creating_record" } : p));
+      }, 400));
+      timers.push(setTimeout(() => {
+        setPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
+      }, 900));
+    }
+    // After 90s at extracting, assume extract done and publish is running.
+    timers.push(setTimeout(() => {
+      setPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
+    }, 90_000));
+
+    return () => timers.forEach(clearTimeout);
+  }
+
   async function handleSubmit() {
     if (!file || !brandId || !brandCode || !profile) return;
 
-    setPhase({ kind: "uploading" });
-
-    // The API helper runs: storage upload → insert row → invoke extract → invoke publish.
-    // We represent the mid-states with timed transitions: the long waits are the
-    // Claude extract pass (30–90s) and the catalog apply (1–5s). There's no
-    // mid-progress signal from a single Promise so we approximate by time.
-    const recTimer = setTimeout(() => {
-      setPhase((p) => (p.kind === "uploading" ? { kind: "creating_record" } : p));
-    }, 400);
-    const extractTimer = setTimeout(() => {
-      setPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
-    }, 900);
-    // After 90s, if still resolving, assume extract done and publish is running.
-    const publishTimer = setTimeout(() => {
-      setPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
-    }, 90_000);
+    const clear = startPhaseTimers("uploading");
 
     const input: UploadSheetInput = {
       brandId,
@@ -168,36 +221,47 @@ export function UploadDrawer({
       uploadedBy:  profile.id,
     };
 
-    let result: UploadSheetResult;
     try {
-      result = await uploadAndExtractSheet(input);
+      const result = await uploadAndExtractSheet(input);
+      clear();
+      handleResult(result);
     } catch (e: unknown) {
+      clear();
       const msg = e instanceof Error ? e.message : String(e);
-      clearTimeout(recTimer);
-      clearTimeout(extractTimer);
-      clearTimeout(publishTimer);
       setPhase({ kind: "failed", message: `Unexpected error: ${msg}` });
-      return;
     }
+  }
 
-    clearTimeout(recTimer);
-    clearTimeout(extractTimer);
-    clearTimeout(publishTimer);
+  /**
+   * Retry a post-insert failure without re-uploading the file. Routes to the
+   * correct server action based on which phase failed: extract → re-runs the
+   * full extract+publish pass; publish → re-runs only publish, preserving the
+   * extract counts the user already saw.
+   */
+  async function handleRetry() {
+    if (phase.kind !== "failed" || !phase.priceSheetId) return;
 
-    if ("error" in result) {
+    const clear = startPhaseTimers("extracting");
+    const priceSheetId = phase.priceSheetId;
+    const failedPhase  = phase.failedPhase;
+    const extracted    = phase.extractedCounts;
+
+    try {
+      const result =
+        failedPhase === "publish" && extracted
+          ? await retryPublish(priceSheetId, extracted)
+          : await retryExtract(priceSheetId);
+      clear();
+      handleResult(result);
+    } catch (e: unknown) {
+      clear();
+      const msg = e instanceof Error ? e.message : String(e);
       setPhase({
         kind: "failed",
-        message: result.error,
-        priceSheetId: result.priceSheetId,
-        failedPhase: result.phase,
-      });
-    } else {
-      setPhase({
-        kind: "success",
-        itemsWritten:    result.itemsWritten,
-        programsWritten: result.programsWritten,
-        itemsApplied:    result.itemsApplied,
-        programsApplied: result.programsApplied,
+        message: `Unexpected error: ${msg}`,
+        priceSheetId,
+        failedPhase,
+        extractedCounts: extracted,
       });
     }
   }
@@ -402,14 +466,26 @@ export function UploadDrawer({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={!file || busy || !brandId || !profile}
-                className="flex-1"
-              >
-                {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {phase.kind === "failed" ? "Retry" : "Upload & extract"}
-              </Button>
+              {(() => {
+                const isRetryable =
+                  phase.kind === "failed" && !!phase.priceSheetId;
+                const onClick = isRetryable ? handleRetry : handleSubmit;
+                const disabled =
+                  busy ||
+                  !brandId ||
+                  !profile ||
+                  (isRetryable ? false : !file);
+                return (
+                  <Button
+                    onClick={onClick}
+                    disabled={disabled}
+                    className="flex-1"
+                  >
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    {phase.kind === "failed" ? "Retry" : "Upload & extract"}
+                  </Button>
+                );
+              })()}
             </>
           )}
         </div>

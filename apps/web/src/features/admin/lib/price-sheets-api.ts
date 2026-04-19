@@ -314,6 +314,9 @@ export type UploadSheetResult =
       priceSheetId?: string;
       /** Which phase failed — surfaced in the drawer for a clearer retry CTA. */
       phase?: "extract" | "publish";
+      /** When phase="publish", the extract counts the server returned so the
+       *  retry path can preserve them through to the final success banner. */
+      extractCounts?: { itemsWritten: number; programsWritten: number };
     };
 
 const STORAGE_BUCKET = "price-sheets";
@@ -343,6 +346,100 @@ function yearMonthUtc(d: Date): string {
   return `${y}-${m}`;
 }
 
+// ── Edge function response shapes (shared by upload + retry paths) ──────────
+
+type ExtractResponse = {
+  priceSheetId: string;
+  status: string;
+  itemsWritten: number;
+  programsWritten: number;
+};
+
+type PublishResponse = {
+  priceSheetId: string;
+  status: string;
+  itemsApplied: number;
+  itemsSkipped: number;
+  programsApplied: number;
+  programsSkipped: number;
+};
+
+/**
+ * Invoke extract → publish for an already-inserted priceSheetId. Shared by
+ * uploadAndExtractSheet (first attempt) and retryExtract (post-failure retry).
+ *
+ * On failure the priceSheetId + phase is returned so callers can surface
+ * a targeted retry CTA without rebuilding the full pipeline.
+ */
+async function runExtractThenPublish(
+  priceSheetId: string,
+  extractWritten?: { itemsWritten: number; programsWritten: number },
+): Promise<UploadSheetResult> {
+  const extractCounts = extractWritten;
+
+  // Extract pass — skipped when the caller already has extract data (retryPublish)
+  let extractData: ExtractResponse | null = null;
+  if (!extractCounts) {
+    const res = await supabase.functions.invoke<ExtractResponse>(
+      "extract-price-sheet",
+      { body: { priceSheetId } },
+    );
+    if (res.error || !res.data) {
+      return {
+        error: `Extraction failed: ${res.error?.message ?? "no response"}`,
+        priceSheetId,
+        phase: "extract",
+      };
+    }
+    extractData = res.data;
+  }
+
+  // Publish pass — always runs
+  const pub = await supabase.functions.invoke<PublishResponse>(
+    "publish-price-sheet",
+    { body: { priceSheetId, auto_approve: true } },
+  );
+  if (pub.error || !pub.data) {
+    const extracted =
+      extractData
+        ? { itemsWritten: extractData.itemsWritten, programsWritten: extractData.programsWritten }
+        : extractCounts;
+    return {
+      error: `Publish failed: ${pub.error?.message ?? "no response"}`,
+      priceSheetId,
+      phase: "publish",
+      extractCounts: extracted,
+    };
+  }
+
+  const itemsWritten    = extractData?.itemsWritten    ?? extractCounts?.itemsWritten    ?? 0;
+  const programsWritten = extractData?.programsWritten ?? extractCounts?.programsWritten ?? 0;
+
+  return {
+    ok: true,
+    priceSheetId:    pub.data.priceSheetId,
+    itemsWritten,
+    programsWritten,
+    itemsApplied:    pub.data.itemsApplied,
+    programsApplied: pub.data.programsApplied,
+  };
+}
+
+/**
+ * Best-effort storage object cleanup. Used after a failed DB insert to avoid
+ * orphaning uploaded files. Errors here are swallowed — the object will
+ * eventually be reaped by a sweeper or bucket lifecycle policy, and the
+ * caller-facing error message is driven by the original DB failure, not this.
+ */
+async function tryRemoveStorageObject(storagePath: string): Promise<void> {
+  try {
+    await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(`[price-sheets-api] orphan cleanup failed for ${storagePath}`, e);
+  }
+}
+
 /**
  * Full upload → DB insert → extract → auto-publish pipeline.
  *
@@ -350,13 +447,15 @@ function yearMonthUtc(d: Date): string {
  *   1. Validate file size + extension client-side  → never leaves browser on fail
  *   2. supabase.storage.upload                      → no DB row yet
  *   3. INSERT qb_price_sheets (status=pending_review)
+ *        — on failure, best-effort remove of the uploaded storage object
+ *          so the bucket doesn't accumulate orphans over time (M1 fix)
  *   4. invoke extract-price-sheet                   → row stays; status moves to
  *                                                      extracted / rejected server-side
  *   5. invoke publish-price-sheet with auto_approve=true (CP6 — owner Q1=B,
  *      no review gate)                              → catalog live
  *
  * On step 4 or 5 failure we return the priceSheetId + phase so the caller can
- * offer a targeted retry without re-uploading.
+ * offer a targeted retry via retryExtract() / retryPublish() without re-uploading.
  */
 export async function uploadAndExtractSheet(
   input: UploadSheetInput,
@@ -407,61 +506,43 @@ export async function uploadAndExtractSheet(
     .single();
 
   if (insertErr || !sheetRow) {
+    // M1: prevent orphaned storage object on insert failure
+    await tryRemoveStorageObject(storagePath);
     return { error: `Could not create sheet record: ${insertErr?.message ?? "unknown"}` };
   }
 
   const priceSheetId = sheetRow.id as string;
 
-  // 4. Invoke extract-price-sheet edge function
-  type ExtractResponse = {
-    priceSheetId: string;
-    status: string;
-    itemsWritten: number;
-    programsWritten: number;
-  };
+  // 4 + 5. Extract then publish
+  return runExtractThenPublish(priceSheetId);
+}
 
-  const { data: extractData, error: extractErr } = await supabase.functions.invoke<ExtractResponse>(
-    "extract-price-sheet",
-    { body: { priceSheetId } },
-  );
+/**
+ * Retry the extract → publish pipeline against an existing priceSheetId.
+ * Used after a phase="extract" failure: the DB row was already inserted and
+ * the storage object already uploaded, so re-running from extraction is both
+ * correct and cheap.
+ *
+ * Note: the edge function enforces a status guard — the sheet must be in
+ * 'pending_review' or 'extracted' status. If a prior attempt left it in
+ * 'extracting' (mid-flight) or 'published', the edge function will reject.
+ */
+export async function retryExtract(
+  priceSheetId: string,
+): Promise<UploadSheetResult> {
+  return runExtractThenPublish(priceSheetId);
+}
 
-  if (extractErr || !extractData) {
-    return {
-      error: `Extraction failed: ${extractErr?.message ?? "no response"}`,
-      priceSheetId,
-      phase: "extract",
-    };
-  }
-
-  // 5. Invoke publish-price-sheet with auto_approve=true (CP6)
-  type PublishResponse = {
-    priceSheetId: string;
-    status: string;
-    itemsApplied: number;
-    itemsSkipped: number;
-    programsApplied: number;
-    programsSkipped: number;
-  };
-
-  const { data: publishData, error: publishErr } = await supabase.functions.invoke<PublishResponse>(
-    "publish-price-sheet",
-    { body: { priceSheetId, auto_approve: true } },
-  );
-
-  if (publishErr || !publishData) {
-    return {
-      error: `Publish failed: ${publishErr?.message ?? "no response"}`,
-      priceSheetId,
-      phase: "publish",
-    };
-  }
-
-  return {
-    ok: true,
-    priceSheetId:    extractData.priceSheetId,
-    itemsWritten:    extractData.itemsWritten,
-    programsWritten: extractData.programsWritten,
-    itemsApplied:    publishData.itemsApplied,
-    programsApplied: publishData.programsApplied,
-  };
+/**
+ * Retry only the publish pass against an already-extracted priceSheetId.
+ * Used after a phase="publish" failure: extraction succeeded (items/programs
+ * are in the staging tables), but applying to the catalog failed. Counts
+ * passed in are the extraction counts the caller already saw, so the success
+ * result still has itemsWritten / programsWritten populated for the UI.
+ */
+export async function retryPublish(
+  priceSheetId: string,
+  extractCounts: { itemsWritten: number; programsWritten: number },
+): Promise<UploadSheetResult> {
+  return runExtractThenPublish(priceSheetId, extractCounts);
 }
