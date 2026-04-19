@@ -213,7 +213,7 @@ function AiRequestLogPageInner() {
                             {row.resolved_model_id ? (
                               resolveDisplay(row)
                             ) : (
-                              <Badge variant="outline" className="text-yellow-600 border-yellow-300">Unresolved</Badge>
+                              <Badge variant="warning">Unresolved</Badge>
                             )}
                           </td>
                           <td className="px-4 py-2">{dealSize(row)}</td>

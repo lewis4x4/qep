@@ -82,7 +82,7 @@ function PriceSheetsPageInner() {
           <span className="text-muted-foreground ml-1">Urgent</span>
         </div>
         <div>
-          <span className="text-2xl font-bold text-orange-500">{noFreight}</span>
+          <span className="text-2xl font-bold text-warning">{noFreight}</span>
           <span className="text-muted-foreground ml-1">No Freight</span>
         </div>
       </div>
