@@ -93,6 +93,30 @@ export function UploadDrawer({
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // H2: mount-safety. In-flight pipelines (uploadAndExtractSheet / retry*)
+  // keep running server-side after the drawer closes. When their promise
+  // resolves, the resulting setPhase() + the setTimeout phase-flippers will
+  // target an unmounted component — React swallows it silently in production
+  // but it's a real "state update on unmounted" warning, and a landmine if
+  // this component is ever wrapped in StrictMode double-mounting or if we
+  // add analytics on phase transitions.
+  //
+  // The flag is a ref so it's stable across renders and doesn't trigger
+  // re-execution of the unmount cleanup. `safeSetPhase` / the timer guards
+  // read through the ref at fire time, which is always the latest value.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  function safeSetPhase(next: Phase | ((prev: Phase) => Phase)) {
+    if (!mountedRef.current) return;
+    setPhase(next);
+  }
+
   // Reset internal state whenever the drawer (re)opens for a new brand.
   useEffect(() => {
     if (open) {
@@ -151,7 +175,7 @@ export function UploadDrawer({
    */
   function handleResult(result: UploadSheetResult) {
     if ("error" in result) {
-      setPhase({
+      safeSetPhase({
         kind: "failed",
         message: result.error,
         priceSheetId: result.priceSheetId,
@@ -160,7 +184,7 @@ export function UploadDrawer({
       });
       return;
     }
-    setPhase({
+    safeSetPhase({
       kind: "success",
       itemsWritten:    result.itemsWritten,
       programsWritten: result.programsWritten,
@@ -193,15 +217,15 @@ export function UploadDrawer({
       // There's no mid-progress signal from a single Promise so we approximate
       // by time. Claude extract dominates the wait (30–90s).
       timers.push(setTimeout(() => {
-        setPhase((p) => (p.kind === "uploading" ? { kind: "creating_record" } : p));
+        safeSetPhase((p) => (p.kind === "uploading" ? { kind: "creating_record" } : p));
       }, 400));
       timers.push(setTimeout(() => {
-        setPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
+        safeSetPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
       }, 900));
     }
     // After 90s at extracting, assume extract done and publish is running.
     timers.push(setTimeout(() => {
-      setPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
+      safeSetPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
     }, 90_000));
 
     return () => timers.forEach(clearTimeout);
@@ -228,7 +252,7 @@ export function UploadDrawer({
     } catch (e: unknown) {
       clear();
       const msg = e instanceof Error ? e.message : String(e);
-      setPhase({ kind: "failed", message: `Unexpected error: ${msg}` });
+      safeSetPhase({ kind: "failed", message: `Unexpected error: ${msg}` });
     }
   }
 
@@ -256,7 +280,7 @@ export function UploadDrawer({
     } catch (e: unknown) {
       clear();
       const msg = e instanceof Error ? e.message : String(e);
-      setPhase({
+      safeSetPhase({
         kind: "failed",
         message: `Unexpected error: ${msg}`,
         priceSheetId,
