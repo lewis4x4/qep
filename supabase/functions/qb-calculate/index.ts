@@ -124,13 +124,20 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 2. Freight zone lookup ─────────────────────────────────────────────
+    // Slice-07 C1 fix: qb_freight_zones actually uses freight_large_cents /
+    // freight_small_cents / zone_name (not large_frame_cents / small_frame_cents
+    // / zone_code), and there is no is_active column — active zones are
+    // expressed via effective_from / effective_to. The prior column names were
+    // a drift between the Slice-02 stub and the Slice-04 schema (migration 284).
     const frameSize = model.frame_size ?? "large";
+    const today = new Date().toISOString().slice(0, 10);
     const { data: freightZone, error: freightErr } = await supabase
       .from("qb_freight_zones")
-      .select("large_frame_cents, small_frame_cents, zone_code")
+      .select("freight_large_cents, freight_small_cents, zone_name")
       .eq("brand_id", brand.id)
       .contains("state_codes", [request.deliveryState])
-      .eq("is_active", true)
+      .lte("effective_from", today)
+      .or(`effective_to.is.null,effective_to.gte.${today}`)
       .order("effective_from", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -152,8 +159,8 @@ Deno.serve(async (req: Request) => {
 
     const freightCents =
       frameSize === "small"
-        ? (freightZone.small_frame_cents ?? freightZone.large_frame_cents)
-        : freightZone.large_frame_cents;
+        ? (freightZone.freight_small_cents ?? freightZone.freight_large_cents)
+        : freightZone.freight_large_cents;
 
     // ── 3. Active programs for this brand ─────────────────────────────────
     // F1 fix: qb_programs uses `active` (not `is_active`), `effective_from`/`effective_to` (not start_date/end_date).
