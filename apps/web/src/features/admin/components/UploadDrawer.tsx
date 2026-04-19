@@ -23,8 +23,20 @@ type Phase =
   | { kind: "uploading" }
   | { kind: "creating_record" }
   | { kind: "extracting" }
-  | { kind: "success"; itemsWritten: number; programsWritten: number }
-  | { kind: "failed"; message: string; priceSheetId?: string };
+  | { kind: "publishing" }
+  | {
+      kind: "success";
+      itemsWritten: number;
+      programsWritten: number;
+      itemsApplied: number;
+      programsApplied: number;
+    }
+  | {
+      kind: "failed";
+      message: string;
+      priceSheetId?: string;
+      failedPhase?: "extract" | "publish";
+    };
 
 const SHEET_TYPE_OPTIONS: Array<{ value: SheetType; label: string; description: string }> = [
   {
@@ -89,13 +101,15 @@ export function UploadDrawer({
   const busy =
     phase.kind === "uploading" ||
     phase.kind === "creating_record" ||
-    phase.kind === "extracting";
+    phase.kind === "extracting" ||
+    phase.kind === "publishing";
 
   const canCloseNow =
     phase.kind === "idle" ||
     phase.kind === "success" ||
     phase.kind === "failed" ||
-    phase.kind === "extracting"; // extraction continues server-side
+    phase.kind === "extracting" || // extract continues server-side
+    phase.kind === "publishing";    // publish continues server-side
 
   function handleOpenChange(next: boolean) {
     if (!next && canCloseNow) {
@@ -130,16 +144,20 @@ export function UploadDrawer({
 
     setPhase({ kind: "uploading" });
 
-    // The API helper runs: storage upload → insert row → invoke extract.
-    // We represent the mid-states as best we can: since it's one async call,
-    // transition to "extracting" shortly after kick-off — the long wait is
-    // dominated by the Claude extraction pass (30–90s) which happens last.
-    const midTimer = setTimeout(() => {
-      setPhase({ kind: "creating_record" });
+    // The API helper runs: storage upload → insert row → invoke extract → invoke publish.
+    // We represent the mid-states with timed transitions: the long waits are the
+    // Claude extract pass (30–90s) and the catalog apply (1–5s). There's no
+    // mid-progress signal from a single Promise so we approximate by time.
+    const recTimer = setTimeout(() => {
+      setPhase((p) => (p.kind === "uploading" ? { kind: "creating_record" } : p));
     }, 400);
     const extractTimer = setTimeout(() => {
-      setPhase({ kind: "extracting" });
+      setPhase((p) => (p.kind === "creating_record" ? { kind: "extracting" } : p));
     }, 900);
+    // After 90s, if still resolving, assume extract done and publish is running.
+    const publishTimer = setTimeout(() => {
+      setPhase((p) => (p.kind === "extracting" ? { kind: "publishing" } : p));
+    }, 90_000);
 
     const input: UploadSheetInput = {
       brandId,
@@ -155,26 +173,31 @@ export function UploadDrawer({
       result = await uploadAndExtractSheet(input);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      clearTimeout(midTimer);
+      clearTimeout(recTimer);
       clearTimeout(extractTimer);
+      clearTimeout(publishTimer);
       setPhase({ kind: "failed", message: `Unexpected error: ${msg}` });
       return;
     }
 
-    clearTimeout(midTimer);
+    clearTimeout(recTimer);
     clearTimeout(extractTimer);
+    clearTimeout(publishTimer);
 
     if ("error" in result) {
       setPhase({
         kind: "failed",
         message: result.error,
         priceSheetId: result.priceSheetId,
+        failedPhase: result.phase,
       });
     } else {
       setPhase({
         kind: "success",
         itemsWritten:    result.itemsWritten,
         programsWritten: result.programsWritten,
+        itemsApplied:    result.itemsApplied,
+        programsApplied: result.programsApplied,
       });
     }
   }
@@ -311,15 +334,33 @@ export function UploadDrawer({
             </div>
           </PhaseBanner>
         )}
+        {phase.kind === "publishing" && (
+          <PhaseBanner icon={<Loader2 className="w-4 h-4 animate-spin" />} tone="info">
+            <div>
+              <div className="font-medium">Publishing to catalog…</div>
+              <div className="text-xs mt-1 opacity-80">
+                Auto-approving extracted items and applying to the live catalog.
+              </div>
+            </div>
+          </PhaseBanner>
+        )}
         {phase.kind === "success" && (
           <PhaseBanner icon={<CheckCircle2 className="w-4 h-4" />} tone="success">
             <div>
-              <div className="font-medium">Extraction complete.</div>
-              <div className="text-xs mt-1 flex gap-3">
-                <Badge variant="success">{phase.itemsWritten} items</Badge>
-                {phase.programsWritten > 0 && (
-                  <Badge variant="success">{phase.programsWritten} programs</Badge>
+              <div className="font-medium">Published to catalog.</div>
+              <div className="text-xs mt-1 flex flex-wrap gap-2">
+                <Badge variant="success">{phase.itemsApplied} items applied</Badge>
+                {phase.programsApplied > 0 && (
+                  <Badge variant="success">{phase.programsApplied} programs applied</Badge>
                 )}
+                {phase.itemsWritten !== phase.itemsApplied && (
+                  <Badge variant="warning">
+                    {phase.itemsWritten - phase.itemsApplied} items skipped
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs mt-2 opacity-80">
+                Reps can now quote against the new pricing.
               </div>
             </div>
           </PhaseBanner>
@@ -327,12 +368,18 @@ export function UploadDrawer({
         {phase.kind === "failed" && (
           <PhaseBanner icon={<AlertCircle className="w-4 h-4" />} tone="error">
             <div className="flex-1">
-              <div className="font-medium text-sm">Could not complete</div>
+              <div className="font-medium text-sm">
+                {phase.failedPhase === "publish"
+                  ? "Extracted but not published"
+                  : "Could not complete"}
+              </div>
               <div className="text-xs mt-1">{phase.message}</div>
               {phase.priceSheetId && (
                 <div className="text-xs mt-1 opacity-80">
-                  Sheet record saved as <code>{phase.priceSheetId.slice(0, 8)}…</code> — you can retry
-                  without re-uploading.
+                  Sheet record saved as <code>{phase.priceSheetId.slice(0, 8)}…</code> —{" "}
+                  {phase.failedPhase === "publish"
+                    ? "extraction is safe. Admin can retry publish from the sheet record."
+                    : "you can retry without re-uploading."}
                 </div>
               )}
             </div>

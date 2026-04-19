@@ -204,11 +204,15 @@ export type UploadSheetResult =
       priceSheetId: string;
       itemsWritten: number;
       programsWritten: number;
+      itemsApplied: number;
+      programsApplied: number;
     }
   | {
       error: string;
-      /** Present when insert succeeded but extraction failed — user can retry. */
+      /** Present when insert succeeded but extract/publish failed — user can retry. */
       priceSheetId?: string;
+      /** Which phase failed — surfaced in the drawer for a clearer retry CTA. */
+      phase?: "extract" | "publish";
     };
 
 const STORAGE_BUCKET = "price-sheets";
@@ -239,7 +243,7 @@ function yearMonthUtc(d: Date): string {
 }
 
 /**
- * Full upload → DB insert → edge-fn extraction pipeline.
+ * Full upload → DB insert → extract → auto-publish pipeline.
  *
  * Order of operations (each failure point leaves predictable state):
  *   1. Validate file size + extension client-side  → never leaves browser on fail
@@ -247,9 +251,11 @@ function yearMonthUtc(d: Date): string {
  *   3. INSERT qb_price_sheets (status=pending_review)
  *   4. invoke extract-price-sheet                   → row stays; status moves to
  *                                                      extracted / rejected server-side
+ *   5. invoke publish-price-sheet with auto_approve=true (CP6 — owner Q1=B,
+ *      no review gate)                              → catalog live
  *
- * On step 4 failure we return the priceSheetId so the caller can offer a retry
- * without re-uploading.
+ * On step 4 or 5 failure we return the priceSheetId + phase so the caller can
+ * offer a targeted retry without re-uploading.
  */
 export async function uploadAndExtractSheet(
   input: UploadSheetInput,
@@ -322,6 +328,30 @@ export async function uploadAndExtractSheet(
     return {
       error: `Extraction failed: ${extractErr?.message ?? "no response"}`,
       priceSheetId,
+      phase: "extract",
+    };
+  }
+
+  // 5. Invoke publish-price-sheet with auto_approve=true (CP6)
+  type PublishResponse = {
+    priceSheetId: string;
+    status: string;
+    itemsApplied: number;
+    itemsSkipped: number;
+    programsApplied: number;
+    programsSkipped: number;
+  };
+
+  const { data: publishData, error: publishErr } = await supabase.functions.invoke<PublishResponse>(
+    "publish-price-sheet",
+    { body: { priceSheetId, auto_approve: true } },
+  );
+
+  if (publishErr || !publishData) {
+    return {
+      error: `Publish failed: ${publishErr?.message ?? "no response"}`,
+      priceSheetId,
+      phase: "publish",
     };
   }
 
@@ -330,5 +360,7 @@ export async function uploadAndExtractSheet(
     priceSheetId:    extractData.priceSheetId,
     itemsWritten:    extractData.itemsWritten,
     programsWritten: extractData.programsWritten,
+    itemsApplied:    publishData.itemsApplied,
+    programsApplied: publishData.programsApplied,
   };
 }

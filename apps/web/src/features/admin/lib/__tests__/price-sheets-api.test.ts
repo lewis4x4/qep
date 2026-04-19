@@ -290,16 +290,33 @@ describe("price-sheets-api", () => {
     uploadedBy:  "user-1",
   };
 
-  // ── Test 6: uploadAndExtractSheet happy path ─────────────────────────────
+  // ── Test 6: uploadAndExtractSheet happy path (extract + publish) ────────
 
-  test("uploadAndExtractSheet: happy path uploads, inserts row, invokes extract-price-sheet", async () => {
+  test("uploadAndExtractSheet: happy path uploads, inserts, extracts, then publishes", async () => {
     mockStorageUpload.mockClear();
     mockFunctionsInvoke.mockClear();
     storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
-    fnState.invoke      = {
-      data: { priceSheetId: "ps-new", status: "extracted", itemsWritten: 42, programsWritten: 3 },
-      error: null,
-    };
+
+    // Two distinct edge-fn responses: extract first, then publish
+    mockFunctionsInvoke.mockImplementationOnce((_name: string, _opts?: unknown) =>
+      Promise.resolve({
+        data: { priceSheetId: "ps-new", status: "extracted", itemsWritten: 42, programsWritten: 3 },
+        error: null,
+      }),
+    );
+    mockFunctionsInvoke.mockImplementationOnce((_name: string, _opts?: unknown) =>
+      Promise.resolve({
+        data: {
+          priceSheetId: "ps-new",
+          status: "published",
+          itemsApplied: 42,
+          itemsSkipped: 0,
+          programsApplied: 3,
+          programsSkipped: 0,
+        },
+        error: null,
+      }),
+    );
 
     // qb_price_sheets insert returns the new row id
     const insertChain: Record<string, unknown> = {};
@@ -316,12 +333,18 @@ describe("price-sheets-api", () => {
       priceSheetId:    "ps-new",
       itemsWritten:    42,
       programsWritten: 3,
+      itemsApplied:    42,
+      programsApplied: 3,
     });
     expect(mockStorageUpload).toHaveBeenCalled();
-    expect(mockFunctionsInvoke).toHaveBeenCalledWith(
-      "extract-price-sheet",
-      { body: { priceSheetId: "ps-new" } },
-    );
+    // Extract called first
+    expect(mockFunctionsInvoke.mock.calls[0]?.[0]).toBe("extract-price-sheet");
+    expect(mockFunctionsInvoke.mock.calls[0]?.[1]).toEqual({ body: { priceSheetId: "ps-new" } });
+    // Publish called second with auto_approve:true
+    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
+    expect(mockFunctionsInvoke.mock.calls[1]?.[1]).toEqual({
+      body: { priceSheetId: "ps-new", auto_approve: true },
+    });
   });
 
   // ── Test 7: uploadAndExtractSheet — storage failure aborts before DB ─────
@@ -339,13 +362,15 @@ describe("price-sheets-api", () => {
     expect(mockFunctionsInvoke).not.toHaveBeenCalled();
   });
 
-  // ── Test 8: extraction failure — returns priceSheetId for retry ──────────
+  // ── Test 8: extraction failure — returns priceSheetId + phase=extract ──
 
-  test("uploadAndExtractSheet: extraction 4xx returns priceSheetId so user can retry", async () => {
+  test("uploadAndExtractSheet: extraction 4xx returns priceSheetId + phase=extract", async () => {
     mockStorageUpload.mockClear();
     mockFunctionsInvoke.mockClear();
     storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
-    fnState.invoke      = { data: null, error: { message: "Claude JSON parse failed" } };
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({ data: null, error: { message: "Claude JSON parse failed" } }),
+    );
 
     const insertChain: Record<string, unknown> = {};
     for (const m of ["insert", "select"]) {
@@ -359,7 +384,48 @@ describe("price-sheets-api", () => {
     expect(result).toMatchObject({
       priceSheetId: "ps-failed",
       error: expect.stringContaining("Extraction failed"),
+      phase: "extract",
     });
+    // Publish should NOT have been attempted after extract failure
+    expect(mockFunctionsInvoke.mock.calls).toHaveLength(1);
+  });
+
+  // ── Test 8b: publish failure — extract succeeded, surfaces phase=publish ─
+
+  test("uploadAndExtractSheet: publish failure returns priceSheetId + phase=publish", async () => {
+    mockStorageUpload.mockClear();
+    mockFunctionsInvoke.mockClear();
+    storageState.upload = { data: { path: "asv/2026-04/stub.pdf" }, error: null };
+
+    // Extract succeeds
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({
+        data: { priceSheetId: "ps-x", status: "extracted", itemsWritten: 10, programsWritten: 0 },
+        error: null,
+      }),
+    );
+    // Publish fails
+    mockFunctionsInvoke.mockImplementationOnce((_name: string) =>
+      Promise.resolve({ data: null, error: { message: "conflict: already publishing" } }),
+    );
+
+    const insertChain: Record<string, unknown> = {};
+    for (const m of ["insert", "select"]) {
+      insertChain[m] = () => insertChain;
+    }
+    insertChain["single"] = () => Promise.resolve({ data: { id: "ps-x" }, error: null });
+    mockFrom.mockImplementationOnce((_t: string) => insertChain);
+
+    const result = await uploadAndExtractSheet({ ...UPLOAD_INPUT, file: makeFile() });
+
+    expect(result).toMatchObject({
+      priceSheetId: "ps-x",
+      error: expect.stringContaining("Publish failed"),
+      phase: "publish",
+    });
+    // Both edge fns should have been called
+    expect(mockFunctionsInvoke.mock.calls).toHaveLength(2);
+    expect(mockFunctionsInvoke.mock.calls[1]?.[0]).toBe("publish-price-sheet");
   });
 
   // ── Test 9: client-side validation rejects oversized files ───────────────

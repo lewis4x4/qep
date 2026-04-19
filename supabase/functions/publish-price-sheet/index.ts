@@ -1,15 +1,22 @@
 /**
- * publish-price-sheet — Catalog Apply Edge Function (Slice 04)
+ * publish-price-sheet — Catalog Apply Edge Function (Slice 04 + CP6 auto-publish)
  *
  * POST /publish-price-sheet
- * Body: { priceSheetId: string }
+ * Body: { priceSheetId: string, auto_approve?: boolean }
+ *
+ * When `auto_approve: true` (Slice 07 CP6 — owner Q1=B, no review gate):
+ *   Before the catalog apply, bulk-flip any items/programs with
+ *   `review_status = 'pending'` on this sheet to `'approved'`. Preserves
+ *   the audit trail (approved, not silently bypassed). Items already in
+ *   `'rejected'` state are still excluded.
  *
  * Flow:
  *   1. Load qb_price_sheets row — must be in 'extracted' status.
  *   2. Optimistic guard: set status → 'extracting' (re-used as publish-in-progress
  *      mutex; prevents double-publish without a schema migration).
- *   3. Load all approved qb_price_sheet_items and qb_price_sheet_programs.
- *   4. Apply each approved item to the catalog:
+ *   3. (optional) If auto_approve: bulk-approve all pending items/programs.
+ *   4. Load all approved qb_price_sheet_items and qb_price_sheet_programs.
+ *   5. Apply each approved item to the catalog:
  *        model create   → INSERT qb_equipment_models
  *        model update   → UPDATE qb_equipment_models SET ... WHERE id = proposed_model_id
  *        attachment create/update → qb_attachments
@@ -383,9 +390,11 @@ Deno.serve(async (req: Request) => {
 
   // ── Parse body ────────────────────────────────────────────────────────────
   let priceSheetId: string;
+  let autoApprove = false;
   try {
     const body = await req.json();
     priceSheetId = body?.priceSheetId;
+    autoApprove  = body?.auto_approve === true;
     if (!priceSheetId) throw new Error("priceSheetId required");
   } catch (e: any) {
     return safeJsonError(`Invalid request body: ${e.message}`, 400, origin);
@@ -429,6 +438,31 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // ── Auto-approve (CP6 — owner Q1=B, no human review gate) ────────────────
+  let autoApprovedItems = 0;
+  let autoApprovedPrograms = 0;
+  if (autoApprove) {
+    const { data: itemsApproved } = await serviceClient
+      .from("qb_price_sheet_items")
+      .update({ review_status: "approved" })
+      .eq("price_sheet_id", priceSheetId)
+      .eq("review_status", "pending")
+      .select("id");
+    autoApprovedItems = (itemsApproved ?? []).length;
+
+    const { data: progsApproved } = await serviceClient
+      .from("qb_price_sheet_programs")
+      .update({ review_status: "approved" })
+      .eq("price_sheet_id", priceSheetId)
+      .eq("review_status", "pending")
+      .select("id");
+    autoApprovedPrograms = (progsApproved ?? []).length;
+
+    console.log(
+      `[publish-price-sheet] auto_approve: flipped ${autoApprovedItems} items and ${autoApprovedPrograms} programs from pending to approved on sheet ${priceSheetId}`,
+    );
+  }
 
   // ── Load approved items ───────────────────────────────────────────────────
   const { data: items, error: itemsErr } = await serviceClient
@@ -549,6 +583,9 @@ Deno.serve(async (req: Request) => {
     itemsSkipped: skippedItems.length,
     programsApplied: appliedProgramIds.length,
     programsSkipped: skippedPrograms.length,
+    autoApproved: autoApprove
+      ? { items: autoApprovedItems, programs: autoApprovedPrograms }
+      : undefined,
     skippedDetails: skippedItems.length + skippedPrograms.length > 0
       ? { items: skippedItems, programs: skippedPrograms }
       : undefined,
