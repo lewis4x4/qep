@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getAiRequestLogs, getAiLogStats, type AiLogRow, type AiLogFilter, type AiLogStats } from "../lib/ai-log-api";
+import { getAiRequestLogs, getAiLogStats, formatTimeToQuote, type AiLogRow, type AiLogFilter, type AiLogStats } from "../lib/ai-log-api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -197,8 +197,8 @@ export function AiRequestLogPage() {
                       <th className="px-4 py-2">Make / Model</th>
                       <th className="px-4 py-2">Deal Size</th>
                       <th className="px-4 py-2">Customer</th>
-                      <th className="px-4 py-2 group relative cursor-default" title="Correlation with qb_quotes deferred to Slice 07 (see plan R4)">
-                        Time to Quote <span className="text-muted-foreground/50">ⓘ</span>
+                      <th className="px-4 py-2" title="Seconds between this AI request and the earliest quote that originated from it.">
+                        Time to Quote
                       </th>
                     </tr>
                   </thead>
@@ -221,7 +221,13 @@ export function AiRequestLogPage() {
                           </td>
                           <td className="px-4 py-2">{dealSize(row)}</td>
                           <td className="px-4 py-2">{customerTypeDisplay(row.customer_type)}</td>
-                          <td className="px-4 py-2 text-muted-foreground">—</td>
+                          <td
+                            className={`px-4 py-2 ${
+                              row.time_to_quote_seconds != null ? "font-medium" : "text-muted-foreground"
+                            }`}
+                          >
+                            {formatTimeToQuote(row.time_to_quote_seconds)}
+                          </td>
                         </tr>
                         {expandedId === row.id && <ExpandedRow key={`${row.id}-expanded`} row={row} />}
                       </>

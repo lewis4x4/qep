@@ -256,7 +256,7 @@ Deno.serve(async (req: Request) => {
             })),
             parsedSummary: parsed.summary,
           });
-          emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs });
+          emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs, logId });
           controller.close();
           return;
         }
@@ -318,7 +318,7 @@ Deno.serve(async (req: Request) => {
             fatal:   false,
             message: `${brand.name} not yet configured for deal engine.`,
           });
-          emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs });
+          emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs, logId });
           controller.close();
           return;
         }
@@ -425,7 +425,7 @@ Deno.serve(async (req: Request) => {
         }
 
         emit({ type: "error", fatal: true, message });
-        emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs });
+        emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs, logId });
       }
 
       controller.close();
