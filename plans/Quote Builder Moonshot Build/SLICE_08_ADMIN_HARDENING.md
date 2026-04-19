@@ -1,15 +1,28 @@
 # SLICE 08 — Admin Hardening & QA Infrastructure
 
-**Status:** Planned. Needs owner Q&A before execution (see below).
+**Status:** Q&A resolved 2026-04-19. Ready for execution on GO.
 
 **Depends on:** Slice 07 + 4 post-merge audit fixes — all on main.
 - Slice 07 merge: `e2a2be8`
 - Audit fixes: `7426ef3` (C1), `ea56ed8` (H1+M1), `3a0b103` (H2), `f8f3650` (polish bundle)
 
 **Branch:** `claude/qep-qb-08-admin-hardening`
-**Next migration:** 302 (only if CP5 adds one — see Data Model Summary)
+**Next migration:** none (Q1=A keeps flare_reports as the surface)
 
 **Source of truth:** This plan addresses the 5 remaining findings from the Slice 07 post-merge audit (`SLICE_07_PRICE_SHEET_ADMIN.md` audit scorecard). All filenames and paths verified against main at the audit-fix branch head.
+
+---
+
+## Resolved Q&A (2026-04-19)
+
+Owner accepted all recommendations:
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Observability surface for extract/publish failures | **A — flare_reports.** No new schema. Reuses existing admin triage flow. |
+| Q2 | Integration test runtime | **A — happy-dom + bun:test.** Fast feedback, colocated with unit suite. |
+| Q3 | `<RequireAdmin>` behavior during profile load | **A — loading spinner.** Avoids flash-of-redirect. |
+| Q4 | Orphaned-sheet recovery UI | **Defer.** Drawer retry (H1 fix) covers the common path. |
 
 ---
 
@@ -18,17 +31,6 @@
 This slice does not ship new operator-facing features. It is **pure resilience + regression defense work**. Owners who expect new user value in every slice should understand: this slice pays down the rough edges in the admin surface shipped by Slices 06–07 so we don't re-litigate them when building Slice 09+.
 
 If that trade-off is not acceptable, fold CPs 1–4 into Slice 09 and defer CPs 5–8 to a dedicated QA-infra slice.
-
----
-
-## Scope Questions — Need Owner Resolution
-
-| # | Question | Context | Recommendation |
-|---|---|---|---|
-| Q1 | When `publish-price-sheet` or `extract-price-sheet` fails, where do those events land? | Today: `console.warn`/`console.error` only. Angela and ops have no alerting. Options: (A) `flare_reports` table — already wired, visible in the Flare admin UI, works for admin failures; (B) existing `event_tracker` infrastructure — better for aggregation/time-series but no UI today; (C) new `qb_admin_events` table with its own list page. | **A — flare_reports.** Zero new schema. Reuses the existing flare triage flow admins already use. Low blast radius. |
-| Q2 | Integration test runtime — `bun:test` + `happy-dom`, or Playwright against the dev server? | `happy-dom` is fast (seconds), runs in the existing bun test suite, doesn't need a real browser. Playwright catches real browser quirks but adds CI minutes and a separate runner. | **happy-dom + bun:test.** Faster feedback loop, keeps tests colocated with unit tests. Playwright in a later slice if we hit genuine browser bugs. |
-| Q3 | `<RequireAdmin>` behavior when profile hasn't loaded yet | Current admin pages render early-return `<Navigate>` on falsy profile, which triggers navigation during the loading millisecond. Options: (A) show a loading spinner while `auth.loading === true`; (B) keep current behavior but fix the hooks-order violation. | **A — loading spinner.** Better UX than a flash of redirect, aligns with how the app shell already handles loading. |
-| Q4 | Should failed uploads get a "retry this sheet" admin surface, or is the drawer-level retry sufficient? | Today: drawer-level retry exists (H1 fix). But if the user closes the drawer mid-failure, the failed sheet row is orphaned in `qb_price_sheets` with no UI to resume it. | **Defer.** The drawer-level retry covers the common path. Orphaned-sheet recovery is future work — only matters if staff closes the drawer during a 90s extract, which is an edge case on an edge case. |
 
 ---
 
