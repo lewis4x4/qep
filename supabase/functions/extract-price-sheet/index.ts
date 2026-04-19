@@ -28,6 +28,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.30.0";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonOk, safeJsonError } from "../_shared/safe-cors.ts";
+import { emitAdminFlare } from "../_shared/admin-flare.ts";
 import {
   detectModelAction,
   detectAttachmentAction,
@@ -257,6 +258,14 @@ Deno.serve(async (req: Request) => {
         extraction_metadata: { error: `Download failed: ${dlErr?.message}` },
       })
       .eq("id", priceSheetId);
+    await emitAdminFlare(serviceClient, {
+      source: "extract-price-sheet",
+      priceSheetId,
+      brandId: sheet.brand_id,
+      phase: "download",
+      message: `Failed to download file: ${dlErr?.message ?? "unknown"}`,
+      extra: { file_url: sheet.file_url },
+    });
     return safeJsonError(`Failed to download file: ${dlErr?.message}`, 500, origin);
   }
 
@@ -270,6 +279,13 @@ Deno.serve(async (req: Request) => {
       .from("qb_price_sheets")
       .update({ status: "rejected", extraction_metadata: { error: "ANTHROPIC_API_KEY not configured" } })
       .eq("id", priceSheetId);
+    await emitAdminFlare(serviceClient, {
+      source: "extract-price-sheet",
+      priceSheetId,
+      brandId: sheet.brand_id,
+      phase: "extract",
+      message: "ANTHROPIC_API_KEY not configured in edge function env",
+    });
     return safeJsonError("ANTHROPIC_API_KEY not configured", 500, origin);
   }
   const anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -318,6 +334,14 @@ Deno.serve(async (req: Request) => {
             },
           })
           .eq("id", priceSheetId);
+        await emitAdminFlare(serviceClient, {
+          source: "extract-price-sheet",
+          priceSheetId,
+          brandId: sheet.brand_id,
+          phase: "parse",
+          message: `JSON parse failed after retry: ${retryErr.message}`,
+          extra: { passType, rawResponseTruncated: String(retryErr.rawResponse ?? "").slice(0, 500) },
+        });
         return safeJsonError(`Extraction failed: could not parse Claude response as JSON`, 422, origin);
       }
     }

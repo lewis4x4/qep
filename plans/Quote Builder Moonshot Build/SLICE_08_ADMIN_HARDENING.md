@@ -1,15 +1,49 @@
 # SLICE 08 — Admin Hardening & QA Infrastructure
 
-**Status:** Q&A resolved 2026-04-19. Ready for execution on GO.
+**Status:** ✅ **SHIPPED** — all 9 CPs complete, all gates green, deployed to staging.
+
+**Branch:** `claude/qep-qb-08-admin-hardening` · **Final commit:** see CP9 below
 
 **Depends on:** Slice 07 + 4 post-merge audit fixes — all on main.
 - Slice 07 merge: `e2a2be8`
 - Audit fixes: `7426ef3` (C1), `ea56ed8` (H1+M1), `3a0b103` (H2), `f8f3650` (polish bundle)
 
-**Branch:** `claude/qep-qb-08-admin-hardening`
-**Next migration:** none (Q1=A keeps flare_reports as the surface)
+---
 
-**Source of truth:** This plan addresses the 5 remaining findings from the Slice 07 post-merge audit (`SLICE_07_PRICE_SHEET_ADMIN.md` audit scorecard). All filenames and paths verified against main at the audit-fix branch head.
+## Execution Log
+
+| CP | Commit | Shipped | Audit finding closed |
+|----|--------|---------|----------------------|
+| CP1 | `204604f` | `RequireAdmin` wrapper + decision tests | H3 (foundation) |
+| CP2 | see PR | Migrated 4 admin pages to `RequireAdmin` | H3 (application) |
+| CP3 | see PR | `active_workspace_id` null guard | M4 |
+| CP4 | see PR | Dark mode audit — 2 token fixes + findings doc | L2 |
+| CP5 | see PR | `flare_reports` emit on extract/publish failure + redeploys | M2 |
+| CP6 | see PR | happy-dom integration harness + smoke test | M3 (infra) |
+| CP7 | see PR | Integration test: PriceSheetsPage upload flow | M3 (test 1) |
+| CP8 | see PR | Integration test: FreightZoneDrawer CRUD + isolated test scripts | M3 (test 2) |
+| CP9 | _(this commit)_ | Final gates + closeout |  |
+
+**Final gate sweep (CP9):**
+- `bun run migrations:check` — 299 files, sequence 001..301 ✓
+- `bun x tsc --noEmit` (apps/web) — clean ✓
+- `bun run test:unit` — **569 pass / 0 fail across 90 files** ✓
+- `bun run test:integration` — **3 files green** (9 integration tests) ✓
+- `bun run build` — ✓ built in 7.30s, exit 0 ✓
+
+**Edge functions redeployed to staging `iciddijgonywtxoelous`:**
+- `extract-price-sheet` — emits flare_reports on download / extract / parse failures
+- `publish-price-sheet` — emits flare_reports on claim / load failures
+
+**Test infrastructure introduced:**
+- `scripts/run-unit-tests.mjs` — one bun subprocess per test file for `mock.module` isolation
+- `scripts/run-integration-tests.mjs` — same isolation strategy for `*.integration.test.tsx`
+- `apps/web/test-setup/happy-dom.ts` — DOM global registrator for React rendering in tests
+- `apps/web/bunfig.toml` + root `bunfig.toml` — preload wired for both cwd positions
+
+---
+
+**Source of truth:** This plan addresses the 5 remaining findings from the Slice 07 post-merge audit. All filenames and paths verified against main at the audit-fix branch head.
 
 ---
 

@@ -8,7 +8,8 @@ export interface CachedProfile {
   iron_role: string | null;
   iron_role_display: string | null;
   is_support: boolean;
-  active_workspace_id: string;
+  /** Nullable to match Profile in useAuth.ts — Slice 08 M4 fix. */
+  active_workspace_id: string | null;
 }
 
 interface CachedProfileEnvelope {

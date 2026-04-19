@@ -234,6 +234,20 @@ export function UploadDrawer({
   async function handleSubmit() {
     if (!file || !brandId || !brandCode || !profile) return;
 
+    // Slice 08 M4: active_workspace_id can be null for a freshly-provisioned
+    // profile that hasn't been assigned to a workspace yet. The upload
+    // pipeline writes a workspace-scoped row in qb_price_sheets, so without
+    // a workspace the insert is blocked. Surface a clear error instead of
+    // an RLS rejection.
+    if (!profile.active_workspace_id) {
+      safeSetPhase({
+        kind: "failed",
+        message: "Your profile isn't assigned to a workspace yet. Ask your admin to assign one before uploading price sheets.",
+      });
+      return;
+    }
+    const workspaceId = profile.active_workspace_id;
+
     const clear = startPhaseTimers("uploading");
 
     const input: UploadSheetInput = {
@@ -241,7 +255,7 @@ export function UploadDrawer({
       brandCode,
       file,
       sheetType,
-      workspaceId: profile.active_workspace_id,
+      workspaceId,
       uploadedBy:  profile.id,
     };
 

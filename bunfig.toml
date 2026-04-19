@@ -13,3 +13,7 @@
 
 [test]
 root = "apps"
+# Slice 08 CP6: happy-dom preload for .integration.test.tsx files.
+# Unit .test.ts files are unaffected — the registrator only installs
+# document/window globals when they're not already defined.
+preload = ["./apps/web/test-setup/happy-dom.ts"]

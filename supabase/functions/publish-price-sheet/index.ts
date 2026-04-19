@@ -38,6 +38,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { optionsResponse, safeJsonOk, safeJsonError } from "../_shared/safe-cors.ts";
+import { emitAdminFlare } from "../_shared/admin-flare.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -422,22 +423,32 @@ Deno.serve(async (req: Request) => {
     .select("id")
     .maybeSingle();
 
+  // Service client for catalog writes + flare emissions (bypasses RLS).
+  // Created before the claim check so we can emit observability flares
+  // on every failure path, including pre-apply ones.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+
   if (claimErr) {
+    await emitAdminFlare(serviceClient, {
+      source: "publish-price-sheet",
+      priceSheetId,
+      brandId: sheet.brand_id,
+      phase: "publish",
+      message: `Failed to claim publish slot: ${claimErr.message}`,
+    });
     return safeJsonError(`Failed to claim publish slot: ${claimErr.message}`, 500, origin);
   }
   if (!claim) {
     // Either already publishing or not in 'extracted' state — safe 409.
+    // Not flared: this is a contention case, not a bug.
     return safeJsonError(
       `Sheet is not in 'extracted' state or a publish is already in flight for sheet ${priceSheetId}`,
       409,
       origin,
     );
   }
-
-  // Service client for catalog writes (bypasses RLS)
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
   // ── Auto-approve (CP6 — owner Q1=B, no human review gate) ────────────────
   let autoApprovedItems = 0;
@@ -476,6 +487,13 @@ Deno.serve(async (req: Request) => {
       .from("qb_price_sheets")
       .update({ status: "extracted" }) // roll back guard
       .eq("id", priceSheetId);
+    await emitAdminFlare(serviceClient, {
+      source: "publish-price-sheet",
+      priceSheetId,
+      brandId: sheet.brand_id,
+      phase: "publish",
+      message: `Failed to load sheet items: ${itemsErr.message}`,
+    });
     return safeJsonError(`Failed to load sheet items: ${itemsErr.message}`, 500, origin);
   }
 
@@ -490,6 +508,13 @@ Deno.serve(async (req: Request) => {
       .from("qb_price_sheets")
       .update({ status: "extracted" })
       .eq("id", priceSheetId);
+    await emitAdminFlare(serviceClient, {
+      source: "publish-price-sheet",
+      priceSheetId,
+      brandId: sheet.brand_id,
+      phase: "publish",
+      message: `Failed to load sheet programs: ${progsErr.message}`,
+    });
     return safeJsonError(`Failed to load sheet programs: ${progsErr.message}`, 500, origin);
   }
 
