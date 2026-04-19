@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import { BrandFreshnessTable } from "../components/BrandFreshnessTable";
 import { UploadDrawer } from "../components/UploadDrawer";
 import { FreightZoneDrawer } from "../components/FreightZoneDrawer";
@@ -10,15 +10,19 @@ import { getBrandSheetStatus, type BrandSheetStatus } from "../lib/price-sheets-
 type SelectedBrand = { id: string; code: string; name: string } | null;
 
 export function PriceSheetsPage() {
+  return (
+    <RequireAdmin>
+      <PriceSheetsPageInner />
+    </RequireAdmin>
+  );
+}
+
+function PriceSheetsPageInner() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<BrandSheetStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadBrand, setUploadBrand] = useState<SelectedBrand>(null);
   const [zonesBrand,  setZonesBrand]  = useState<SelectedBrand>(null);
-
-  if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   const refetch = useCallback(() => {
     let cancelled = false;
@@ -123,7 +127,7 @@ export function PriceSheetsPage() {
         }}
         brandId={zonesBrand?.id ?? null}
         brandName={zonesBrand?.name ?? null}
-        workspaceId={profile.active_workspace_id}
+        workspaceId={profile?.active_workspace_id ?? null}
         onMutated={refetch}
       />
     </div>

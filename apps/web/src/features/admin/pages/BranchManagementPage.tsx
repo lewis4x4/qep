@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import { Building2, MapPin, Phone, Mail, Users, Clock, FileText, Plus, Pencil, Trash2, ChevronDown, ChevronRight, Shield, LocateFixed, Loader2 } from "lucide-react";
 import { BranchLogoUpload } from "@/components/BranchLogoUpload";
 import { geocodeAddress } from "@/lib/geocode";
@@ -256,6 +257,14 @@ function Section({ icon: Icon, title, children, defaultOpen = true }: {
 }
 
 export function BranchManagementPage() {
+  return (
+    <RequireAdmin>
+      <BranchManagementPageInner />
+    </RequireAdmin>
+  );
+}
+
+function BranchManagementPageInner() {
   const branchesQ = useBranches();
   const saveMut = useSaveBranch();
   const deleteMut = useDeleteBranch();

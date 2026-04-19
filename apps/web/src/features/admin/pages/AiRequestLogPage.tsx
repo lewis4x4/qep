@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import { getAiRequestLogs, getAiLogStats, formatTimeToQuote, type AiLogRow, type AiLogFilter, type AiLogStats } from "../lib/ai-log-api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,17 +99,14 @@ type DaysFilter = "7" | "30" | "all";
 type SourceFilter = "all" | "text" | "voice";
 
 export function AiRequestLogPage() {
-  const { profile } = useAuth();
+  return (
+    <RequireAdmin>
+      <AiRequestLogPageInner />
+    </RequireAdmin>
+  );
+}
 
-  const canView = ["admin", "manager", "owner"].includes(profile?.role ?? "");
-  if (!canView) {
-    return (
-      <div className="flex h-64 items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">You do not have access to this page.</p>
-      </div>
-    );
-  }
-
+function AiRequestLogPageInner() {
   const [days, setDays]           = useState<DaysFilter>("7");
   const [source, setSource]       = useState<SourceFilter>("all");
   const [rows, setRows]           = useState<AiLogRow[]>([]);

@@ -1,10 +1,19 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import { ServiceCreditsForm } from "../components/DealEconomics/ServiceCreditsForm";
 import { InternalFreightRulesForm } from "../components/DealEconomics/InternalFreightRulesForm";
 import { BrandFreightKeysForm } from "../components/DealEconomics/BrandFreightKeysForm";
 import { BrandEngineStatusForm } from "../components/DealEconomics/BrandEngineStatusForm";
 
 export function DealEconomicsPage() {
+  return (
+    <RequireAdmin>
+      <DealEconomicsPageInner />
+    </RequireAdmin>
+  );
+}
+
+function DealEconomicsPageInner() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>

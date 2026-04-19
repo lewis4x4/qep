@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideAccess } from "../RequireAdmin";
+import { decideAccess } from "../requireAdminLogic";
 
 const ADMIN_LIKE: ReadonlyArray<"admin" | "manager" | "owner" | "rep"> = [
   "admin",

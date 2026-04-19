@@ -2,6 +2,8 @@ import { Navigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { UserRole } from "@/lib/database.types";
+import { decideAccess } from "./requireAdminLogic";
+export { decideAccess, type AccessDecision } from "./requireAdminLogic";
 
 /**
  * RequireAdmin — role-gated route wrapper.
@@ -26,23 +28,6 @@ import type { UserRole } from "@/lib/database.types";
  */
 
 const DEFAULT_ROLES: UserRole[] = ["admin", "manager", "owner"];
-
-export type AccessDecision = "loading" | "redirect" | "allow";
-
-/**
- * Pure access decision — exported for unit testing without a DOM.
- * Encodes the full gate logic so the component is a thin presentation shell.
- */
-export function decideAccess(input: {
-  loading: boolean;
-  profileRole: UserRole | null;
-  allowedRoles: readonly UserRole[];
-}): AccessDecision {
-  if (input.loading) return "loading";
-  if (!input.profileRole) return "redirect";
-  if (!input.allowedRoles.includes(input.profileRole)) return "redirect";
-  return "allow";
-}
 
 export interface RequireAdminProps {
   /** Roles allowed to see the children. Default: admin / manager / owner. */
