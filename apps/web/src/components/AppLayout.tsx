@@ -24,7 +24,8 @@ interface Profile {
   iron_role: string | null;
   iron_role_display: string | null;
   is_support: boolean;
-  active_workspace_id: string;
+  /** Nullable to match useAuth.Profile — Slice 08 M4 fix. */
+  active_workspace_id: string | null;
 }
 
 export interface AppLayoutProps {

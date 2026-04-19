@@ -17,7 +17,11 @@ interface Profile {
   iron_role: string | null;
   iron_role_display: string | null;
   is_support: boolean;
-  active_workspace_id: string;
+  /** A valid DB value can be null for a brand-new profile that has not
+   *  yet been assigned to a workspace. Admin surfaces must narrow this
+   *  before passing it to workspace-scoped writes (see M4 in the Slice
+   *  07 audit). */
+  active_workspace_id: string | null;
 }
 
 interface AuthState {
