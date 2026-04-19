@@ -1,12 +1,41 @@
 # SLICE 07 — Price Sheet Admin + Freight Zones + Discount Cleanup
 
-**Status:** Planned — owner Q&A resolved 2026-04-18. Ready for execution on GO.
+**Status:** ✅ **SHIPPED** — all 10 CPs complete, all gates green, deployed to staging.
 
-**Depends on:** Slice 06 (Admin UI Polish) — shipped 2026-04-18 at `ebed3f4`. PR #2 merged.
-Post-PR cleanup: `b4cdea4` (migration allowlist, main).
+**Branch:** `claude/qep-qb-07-price-sheet-admin` · **Final commit:** see CP10 below
+**Smoke test procedure:** [SLICE_07_SMOKE_TEST.md](./SLICE_07_SMOKE_TEST.md)
 
-**Branch:** `claude/qep-qb-07-price-sheet-admin`
-**Next migration:** 301
+**Depends on:** Slice 06 (Admin UI Polish) — shipped 2026-04-18 at `ebed3f4`.
+
+---
+
+## Execution Log
+
+| CP | Commit | Shipped | Gates | Notes |
+|----|--------|---------|-------|-------|
+| CP1 | `c7663b5` | Migration 301 SQL | ✓ | `discount_configured` comment + `qb_quotes.originating_log_id` FK |
+| CP1-bis | `df13115` | Types regen | ✓ | After orchestrator applied 301 to staging |
+| CP2 | `09b5c4e` | R2 error messages | ✓ | `qb-calculate` freight error updated |
+| CP3 | `4c3eca3` | Price Sheets service layer | ✓ (5 tests) | `getBrandSheetStatus`, freight CRUD |
+| CP4 | `9f740b7` | Freshness dashboard | ✓ (9 tests) | `PriceSheetsPage`, `UrgencyBadge`, route + nav |
+| CP5 | `fd335b7` | Upload drawer | ✓ (14 tests) | `uploadAndExtractSheet` pipeline |
+| CP6 | `39fbdb4` | Auto-publish | ✓ (15 tests) | `publish-price-sheet` v3 deployed, `auto_approve` flag |
+| CP7 | `ee66109` | Freight zone CRUD | ✓ (49 tests) | `FreightZoneDrawer`, coverage grid, overlap detection |
+| CP8 | `f1a1d8b` | `originating_log_id` wire-up | ✓ (59 tests) | `qb-ai-scenarios` v3 deployed, Time-to-Quote column |
+| CP9 | `546f3d4` | Deal Engine Status tab | ✓ (65 tests) | `BrandEngineStatusForm` with readiness badges |
+| CP10 | _(this commit)_ | Smoke test doc + closeout | ✓ (69 tests) | Full gate re-verify, smoke procedure documented |
+
+**Final gate sweep (CP10):**
+- `bun run migrations:check` — 299 files, sequence 001..301 ✓
+- `bun x tsc --noEmit` (apps/web) — clean ✓
+- `bun test src/features/admin` — **69 pass / 0 fail / 212 assertions** across 5 files ✓
+- `bun run build` — ✓ built in 7.09s, exit 0 ✓
+
+**Edge functions deployed to staging `iciddijgonywtxoelous`:**
+- `qb-ai-scenarios` v3 — all `complete` SSE events include `logId`
+- `publish-price-sheet` v3 — `auto_approve: true` flag support
+
+---
 
 **Source of truth:** All table names, column names, and component paths verified against the
 live codebase. Owner Q&A resolved 2026-04-18 (answers folded in below).
