@@ -34,6 +34,10 @@ const {
   deleteFreightRule,
   getBrandFreightKeys,
   setBrandFreightKey,
+  getBrandEngineStatus,
+  setBrandDealEngineEnabled,
+  isBrandQuoteReady,
+  missingPrereqs,
 } = await import("../deal-economics-api");
 
 describe("deal-economics-api", () => {
@@ -166,5 +170,118 @@ describe("deal-economics-api", () => {
 
     const result = await setBrandFreightKey("brand-uuid", false);
     expect(result).toEqual({ error: "permission denied" });
+  });
+
+  // ── Brand Engine Status (CP9) ────────────────────────────────────────────
+
+  test("getBrandEngineStatus fires 4 parallel queries to the right tables", async () => {
+    await getBrandEngineStatus();
+    expect(mockFrom).toHaveBeenCalledWith("qb_brands");
+    expect(mockFrom).toHaveBeenCalledWith("qb_price_sheets");
+    expect(mockFrom).toHaveBeenCalledWith("qb_freight_zones");
+    expect(mockFrom).toHaveBeenCalledWith("qb_programs");
+  });
+
+  test("getBrandEngineStatus merges sheet/zone/program counts into per-brand rows", async () => {
+    const brandsRow = { order: mock(() => Promise.resolve({
+      data: [
+        { id: "b1", code: "ASV", name: "ASV", discount_configured: true,  has_inbound_freight_key: true  },
+        { id: "b2", code: "BAR", name: "Barko", discount_configured: false, has_inbound_freight_key: false },
+      ],
+      error: null,
+    })) };
+    const sheetsRes = Promise.resolve({
+      data: [
+        { brand_id: "b1", status: "published" },
+        { brand_id: "b1", status: "published" },
+        { brand_id: "b1", status: "extracted"  }, // not yet published — excluded
+        { brand_id: "b2", status: "superseded" }, // excluded
+      ],
+      error: null,
+    });
+    const zonesRes = Promise.resolve({
+      data: [{ brand_id: "b1" }, { brand_id: "b1" }, { brand_id: "b1" }],
+      error: null,
+    });
+    const programsRes = Promise.resolve({
+      data: [
+        { brand_id: "b1", active: true  },
+        { brand_id: "b1", active: true  },
+        { brand_id: "b1", active: false }, // inactive — excluded
+      ],
+      error: null,
+    });
+
+    // First select: qb_brands (needs .order); next 3: direct awaits on .select()
+    mockSelect.mockImplementationOnce(() => brandsRow);
+    mockSelect.mockImplementationOnce(() => sheetsRes);
+    mockSelect.mockImplementationOnce(() => zonesRes);
+    mockSelect.mockImplementationOnce(() => programsRes);
+
+    const rows = await getBrandEngineStatus();
+
+    expect(rows).toHaveLength(2);
+    const asv = rows.find((r) => r.id === "b1")!;
+    expect(asv.name).toBe("ASV");
+    expect(asv.discount_configured).toBe(true);
+    expect(asv.published_sheet_count).toBe(2);
+    expect(asv.freight_zone_count).toBe(3);
+    expect(asv.active_program_count).toBe(2);
+
+    const barko = rows.find((r) => r.id === "b2")!;
+    expect(barko.discount_configured).toBe(false);
+    expect(barko.published_sheet_count).toBe(0);
+    expect(barko.freight_zone_count).toBe(0);
+    expect(barko.active_program_count).toBe(0);
+  });
+
+  test("setBrandDealEngineEnabled writes { discount_configured } to qb_brands WHERE id = brandId", async () => {
+    const eqMock = mock(() => Promise.resolve({ error: null }));
+    mockUpdate.mockImplementationOnce(() => ({ eq: eqMock }));
+
+    const result = await setBrandDealEngineEnabled("brand-asv-uuid", true);
+
+    expect(mockFrom).toHaveBeenCalledWith("qb_brands");
+    expect(mockUpdate).toHaveBeenCalledWith({ discount_configured: true });
+    expect(eqMock).toHaveBeenCalledWith("id", "brand-asv-uuid");
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("setBrandDealEngineEnabled surfaces DB error messages", async () => {
+    const eqMock = mock(() => Promise.resolve({ error: { message: "rls: forbidden" } }));
+    mockUpdate.mockImplementationOnce(() => ({ eq: eqMock }));
+    const result = await setBrandDealEngineEnabled("b-1", false);
+    expect(result).toEqual({ error: "rls: forbidden" });
+  });
+
+  test("isBrandQuoteReady requires ≥1 published sheet AND ≥1 freight zone", () => {
+    const base = {
+      id: "b", code: "X", name: "X",
+      discount_configured: false, has_inbound_freight_key: false,
+      published_sheet_count: 0, freight_zone_count: 0, active_program_count: 0,
+    };
+    expect(isBrandQuoteReady(base)).toBe(false);
+    expect(isBrandQuoteReady({ ...base, published_sheet_count: 1 })).toBe(false);
+    expect(isBrandQuoteReady({ ...base, freight_zone_count: 1 })).toBe(false);
+    expect(isBrandQuoteReady({ ...base, published_sheet_count: 1, freight_zone_count: 1 })).toBe(true);
+  });
+
+  test("missingPrereqs lists only the missing required items", () => {
+    const base = {
+      id: "b", code: "X", name: "X",
+      discount_configured: false, has_inbound_freight_key: false,
+      published_sheet_count: 0, freight_zone_count: 0, active_program_count: 0,
+    };
+    expect(missingPrereqs(base)).toEqual(["price sheet", "freight zones"]);
+    expect(missingPrereqs({ ...base, published_sheet_count: 1 })).toEqual(["freight zones"]);
+    expect(missingPrereqs({ ...base, published_sheet_count: 1, freight_zone_count: 1 })).toEqual([]);
+    // Programs and freight key are NOT required — absence shouldn't appear
+    expect(missingPrereqs({
+      ...base,
+      published_sheet_count: 1,
+      freight_zone_count: 1,
+      active_program_count: 0,
+      has_inbound_freight_key: false,
+    })).toEqual([]);
   });
 });

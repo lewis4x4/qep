@@ -132,3 +132,115 @@ export async function setBrandFreightKey(
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+// ── Brand Engine Status (CP9) ────────────────────────────────────────────────
+//
+// UI label: "Deal Engine Enabled". DB column is discount_configured (retained
+// to avoid a 14-callsite rename). When true, the brand is fully configured and
+// quote scenarios can be generated for it. When false, qb-ai-scenarios returns
+// "not yet configured for deal engine" and skips scenario generation.
+
+export interface BrandEngineStatusRow {
+  id: string;
+  code: string;
+  name: string;
+  /** Maps to qb_brands.discount_configured. Surfaced as "Deal Engine Enabled". */
+  discount_configured: boolean;
+  has_inbound_freight_key: boolean;
+  /** # of published price sheets for this brand (from qb_price_sheets). */
+  published_sheet_count: number;
+  /** # of freight zones configured for this brand (from qb_freight_zones). */
+  freight_zone_count: number;
+  /** # of active programs for this brand (from qb_programs). */
+  active_program_count: number;
+}
+
+export async function getBrandEngineStatus(): Promise<BrandEngineStatusRow[]> {
+  const [brandsRes, sheetsRes, zonesRes, programsRes] = await Promise.all([
+    supabase
+      .from("qb_brands")
+      .select("id, code, name, discount_configured, has_inbound_freight_key")
+      .order("name", { ascending: true }),
+    supabase
+      .from("qb_price_sheets")
+      .select("brand_id, status"),
+    supabase
+      .from("qb_freight_zones")
+      .select("brand_id"),
+    supabase
+      .from("qb_programs")
+      .select("brand_id, active"),
+  ]);
+
+  const brands   = (brandsRes.data   ?? []) as Array<{
+    id: string; code: string; name: string;
+    discount_configured: boolean; has_inbound_freight_key: boolean;
+  }>;
+  const sheets   = (sheetsRes.data   ?? []) as Array<{ brand_id: string | null; status: string }>;
+  const zones    = (zonesRes.data    ?? []) as Array<{ brand_id: string }>;
+  const programs = (programsRes.data ?? []) as Array<{ brand_id: string | null; active: boolean | null }>;
+
+  const publishedByBrand = new Map<string, number>();
+  for (const s of sheets) {
+    if (!s.brand_id || s.status !== "published") continue;
+    publishedByBrand.set(s.brand_id, (publishedByBrand.get(s.brand_id) ?? 0) + 1);
+  }
+
+  const zonesByBrand = new Map<string, number>();
+  for (const z of zones) {
+    zonesByBrand.set(z.brand_id, (zonesByBrand.get(z.brand_id) ?? 0) + 1);
+  }
+
+  const activeProgramsByBrand = new Map<string, number>();
+  for (const p of programs) {
+    if (!p.brand_id || !p.active) continue;
+    activeProgramsByBrand.set(p.brand_id, (activeProgramsByBrand.get(p.brand_id) ?? 0) + 1);
+  }
+
+  return brands.map((b) => ({
+    id:                      b.id,
+    code:                    b.code,
+    name:                    b.name,
+    discount_configured:     b.discount_configured,
+    has_inbound_freight_key: b.has_inbound_freight_key,
+    published_sheet_count:   publishedByBrand.get(b.id) ?? 0,
+    freight_zone_count:      zonesByBrand.get(b.id) ?? 0,
+    active_program_count:    activeProgramsByBrand.get(b.id) ?? 0,
+  }));
+}
+
+export async function setBrandDealEngineEnabled(
+  brandId: string,
+  enabled: boolean,
+): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase
+    .from("qb_brands")
+    .update({ discount_configured: enabled })
+    .eq("id", brandId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+/**
+ * A brand is considered quote-ready when it has at least one published price
+ * sheet AND at least one freight zone. Programs are nice-to-have (many brands
+ * have programs, but a plain-pricing brand can still quote without them). The
+ * inbound freight key is independent — only affects freight line display.
+ *
+ * Exported for tests and for UI warning surfaces.
+ */
+export function isBrandQuoteReady(row: BrandEngineStatusRow): boolean {
+  return row.published_sheet_count > 0 && row.freight_zone_count > 0;
+}
+
+/**
+ * Returns an array of human-readable missing-prereq labels for a brand.
+ * Empty when all prereqs are met.
+ */
+export function missingPrereqs(row: BrandEngineStatusRow): string[] {
+  const missing: string[] = [];
+  if (row.published_sheet_count === 0) missing.push("price sheet");
+  if (row.freight_zone_count === 0)    missing.push("freight zones");
+  return missing;
+}
