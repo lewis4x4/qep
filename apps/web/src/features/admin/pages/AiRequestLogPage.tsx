@@ -197,7 +197,7 @@ export function AiRequestLogPage() {
                       <th className="px-4 py-2">Make / Model</th>
                       <th className="px-4 py-2">Deal Size</th>
                       <th className="px-4 py-2">Customer</th>
-                      <th className="px-4 py-2" title="Seconds between this AI request and the earliest quote that originated from it.">
+                      <th className="px-4 py-2" title="Time from AI request to first saved quote.">
                         Time to Quote
                       </th>
                     </tr>

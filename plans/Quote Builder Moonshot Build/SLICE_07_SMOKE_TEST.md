@@ -121,12 +121,15 @@ prereqs are now met); toast confirms the change.
 4. Refresh the AI Request Log. A new row should appear at the top:
    - **Make/Model** resolved correctly (brand — model)
    - **Deal Size** populated
-   - **Time to Quote** — column renders `—` for now (real quotes aren't
-     yet written to `qb_quotes` by runtime code; CP8 wired the join,
-     which will light up once `qb_quotes` inserts start happening)
+   - **Time to Quote** — column renders `—`. **This is the expected and
+     correct result today, not a bug.** The FK + join were wired in CP8,
+     but no runtime code currently inserts into `qb_quotes` (quote saves
+     still land in `quote_packages`). The column will automatically show
+     real deltas the moment `qb_quotes` inserts begin in a future slice —
+     no further UI change is needed.
 
 **Pass criteria:**
-- SSE stream does NOT emit a "not yet configured for deal engine" error
+- SSE stream does NOT emit a "not yet configured for Deal Engine" error
   (CP2 error-message + CP9 toggle working together).
 - Log row is created with the correct resolved model.
 - Time to Quote column displays `—` cleanly (not blank, not undefined).

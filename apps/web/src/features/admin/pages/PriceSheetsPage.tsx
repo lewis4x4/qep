@@ -7,15 +7,12 @@ import { UploadDrawer } from "../components/UploadDrawer";
 import { FreightZoneDrawer } from "../components/FreightZoneDrawer";
 import { getBrandSheetStatus, type BrandSheetStatus } from "../lib/price-sheets-api";
 
-type Tab = "overview";
-
 type SelectedBrand = { id: string; code: string; name: string } | null;
 
 export function PriceSheetsPage() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<BrandSheetStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [_tab] = useState<Tab>("overview");
   const [uploadBrand, setUploadBrand] = useState<SelectedBrand>(null);
   const [zonesBrand,  setZonesBrand]  = useState<SelectedBrand>(null);
 
@@ -62,7 +59,7 @@ export function PriceSheetsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Price Sheets</h1>
         <p className="text-muted-foreground mt-1">
-          Manage brand price sheet uploads, freight zones, and deal engine configuration.
+          Manage brand price sheet uploads, freight zones, and Deal Engine configuration.
         </p>
       </div>
 
