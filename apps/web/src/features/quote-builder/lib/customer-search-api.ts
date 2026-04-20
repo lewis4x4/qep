@@ -443,14 +443,21 @@ export async function fetchCustomerPastEquipment(
 }
 
 /**
- * Hydrate a customer from a CRM contact id or company id — used when
- * Quote Builder is deep-linked from QRM with `?contact_id=` or
- * `?deal_id=`. Resolves the same shape the CustomerPicker emits so the
- * draft can be seeded and the intel panel renders on mount.
+ * Hydrate a customer from a CRM contact id, company id, or deal id —
+ * used when Quote Builder is deep-linked from QRM with `?contact_id=`,
+ * `?deal_id=`, or `?crm_deal_id=`. Resolves the same shape the
+ * CustomerPicker emits so the draft can be seeded and the intel panel
+ * renders on mount.
+ *
+ * Resolution order: if `dealId` is provided, fetch the deal row to
+ * extract `primary_contact_id` and `company_id`, which become inputs to
+ * the contact + company lookups. A caller-provided `contactId` /
+ * `companyId` wins over the deal's — we don't clobber explicit intent.
  */
 export async function hydrateCustomerById(args: {
   contactId?: string | null;
   companyId?: string | null;
+  dealId?:    string | null;
 }): Promise<{
   contactId: string | null;
   companyId: string | null;
@@ -461,7 +468,25 @@ export async function hydrateCustomerById(args: {
   signals: CompanySignals;
   warmth: CustomerWarmth;
 } | null> {
-  const { contactId, companyId } = args;
+  let { contactId, companyId } = args;
+  const { dealId } = args;
+
+  // Resolve deal → contact/company first so the rest of this function
+  // can treat dealId as if the caller had passed contactId/companyId.
+  if (dealId && !contactId && !companyId) {
+    const { data: deal } = await supabase
+      .from("crm_deals")
+      .select("primary_contact_id, company_id")
+      .eq("id", dealId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (deal) {
+      const d = deal as { primary_contact_id: string | null; company_id: string | null };
+      contactId = contactId ?? d.primary_contact_id ?? null;
+      companyId = companyId ?? d.company_id ?? null;
+    }
+  }
+
   if (!contactId && !companyId) return null;
 
   let resolvedContactId: string | null = null;

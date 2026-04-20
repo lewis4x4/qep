@@ -211,7 +211,10 @@ export function QuoteBuilderV2Page() {
     let cancelled = false;
     (async () => {
       try {
-        const hydrated = await hydrateCustomerById({ contactId: contactId || null });
+        const hydrated = await hydrateCustomerById({
+          contactId: contactId || null,
+          dealId:    dealId || null,
+        });
         if (!hydrated || cancelled) return;
         setDraft((current) => ({
           ...current,
@@ -519,6 +522,16 @@ export function QuoteBuilderV2Page() {
   const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
   const firstEquipment = draft.equipment[0];
 
+  // Gate for advancing off the Customer step — any of name, company,
+  // or a resolved CRM id is enough. Kept as one derived flag so the
+  // Next-button disabled state and the inline helper text can't drift.
+  const hasCustomer = Boolean(
+    draft.customerName?.trim() ||
+    draft.customerCompany?.trim() ||
+    draft.contactId ||
+    draft.companyId,
+  );
+
   const intelligencePanel = (
     <IntelligencePanel
       recommendation={draft.recommendation}
@@ -763,9 +776,9 @@ export function QuoteBuilderV2Page() {
             onManualChange={(field, value) => setDraft((cur) => ({
               ...cur,
               [field]: value,
-              // Manual edits invalidate the Digital Twin snapshot
-              customerSignals: null,
-              customerWarmth:  null,
+              // Preserve signals on field edits — a rep fixing a typo in
+              // phone or email shouldn't lose the Digital Twin panel.
+              // Only onClear (below) discards the signal snapshot.
             }))}
             onClear={() => setDraft((cur) => ({
               ...cur,
@@ -787,22 +800,41 @@ export function QuoteBuilderV2Page() {
             warmth={draft.customerWarmth ?? null}
           />
 
-          <div className="flex justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Button variant="outline" onClick={() => setStep("entry")}>
               <ArrowLeft className="mr-1 h-4 w-4" /> Back
             </Button>
-            <Button
-              onClick={() => setStep("equipment")}
-              disabled={
-                !(draft.customerName?.trim() || draft.customerCompany?.trim() || draft.contactId || draft.companyId)
-              }
-            >
-              Equipment <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* "Quote for prospect" escape hatch — seeds a placeholder
+                  so reps can build a spec quote for a walk-in without a
+                  real CRM match. Rep can edit the name later on this
+                  step; the save path stores it as a normal quote. */}
+              {!hasCustomer && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDraft((cur) => ({
+                      ...cur,
+                      customerName:    cur.customerName    || "Walk-in prospect",
+                      customerCompany: cur.customerCompany || "Walk-in prospect",
+                      customerSignals: null,
+                      customerWarmth:  null,
+                    }));
+                    setStep("equipment");
+                  }}
+                >
+                  Quote for prospect
+                </Button>
+              )}
+              <Button onClick={() => setStep("equipment")} disabled={!hasCustomer}>
+                Equipment <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          {!(draft.customerName?.trim() || draft.customerCompany?.trim() || draft.contactId || draft.companyId) && (
+          {!hasCustomer && (
             <p className="text-right text-[11px] text-muted-foreground">
-              Select or add a customer to continue.
+              Select or add a customer, or use "Quote for prospect" for a walk-in.
             </p>
           )}
         </div>
