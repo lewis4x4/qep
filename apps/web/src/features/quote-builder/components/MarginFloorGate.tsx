@@ -16,6 +16,11 @@ import {
   estimateMarginGapCents,
   type MarginThresholdRow,
 } from "@/features/admin/lib/pricing-discipline-api";
+import {
+  getReasonIntelligence,
+  type ReasonIntelligence,
+} from "../lib/deal-intelligence-api";
+import { ReasonHint } from "./ReasonHint";
 
 /**
  * Slice 15 — Margin Floor Gate.
@@ -62,6 +67,10 @@ export function MarginFloorGate({
   const [threshold, setThreshold] = useState<MarginThresholdRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState("");
+  // Slice 18 — reason intelligence loaded lazily when the modal opens so
+  // we don't pay the query on every quote, only when the rep is about to
+  // actually need it.
+  const [reasonIntel, setReasonIntel] = useState<ReasonIntelligence>({ stats: [], totalSamples: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -74,9 +83,15 @@ export function MarginFloorGate({
     return () => { cancelled = true; };
   }, [brandId]);
 
-  // Reset reason on modal open
+  // Reset reason on modal open + lazy-load reason intelligence
   useEffect(() => {
-    if (reasonModalOpen) setReason("");
+    if (!reasonModalOpen) return;
+    setReason("");
+    let cancelled = false;
+    getReasonIntelligence().then((r) => {
+      if (!cancelled) setReasonIntel(r);
+    });
+    return () => { cancelled = true; };
   }, [reasonModalOpen]);
 
   if (loading || !threshold) return null;
@@ -125,6 +140,8 @@ export function MarginFloorGate({
               className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
             />
             <p className="text-[10px] text-muted-foreground">{reason.length}/500</p>
+
+            <ReasonHint reason={reason} intelligence={reasonIntel} />
           </div>
 
           <DialogFooter>
