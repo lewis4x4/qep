@@ -920,6 +920,13 @@ Deno.serve(async (req) => {
         return safeJsonError("deal_id required", 400, origin);
       }
 
+      // Slice 09 CP2: accept optional originating_log_id so the AI Request
+      // Log time-to-quote column can join this quote back to the request
+      // that led to it. Defensive typing — only persist when it's a uuid.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const rawLogId = typeof body.originating_log_id === "string" ? body.originating_log_id : null;
+      const originatingLogId = rawLogId && UUID_RE.test(rawLogId) ? rawLogId : null;
+
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
@@ -945,6 +952,7 @@ Deno.serve(async (req) => {
           customer_company: typeof body.customer_company === "string" ? body.customer_company.trim().slice(0, 200) : null,
           customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null,
           customer_email: typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null,
+          originating_log_id: originatingLogId,
         }, { onConflict: "deal_id" })
         .select()
         .single();
