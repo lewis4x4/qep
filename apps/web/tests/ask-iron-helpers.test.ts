@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildHistoryPayload,
+  extractProposedMoves,
   humanizeToolName,
   oneLinePreview,
   SUGGESTED_STARTERS,
@@ -82,6 +83,9 @@ describe("humanizeToolName", () => {
   it("maps search_entities to Searched graph", () => {
     expect(humanizeToolName("search_entities")).toBe("Searched graph");
   });
+  it("maps propose_move to Queued a move", () => {
+    expect(humanizeToolName("propose_move")).toBe("Queued a move");
+  });
   it("falls back to 'Called <tool>' for unknown tools", () => {
     expect(humanizeToolName("some_future_tool")).toBe("Called some_future_tool");
   });
@@ -104,6 +108,7 @@ describe("summarizeToolTrace", () => {
       moves: 0,
       signals: 0,
       entities: 0,
+      proposed: 0,
     });
   });
 
@@ -155,6 +160,26 @@ describe("summarizeToolTrace", () => {
     expect(summarizeToolTrace(trace).entities).toBe(3);
   });
 
+  it("counts successful propose_move entries", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      {
+        tool: "propose_move",
+        input: { kind: "call_now", title: "x" },
+        result: { move: { id: "m-1", kind: "call_now", title: "x", priority: 55 } },
+        ok: true,
+      },
+      {
+        tool: "propose_move",
+        input: { kind: "send_quote", title: "y" },
+        result: { error: "budget exhausted" },
+        ok: false,
+      },
+    ];
+    const summary = summarizeToolTrace(trace);
+    // Only the successful propose counts.
+    expect(summary.proposed).toBe(1);
+  });
+
   it("skips failed tool calls entirely", () => {
     const trace: AskIronToolTraceEntry[] = [
       {
@@ -168,6 +193,93 @@ describe("summarizeToolTrace", () => {
       moves: 0,
       signals: 0,
       entities: 0,
+      proposed: 0,
     });
+  });
+});
+
+describe("extractProposedMoves", () => {
+  it("returns [] for undefined trace", () => {
+    expect(extractProposedMoves(undefined)).toEqual([]);
+  });
+
+  it("returns [] when there are no propose_move entries", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      { tool: "list_my_moves", input: {}, result: { moves: [] }, ok: true },
+    ];
+    expect(extractProposedMoves(trace)).toEqual([]);
+  });
+
+  it("pulls fields from a successful propose_move tool result", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      {
+        tool: "propose_move",
+        input: { kind: "call_now", title: "Call Acme" },
+        result: {
+          move: {
+            id: "m-1",
+            kind: "call_now",
+            title: "Call Acme about CAT 305",
+            status: "suggested",
+            priority: 55,
+            entity: { type: "deal", id: "d-1" },
+            due_at: "2026-04-21T15:00:00Z",
+          },
+        },
+        ok: true,
+      },
+    ];
+    const out = extractProposedMoves(trace);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("m-1");
+    expect(out[0].title).toBe("Call Acme about CAT 305");
+    expect(out[0].priority).toBe(55);
+    expect(out[0].entity).toEqual({ type: "deal", id: "d-1" });
+    expect(out[0].dueAt).toBe("2026-04-21T15:00:00Z");
+  });
+
+  it("skips propose_move entries that failed", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      {
+        tool: "propose_move",
+        input: { kind: "call_now", title: "x" },
+        result: { error: "budget exhausted" },
+        ok: false,
+      },
+    ];
+    expect(extractProposedMoves(trace)).toEqual([]);
+  });
+
+  it("tolerates malformed move payloads without throwing", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      { tool: "propose_move", input: {}, result: { move: null }, ok: true },
+      { tool: "propose_move", input: {}, result: { move: "not-an-object" }, ok: true },
+      { tool: "propose_move", input: {}, result: { move: { id: 42 } }, ok: true },
+    ];
+    // Each malformed payload is dropped rather than crashing the UI.
+    expect(extractProposedMoves(trace)).toEqual([]);
+  });
+
+  it("tolerates missing entity / due_at / priority", () => {
+    const trace: AskIronToolTraceEntry[] = [
+      {
+        tool: "propose_move",
+        input: {},
+        result: {
+          move: {
+            id: "m-2",
+            kind: "other",
+            title: "Thinky thing",
+          },
+        },
+        ok: true,
+      },
+    ];
+    const out = extractProposedMoves(trace);
+    expect(out).toHaveLength(1);
+    expect(out[0].entity).toBeNull();
+    expect(out[0].dueAt).toBeNull();
+    // Priority defaults to 50 on missing payload per the spec.
+    expect(out[0].priority).toBe(50);
   });
 });

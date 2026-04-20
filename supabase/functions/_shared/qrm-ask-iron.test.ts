@@ -2,8 +2,11 @@ import { assertEquals } from "jsr:@std/assert@1";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   ASK_IRON_TOOLS,
+  createAskIronSession,
   executeAskIronTool,
+  MAX_PROPOSE_MOVES_PER_REQUEST,
   normalizeMoveFilters,
+  normalizeProposeMoveInput,
   normalizeSearchInput,
   normalizeSignalFilters,
 } from "./qrm-ask-iron.ts";
@@ -21,6 +24,8 @@ interface StubCapture {
   filters: Array<{ op: string; column: string; value: unknown }>;
   orderColumn?: string;
   limit?: number;
+  insert?: Record<string, unknown>;
+  update?: Record<string, unknown>;
 }
 
 function makeStubClient(
@@ -78,6 +83,14 @@ function makeStubClient(
       },
       maybeSingle: () => Promise.resolve(result),
       single: () => Promise.resolve(result),
+      insert: (payload: Record<string, unknown>) => {
+        capture.insert = payload;
+        return builder;
+      },
+      update: (payload: Record<string, unknown>) => {
+        capture.update = payload;
+        return builder;
+      },
       then: (resolve: (value: StubResult) => unknown) => resolve(result),
     });
     return builder;
@@ -126,13 +139,14 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the five tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the six tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
     "get_deal_detail",
     "list_my_moves",
     "list_recent_signals",
+    "propose_move",
     "search_entities",
   ]);
 });
@@ -436,4 +450,383 @@ Deno.test("executeAskIronTool surfaces DB errors without leaking stack traces", 
   const res = await executeAskIronTool(ctx, "list_recent_signals", {});
   assertEquals(res.ok, false);
   assertEquals(res.error, "permission denied for relation signals");
+});
+
+// ── normalizeProposeMoveInput ───────────────────────────────────────────────
+
+Deno.test("normalizeProposeMoveInput rejects unknown kind", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  try {
+    normalizeProposeMoveInput({ kind: "nuke_pipeline", title: "x" }, ctx);
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:kind");
+  }
+});
+
+Deno.test("normalizeProposeMoveInput rejects missing title", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  try {
+    normalizeProposeMoveInput({ kind: "call_now" }, ctx);
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:title");
+  }
+});
+
+Deno.test("normalizeProposeMoveInput rejects entity_id without entity_type", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  try {
+    normalizeProposeMoveInput(
+      { kind: "call_now", title: "x", entity_id: "c-1" },
+      ctx,
+    );
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:entity_type");
+  }
+});
+
+Deno.test("normalizeProposeMoveInput rejects activity/workspace entity scopes", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "manager" });
+  try {
+    normalizeProposeMoveInput(
+      { kind: "other", title: "log it", entity_type: "workspace", entity_id: "ws-1" },
+      ctx,
+    );
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:entity_type");
+  }
+});
+
+Deno.test("normalizeProposeMoveInput rejects past due_at beyond clock skew", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  try {
+    normalizeProposeMoveInput(
+      { kind: "call_now", title: "x", due_at: "2020-01-01T00:00:00Z" },
+      ctx,
+    );
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:due_at");
+  }
+});
+
+Deno.test("normalizeProposeMoveInput pins rep callers to self regardless of model input", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+  const n = normalizeProposeMoveInput(
+    { kind: "call_now", title: "x", assigned_rep_id: "rep-other" },
+    ctx,
+  );
+  assertEquals(n.assignedRepId, "rep-me");
+});
+
+Deno.test("normalizeProposeMoveInput lets elevated callers route to another rep (and defaults to self if omitted)", () => {
+  const { client } = makeStubClient({});
+  const mgrCtx = makeCtx(client, { role: "manager", userId: "mgr-1" });
+  const routed = normalizeProposeMoveInput(
+    { kind: "send_quote", title: "x", assigned_rep_id: "rep-7" },
+    mgrCtx,
+  );
+  assertEquals(routed.assignedRepId, "rep-7");
+  const selfAssigned = normalizeProposeMoveInput(
+    { kind: "send_quote", title: "x" },
+    mgrCtx,
+  );
+  assertEquals(selfAssigned.assignedRepId, "mgr-1");
+});
+
+Deno.test("normalizeProposeMoveInput defaults priority to 55 and clamps to 0..100", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  assertEquals(
+    normalizeProposeMoveInput({ kind: "call_now", title: "x" }, ctx).priority,
+    55,
+  );
+  assertEquals(
+    normalizeProposeMoveInput(
+      { kind: "call_now", title: "x", priority: 500 },
+      ctx,
+    ).priority,
+    100,
+  );
+  assertEquals(
+    normalizeProposeMoveInput(
+      { kind: "call_now", title: "x", priority: -1 },
+      ctx,
+    ).priority,
+    0,
+  );
+});
+
+Deno.test("normalizeProposeMoveInput clamps runaway titles with an ellipsis", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const long = "a".repeat(400);
+  const n = normalizeProposeMoveInput({ kind: "call_now", title: long }, ctx);
+  assertEquals(n.title.length <= 120, true);
+  assertEquals(n.title.endsWith("…"), true);
+});
+
+// ── executor: propose_move ──────────────────────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool propose_move inserts with workspace + ask_iron provenance",
+  async () => {
+    // Stub the admin insert — `createMove` hits ctx.admin.from("moves").insert().
+    // We want to capture the insert row and verify workspace + provenance.
+    const { client: callerDb } = makeStubClient({});
+    const insertedRow = {
+      id: "m-iron-1",
+      workspace_id: "ws-1",
+      kind: "call_now",
+      status: "suggested",
+      title: "Call Acme about CAT 305",
+      priority: 55,
+      entity_type: "deal",
+      entity_id: "deal-7",
+      assigned_rep_id: "rep-me",
+      due_at: null,
+    };
+    const { client: admin, captures: adminCaptures } = makeStubClient({
+      moves: { data: insertedRow, error: null },
+    });
+    const ctx = makeCtx(callerDb, { role: "rep", userId: "rep-me", admin });
+
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      {
+        kind: "call_now",
+        title: "Call Acme about CAT 305",
+        rationale: "Operator asked for a follow-up",
+        entity_type: "deal",
+        entity_id: "deal-7",
+      },
+      createAskIronSession(),
+    );
+
+    assertEquals(res.ok, true);
+    const data = res.data as { move: { id: string } };
+    assertEquals(data.move.id, "m-iron-1");
+
+    const movesInsert = adminCaptures.find((c) => c.table === "moves");
+    if (!movesInsert?.insert) throw new Error("insert payload not captured");
+    const row = movesInsert.insert as Record<string, unknown>;
+    assertEquals(row.workspace_id, "ws-1");
+    assertEquals(row.kind, "call_now");
+    assertEquals(row.recommender, "ask_iron");
+    assertEquals(row.recommender_version, "v1");
+    assertEquals(row.assigned_rep_id, "rep-me");
+    assertEquals(row.priority, 55);
+    const payload = row.payload as Record<string, unknown>;
+    assertEquals(payload.proposed_via, "ask_iron");
+    assertEquals(payload.proposer_user_id, "rep-me");
+  },
+);
+
+Deno.test(
+  "executeAskIronTool propose_move rep cannot route moves to another rep",
+  async () => {
+    const { client: callerDb } = makeStubClient({});
+    const { client: admin, captures: adminCaptures } = makeStubClient({
+      moves: { data: { id: "m-1" }, error: null },
+    });
+    const ctx = makeCtx(callerDb, { role: "rep", userId: "rep-me", admin });
+
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      {
+        kind: "send_follow_up",
+        title: "Email the buyer",
+        assigned_rep_id: "rep-other", // ← Iron/operator tries to hijack
+      },
+      createAskIronSession(),
+    );
+    assertEquals(res.ok, true);
+    const row = adminCaptures.find((c) => c.table === "moves")?.insert as
+      | Record<string, unknown>
+      | undefined;
+    // Rep-scoping pins to self even when the model passes a different id.
+    assertEquals(row?.assigned_rep_id, "rep-me");
+  },
+);
+
+Deno.test(
+  `executeAskIronTool propose_move enforces session cap (max ${MAX_PROPOSE_MOVES_PER_REQUEST} per request)`,
+  async () => {
+    const { client: callerDb } = makeStubClient({});
+    const { client: admin } = makeStubClient({
+      moves: { data: { id: "m-1" }, error: null },
+    });
+    const ctx = makeCtx(callerDb, { role: "manager", userId: "mgr-1", admin });
+    const session = createAskIronSession();
+
+    // Drive the session up to the cap. Each of these should succeed.
+    for (let i = 0; i < MAX_PROPOSE_MOVES_PER_REQUEST; i++) {
+      const res = await executeAskIronTool(
+        ctx,
+        "propose_move",
+        { kind: "other", title: `move ${i}` },
+        session,
+      );
+      assertEquals(res.ok, true);
+    }
+    assertEquals(session.proposedMoveCount, MAX_PROPOSE_MOVES_PER_REQUEST);
+
+    // One more call should be refused — the session is full.
+    const overflow = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      { kind: "other", title: "one too many" },
+      session,
+    );
+    assertEquals(overflow.ok, false);
+    assertEquals(overflow.error?.includes("budget exhausted"), true);
+    // Count must NOT increment on a rejected call.
+    assertEquals(session.proposedMoveCount, MAX_PROPOSE_MOVES_PER_REQUEST);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool propose_move returns a structured error for an unknown kind (no throw)",
+  async () => {
+    // Validation errors from normalize bubble as `tool_result.error` rather
+    // than a 500. That's intentional: Claude sees the error string and can
+    // apologize to the operator / pick a different kind.
+    const { client: callerDb } = makeStubClient({});
+    const ctx = makeCtx(callerDb, { role: "rep" });
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      { kind: "smoke_signal", title: "x" },
+      createAskIronSession(),
+    );
+    assertEquals(res.ok, false);
+    assertEquals(res.error, "VALIDATION_ERROR:kind");
+  },
+);
+
+Deno.test(
+  "executeAskIronTool propose_move works without a session (budget is off)",
+  async () => {
+    // Unit-test convenience: allow calling without a session to smoke-test
+    // a single propose in isolation. The edge function always passes one.
+    const { client: callerDb } = makeStubClient({});
+    const { client: admin } = makeStubClient({
+      moves: { data: { id: "m-ad-hoc" }, error: null },
+    });
+    const ctx = makeCtx(callerDb, { role: "rep", userId: "rep-1", admin });
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      { kind: "call_now", title: "Ad-hoc propose" },
+    );
+    assertEquals(res.ok, true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool propose_move rejects cross-workspace rep routing (elevated caller)",
+  async () => {
+    // A manager/admin/owner tries to route a move to a rep that lives in a
+    // *different* workspace. The guard inside toolProposeMove should check
+    // profiles.workspace_id via the admin client and throw before the insert
+    // ever fires. This mirrors the same defense in toolListMyMoves but is
+    // strictly more important because propose_move is a write.
+    const { client: callerDb } = makeStubClient({});
+    const { client: admin, captures: adminCaptures } = makeStubClient({
+      // profiles lookup returns a rep whose workspace_id doesn't match.
+      profiles: { data: { id: "rep-other", workspace_id: "ws-other" }, error: null },
+      // If the guard is bypassed, this is what createMove would write to.
+      moves: { data: { id: "m-should-not-insert" }, error: null },
+    });
+    const ctx = makeCtx(callerDb, {
+      role: "manager",
+      userId: "mgr-1",
+      workspaceId: "ws-1",
+      admin,
+    });
+
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      {
+        kind: "send_follow_up",
+        title: "Email the buyer",
+        assigned_rep_id: "rep-other",
+      },
+      createAskIronSession(),
+    );
+
+    assertEquals(res.ok, false);
+    assertEquals(res.error, "rep not in workspace");
+
+    // Verify the profiles lookup actually happened and the moves insert
+    // did NOT — otherwise the guard is ornamental.
+    const profilesCap = adminCaptures.find((c) => c.table === "profiles");
+    if (!profilesCap) throw new Error("profiles lookup never ran");
+    const movesCap = adminCaptures.find((c) => c.table === "moves");
+    assertEquals(movesCap?.insert, undefined);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool propose_move allows elevated routing to a rep in the SAME workspace",
+  async () => {
+    // Flip side of the guard: when profiles.workspace_id matches, the insert
+    // proceeds. This keeps the happy-path "assign Jim's move to Jane" flow
+    // working for managers.
+    const { client: callerDb } = makeStubClient({});
+    const { client: admin, captures: adminCaptures } = makeStubClient({
+      profiles: { data: { id: "rep-other", workspace_id: "ws-1" }, error: null },
+      moves: { data: { id: "m-ok" }, error: null },
+    });
+    const ctx = makeCtx(callerDb, {
+      role: "manager",
+      userId: "mgr-1",
+      workspaceId: "ws-1",
+      admin,
+    });
+
+    const res = await executeAskIronTool(
+      ctx,
+      "propose_move",
+      {
+        kind: "send_follow_up",
+        title: "Email the buyer",
+        assigned_rep_id: "rep-other",
+      },
+      createAskIronSession(),
+    );
+    assertEquals(res.ok, true);
+    const movesCap = adminCaptures.find((c) => c.table === "moves");
+    if (!movesCap?.insert) throw new Error("expected insert to fire");
+    assertEquals(
+      (movesCap.insert as Record<string, unknown>).assigned_rep_id,
+      "rep-other",
+    );
+  },
+);
+
+Deno.test("normalizeProposeMoveInput rejects unknown due_at strings", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  try {
+    normalizeProposeMoveInput(
+      { kind: "call_now", title: "x", due_at: "not-a-date" },
+      ctx,
+    );
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:due_at");
+  }
 });

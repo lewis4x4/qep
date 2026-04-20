@@ -19,6 +19,7 @@
  *   - search_entities      — fuzzy search across contacts/companies/deals
  *   - get_deal_detail      — drill into a single deal (id known)
  *   - get_company_detail   — drill into a single company (id known)
+ *   - propose_move         — create a new move in Today (Slice 6: write surface)
  *
  * Auth envelope:
  *   Tools run through the same `RouterCtx` as the HTTP router, so RLS on
@@ -33,6 +34,12 @@
  */
 
 import type { RouterCtx } from "./crm-router-service.ts";
+import {
+  createMove,
+  type MoveCreatePayload,
+  type MoveEntityType,
+  type MoveKind,
+} from "./qrm-moves.ts";
 
 // ── Tool schema ────────────────────────────────────────────────────────────
 
@@ -147,6 +154,76 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
         company_id: { type: "string" },
       },
       required: ["company_id"],
+    },
+  },
+  {
+    name: "propose_move",
+    description:
+      "Create a new move on the operator's Today queue. Use when the operator explicitly asks for a follow-up action ('add a call to Acme tomorrow', 'remind me to send a quote', 'queue a field visit on Wednesday'). Do NOT use proactively — propose only when the operator requested an action. The move is assigned to the caller by default; managers/admins may route to another rep in the same workspace.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: {
+          type: "string",
+          enum: [
+            "call_now",
+            "send_quote",
+            "send_follow_up",
+            "schedule_meeting",
+            "escalate",
+            "drop_deal",
+            "reassign",
+            "field_visit",
+            "send_proposal",
+            "pricing_review",
+            "inventory_reserve",
+            "service_escalate",
+            "rescue_offer",
+            "other",
+          ],
+          description:
+            "Move kind — pick the one closest to the action the operator asked for. Use 'other' only if nothing else fits.",
+        },
+        title: {
+          type: "string",
+          description:
+            "Short imperative summary of the action, e.g. 'Call Acme about CAT 305 quote'. Max 120 chars.",
+        },
+        rationale: {
+          type: "string",
+          description:
+            "One-sentence reason, grounded in the operator's request. Max 280 chars.",
+        },
+        entity_type: {
+          type: "string",
+          enum: ["deal", "contact", "company", "equipment", "rental"],
+          description:
+            "What the move is about. Omit only if the move doesn't map to a specific entity.",
+        },
+        entity_id: {
+          type: "string",
+          description:
+            "UUID for the entity, obtained from search_entities / list_my_moves / list_recent_signals.",
+        },
+        priority: {
+          type: "integer",
+          minimum: 0,
+          maximum: 100,
+          description:
+            "Priority 0–100. Default 55 for operator-requested moves (slightly above baseline).",
+        },
+        due_at: {
+          type: "string",
+          description:
+            "ISO-8601 timestamp for when this should be done by. Omit if the operator didn't give one.",
+        },
+        assigned_rep_id: {
+          type: "string",
+          description:
+            "UUID of the rep to own this move. Elevated callers only; rep callers are always assigned their own id regardless of this field.",
+        },
+      },
+      required: ["kind", "title"],
     },
   },
 ];
@@ -312,7 +389,158 @@ export function normalizeSearchInput(
   return { query, types, limit };
 }
 
+// ── propose_move normalization ─────────────────────────────────────────────
+
+export interface NormalizedProposeMove {
+  kind: MoveKind;
+  title: string;
+  rationale: string | null;
+  entityType: MoveEntityType | null;
+  entityId: string | null;
+  priority: number;
+  dueAt: string | null;
+  assignedRepId: string | null;
+}
+
+const ALLOWED_MOVE_KINDS = new Set<MoveKind>([
+  "call_now",
+  "send_quote",
+  "send_follow_up",
+  "schedule_meeting",
+  "escalate",
+  "drop_deal",
+  "reassign",
+  "field_visit",
+  "send_proposal",
+  "pricing_review",
+  "inventory_reserve",
+  "service_escalate",
+  "rescue_offer",
+  "other",
+]);
+
+// Iron is not allowed to propose moves on "activity" or "workspace" entities —
+// those are internal scopes the recommender uses, not operator-facing targets.
+const ALLOWED_PROPOSE_ENTITY_TYPES = new Set<MoveEntityType>([
+  "deal",
+  "contact",
+  "company",
+  "equipment",
+  "rental",
+]);
+
+const MAX_PROPOSE_TITLE_CHARS = 120;
+const MAX_PROPOSE_RATIONALE_CHARS = 280;
+
+function clampText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+  if (cleaned.length === 0) return null;
+  return cleaned.length <= max ? cleaned : cleaned.slice(0, max - 1) + "…";
+}
+
+/**
+ * Validate + normalize the LLM-supplied `propose_move` input before it hits
+ * the DB. Throws on structural problems (unknown kind, missing title) so the
+ * caller can return a clean tool error and Claude can retry. Rep callers
+ * always get `assigned_rep_id` pinned to their own userId — the same checkpoint
+ * used by `normalizeMoveFilters`.
+ */
+export function normalizeProposeMoveInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+): NormalizedProposeMove {
+  const kindRaw = typeof input.kind === "string" ? input.kind : "";
+  if (!ALLOWED_MOVE_KINDS.has(kindRaw as MoveKind)) {
+    throw new Error("VALIDATION_ERROR:kind");
+  }
+  const kind = kindRaw as MoveKind;
+
+  const title = clampText(input.title, MAX_PROPOSE_TITLE_CHARS);
+  if (!title) throw new Error("VALIDATION_ERROR:title");
+
+  const rationale = clampText(input.rationale, MAX_PROPOSE_RATIONALE_CHARS);
+
+  // Entity scope: if `entity_type` is provided it must be in the allowed set,
+  // and `entity_id` must accompany it. We reject mismatches rather than
+  // silently stripping — a half-scoped move is worse than an error because
+  // the operator sees "call about Acme" with no contact attached.
+  let entityType: MoveEntityType | null = null;
+  let entityId: string | null = null;
+  if (typeof input.entity_type === "string" && input.entity_type.length > 0) {
+    if (!ALLOWED_PROPOSE_ENTITY_TYPES.has(input.entity_type as MoveEntityType)) {
+      throw new Error("VALIDATION_ERROR:entity_type");
+    }
+    entityType = input.entity_type as MoveEntityType;
+    if (typeof input.entity_id !== "string" || input.entity_id.length === 0) {
+      throw new Error("VALIDATION_ERROR:entity_id");
+    }
+    entityId = input.entity_id;
+  } else if (
+    typeof input.entity_id === "string" && input.entity_id.length > 0
+  ) {
+    // entity_id without entity_type is ambiguous — reject rather than guess.
+    throw new Error("VALIDATION_ERROR:entity_type");
+  }
+
+  // Priority: clamp 0..100, default 55 (a hair above baseline 50) to reflect
+  // "operator asked for this" weighting without drowning the recommender queue.
+  const priorityRaw = Number(input.priority ?? 55);
+  const priority = Number.isFinite(priorityRaw)
+    ? Math.min(Math.max(Math.trunc(priorityRaw), 0), 100)
+    : 55;
+
+  // due_at: accept if the string parses as a Date and isn't in the past by
+  // more than a minute (small clock-skew tolerance). Reject nonsense quietly
+  // by throwing — better than inserting a bogus timestamp.
+  let dueAt: string | null = null;
+  if (typeof input.due_at === "string" && input.due_at.length > 0) {
+    const parsed = new Date(input.due_at);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("VALIDATION_ERROR:due_at");
+    }
+    if (parsed.getTime() < Date.now() - 60_000) {
+      throw new Error("VALIDATION_ERROR:due_at");
+    }
+    dueAt = parsed.toISOString();
+  }
+
+  // Rep assignment: reps are always pinned to self; elevated callers may
+  // route to another rep id (workspace-membership is validated at insert
+  // time by the DB's RLS/FK, but we could harden here with a profiles lookup
+  // if abuse shows up).
+  const requestedRepId = typeof input.assigned_rep_id === "string" &&
+      input.assigned_rep_id.length > 0
+    ? input.assigned_rep_id
+    : null;
+  let assignedRepId: string | null;
+  if (!ctx.caller.isServiceRole && ctx.caller.role === "rep") {
+    assignedRepId = ctx.caller.userId;
+  } else {
+    assignedRepId = requestedRepId ?? ctx.caller.userId;
+  }
+
+  return { kind, title, rationale, entityType, entityId, priority, dueAt, assignedRepId };
+}
+
 // ── Executor ────────────────────────────────────────────────────────────────
+
+/**
+ * Per-request mutable budget carried through `executeAskIronTool`. A single
+ * Ask Iron HTTP request may fan out multiple tool calls across several Claude
+ * turns — this counter keeps the model from stuffing Today with 10 moves in
+ * one run. The edge function owns the lifecycle (one fresh session per POST);
+ * unit tests can construct their own to exercise the cap directly.
+ */
+export interface AskIronSession {
+  proposedMoveCount: number;
+}
+
+export function createAskIronSession(): AskIronSession {
+  return { proposedMoveCount: 0 };
+}
+
+export const MAX_PROPOSE_MOVES_PER_REQUEST = 3;
 
 export interface AskIronToolResult {
   ok: boolean;
@@ -333,6 +561,7 @@ export async function executeAskIronTool(
   ctx: RouterCtx,
   name: string,
   input: Record<string, unknown>,
+  session?: AskIronSession,
 ): Promise<AskIronToolResult> {
   try {
     switch (name) {
@@ -346,6 +575,24 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolGetDealDetail(ctx, input) };
       case "get_company_detail":
         return { ok: true, data: await toolGetCompanyDetail(ctx, input) };
+      case "propose_move": {
+        // Per-request cap. We return a structured error (not throw) so Claude
+        // sees it in the tool result and can apologize to the operator
+        // without retrying — throwing would surface as a generic `tool failed`.
+        if (
+          session &&
+          session.proposedMoveCount >= MAX_PROPOSE_MOVES_PER_REQUEST
+        ) {
+          return {
+            ok: false,
+            error:
+              `propose_move budget exhausted (max ${MAX_PROPOSE_MOVES_PER_REQUEST} per request). Tell the operator to queue additional moves directly on Today.`,
+          };
+        }
+        const data = await toolProposeMove(ctx, input);
+        if (session) session.proposedMoveCount += 1;
+        return { ok: true, data };
+      }
       default:
         return { ok: false, error: `Unknown tool: ${name}` };
     }
@@ -580,6 +827,76 @@ async function toolGetCompanyDetail(
   return { found: true, company: data };
 }
 
+/**
+ * Create a move on behalf of the operator via the normal createMove path.
+ * Provenance is stamped so the Today surface can badge this as "proposed by
+ * Iron" (and a future recommender can weight or deduplicate against these).
+ */
+async function toolProposeMove(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeProposeMoveInput(input, ctx);
+
+  // Cross-tenant write guard. If an elevated caller routed this move to a
+  // rep other than themselves, confirm that rep lives in the caller's
+  // workspace before the insert. Reps are already pinned to `userId` in
+  // normalizeProposeMoveInput, so this branch is admin/manager/owner only.
+  // Mirrors the same defense in toolListMyMoves — more important here
+  // because propose_move writes, whereas list_my_moves only reads.
+  if (
+    n.assignedRepId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    n.assignedRepId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", n.assignedRepId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  const payload: MoveCreatePayload = {
+    kind: n.kind,
+    title: n.title,
+    rationale: n.rationale,
+    priority: n.priority,
+    entityType: n.entityType,
+    entityId: n.entityId,
+    assignedRepId: n.assignedRepId,
+    dueAt: n.dueAt,
+    recommender: "ask_iron",
+    recommenderVersion: "v1",
+    payload: {
+      proposed_via: "ask_iron",
+      proposed_at: new Date().toISOString(),
+      proposer_user_id: ctx.caller.userId,
+    },
+  };
+
+  const row = await createMove(ctx, payload);
+  return {
+    move: {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      status: row.status,
+      priority: row.priority,
+      assigned_rep_id: row.assigned_rep_id,
+      entity: row.entity_type && row.entity_id
+        ? { type: row.entity_type, id: row.entity_id }
+        : null,
+      due_at: row.due_at,
+    },
+  };
+}
+
 // ── System prompt ───────────────────────────────────────────────────────────
 
 export const ASK_IRON_SYSTEM_PROMPT = `You are Iron, the ambient agent for QRM — the operating system for an equipment and parts dealership. You help salesmen, service operators, and dealership managers move work forward.
@@ -591,6 +908,7 @@ Rules:
 - If the question names a customer or a contact, call search_entities first, then drill in.
 - For "what should I do", call list_my_moves.
 - For "what changed" or "anything new", call list_recent_signals.
+- When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
 - Reply in 2-6 sentences of tight prose. Only bullet when listing 3+ discrete items.

@@ -36,6 +36,7 @@ import { resolveCallerContext } from "../_shared/dge-auth.ts";
 import {
   ASK_IRON_SYSTEM_PROMPT,
   ASK_IRON_TOOLS,
+  createAskIronSession,
   executeAskIronTool,
 } from "../_shared/qrm-ask-iron.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -186,6 +187,9 @@ Deno.serve(async (req) => {
       result: unknown;
       ok: boolean;
     }> = [];
+    // One session carries through all tool calls in this HTTP request so the
+    // propose_move cap applies across Claude's MAX_TOOL_TURNS, not per-turn.
+    const session = createAskIronSession();
     let finalText = "";
     let totalTokensIn = 0;
     let totalTokensOut = 0;
@@ -216,7 +220,7 @@ Deno.serve(async (req) => {
 
       const toolResults: ClaudeMessageContent[] = [];
       for (const tu of toolUses) {
-        const res = await executeAskIronTool(ctx, tu.name, tu.input);
+        const res = await executeAskIronTool(ctx, tu.name, tu.input, session);
         toolTrace.push({
           tool: tu.name,
           input: tu.input,
@@ -278,6 +282,10 @@ Deno.serve(async (req) => {
         tokens_in: totalTokensIn,
         tokens_out: totalTokensOut,
         truncated: !settled,
+        // How many moves Iron queued on Today this turn. The web client
+        // uses this to invalidate the Today query + render a "Move added"
+        // confirmation chip inline with the assistant answer.
+        proposed_move_count: session.proposedMoveCount,
       },
       origin,
     );

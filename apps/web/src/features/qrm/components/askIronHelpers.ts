@@ -6,6 +6,7 @@
 
 import type {
   AskIronMessage,
+  AskIronProposedMove,
   AskIronToolTraceEntry,
 } from "../lib/ask-iron-types";
 
@@ -53,6 +54,8 @@ export function humanizeToolName(tool: string): string {
       return "Pulled deal detail";
     case "get_company_detail":
       return "Pulled company detail";
+    case "propose_move":
+      return "Queued a move";
     default:
       return `Called ${tool}`;
   }
@@ -76,8 +79,8 @@ export const SUGGESTED_STARTERS: string[] = [
  */
 export function summarizeToolTrace(
   trace: AskIronToolTraceEntry[] | undefined,
-): { moves: number; signals: number; entities: number } {
-  const summary = { moves: 0, signals: 0, entities: 0 };
+): { moves: number; signals: number; entities: number; proposed: number } {
+  const summary = { moves: 0, signals: 0, entities: 0, proposed: 0 };
   if (!trace) return summary;
 
   for (const entry of trace) {
@@ -97,8 +100,51 @@ export function summarizeToolTrace(
       if ((entry.result as { found?: boolean } | null)?.found) {
         summary.entities += 1;
       }
+    } else if (entry.tool === "propose_move") {
+      // Successful propose_move entries are precisely the moves Iron queued.
+      summary.proposed += 1;
     }
   }
 
   return summary;
+}
+
+/**
+ * Walk the tool trace and pull out the moves Iron created this turn. Used by
+ * the surface to render "Queued on Today" chips next to the assistant reply
+ * and by the query-invalidation hook so Today refetches immediately.
+ *
+ * Tolerant of shape drift: a future tool-result schema change won't crash
+ * the UI — unknown shapes are skipped.
+ */
+export function extractProposedMoves(
+  trace: AskIronToolTraceEntry[] | undefined,
+): AskIronProposedMove[] {
+  if (!trace) return [];
+  const out: AskIronProposedMove[] = [];
+  for (const entry of trace) {
+    if (!entry.ok || entry.tool !== "propose_move") continue;
+    const move = (entry.result as { move?: unknown } | null)?.move as
+      | Record<string, unknown>
+      | undefined;
+    if (!move || typeof move !== "object") continue;
+    const id = typeof move.id === "string" ? move.id : null;
+    const title = typeof move.title === "string" ? move.title : null;
+    const kind = typeof move.kind === "string" ? move.kind : null;
+    if (!id || !title || !kind) continue;
+    const priorityRaw = Number(move.priority ?? 50);
+    const priority = Number.isFinite(priorityRaw) ? priorityRaw : 50;
+    const entityRaw = move.entity as
+      | { type?: unknown; id?: unknown }
+      | null
+      | undefined;
+    const entity = entityRaw &&
+        typeof entityRaw.type === "string" &&
+        typeof entityRaw.id === "string"
+      ? { type: entityRaw.type, id: entityRaw.id }
+      : null;
+    const dueAt = typeof move.due_at === "string" ? move.due_at : null;
+    out.push({ id, kind, title, priority, entity, dueAt });
+  }
+  return out;
 }

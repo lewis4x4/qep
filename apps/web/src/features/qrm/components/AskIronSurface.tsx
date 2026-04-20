@@ -17,8 +17,17 @@
  */
 
 import { FormEvent, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Sparkles, Send, Loader2, AlertCircle, Wrench, CornerDownRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Sparkles,
+  Send,
+  Loader2,
+  AlertCircle,
+  Wrench,
+  CornerDownRight,
+  Plus,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,15 +35,17 @@ import {
   askIron,
   AskIronOfflineError,
 } from "../lib/ask-iron-api";
-import type { AskIronMessage } from "../lib/ask-iron-types";
+import type { AskIronMessage, AskIronProposedMove } from "../lib/ask-iron-types";
 import {
   buildHistoryPayload,
+  extractProposedMoves,
   humanizeToolName,
   SUGGESTED_STARTERS,
   summarizeToolTrace,
 } from "./askIronHelpers";
 
 export function AskIronSurface() {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<AskIronMessage[]>([]);
   const [input, setInput] = useState("");
   const [offline, setOffline] = useState(false);
@@ -48,14 +59,26 @@ export function AskIronSurface() {
       });
     },
     onSuccess: (data) => {
+      // Slice 6: detect moves Iron queued during this turn and shape them
+      // into chips. We trust the server's proposed_move_count for the
+      // invalidation decision (cheaper than re-scanning tool_trace) and use
+      // extractProposedMoves for the actual chip data.
+      const proposedMoves = extractProposedMoves(data.tool_trace);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content: data.answer,
           toolTrace: data.tool_trace,
+          proposedMoves: proposedMoves.length > 0 ? proposedMoves : undefined,
         },
       ]);
+      // If Iron created any moves, invalidate Today so the user sees them
+      // without manual refresh. Match by key prefix — TodaySurface uses
+      // ["qrm", "today-moves", scope, userId].
+      if ((data.proposed_move_count ?? proposedMoves.length) > 0) {
+        void queryClient.invalidateQueries({ queryKey: ["qrm", "today-moves"] });
+      }
       // After the assistant replies, auto-scroll to the newest message on the
       // next paint. Using rAF avoids a layout thrash inside onSuccess.
       requestAnimationFrame(() => {
@@ -188,6 +211,7 @@ function MessageBubble({ message }: { message: AskIronMessage }) {
     () => summarizeToolTrace(message.toolTrace),
     [message.toolTrace],
   );
+  const proposed = message.proposedMoves ?? [];
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -200,6 +224,18 @@ function MessageBubble({ message }: { message: AskIronMessage }) {
         )}
       >
         <p className="whitespace-pre-wrap">{message.content}</p>
+
+        {!isUser && proposed.length > 0 ? (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-border/40 pt-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-qep-orange">
+              Queued on Today
+            </span>
+            {proposed.map((m) => (
+              <ProposedMoveChip key={m.id} move={m} />
+            ))}
+          </div>
+        ) : null}
+
         {!isUser && message.toolTrace && message.toolTrace.length > 0 ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2">
             {message.toolTrace.map((t, idx) => (
@@ -217,18 +253,67 @@ function MessageBubble({ message }: { message: AskIronMessage }) {
                 {humanizeToolName(t.tool)}
               </span>
             ))}
-            {(trace.moves + trace.signals + trace.entities) > 0 ? (
-              <span className="text-[10px] text-muted-foreground">
-                Touched{" "}
-                {trace.moves > 0 ? `${trace.moves} moves · ` : ""}
-                {trace.signals > 0 ? `${trace.signals} signals · ` : ""}
-                {trace.entities > 0 ? `${trace.entities} entities` : ""}
-              </span>
-            ) : null}
+            {(trace.moves + trace.signals + trace.entities + trace.proposed) >
+                0
+              ? (
+                <span className="text-[10px] text-muted-foreground">
+                  Touched{" "}
+                  {trace.moves > 0 ? `${trace.moves} moves · ` : ""}
+                  {trace.signals > 0 ? `${trace.signals} signals · ` : ""}
+                  {trace.entities > 0 ? `${trace.entities} entities · ` : ""}
+                  {trace.proposed > 0
+                    ? `queued ${trace.proposed} move${trace.proposed === 1 ? "" : "s"}`
+                    : ""}
+                </span>
+              )
+              : null}
           </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Compact card rendered under an Iron answer when Iron queued a move this
+ * turn. Clicking deep-links to the move's entity surface so the operator can
+ * inspect the context before executing. Keyboard-focusable for a11y.
+ */
+function ProposedMoveChip({ move }: { move: AskIronProposedMove }) {
+  // Map the move entity to a QRM surface path. Falls back to Today when
+  // unscoped — the operator still sees the new move there.
+  const href = (() => {
+    if (!move.entity) return "/qrm/activities";
+    switch (move.entity.type) {
+      case "deal":
+        return `/qrm/deals/${move.entity.id}`;
+      case "contact":
+        return `/qrm/contacts/${move.entity.id}`;
+      case "company":
+        return `/qrm/companies/${move.entity.id}`;
+      default:
+        return "/qrm/activities";
+    }
+  })();
+
+  return (
+    <Link
+      to={href}
+      className={cn(
+        "flex items-center gap-2 rounded-md border border-qep-orange/30 bg-qep-orange/5 px-2 py-1.5 text-xs",
+        "transition-colors hover:border-qep-orange/60 hover:bg-qep-orange/10",
+        "focus:outline-none focus:ring-2 focus:ring-qep-orange/40",
+      )}
+      aria-label={`Queued move: ${move.title}`}
+    >
+      <Plus className="h-3.5 w-3.5 text-qep-orange" aria-hidden="true" />
+      <span className="truncate">{move.title}</span>
+      {move.dueAt ? (
+        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+          due {new Date(move.dueAt).toLocaleDateString()}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 
