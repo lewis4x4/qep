@@ -2,14 +2,32 @@
  * Service engine edge functions: JWT-only auth (no service_role impersonation).
  * Aligns with RLS — callers use anon key + user JWT.
  *
- * IMPORTANT: this helper extracts the JWT from the Authorization header and
- * passes it EXPLICITLY to `supabase.auth.getUser(token)`. The implicit
- * `auth.getUser()` (no args) variant does NOT honor `global.headers.Authorization`
- * across all supabase-js builds (especially the JSR Deno builds used in edge
- * functions) — it falls into a `_useSession` path that requires either a
- * stored session OR `hasCustomAuthorizationHeader` to be true on the auth
- * client, and returns AuthSessionMissingError otherwise. That returned a
- * silent 401 on every Iron call until this fix landed.
+ * ────────────────────────────────────────────────────────────────────────
+ * TWO BUGS THIS HELPER HAS HAD, BOTH RELATED TO auth.getUser()
+ * ────────────────────────────────────────────────────────────────────────
+ *
+ * 1. Argless variant silently 401s on JSR/Deno supabase-js builds
+ *    (the implicit path requires a stored session or
+ *    `hasCustomAuthorizationHeader`; neither applies in edge runtime).
+ *    FIX: always pass the token explicitly.
+ *
+ * 2. **ES256 JWT support (current project)** — Supabase JWT Signing Keys
+ *    is live on this project; the JWKS endpoint confirms
+ *    `alg: ES256`. The supabase-js v2 built-in JWT verifier rejects
+ *    ES256 with "Unsupported JWT algorithm ES256", so
+ *    `auth.getUser(token)` 401s every legit user token.
+ *    FIX: skip the library's local verifier. Call GoTrue's /user
+ *    endpoint directly with the token in Authorization + the anon
+ *    key in apikey header. GoTrue validates against the project's
+ *    actual signing key (it knows ES256 because it minted the
+ *    token). Works for HS256 tokens too — this path is algorithm-
+ *    agnostic.
+ *
+ * Trade-off: one extra HTTP round-trip to GoTrue vs. library-local
+ * verification. Acceptable — GoTrue is co-located with the edge
+ * function runtime, so the round-trip is <50ms typically, and it's
+ * strictly more correct (server validates what server minted).
+ * ────────────────────────────────────────────────────────────────────────
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { safeJsonError } from "./safe-cors.ts";
@@ -55,9 +73,9 @@ export async function requireServiceUser(
     };
   }
 
-  // Extract the raw JWT — getUser(token) is the only variant that works
-  // reliably on the JSR/Deno supabase-js build. Do NOT switch to getUser()
-  // without an argument; that path silently 401s server-side.
+  // Extract the raw JWT — used to both call GoTrue for validation and
+  // as the Authorization header on the supabase-js client so RLS sees
+  // the user identity on subsequent queries.
   const token = authHeader.slice("Bearer ".length).trim();
   if (!token) {
     return { ok: false, response: safeJsonError("Missing bearer token", 401, origin) };
@@ -67,12 +85,39 @@ export async function requireServiceUser(
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user }, error: userErr } = await supabase.auth.getUser(token);
-  if (userErr || !user) {
+  // Validate the token by asking GoTrue directly — /auth/v1/user has
+  // the project's actual signing key and handles whatever algorithm
+  // the project is currently on (HS256, ES256, RS256). Side-steps the
+  // supabase-js local verifier which rejects ES256.
+  let user: { id: string } | null = null;
+  try {
+    const userResp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: anonKey,
+      },
+    });
+    if (!userResp.ok) {
+      const body = await userResp.json().catch(() => ({}));
+      const message =
+        (body as { msg?: string; message?: string }).msg
+        ?? (body as { message?: string }).message
+        ?? `HTTP ${userResp.status}`;
+      return {
+        ok: false,
+        response: safeJsonError(`Unauthorized: ${message}`, 401, origin),
+      };
+    }
+    const userBody = await userResp.json();
+    if (!userBody || typeof userBody.id !== "string") {
+      return { ok: false, response: safeJsonError("Unauthorized: malformed user", 401, origin) };
+    }
+    user = { id: userBody.id };
+  } catch (e) {
     return {
       ok: false,
       response: safeJsonError(
-        userErr?.message ? `Unauthorized: ${userErr.message}` : "Unauthorized",
+        `Unauthorized: ${e instanceof Error ? e.message : "token verification failed"}`,
         401,
         origin,
       ),
