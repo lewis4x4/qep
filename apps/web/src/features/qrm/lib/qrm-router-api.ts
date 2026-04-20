@@ -436,3 +436,54 @@ export async function patchQrmMove(moveId: string, input: PatchMoveInput): Promi
   });
   return payload.move;
 }
+
+// ---------------------------------------------------------------------------
+// Signals (Slice 3) — the raw event stream backing the Pulse surface. Reads
+// are RLS-scoped by workspace + rep visibility; writes go through dedicated
+// ingest adapters, not this client.
+// ---------------------------------------------------------------------------
+
+export type {
+  QrmSignal,
+  QrmSignalEntityType,
+  QrmSignalKind,
+  QrmSignalSeverity,
+} from "./signals-types";
+import type {
+  QrmSignal,
+  QrmSignalEntityType,
+  QrmSignalKind,
+  QrmSignalSeverity,
+} from "./signals-types";
+
+export interface ListSignalsParams {
+  kinds?: QrmSignalKind[];
+  severityAtLeast?: QrmSignalSeverity | null;
+  entityType?: QrmSignalEntityType | null;
+  entityId?: string | null;
+  assignedRepId?: string | null;
+  /** ISO timestamp. Server floors signals to occurred_at >= since. */
+  since?: string | null;
+  limit?: number;
+}
+
+export async function listQrmSignals(
+  params: ListSignalsParams = {},
+): Promise<QrmSignal[]> {
+  const q = new URLSearchParams();
+  if (params.kinds && params.kinds.length > 0) {
+    q.set("kind", params.kinds.join(","));
+  }
+  if (params.severityAtLeast) q.set("severity_at_least", params.severityAtLeast);
+  if (params.entityType) q.set("entity_type", params.entityType);
+  if (params.entityId) q.set("entity_id", params.entityId);
+  if (params.assignedRepId) q.set("assigned_rep_id", params.assignedRepId);
+  if (params.since) q.set("since", params.since);
+  if (params.limit != null) q.set("limit", String(params.limit));
+
+  const qs = q.toString();
+  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+    `/qrm/signals${qs ? `?${qs}` : ""}`,
+  );
+  return payload.signals;
+}

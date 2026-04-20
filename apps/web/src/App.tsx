@@ -448,6 +448,14 @@ const WithTodaySurface = lazy(() =>
     default: m.WithTodaySurface,
   }))
 );
+// Shell v2: Pulse surface replaces the legacy ExceptionHandlingPage when the
+// flag is on. Pulse reads the normalized signals feed (Slice 3) so reps and
+// elevated operators see the same "what changed" list.
+const WithPulseSurface = lazy(() =>
+  import("./features/qrm/shell/withPulseSurface").then((m) => ({
+    default: m.WithPulseSurface,
+  }))
+);
 const QrmContactDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
     default: m.QrmContactDetailPage,
@@ -2144,8 +2152,16 @@ function App() {
               <Route
                 path="/qrm/exceptions"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <ExceptionHandlingPage />
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <WithPulseSurface
+                      fallback={
+                        ["admin", "manager", "owner"].includes(profile.role) ? (
+                          <ExceptionHandlingPage />
+                        ) : (
+                          <Navigate to="/dashboard" replace />
+                        )
+                      }
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

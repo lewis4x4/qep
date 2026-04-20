@@ -35,6 +35,12 @@ import {
   type MovePatchPayload,
 } from "../_shared/qrm-moves.ts";
 import {
+  ingestSignal,
+  listSignals,
+  parseSignalListFilters,
+  type SignalIngestPayload,
+} from "../_shared/qrm-signals.ts";
+import {
   createActivity,
   createCompany,
   createContact,
@@ -788,6 +794,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const body = await readJsonBody<MoveCreatePayload>(req);
         const move = await createMove(ctx, body);
         return crmOk({ move }, { origin, status: 201 });
+      }
+    }
+
+    if (segments[1] === "signals") {
+      requireCaller(ctx);
+
+      // GET /qrm/signals — the Pulse feed. Any authenticated caller; RLS
+      // filters to rows the caller can see.
+      if (req.method === "GET" && segments.length === 2) {
+        const filters = parseSignalListFilters(url.searchParams);
+        const signals = await listSignals(ctx, filters);
+        return crmOk({ signals }, { origin });
+      }
+
+      // POST /qrm/signals — ingest a signal. Adapters (inbound-email,
+      // telematics, news-scan) are the canonical writers; elevated users
+      // can hand-author a signal for testing or manual triage. Reps cannot
+      // write directly — requireElevated also permits service-role.
+      if (req.method === "POST" && segments.length === 2) {
+        requireElevated(ctx);
+        const body = await readJsonBody<SignalIngestPayload>(req);
+        const signal = await ingestSignal(ctx, body);
+        return crmOk({ signal }, { origin, status: 201 });
       }
     }
 
