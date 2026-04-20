@@ -8,6 +8,7 @@
  */
 
 import type { QuoteWorkspaceDraft } from "../../../../../../../shared/qep-moonshot-contracts";
+import type { SimilarDealsResult, ReasonIntelligence } from "../deal-intelligence-api";
 
 // ── Context the registry passes to every rule ──────────────────────────────
 
@@ -52,6 +53,16 @@ export interface DealCoachContext {
     programName: string;
     brandName: string;
   }>;
+
+  /** Slice 17 — outcomes of historical deals that resemble this draft.
+   *  Null when the draft doesn't yet have enough signal (no equipment or
+   *  net total ≤ 0) to form a query. */
+  similarDeals: SimilarDealsResult | null;
+
+  /** Slice 17 — workspace-wide stats on which margin-exception reasons
+   *  correlate with wins. Buckets under MIN_BUCKET_SAMPLES are excluded
+   *  by the aggregator already. */
+  reasonIntelligence: ReasonIntelligence;
 }
 
 // ── Rule result ────────────────────────────────────────────────────────────

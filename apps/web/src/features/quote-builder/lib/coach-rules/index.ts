@@ -11,6 +11,7 @@
 
 import { marginBaselineRule } from "./margin-baseline";
 import { activeProgramsRule } from "./active-programs";
+import { similarDealsRule } from "./similar-deals";
 import type {
   DealCoachContext,
   RuleEvaluator,
@@ -23,6 +24,7 @@ export * from "./types";
 const RULES: RuleEvaluator[] = [
   marginBaselineRule,
   activeProgramsRule,
+  similarDealsRule,
 ];
 
 /** Maximum suggestions shown at once — prevents Clippy-feel. */

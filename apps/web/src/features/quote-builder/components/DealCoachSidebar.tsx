@@ -18,6 +18,14 @@ import {
   SEVERITY_TONE,
   type MarginBaseline,
 } from "../lib/coach-api";
+import {
+  buildSimilarDealsQuery,
+  getSimilarDealOutcomes,
+  getReasonIntelligence,
+  getPersonalSuppressions,
+  type SimilarDealsResult,
+  type ReasonIntelligence,
+} from "../lib/deal-intelligence-api";
 
 /**
  * Slice 13 — Deal Coach Sidebar v1.
@@ -67,6 +75,11 @@ export function DealCoachSidebar({
   const [activePrograms, setActivePrograms] = useState<DealCoachContext["activePrograms"]>([]);
   const [dismissedRuleIds, setDismissedRuleIds] = useState<Set<string>>(new Set());
 
+  // Slice 17 — intelligence layer state
+  const [similarDeals, setSimilarDeals] = useState<SimilarDealsResult | null>(null);
+  const [reasonIntelligence, setReasonIntelligence] = useState<ReasonIntelligence>({ stats: [], totalSamples: 0 });
+  const [personalSuppressions, setPersonalSuppressions] = useState<Set<string>>(new Set());
+
   // ── Context fetch (once per user + equipment-make change) ──────────────
   const equipmentMakesKey = useMemo(
     () => draft.equipment.map((e) => (e.make ?? "").trim()).join("|"),
@@ -78,18 +91,43 @@ export function DealCoachSidebar({
     let cancelled = false;
 
     (async () => {
-      const [baseline, programs] = await Promise.all([
+      const [baseline, programs, reasons, suppressions] = await Promise.all([
         getMarginBaseline(profile.id),
         getActiveProgramsForDraft(draft),
+        getReasonIntelligence(),
+        getPersonalSuppressions({ repId: profile.id }),
       ]);
       if (cancelled) return;
       setMarginBaseline(baseline);
       setActivePrograms(programs);
+      setReasonIntelligence(reasons);
+      setPersonalSuppressions(suppressions);
     })();
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, equipmentMakesKey]);
+
+  // Similar-deals query depends on brand + netTotal. Refetches when either
+  // meaningfully changes — debounced at the netTotal level via rounding to
+  // the nearest 1k, so minor tweaks don't trigger a re-query.
+  const similarQueryKey = useMemo(() => {
+    const query = buildSimilarDealsQuery(draft, computed.netTotal);
+    if (!query) return "";
+    return `${query.brandName ?? ""}::${Math.round(query.netTotal / 1000)}`;
+  }, [equipmentMakesKey, computed.netTotal, draft]);
+
+  useEffect(() => {
+    if (!similarQueryKey) { setSimilarDeals(null); return; }
+    let cancelled = false;
+    const query = buildSimilarDealsQuery(draft, computed.netTotal);
+    if (!query) { setSimilarDeals(null); return; }
+    getSimilarDealOutcomes(query).then((result) => {
+      if (!cancelled) setSimilarDeals(result);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [similarQueryKey]);
 
   // ── Dismissed-set fetch when quote id shows up ─────────────────────────
   useEffect(() => {
@@ -112,7 +150,17 @@ export function DealCoachSidebar({
     activeProgramCount: activePrograms.length,
     dismissedCount: dismissedRuleIds.size,
     hasRecommendation: !!draft.recommendation,
-  }), [computed.marginPct, equipmentMakesKey, marginBaseline, activePrograms.length, dismissedRuleIds.size, draft.recommendation]);
+    // Slice 17 — include intelligence signals in the debounce key
+    similarKey: similarDeals
+      ? `${similarDeals.closedSampleSize}:${similarDeals.winRatePct}:${similarDeals.avgWinMarginPct}`
+      : "",
+    reasonKey: reasonIntelligence.totalSamples,
+    suppressionKey: personalSuppressions.size,
+  }), [
+    computed.marginPct, equipmentMakesKey, marginBaseline,
+    activePrograms.length, dismissedRuleIds.size, draft.recommendation,
+    similarDeals, reasonIntelligence.totalSamples, personalSuppressions.size,
+  ]);
 
   useEffect(() => {
     if (!profile || !marginBaseline) {
@@ -129,8 +177,16 @@ export function DealCoachSidebar({
         quotePackageId,
         marginBaseline,
         activePrograms,
+        similarDeals,
+        reasonIntelligence,
       };
-      const results = evaluateCoachRules(ctx, dismissedRuleIds);
+      // Combine per-quote dismissals with the rep's personal 30-day
+      // suppression memory. Both silence the rule before it ever shows.
+      const effectiveDismissals = new Set<string>([
+        ...dismissedRuleIds,
+        ...personalSuppressions,
+      ]);
+      const results = evaluateCoachRules(ctx, effectiveDismissals);
       setSuggestions(results);
       setLoading(false);
       // Record "shown" for each newly-surfaced suggestion (fire-and-forget)
