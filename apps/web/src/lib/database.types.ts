@@ -14295,6 +14295,70 @@ export type Database = {
           },
         ]
       }
+      qb_quote_outcomes: {
+        Row: {
+          captured_at: string
+          captured_by: string | null
+          competitor: string | null
+          created_at: string
+          id: string
+          outcome: string
+          price_sensitivity: string | null
+          quote_package_id: string
+          reason: string | null
+          reason_details: string | null
+          workspace_id: string
+        }
+        Insert: {
+          captured_at?: string
+          captured_by?: string | null
+          competitor?: string | null
+          created_at?: string
+          id?: string
+          outcome: string
+          price_sensitivity?: string | null
+          quote_package_id: string
+          reason?: string | null
+          reason_details?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string | null
+          competitor?: string | null
+          created_at?: string
+          id?: string
+          outcome?: string
+          price_sensitivity?: string | null
+          quote_package_id?: string
+          reason?: string | null
+          reason_details?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_quote_outcomes_captured_by_fkey"
+            columns: ["captured_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_quote_outcomes_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "qb_quote_outcomes_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_quotes: {
         Row: {
           applied_program_ids: string[] | null

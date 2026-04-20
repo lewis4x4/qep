@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, FileText, Mic, MessageSquare } from "lucide-react";
 import { listQuotePackages } from "../lib/quote-api";
+import { OutcomeCaptureDrawer } from "../components/OutcomeCaptureDrawer";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 const STATUS_FILTERS = ["all", "draft", "ready", "sent", "accepted"] as const;
@@ -31,11 +32,15 @@ function fmt(amount: number | null): string {
   return `$${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+const OPEN_STATES_FOR_OUTCOME = new Set(["sent", "viewed"]);
+
 export function QuoteListPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Slice 10: outcome capture drawer state
+  const [outcomeTarget, setOutcomeTarget] = useState<string | null>(null);
 
   // Debounce search input
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,9 +188,31 @@ export function QuoteListPage() {
                 </p>
               </div>
             </div>
+            {OPEN_STATES_FOR_OUTCOME.has(item.status) && (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOutcomeTarget(item.id);
+                  }}
+                  className="text-xs text-primary underline-offset-2 hover:underline"
+                >
+                  Record outcome →
+                </button>
+              </div>
+            )}
           </Card>
         );
       })}
+
+      <OutcomeCaptureDrawer
+        open={outcomeTarget !== null}
+        onClose={() => setOutcomeTarget(null)}
+        quotePackageId={outcomeTarget}
+        triggeredBy={null}
+        onSaved={() => quotesQuery.refetch()}
+      />
     </div>
   );
 }
