@@ -185,6 +185,42 @@ export async function getFactorAttributionDeals(): Promise<
 }
 
 /**
+ * Slice 20i — fetch label → verdict map for the live WinProbabilityStrip.
+ * Rep-accessible endpoint — no role gate. Returns only the ternary
+ * verdict per factor label ("proven" | "suspect" | "unknown"), never
+ * the underlying win rates or counts.
+ *
+ * On error we return an empty map rather than a discriminated union —
+ * the live strip must not be blocked by an instrumentation failure,
+ * and reps don't need to see an error message for a nice-to-have
+ * badge. Silent-fail is the right call here; a bug would be visible
+ * via the list page's factor breakdown card instead.
+ */
+export async function getFactorVerdicts(): Promise<
+  Map<string, "proven" | "suspect" | "unknown">
+> {
+  try {
+    const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/factor-verdicts`);
+    if (!res.ok) return new Map();
+    const body = (await res.json()) as {
+      verdicts?: Array<{ label: string; verdict: "proven" | "suspect" | "unknown" }>;
+    };
+    const out = new Map<string, "proven" | "suspect" | "unknown">();
+    if (!Array.isArray(body.verdicts)) return out;
+    for (const row of body.verdicts) {
+      if (!row || typeof row.label !== "string" || row.label.length === 0) continue;
+      if (row.verdict !== "proven" && row.verdict !== "suspect" && row.verdict !== "unknown") {
+        continue;
+      }
+      out.set(row.label, row.verdict);
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
+/**
  * Slice 20h — fetch closed-deal audit rows. Discriminated union so the
  * card can distinguish forbidden (hide) / error (warn) / empty (hint)
  * states without string-parsing the message.

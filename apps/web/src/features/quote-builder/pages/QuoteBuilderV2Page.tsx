@@ -46,6 +46,7 @@ import {
   buildQuoteSavePayload,
   calculateFinancing,
   getAiEquipmentRecommendation,
+  getFactorVerdicts,
   getPortalRevision,
   publishPortalRevision,
   returnPortalRevisionToDraft,
@@ -251,6 +252,22 @@ export function QuoteBuilderV2Page() {
   // Memoized so the strip's `useMemo([draft, context])` scorer can actually
   // hit — a fresh object literal on every render would invalidate it.
   const marginBaselineMedianPct = marginBaselineQuery.data?.medianPct ?? null;
+
+  // Slice 20i: factor verdicts — historical "proven / suspect / unknown"
+  // labels for each scorer factor, used by WinProbabilityStrip to annotate
+  // the live factor chips. Rep-accessible endpoint; on failure it returns
+  // an empty map and the strip silently renders without badges.
+  // Gated on `profile?.id` to avoid firing a pre-auth fetch that'd be
+  // silently discarded; 5-minute stale time because the verdict
+  // aggregate changes on closed-deal timescale, not quote-editing
+  // timescale.
+  const factorVerdictsQuery = useQuery({
+    queryKey: ["quote-builder", "factor-verdicts"],
+    queryFn: getFactorVerdicts,
+    enabled: !!profile?.id,
+    staleTime: 5 * 60_000,
+  });
+  const factorVerdicts = factorVerdictsQuery.data ?? null;
   const winProbContext = useMemo(
     () => ({ marginPct, marginBaselineMedianPct }),
     [marginPct, marginBaselineMedianPct],
@@ -841,7 +858,7 @@ export function QuoteBuilderV2Page() {
 
           {/* Slice 20c: always-on win-probability strip. Rule-based today;
               becomes the rule-baseline for Move 2's counterfactual engine. */}
-          <WinProbabilityStrip draft={draft} context={winProbContext} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
 
           <CustomerSection
             draft={draft}
@@ -967,7 +984,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
 
           <EquipmentSelector
             onSelect={(entry) => {
@@ -1112,7 +1129,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
 
           <MarginCheckBanner
             marginPct={marginPct}

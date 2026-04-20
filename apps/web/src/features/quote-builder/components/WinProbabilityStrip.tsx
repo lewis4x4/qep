@@ -24,7 +24,10 @@
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight } from "lucide-react";
+import {
+  TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight,
+  CheckCircle2, AlertTriangle,
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +42,7 @@ import {
   type WinProbabilityLift,
   type WinProbabilityResult,
 } from "../lib/win-probability-scorer";
+import type { FactorVerdict } from "../lib/factor-verdict";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 export interface WinProbabilityStripProps {
@@ -46,6 +50,14 @@ export interface WinProbabilityStripProps {
   context: WinProbabilityContext;
   /** Optional compact mode for tight sidebars — hides the factor chips. */
   compact?: boolean;
+  /**
+   * Slice 20i — label → historical verdict. When present, each factor
+   * chip gets a small "proven" / "suspect" badge so the rep can see
+   * which parts of the score have been validated against closed deals.
+   * Unknown or missing factors render without a badge — we never
+   * annotate something we can't back up.
+   */
+  verdicts?: Map<string, FactorVerdict> | null;
 }
 
 const BAND_STYLE: Record<
@@ -58,7 +70,12 @@ const BAND_STYLE: Record<
   at_risk: { label: "At risk",  ring: "ring-rose-500/40",    text: "text-rose-400",    bar: "bg-rose-500",    bg: "bg-rose-500/5 border-rose-500/30" },
 };
 
-export function WinProbabilityStrip({ draft, context, compact = false }: WinProbabilityStripProps) {
+export function WinProbabilityStrip({
+  draft,
+  context,
+  compact = false,
+  verdicts = null,
+}: WinProbabilityStripProps) {
   const result = useMemo(
     () => computeWinProbability(draft, context),
     [draft, context],
@@ -109,7 +126,11 @@ export function WinProbabilityStrip({ draft, context, compact = false }: WinProb
         {!compact && topFactors.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {topFactors.map((f, i) => (
-              <FactorChip key={`${f.label}-${i}`} factor={f} />
+              <FactorChip
+                key={`${f.label}-${i}`}
+                factor={f}
+                verdict={verdicts?.get(f.label) ?? null}
+              />
             ))}
             {result.factors.length > topFactors.length && (
               <Tooltip>
@@ -185,15 +206,40 @@ function GaugeBar({ score, barColor }: { score: number; barColor: string }) {
   );
 }
 
-function FactorChip({ factor }: { factor: WinProbabilityFactor }) {
+function FactorChip({
+  factor,
+  verdict,
+}: {
+  factor: WinProbabilityFactor;
+  verdict: FactorVerdict | null;
+}) {
   const Icon = factor.weight > 0 ? TrendingUp : factor.weight < 0 ? TrendingDown : Minus;
+  // Only render a badge for proven/suspect. `unknown` + `null` both
+  // mean "no historical claim to make" — the chip stays clean.
+  const showBadge = verdict === "proven" || verdict === "suspect";
+  // Rep-facing copy: avoid analyst jargon and never point reps at a
+  // manager-only surface. "Proven" means the factor has backed up its
+  // scorer weight in closed deals; "suspect" means it hasn't — don't
+  // lean on this one signal alone, use it alongside your judgment.
+  const verdictTooltip =
+    verdict === "proven"
+      ? "Historically confirmed — past closed deals backed this signal up."
+      : verdict === "suspect"
+        ? "Historically mixed — this signal didn't consistently hold in past closed deals. Use judgment, don't lean on it alone."
+        : null;
+  // Compose the accessible label so it includes the verdict when
+  // present — otherwise screen readers would miss the badge semantics.
+  const ariaLabel =
+    verdictTooltip !== null
+      ? `${factor.label}: ${factor.rationale}. ${verdictTooltip}`
+      : `${factor.label}: ${factor.rationale}`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
           tabIndex={0}
           role="button"
-          aria-label={`${factor.label}: ${factor.rationale}`}
+          aria-label={ariaLabel}
           className={cn(
             "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] cursor-help focus:outline-none focus:ring-2 focus:ring-ring",
             factor.weight > 0
@@ -208,10 +254,27 @@ function FactorChip({ factor }: { factor: WinProbabilityFactor }) {
             {factor.weight > 0 ? "+" : ""}{factor.weight}
           </span>
           <span>{factor.label}</span>
+          {showBadge && verdict === "proven" && (
+            <CheckCircle2
+              className="h-3 w-3 text-emerald-400 -mr-0.5"
+              aria-hidden
+            />
+          )}
+          {showBadge && verdict === "suspect" && (
+            <AlertTriangle
+              className="h-3 w-3 text-amber-400 -mr-0.5"
+              aria-hidden
+            />
+          )}
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-xs text-xs">
-        {factor.rationale}
+        <p>{factor.rationale}</p>
+        {verdictTooltip !== null && (
+          <p className="mt-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground">
+            {verdictTooltip}
+          </p>
+        )}
       </TooltipContent>
     </Tooltip>
   );

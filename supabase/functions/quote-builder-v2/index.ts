@@ -579,6 +579,109 @@ Deno.serve(async (req) => {
         return safeJsonOk({ deals }, origin);
       }
 
+      // ── GET /factor-verdicts (Slice 20i) ─────────────────────────────
+      // REP-ACCESSIBLE. Unlike /factor-attribution which ships the full
+      // numeric report (manager-only), this endpoint ships only a
+      // label → verdict ternary ("proven" | "suspect" | "unknown").
+      // That's safe for reps because verdicts reveal no win-rate data
+      // beyond what the scorer already exposes — only whether each
+      // factor's historical lift agrees with its signed weight.
+      //
+      // The verdict math mirrors factor-verdict.ts (client lib) so the
+      // two stay in lockstep; keeping it inline here avoids crossing
+      // the edge/Bun module boundary.
+      if (action === "factor-verdicts") {
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_packages!inner(win_probability_snapshot)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("factor-verdicts query error:", error);
+          return safeJsonError("Failed to load factor verdicts", 500, origin);
+        }
+
+        // Step 1: flatten to deal-grouped observations (same shape as
+        // factor-attribution).
+        const deals = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const snapshot = (pkg as { win_probability_snapshot?: unknown } | null)
+            ?.win_probability_snapshot;
+          const outcome = row.outcome;
+          if (
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((fa: unknown) => {
+            if (!fa || typeof fa !== "object") return [];
+            const rec = fa as { label?: unknown; weight?: unknown };
+            if (
+              typeof rec.label !== "string" ||
+              typeof rec.weight !== "number" ||
+              !Number.isFinite(rec.weight)
+            ) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [{ factors, outcome: outcome as "won" | "lost" | "expired" }];
+        });
+
+        // Step 2: for each distinct label, compute the signal needed to
+        // decide verdict. Mirrors computeFactorAttribution but
+        // short-circuits to the ternary — no win rates leave the
+        // server.
+        const MIN_PER_SIDE = 3;
+        const labels = new Set<string>();
+        for (const d of deals) for (const f of d.factors) labels.add(f.label);
+
+        const verdicts: Array<{ label: string; verdict: "proven" | "suspect" | "unknown" }> = [];
+        for (const label of labels) {
+          let present = 0;
+          let presentWins = 0;
+          let absent = 0;
+          let absentWins = 0;
+          let weightSum = 0;
+          for (const d of deals) {
+            const hit = d.factors.find((f) => f.label === label);
+            const won = d.outcome === "won";
+            if (hit) {
+              present += 1;
+              if (won) presentWins += 1;
+              if (Number.isFinite(hit.weight)) weightSum += hit.weight;
+            } else {
+              absent += 1;
+              if (won) absentWins += 1;
+            }
+          }
+          const lowConfidence = present < MIN_PER_SIDE || absent < MIN_PER_SIDE;
+          if (lowConfidence || present === 0 || absent === 0) {
+            verdicts.push({ label, verdict: "unknown" });
+            continue;
+          }
+          const winRateWhenPresent = presentWins / present;
+          const winRateWhenAbsent = absentWins / absent;
+          const lift = winRateWhenPresent - winRateWhenAbsent;
+          const avgWeight = weightSum / present;
+          // isFactorSurprising: |weight| >= 1 and lift disagrees in sign.
+          const surprising =
+            (avgWeight >= 1 && lift < 0) || (avgWeight <= -1 && lift > 0);
+          verdicts.push({ label, verdict: surprising ? "suspect" : "proven" });
+        }
+
+        return safeJsonOk({ verdicts }, origin);
+      }
+
       // ── GET /closed-deals-audit (Slice 20h) ─────────────────────────
       // Manager/owner-only triage queue: the last N closed deals with
       // stored snapshots, flattened to { packageId, score, outcome,
