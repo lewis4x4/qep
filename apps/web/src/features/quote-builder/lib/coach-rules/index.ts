@@ -22,7 +22,16 @@ import type {
 import { SEVERITY_RANK } from "./types";
 
 export * from "./types";
-export * from "./adaptive";
+// Narrow, intentional re-export. Keep this selective — consumers that
+// actually need the adaptive internals (CoachPerformancePage, sidebar
+// tests) get them, but we don't balloon the public surface with
+// applyAdaptiveAdjustments + classify + AdaptiveOutcome.
+export {
+  MIN_CONFIDENCE_SHOWS,
+  SUPPRESS_BELOW_PCT,
+  DEMOTE_BELOW_PCT,
+  type AcceptanceSnapshot,
+} from "./adaptive";
 
 const RULES: RuleEvaluator[] = [
   marginBaselineRule,

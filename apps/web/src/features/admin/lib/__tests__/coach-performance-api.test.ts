@@ -42,6 +42,10 @@ describe("aggregateCoachPerformance", () => {
     expect(out.rules).toEqual([]);
     expect(out.repDismissals).toEqual([]);
     expect(out.windowFrom).toBe(windowFrom.toISOString());
+    // Pure aggregator always reports non-truncated, error-free — the
+    // wrapper fills these from Supabase call outcomes.
+    expect(out.truncated).toBe(false);
+    expect(out.error).toBeNull();
   });
 
   test("computes headline totals + acceptance", () => {

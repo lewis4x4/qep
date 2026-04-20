@@ -228,6 +228,15 @@ export interface RuleAcceptanceStat {
   acceptanceRatePct: number | null;
 }
 
+/**
+ * Cap on rows pulled for the adaptive classifier. 5000 × 60 days is
+ * generous even for a busy workspace; hitting it means the classifier
+ * is operating on a truncated sample, so we'd rather see a real signal
+ * than silently misreport. When Slice 18/19 adds a materialized view
+ * or RPC for this, the cap goes away.
+ */
+export const MAX_ACCEPTANCE_ROWS = 5000;
+
 export async function getRuleAcceptanceStats(daysBack = 60): Promise<RuleAcceptanceStat[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - daysBack);
@@ -235,7 +244,9 @@ export async function getRuleAcceptanceStats(daysBack = 60): Promise<RuleAccepta
   const { data: rows } = await supabase
     .from("qb_deal_coach_actions")
     .select("rule_id, action, shown_at")
-    .gte("shown_at", cutoff.toISOString());
+    .gte("shown_at", cutoff.toISOString())
+    .order("shown_at", { ascending: false })
+    .limit(MAX_ACCEPTANCE_ROWS);
 
   return aggregateRuleAcceptance(((rows ?? []) as Pick<ActionRow, "rule_id" | "action">[]));
 }

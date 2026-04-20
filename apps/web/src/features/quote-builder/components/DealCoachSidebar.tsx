@@ -62,6 +62,22 @@ export interface DealCoachSidebarProps {
 
 const DEBOUNCE_MS = 300;
 
+/**
+ * When writing coach actions to qb_deal_coach_actions we persist the
+ * author-chosen severity, not the adaptively-demoted one — analytics
+ * queries treat the severity column as "what tier did the rule author
+ * think this deserved". The fact of demotion is already captured in
+ * suggestion_snapshot.metrics.adaptive_demoted_from, so both are
+ * recoverable.
+ */
+function persistableRule(rule: RuleResult): RuleResult {
+  const originalSeverity = rule.metrics?.adaptive_demoted_from;
+  if (originalSeverity === "critical" || originalSeverity === "warning" || originalSeverity === "info") {
+    return { ...rule, severity: originalSeverity };
+  }
+  return rule;
+}
+
 export function DealCoachSidebar({
   draft,
   computed,
@@ -171,6 +187,10 @@ export function DealCoachSidebar({
     reasonKey: reasonIntelligence.totalSamples,
     suppressionKey: personalSuppressions.size,
     acceptanceKey: acceptanceStats.length,
+  // similarDeals must stay in deps — its closure reference is what
+  // React uses to decide when to recompute similarKey. Upstream
+  // setSimilarDeals only fires when a query result arrives, so this
+  // doesn't thrash.
   }), [
     computed.marginPct, equipmentMakesKey, marginBaseline,
     activePrograms.length, dismissedRuleIds.size, draft.recommendation,
@@ -205,13 +225,17 @@ export function DealCoachSidebar({
       const results = evaluateCoachRules(ctx, effectiveDismissals, acceptanceStats);
       setSuggestions(results);
       setLoading(false);
-      // Record "shown" for each newly-surfaced suggestion (fire-and-forget)
+      // Record "shown" for each newly-surfaced suggestion (fire-and-forget).
+      // Persistence restores the author-chosen severity — the adaptive
+      // demote fact lives in `suggestion_snapshot.metrics` so analytics
+      // can still see both, but `qb_deal_coach_actions.severity` keeps
+      // its semantic meaning ("critical" = the author said so).
       if (quotePackageId && profile.active_workspace_id) {
         for (const r of results) {
           void recordCoachAction({
             workspaceId:  profile.active_workspace_id,
             quotePackageId,
-            rule:         r,
+            rule:         persistableRule(r),
             action:       "shown",
             showingUserId: profile.id,
           });
@@ -228,7 +252,7 @@ export function DealCoachSidebar({
       void recordCoachAction({
         workspaceId: profile.active_workspace_id,
         quotePackageId,
-        rule,
+        rule: persistableRule(rule),
         action: "applied",
         showingUserId: profile.id,
       });
@@ -246,7 +270,7 @@ export function DealCoachSidebar({
       void recordCoachAction({
         workspaceId: profile.active_workspace_id,
         quotePackageId,
-        rule,
+        rule: persistableRule(rule),
         action: "dismissed",
         showingUserId: profile.id,
       });

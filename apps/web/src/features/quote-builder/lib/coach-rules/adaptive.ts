@@ -36,7 +36,11 @@ export type AdaptiveAction = "unchanged" | "demoted" | "suppressed";
 export interface AdaptiveOutcome {
   rule:   RuleResult;
   action: AdaptiveAction;
-  /** The acceptance-rate-pct that drove the decision, for UI tooltips. */
+  /** The acceptance-rate-pct that drove the decision. Available for
+   *  callers that want to render an inline "(demoted: 12% acceptance)"
+   *  tooltip — `evaluateCoachRules` doesn't surface this today but
+   *  `applyAdaptiveAdjustments` returns it on its actions map so any
+   *  future UI can wire it without changing the decision pipeline. */
   acceptanceRatePct: number | null;
   /** How many times the rule has shown (workspace-wide, window). */
   timesShown: number;

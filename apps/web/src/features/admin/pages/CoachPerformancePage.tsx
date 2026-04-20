@@ -80,8 +80,19 @@ function CoachPerformancePageInner() {
 
       {loading || !summary ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : summary.error ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <div className="font-medium text-destructive">Couldn't load coach performance</div>
+          <div className="text-xs text-muted-foreground">{summary.error}</div>
+        </div>
       ) : (
         <>
+          {summary.truncated && (
+            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
+              Rollup is computed over the 5,000 most recent actions — consider shortening the
+              window if you need a complete sample.
+            </div>
+          )}
           <HeadlineStrip summary={summary} />
 
           <Card>
@@ -111,9 +122,16 @@ function CoachPerformancePageInner() {
               <ThresholdSlider
                 label="Suppress when acceptance is under"
                 value={suppressAt}
-                onChange={setSuppressAt}
+                onChange={(next) => {
+                  setSuppressAt(next);
+                  // Keep suppress ≤ demote so `wouldDemoteAt` always has a
+                  // valid band to filter on. Without this clamp the admin
+                  // can drag suppress above demote and the preview
+                  // silently empties out.
+                  if (next > demoteAt) setDemoteAt(next);
+                }}
                 min={0}
-                max={50}
+                max={80}
               />
               <ThresholdSlider
                 label="Demote when acceptance is under (but above suppress)"

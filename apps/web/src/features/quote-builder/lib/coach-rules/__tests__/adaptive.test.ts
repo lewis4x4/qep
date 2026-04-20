@@ -92,6 +92,16 @@ describe("classify", () => {
     expect(out.rule.metrics?.adaptive_demoted_from).toBe("critical");
     expect(out.rule.metrics?.adaptive_acceptance_pct).toBe(12);
   });
+
+  test("demoted rule preserves the original metrics from the rule author", () => {
+    const out = classify(
+      rule({ severity: "critical", metrics: { sample_size: 42 } }),
+      stat({ timesShown: 30, acceptanceRatePct: 12 }),
+    );
+    // Author-supplied metrics must be preserved alongside the adaptive stamps.
+    expect(out.rule.metrics?.sample_size).toBe(42);
+    expect(out.rule.metrics?.adaptive_demoted_from).toBe("critical");
+  });
 });
 
 // ── applyAdaptiveAdjustments ─────────────────────────────────────────────

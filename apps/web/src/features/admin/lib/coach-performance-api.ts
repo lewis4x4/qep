@@ -57,7 +57,22 @@ export interface CoachPerformanceSummary {
   /** ISO timestamps — window the rollup covers. */
   windowFrom:     string;
   windowTo:       string;
+  /** True when the underlying action query hit MAX_ACTION_ROWS and the
+   *  rollup is computed over a truncated sample. Admin UI should warn. */
+  truncated:      boolean;
+  /** Non-null when an upstream query errored — lets the page surface
+   *  "Couldn't load coach performance" instead of silently showing zeros. */
+  error:          string | null;
 }
+
+/**
+ * Cap on the action-row fetch. At 5k rows across 90 days, even a
+ * chatty workspace stays well within Supabase's per-request budget.
+ * Setting a value > 1000 lifts the default REST-API limit so we don't
+ * silently truncate small data sets. When the cap is hit we surface it
+ * on the returned summary so admin can widen the window if needed.
+ */
+export const MAX_ACTION_ROWS = 5000;
 
 // ── Public API ───────────────────────────────────────────────────────────
 
@@ -67,32 +82,46 @@ export async function getCoachPerformanceSummary(
   const to = new Date();
   const from = new Date();
   from.setDate(from.getDate() - daysBack);
+  const emptyBase = {
+    totalActions: 0, totalApplied: 0, totalDismissed: 0, acceptedPct: null,
+    rules: [], repDismissals: [],
+    windowFrom: from.toISOString(), windowTo: to.toISOString(),
+    truncated: false, error: null as string | null,
+  };
 
   // Pull actions joined to package status so we can compute win-rate
-  // uplift in one pass. quote_packages status is the outcome proxy
-  // (accepted=won, rejected=lost, else in-flight/excluded).
-  const { data: actions } = await supabase
+  // uplift in one pass. MAX_ACTION_ROWS lifts the Postgrest default
+  // 1000-row cap — without this the rollup could silently truncate in
+  // a busy workspace.
+  const { data: actions, error: actionsErr } = await supabase
     .from("qb_deal_coach_actions")
     .select("rule_id, action, shown_by, shown_at, quote_package_id")
-    .gte("shown_at", from.toISOString());
+    .gte("shown_at", from.toISOString())
+    .order("shown_at", { ascending: false })
+    .limit(MAX_ACTION_ROWS);
+
+  if (actionsErr) {
+    return { ...emptyBase, error: actionsErr.message };
+  }
 
   const actionRows = ((actions ?? []) as Pick<ActionRow,
     "rule_id" | "action" | "shown_by" | "shown_at" | "quote_package_id">[]);
 
-  if (actionRows.length === 0) {
-    return {
-      totalActions: 0, totalApplied: 0, totalDismissed: 0, acceptedPct: null,
-      rules: [], repDismissals: [],
-      windowFrom: from.toISOString(), windowTo: to.toISOString(),
-    };
-  }
+  if (actionRows.length === 0) return emptyBase;
+
+  const truncated = actionRows.length === MAX_ACTION_ROWS;
 
   // Batch-fetch statuses for just the packages referenced
   const pkgIds = [...new Set(actionRows.map((a) => a.quote_package_id))];
-  const { data: pkgs } = await supabase
+  const { data: pkgs, error: pkgsErr } = await supabase
     .from("quote_packages")
     .select("id, status")
     .in("id", pkgIds);
+
+  if (pkgsErr) {
+    return { ...emptyBase, error: pkgsErr.message };
+  }
+
   const statusByPkg = new Map<string, string>();
   for (const p of (pkgs ?? []) as { id: string; status: string }[]) {
     statusByPkg.set(p.id, p.status);
@@ -102,18 +131,22 @@ export async function getCoachPerformanceSummary(
   const repIds = [...new Set(actionRows.map((a) => a.shown_by).filter((v): v is string => !!v))];
   const nameByRep = new Map<string, string>();
   if (repIds.length > 0) {
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profilesErr } = await supabase
       .from("profiles")
       .select("id, display_name, full_name, email")
       .in("id", repIds);
-    for (const p of (profiles ?? []) as Array<{
-      id: string; display_name: string | null; full_name: string | null; email: string | null;
-    }>) {
-      nameByRep.set(p.id, p.display_name ?? p.full_name ?? p.email ?? p.id);
+    // A profile fetch failure is non-fatal — we fall back to raw IDs.
+    if (!profilesErr) {
+      for (const p of (profiles ?? []) as Array<{
+        id: string; display_name: string | null; full_name: string | null; email: string | null;
+      }>) {
+        nameByRep.set(p.id, p.display_name ?? p.full_name ?? p.email ?? p.id);
+      }
     }
   }
 
-  return aggregateCoachPerformance(actionRows, statusByPkg, nameByRep, from, to);
+  const summary = aggregateCoachPerformance(actionRows, statusByPkg, nameByRep, from, to);
+  return { ...summary, truncated, error: null };
 }
 
 // ── Pure aggregator (exported for tests) ─────────────────────────────────
@@ -220,6 +253,10 @@ export function aggregateCoachPerformance(
     repDismissals,
     windowFrom:     windowFrom.toISOString(),
     windowTo:       windowTo.toISOString(),
+    // These two are filled in by the Supabase wrapper. Pure aggregation
+    // never knows about truncation or upstream errors, so defaults here.
+    truncated:      false,
+    error:          null,
   };
 }
 
