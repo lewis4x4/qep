@@ -73,6 +73,10 @@ export function normalizeRouterPath(pathname: string): string {
     return pathname.slice("/crm-router".length) || "/";
   }
 
+  if (pathname.startsWith("/qrm-router")) {
+    return pathname.slice("/qrm-router".length) || "/";
+  }
+
   return pathname;
 }
 

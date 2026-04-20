@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { FLAGS, isFeatureEnabled } from "@/lib/feature-flags";
+import { QrmShellV2 } from "../shell/QrmShellV2";
 
 interface SubNavItem {
   label: string;
@@ -69,6 +71,14 @@ const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
 export function QrmSubNav() {
   const { profile } = useAuth();
   const { pathname } = useLocation();
+
+  // Slice 0 cutover: when the 4-surface shell flag is on, every page that
+  // used to render the 25-tab horizontal strip renders the new shell instead.
+  // When off, behaviour is identical to pre-flag.
+  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+    return <QrmShellV2 />;
+  }
+
   const items = CRM_SUB_NAV_ITEMS.filter((item) => {
     if (!item.roles) return true;
     if (!profile?.role) return false;

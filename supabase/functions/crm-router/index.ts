@@ -377,7 +377,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const path = normalizeRouterPath(url.pathname);
   const segments = path.split("/").filter(Boolean);
 
-  if (segments.length === 0 || segments[0] !== "crm") {
+  // Accept both "crm" (legacy) and "qrm" (canonical post-rename) as the first segment.
+  // The frontend calls /functions/v1/qrm-router/qrm/... after the Tier 4 rename;
+  // external callers that still target /functions/v1/crm-router/crm/... also work.
+  if (
+    segments.length === 0 ||
+    (segments[0] !== "crm" && segments[0] !== "qrm")
+  ) {
     return crmFail({
       origin,
       status: 404,
