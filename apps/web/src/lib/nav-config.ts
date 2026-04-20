@@ -577,6 +577,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     utility: true,
     sectionLabel: "Admin",
   },
+  {
+    label: "Coach Performance",
+    href: "/admin/coach-performance",
+    icon: Sparkles,
+    roles: ["admin", "manager", "owner"],
+    utility: true,
+    sectionLabel: "Admin",
+  },
 ];
 
 export const BOTTOM_TAB_HREFS = ["/qrm", "/service", "/chat", "/voice", "/quote"];

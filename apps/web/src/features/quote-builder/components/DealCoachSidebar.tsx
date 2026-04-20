@@ -23,9 +23,12 @@ import {
   getSimilarDealOutcomes,
   getReasonIntelligence,
   getPersonalSuppressions,
+  getRuleAcceptanceStats,
   type SimilarDealsResult,
   type ReasonIntelligence,
+  type RuleAcceptanceStat,
 } from "../lib/deal-intelligence-api";
+import type { AcceptanceSnapshot } from "../lib/coach-rules/adaptive";
 
 /**
  * Slice 13 — Deal Coach Sidebar v1.
@@ -59,6 +62,22 @@ export interface DealCoachSidebarProps {
 
 const DEBOUNCE_MS = 300;
 
+/**
+ * When writing coach actions to qb_deal_coach_actions we persist the
+ * author-chosen severity, not the adaptively-demoted one — analytics
+ * queries treat the severity column as "what tier did the rule author
+ * think this deserved". The fact of demotion is already captured in
+ * suggestion_snapshot.metrics.adaptive_demoted_from, so both are
+ * recoverable.
+ */
+function persistableRule(rule: RuleResult): RuleResult {
+  const originalSeverity = rule.metrics?.adaptive_demoted_from;
+  if (originalSeverity === "critical" || originalSeverity === "warning" || originalSeverity === "info") {
+    return { ...rule, severity: originalSeverity };
+  }
+  return rule;
+}
+
 export function DealCoachSidebar({
   draft,
   computed,
@@ -80,6 +99,9 @@ export function DealCoachSidebar({
   const [reasonIntelligence, setReasonIntelligence] = useState<ReasonIntelligence>({ stats: [], totalSamples: 0 });
   const [personalSuppressions, setPersonalSuppressions] = useState<Set<string>>(new Set());
 
+  // Slice 18 — workspace acceptance snapshots drive adaptive demote/suppress
+  const [acceptanceStats, setAcceptanceStats] = useState<AcceptanceSnapshot[]>([]);
+
   // ── Context fetch (once per user + equipment-make change) ──────────────
   const equipmentMakesKey = useMemo(
     () => draft.equipment.map((e) => (e.make ?? "").trim()).join("|"),
@@ -91,17 +113,25 @@ export function DealCoachSidebar({
     let cancelled = false;
 
     (async () => {
-      const [baseline, programs, reasons, suppressions] = await Promise.all([
+      const [baseline, programs, reasons, suppressions, acceptance] = await Promise.all([
         getMarginBaseline(profile.id),
         getActiveProgramsForDraft(draft),
         getReasonIntelligence(),
         getPersonalSuppressions({ repId: profile.id }),
+        getRuleAcceptanceStats(),
       ]);
       if (cancelled) return;
       setMarginBaseline(baseline);
       setActivePrograms(programs);
       setReasonIntelligence(reasons);
       setPersonalSuppressions(suppressions);
+      // The adaptive filter only needs the three fields — strip the rest
+      // so we're not holding more than necessary in component state.
+      setAcceptanceStats(acceptance.map((a: RuleAcceptanceStat): AcceptanceSnapshot => ({
+        ruleId:            a.ruleId,
+        timesShown:        a.timesShown,
+        acceptanceRatePct: a.acceptanceRatePct,
+      })));
     })();
 
     return () => { cancelled = true; };
@@ -156,10 +186,16 @@ export function DealCoachSidebar({
       : "",
     reasonKey: reasonIntelligence.totalSamples,
     suppressionKey: personalSuppressions.size,
+    acceptanceKey: acceptanceStats.length,
+  // similarDeals must stay in deps — its closure reference is what
+  // React uses to decide when to recompute similarKey. Upstream
+  // setSimilarDeals only fires when a query result arrives, so this
+  // doesn't thrash.
   }), [
     computed.marginPct, equipmentMakesKey, marginBaseline,
     activePrograms.length, dismissedRuleIds.size, draft.recommendation,
     similarDeals, reasonIntelligence.totalSamples, personalSuppressions.size,
+    acceptanceStats.length,
   ]);
 
   useEffect(() => {
@@ -186,16 +222,20 @@ export function DealCoachSidebar({
         ...dismissedRuleIds,
         ...personalSuppressions,
       ]);
-      const results = evaluateCoachRules(ctx, effectiveDismissals);
+      const results = evaluateCoachRules(ctx, effectiveDismissals, acceptanceStats);
       setSuggestions(results);
       setLoading(false);
-      // Record "shown" for each newly-surfaced suggestion (fire-and-forget)
+      // Record "shown" for each newly-surfaced suggestion (fire-and-forget).
+      // Persistence restores the author-chosen severity — the adaptive
+      // demote fact lives in `suggestion_snapshot.metrics` so analytics
+      // can still see both, but `qb_deal_coach_actions.severity` keeps
+      // its semantic meaning ("critical" = the author said so).
       if (quotePackageId && profile.active_workspace_id) {
         for (const r of results) {
           void recordCoachAction({
             workspaceId:  profile.active_workspace_id,
             quotePackageId,
-            rule:         r,
+            rule:         persistableRule(r),
             action:       "shown",
             showingUserId: profile.id,
           });
@@ -212,7 +252,7 @@ export function DealCoachSidebar({
       void recordCoachAction({
         workspaceId: profile.active_workspace_id,
         quotePackageId,
-        rule,
+        rule: persistableRule(rule),
         action: "applied",
         showingUserId: profile.id,
       });
@@ -230,7 +270,7 @@ export function DealCoachSidebar({
       void recordCoachAction({
         workspaceId: profile.active_workspace_id,
         quotePackageId,
-        rule,
+        rule: persistableRule(rule),
         action: "dismissed",
         showingUserId: profile.id,
       });
