@@ -37,6 +37,12 @@ import {
   MISS_THRESHOLD,
   type ClosedDealAudit,
 } from "../lib/closed-deals-audit";
+import {
+  computeRetrospectiveShadows,
+  computeShadowAgreementSummary,
+  describeShadowTrustHeadline,
+  type ShadowAgreementSummary,
+} from "../lib/retrospective-shadow";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -215,6 +221,23 @@ export function QuoteListPage() {
     return { kind: "audits", audits };
   }, [closedAuditQuery.data]);
 
+  /**
+   * Slice 20k — shadow calibration summary. Derived from the same raw
+   * `ClosedDealAuditRow[]` as the worst-misses card, but answers a
+   * different question: "how often does the shadow score agree with
+   * reality, and when it disagrees with the rule scorer, who's right?"
+   * This closes the Move-2 loop — the shadow from 20j lives on the
+   * live strip; this card proves whether it deserves that real estate.
+   * Hidden cleanly for forbidden (rep) and zero-rows empty states.
+   */
+  const shadowCalibrationSummary = useMemo<ShadowAgreementSummary | null>(() => {
+    const r = closedAuditQuery.data;
+    if (!r || !r.ok) return null;
+    if (r.audits.length === 0) return null;
+    const retros = computeRetrospectiveShadows(r.audits);
+    return computeShadowAgreementSummary(retros);
+  }, [closedAuditQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -254,6 +277,17 @@ export function QuoteListPage() {
       )}
       {calibrationDisplay?.kind === "error" && (
         <InstrumentationErrorRow label="Scorer calibration" message={calibrationDisplay.message} />
+      )}
+
+      {/* Slice 20k: shadow calibration — "does the shadow score deserve
+          to sit next to the live score?" Renders between calibration
+          and closed-deals cards so the instrumentation story flows:
+          (1) rule scorer accuracy → (2) shadow scorer accuracy →
+          (3) worst individual misses. Hidden silently when we lack
+          scorable data; `describeShadowTrustHeadline` owns the
+          low-confidence / no-data / coin-flip copy. */}
+      {shadowCalibrationSummary && shadowCalibrationSummary.totalDeals > 0 && (
+        <ShadowCalibrationCard summary={shadowCalibrationSummary} />
       )}
 
       {/* Slice 20h: closed-deals audit — manager/owner only, rendered
@@ -784,6 +818,112 @@ function InstrumentationErrorRow({
     </div>
   );
 }
+/**
+ * Slice 20k — shadow calibration card.
+ *
+ * Closes the Move-2 loop: 20j surfaces the shadow score on every live
+ * deal; this card proves whether managers should trust it. Renders
+ * aggregate agreement rates for the rule scorer and the shadow, plus
+ * — the Move-2 critical stat — who wins when they disagree.
+ *
+ * We deliberately resist "beating the drum" for the shadow:
+ *   • Rate bars are neutral sky, not emerald victories.
+ *   • Headline copy cites the literal win-rate; it changes tone (not
+ *     substance) at 60%/40% to flag directional reads honestly.
+ *   • Low-confidence (thin data) collapses to a single line.
+ *
+ * The card's job is transparency, not advocacy.
+ */
+function ShadowCalibrationCard({ summary }: { summary: ShadowAgreementSummary }) {
+  const headline = describeShadowTrustHeadline(summary);
+  const ruleRate = summary.ruleAgreementRate;
+  const shadowRate = summary.shadowAgreementRate;
+  const showRates = !summary.lowConfidence && summary.scorableDeals > 0;
+
+  return (
+    <Card
+      className="border-sky-500/30 bg-sky-500/5 p-3"
+      role="region"
+      aria-label="Shadow calibration"
+    >
+      <div className="flex items-start gap-2">
+        <Gauge className="h-4 w-4 shrink-0 text-sky-400" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-400">
+              Shadow calibration
+            </span>
+            <span
+              className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap"
+              aria-label={
+                `${summary.scorableDeals} deals scored by both, ${summary.shadowAbstainCount} abstained by shadow due to thin data`
+              }
+            >
+              {summary.scorableDeals}/{summary.totalDeals} scored
+              {summary.shadowAbstainCount > 0 && ` · ${summary.shadowAbstainCount} thin`}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-foreground">{headline}</p>
+
+          {showRates && (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <AgreementRatePill label="Rule scorer" rate={ruleRate} count={summary.ruleAgreedCount} total={summary.scorableDeals} />
+              <AgreementRatePill label="Shadow" rate={shadowRate} count={summary.shadowAgreedCount} total={summary.scorableDeals} />
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Compact agreement rate pill. Neutral sky styling for both halves —
+ * this is a reporting surface, not a contest. `rate` in [0, 1] or null;
+ * null renders as a muted "—" so a malformed / thin slice doesn't
+ * imply "0% agreement".
+ */
+function AgreementRatePill({
+  label,
+  rate,
+  count,
+  total,
+}: {
+  label: string;
+  rate: number | null;
+  count: number;
+  total: number;
+}) {
+  const pct = rate === null ? null : Math.round(rate * 100);
+  const ariaLabel =
+    pct === null
+      ? `${label}: agreement rate unavailable`
+      : `${label}: agreed on ${count} of ${total} deals, ${pct} percent`;
+  return (
+    <div
+      className="rounded-md border border-sky-500/20 bg-background/40 px-2 py-1.5"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-baseline justify-between gap-2" aria-hidden="true">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className="text-sm font-semibold tabular-nums text-sky-300">
+          {pct === null ? "—" : `${pct}%`}
+        </span>
+      </div>
+      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted/30" aria-hidden="true">
+        <div
+          className="h-full rounded-full bg-sky-500"
+          style={{ width: pct === null ? "0%" : `${pct}%` }}
+        />
+      </div>
+      <div className="mt-0.5 text-[10px] text-muted-foreground tabular-nums" aria-hidden="true">
+        {count} / {total}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Slice 20h — closed-deals audit card.
  *
