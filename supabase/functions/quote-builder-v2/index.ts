@@ -264,9 +264,27 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // IMPORTANT: Pass the JWT explicitly to auth.getUser(token). The
+    // argless form silently 401s on the JSR/Deno supabase-js build —
+    // it falls into the _useSession path which needs either a stored
+    // session or hasCustomAuthorizationHeader on the auth client,
+    // neither of which exists here. Every user-facing call to /list
+    // was 401ing in production because of this. See
+    // supabase/functions/_shared/service-auth.ts for the canonical
+    // pattern.
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : authHeader.trim();
+    if (!token) {
+      return safeJsonError("Missing bearer token", 401, origin);
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
+      return safeJsonError(
+        authError?.message ? `Unauthorized: ${authError.message}` : "Unauthorized",
+        401,
+        origin,
+      );
     }
 
     const { data: profile } = await supabase
