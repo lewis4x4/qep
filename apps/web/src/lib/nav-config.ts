@@ -42,6 +42,7 @@ import {
   Lightbulb,
   Activity,
   FileSpreadsheet,
+  History,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -547,6 +548,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Price Sheets",
     href: "/admin/price-sheets",
     icon: FileSpreadsheet,
+    roles: ["admin", "manager", "owner"],
+    utility: true,
+    sectionLabel: "Admin",
+  },
+  {
+    label: "Audit Log",
+    href: "/admin/audit-log",
+    icon: History,
     roles: ["admin", "manager", "owner"],
     utility: true,
     sectionLabel: "Admin",
