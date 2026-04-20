@@ -296,6 +296,11 @@ export function buildQuoteSavePayload(
     marginAmount: number;
     marginPct: number;
   },
+  /** Slice 20e: win-probability snapshot captured at save time. Passed
+   *  opaquely to the edge function where it's validated + persisted to
+   *  quote_packages.win_probability_snapshot. Optional so legacy
+   *  callers keep working. */
+  winProbabilitySnapshot?: Record<string, unknown> | null,
 ): Record<string, unknown> {
   return {
     deal_id: draft.dealId,
@@ -334,6 +339,7 @@ export function buildQuoteSavePayload(
     customer_phone: draft.customerPhone || null,
     customer_email: draft.customerEmail || null,
     originating_log_id: draft.originatingLogId ?? null,
+    win_probability_snapshot: winProbabilitySnapshot ?? null,
   };
 }
 

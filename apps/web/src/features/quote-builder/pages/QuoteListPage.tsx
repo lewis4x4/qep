@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileText, Mic, MessageSquare,
-  AlertTriangle, RotateCcw, Sparkles,
+  AlertTriangle, RotateCcw, Sparkles, Gauge,
 } from "lucide-react";
 import { listQuotePackages } from "../lib/quote-api";
 import { OutcomeCaptureDrawer } from "../components/OutcomeCaptureDrawer";
@@ -48,6 +48,24 @@ const ENTRY_ICONS: Record<string, typeof FileText> = {
 
 const OPEN_STATUSES = new Set(["draft", "ready", "sent", "viewed"]);
 const OPEN_STATES_FOR_OUTCOME = new Set(["sent", "viewed"]);
+
+/**
+ * Slice 20e: win-probability band thresholds — must match the inline
+ * ternary in `computeWinProbability` inside win-probability-scorer.ts.
+ * We mirror the mapping here instead of importing it so the list page
+ * doesn't pull in the scorer module just to color a pill. If the scorer
+ * thresholds change, update both sites.
+ *   score >= 70 → strong   (emerald)
+ *   score >= 55 → healthy  (sky)
+ *   score >= 35 → mixed    (amber)
+ *   score <  35 → at_risk  (rose)
+ */
+function scoreBandStyle(score: number): { ring: string; text: string; bg: string; label: string } {
+  if (score >= 70) return { ring: "ring-emerald-500/30", text: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30", label: "On pace" };
+  if (score >= 55) return { ring: "ring-sky-500/30",     text: "text-sky-400",     bg: "bg-sky-500/10 border-sky-500/30",     label: "Healthy" };
+  if (score >= 35) return { ring: "ring-amber-500/30",   text: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/30", label: "Mixed"   };
+  return             { ring: "ring-rose-500/30",    text: "text-rose-400",    bg: "bg-rose-500/10 border-rose-500/30",    label: "At risk" };
+}
 
 function fmtCurrency(amount: number | null): string {
   if (amount == null) return "—";
@@ -355,8 +373,9 @@ function QuoteCard({
             </span>
           </div>
         </div>
-        <div className="text-right shrink-0">
+        <div className="flex flex-col items-end shrink-0 gap-1">
           <p className="text-sm font-bold text-foreground">{fmtCurrency(item.net_total)}</p>
+          <WinProbabilityPill score={item.win_probability_score} />
           <p className="text-[10px] text-muted-foreground">
             {new Date(item.created_at).toLocaleDateString()}
           </p>
@@ -377,6 +396,36 @@ function QuoteCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Slice 20e: compact band pill on each quote row. Null-safe — legacy
+ * rows saved before migration 311 render "— · WP" so the rep can still
+ * distinguish "no score" from "low score" at a glance.
+ */
+function WinProbabilityPill({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/40 px-2 py-0.5 text-[10px] text-muted-foreground"
+        title="No win-probability score — quote predates Slice 20e snapshot persistence"
+      >
+        <Gauge className="h-2.5 w-2.5" aria-hidden />
+        <span className="font-mono">—</span>
+      </span>
+    );
+  }
+  const style = scoreBandStyle(score);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${style.bg} ${style.text}`}
+      title={`${style.label} · win probability ${score}/100`}
+      aria-label={`Win probability: ${score} out of 100 (${style.label})`}
+    >
+      <Gauge className="h-2.5 w-2.5" aria-hidden />
+      <span className="tabular-nums">{score}</span>
+    </span>
   );
 }
 

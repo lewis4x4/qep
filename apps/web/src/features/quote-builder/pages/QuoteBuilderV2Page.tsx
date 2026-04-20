@@ -23,6 +23,7 @@ import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
 import { PointShootTradeCard } from "../components/PointShootTradeCard";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
 import { getMarginBaseline } from "../lib/coach-api";
+import { computeWinProbability } from "../lib/win-probability-scorer";
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
@@ -325,17 +326,32 @@ export function QuoteBuilderV2Page() {
   }, []);
 
   const saveMutation = useMutation({
-    mutationFn: (): Promise<QuotePackageSaveResponse> =>
-      saveQuotePackage(
-        buildQuoteSavePayload(draft, {
-          equipmentTotal,
-          attachmentTotal,
-          subtotal,
-          netTotal,
-          marginAmount,
-          marginPct,
-        }),
-      ),
+    mutationFn: (): Promise<QuotePackageSaveResponse> => {
+      // Slice 20e: capture the rule-based win-probability result at save
+      // time so we can show it on list views + build the learning loop
+      // later. We compute it here (not from the live strip state) to
+      // make sure the persisted snapshot is consistent with the exact
+      // draft + context we send to the edge function. Weights are
+      // versioned so future scorer rewrites stay diffable against old
+      // snapshots.
+      const wp = computeWinProbability(draft, winProbContext);
+      const snapshot = {
+        score: wp.score,
+        band: wp.band,
+        rawScore: wp.rawScore,
+        factors: wp.factors,
+        marginBaselineMedianPct: winProbContext.marginBaselineMedianPct ?? null,
+        weightsVersion: "v1",
+        savedAt: new Date().toISOString(),
+      };
+      return saveQuotePackage(
+        buildQuoteSavePayload(
+          draft,
+          { equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct },
+          snapshot,
+        ),
+      );
+    },
   });
 
   // Slice 15: margin-floor gate state. The gate blocks the save action

@@ -124,6 +124,13 @@ export interface QuoteListItem {
   equipment_summary: string;
   entry_mode: string | null;
   created_at: string;
+  /**
+   * Slice 20e: denormalized win-probability score (0..100) captured at
+   * save time by the rule-based scorer. Null for quotes saved before
+   * the snapshot column existed. QuoteListPage renders a colored band
+   * pill from this without pulling the full jsonb snapshot.
+   */
+  win_probability_score: number | null;
 }
 
 export interface PortalQuoteRevisionCompare {

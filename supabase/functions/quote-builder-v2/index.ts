@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
 
         let query = supabase
           .from("quote_packages")
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, win_probability_score")
           .order("created_at", { ascending: false })
           .limit(50);
 
@@ -429,6 +429,14 @@ Deno.serve(async (req) => {
             .map((e: Record<string, unknown>) => [e.make, e.model].filter(Boolean).join(" "))
             .filter(Boolean)
             .join(", ") || "No equipment";
+          // Slice 20e: surface the denormalized win-probability score so
+          // QuoteListPage can render a band pill without pulling the full
+          // jsonb snapshot. Null for quotes saved before the snapshot
+          // column existed — the UI renders "—" for those rows.
+          const rawScore = row.win_probability_score;
+          const winScore = typeof rawScore === "number" && Number.isFinite(rawScore)
+            ? Math.max(0, Math.min(100, Math.round(rawScore)))
+            : null;
           return {
             id: row.id,
             quote_number: row.quote_number ?? null,
@@ -439,6 +447,7 @@ Deno.serve(async (req) => {
             equipment_summary: summary,
             entry_mode: row.entry_mode ?? null,
             created_at: row.created_at,
+            win_probability_score: winScore,
           };
         });
 
@@ -987,6 +996,33 @@ Deno.serve(async (req) => {
       const rawLogId = typeof body.originating_log_id === "string" ? body.originating_log_id : null;
       const originatingLogId = rawLogId && UUID_RE.test(rawLogId) ? rawLogId : null;
 
+      // Slice 20e: win-probability snapshot. We store the client-computed
+      // rule-based scorer result alongside the quote. Defensive validation:
+      // accept only a JSON object with an integer `score` in [0,100] and a
+      // known `band`; malformed snapshots are ignored.
+      //
+      // CRITICAL — only build the upsert patch when we have a valid snapshot.
+      // Otherwise we skip the two snapshot columns entirely so a resave
+      // that lacks a snapshot (portal revision path, retry, transient
+      // scorer failure) preserves the previously-persisted values rather
+      // than wiping them to null.
+      const rawSnap = body.win_probability_snapshot;
+      let winProbabilityPatch: { win_probability_snapshot: Record<string, unknown>; win_probability_score: number } | null = null;
+      if (rawSnap && typeof rawSnap === "object" && !Array.isArray(rawSnap)) {
+        const s = (rawSnap as { score?: unknown }).score;
+        const b = (rawSnap as { band?: unknown }).band;
+        const validBand = typeof b === "string" && ["strong", "healthy", "mixed", "at_risk"].includes(b);
+        // Integer-only score to match the client contract + the smallint
+        // column. Floats are rejected rather than silently rounded so a
+        // buggy scorer doesn't corrupt the training set.
+        if (typeof s === "number" && Number.isInteger(s) && s >= 0 && s <= 100 && validBand) {
+          winProbabilityPatch = {
+            win_probability_snapshot: rawSnap as Record<string, unknown>,
+            win_probability_score: s,
+          };
+        }
+      }
+
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
@@ -1013,6 +1049,10 @@ Deno.serve(async (req) => {
           customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null,
           customer_email: typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null,
           originating_log_id: originatingLogId,
+          // Only include snapshot keys when the client supplied a valid
+          // one — omitting them lets the upsert preserve the prior values
+          // on update instead of nulling them.
+          ...(winProbabilityPatch ?? {}),
         }, { onConflict: "deal_id" })
         .select()
         .single();
