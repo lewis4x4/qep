@@ -21,7 +21,7 @@
  * that transparently — moonshot requires trust, not magic black boxes.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,18 @@ export function PointShootTradeCard({
     make: string; model: string; year: string; hours: string;
   } | null>(null);
 
+  // Track blob URLs so we can revoke them. A rep retaking photos
+  // without unmounting the card would otherwise retain one blob ref
+  // per shot until the full Quote Builder page teardown.
+  const blobUrlsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const urls = blobUrlsRef.current;
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      urls.clear();
+    };
+  }, []);
+
   const isApplied = appliedAllowanceDollars != null && appliedAllowanceDollars > 0;
 
   // ── Handlers ──────────────────────────────────────────────────────────
@@ -86,6 +98,7 @@ export function PointShootTradeCard({
   async function handleFile(file: File) {
     setPhase({ kind: "uploading" });
     const photoPreview = URL.createObjectURL(file);
+    blobUrlsRef.current.add(photoPreview);
     try {
       const ident = await identifyEquipmentFromPhoto(file);
       if (!ident.make || !ident.model) {
@@ -136,6 +149,10 @@ export function PointShootTradeCard({
       });
       onApply(allowanceDollars, result.valuationId);
       // Collapse back to a compact "applied" summary after a successful write.
+      // The parent's onApply batches with our setPhase in React 18, so the
+      // applied UI shows without a flash of idle.
+      blobUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+      blobUrlsRef.current.clear();
       setPhase({ kind: "idle" });
     } catch (err) {
       setPhase({ kind: "error", message: (err as Error).message ?? "Apply failed." });
@@ -159,6 +176,10 @@ export function PointShootTradeCard({
   }
 
   function reset() {
+    // Revoke any blob URLs we allocated — a fresh capture allocates a
+    // new one so we don't need to keep the old.
+    blobUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+    blobUrlsRef.current.clear();
     setPhase({ kind: "idle" });
     setEdit(null);
   }

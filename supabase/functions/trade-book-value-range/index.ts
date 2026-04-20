@@ -248,13 +248,18 @@ Deno.serve(async (req) => {
     }
 
     // ── Source 3: active competitor_listings average ───────────────────
+    // Schema (migration 013): source, source_url, asking_price, year, hours,
+    // first_seen_at, last_seen_at, is_active. No dealer_name/scraped_at —
+    // an earlier revision of this file used the wrong column names and
+    // silently fell through to synthetic on every call.
     {
       let q = supabaseAdmin
         .from("competitor_listings")
-        .select("asking_price, dealer_name, scraped_at, year")
+        .select("asking_price, source, last_seen_at, year")
         .ilike("make", make)
         .ilike("model", model)
-        .order("scraped_at", { ascending: false })
+        .eq("is_active", true)
+        .order("last_seen_at", { ascending: false })
         .limit(10);
       if (year) q = q.gte("year", year - 2).lte("year", year + 2);
       const { data: listings } = await q;
@@ -273,7 +278,7 @@ Deno.serve(async (req) => {
             high_cents:  Math.round(max  * 100),
             confidence: prices.length >= 4 ? "medium" : "low",
             sample_size: prices.length,
-            as_of: (rows[0]!.scraped_at as string) ?? null,
+            as_of: (rows[0]!.last_seen_at as string) ?? null,
             // Asking price ≠ transacted — treat as upper-bound signal.
             detail: "Asking prices (not transacted). Upper-bound signal.",
           });

@@ -265,19 +265,42 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
   // Patch the row with our multi-source comps + auction_value from our
   // computed midpoint. We write cents → dollars for compatibility with
   // the existing numeric columns.
+  //
+  // market_comps is typed `jsonb default '[]'` in migration 074 and the
+  // SOP (roadmap) contract says it's an array of `{source, price, url?}`
+  // comps. We write a superset — each element is the canonical comp
+  // shape plus our richer range / confidence fields — so downstream
+  // readers that only know the SOP shape still work, while the Deal
+  // Coach / manager approval UI can consume the extra fields when
+  // upgraded. Aggregate bounds + meta go in a sidecar last-element.
   const auctionDollars = input.bookValue.midCents / 100;
+  const compsArray = [
+    ...input.bookValue.sources.map((s) => ({
+      source: s.name,
+      price: Math.round(s.value_cents / 100),
+      low:   s.low_cents  != null ? Math.round(s.low_cents  / 100) : null,
+      high:  s.high_cents != null ? Math.round(s.high_cents / 100) : null,
+      confidence: s.confidence,
+      kind: s.kind,
+      sample_size: s.sample_size ?? null,
+      as_of: s.as_of ?? null,
+      detail: s.detail ?? null,
+    })),
+    {
+      source: "_aggregate",
+      price: Math.round(input.bookValue.midCents / 100),
+      low:   Math.round(input.bookValue.lowCents / 100),
+      high:  Math.round(input.bookValue.highCents / 100),
+      confidence: input.bookValue.confidence,
+      kind: "aggregate",
+      is_synthetic: input.bookValue.isSynthetic,
+    },
+  ];
   await supabase
     .from("trade_valuations")
     .update({
       auction_value: auctionDollars,
-      market_comps: {
-        low_cents:  input.bookValue.lowCents,
-        mid_cents:  input.bookValue.midCents,
-        high_cents: input.bookValue.highCents,
-        confidence: input.bookValue.confidence,
-        is_synthetic: input.bookValue.isSynthetic,
-        sources: input.bookValue.sources,
-      },
+      market_comps: compsArray,
     })
     .eq("id", v.id);
 

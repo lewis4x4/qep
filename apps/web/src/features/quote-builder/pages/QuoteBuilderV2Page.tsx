@@ -95,6 +95,47 @@ interface CatalogEntryMatch {
   list_price?: number;
 }
 
+/**
+ * Heuristic: is `next` likely a typo-fix / case-variation of `prev`,
+ * not a material rewrite to a different company?
+ *
+ * Returns true when the edit is safe to preserve the Digital Twin
+ * snapshot through (e.g. "acme landscaping" → "Acme Landscaping",
+ * "Acme Ldsc" → "Acme Landscaping", trailing whitespace trims).
+ * Returns false for genuine re-targeting ("Acme" → "Smith Excavation").
+ *
+ * We require either: (a) case-insensitive prefix match in either
+ * direction, or (b) small edit distance relative to the shorter
+ * string (≤20% of length). Not perfect — but correct on the demo
+ * axes and safe: the worst false-positive preserves a signal that
+ * the rep can still clear manually; the worst false-negative just
+ * triggers a CustomerIntelPanel re-fetch.
+ */
+function isTypoLikeRewrite(prev: string, next: string): boolean {
+  const a = prev.trim().toLowerCase();
+  const b = next.trim().toLowerCase();
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  // Bounded Levenshtein — bail if length gap alone exceeds threshold.
+  const shorter = Math.min(a.length, b.length);
+  const threshold = Math.max(2, Math.floor(shorter * 0.2));
+  if (Math.abs(a.length - b.length) > threshold) return false;
+  // Small-string Levenshtein; O(a*b) but both are ≤ a few dozen chars.
+  const dp: number[] = Array(b.length + 1).fill(0).map((_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prevDiag = dp[0]!;
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j]!;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[j] = Math.min(dp[j]! + 1, dp[j - 1]! + 1, prevDiag + cost);
+      prevDiag = tmp;
+    }
+  }
+  return (dp[b.length] ?? Infinity) <= threshold;
+}
+
 function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
   return {
     kind: "equipment",
@@ -774,13 +815,30 @@ export function QuoteBuilderV2Page() {
               customerSignals: picked.signals ?? null,
               customerWarmth:  picked.warmth ?? null,
             }))}
-            onManualChange={(field, value) => setDraft((cur) => ({
-              ...cur,
-              [field]: value,
-              // Preserve signals on field edits — a rep fixing a typo in
-              // phone or email shouldn't lose the Digital Twin panel.
-              // Only onClear (below) discards the signal snapshot.
-            }))}
+            onManualChange={(field, value) => setDraft((cur) => {
+              // Preserve signals on typo fixes (phone, email, name punctuation)
+              // but *clear* them when the company name is materially rewritten —
+              // keeping Acme's open-deal count attached to "Smith Excavation"
+              // would poison the intel panel and the saved quote. Heuristic:
+              // clear when the field is customerCompany, a snapshot exists,
+              // and the new value is clearly a different company (not a
+              // prefix / not a case variation of the old).
+              const next = { ...cur, [field]: value };
+              if (
+                field === "customerCompany" &&
+                cur.customerSignals &&
+                cur.customerCompany &&
+                !isTypoLikeRewrite(cur.customerCompany, value)
+              ) {
+                next.customerSignals = null;
+                next.customerWarmth  = null;
+                // The companyId/contactId referred to the prior customer;
+                // drop them so downstream reads don't cross-attribute.
+                next.companyId = undefined;
+                next.contactId = undefined;
+              }
+              return next;
+            })}
             onClear={() => setDraft((cur) => ({
               ...cur,
               contactId:       undefined,
