@@ -9,8 +9,14 @@ import {
   Plus, Search, FileText, Mic, MessageSquare,
   AlertTriangle, RotateCcw, Sparkles, Gauge,
   ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertOctagon,
+  Target, Check, X, Clock,
 } from "lucide-react";
-import { listQuotePackages, getScorerCalibrationObservations, getFactorAttributionDeals } from "../lib/quote-api";
+import {
+  listQuotePackages,
+  getScorerCalibrationObservations,
+  getFactorAttributionDeals,
+  getClosedDealsAudit,
+} from "../lib/quote-api";
 import { OutcomeCaptureDrawer } from "../components/OutcomeCaptureDrawer";
 import {
   calibrationHeadline,
@@ -25,6 +31,12 @@ import {
   type FactorAttribution,
   type FactorAttributionReport,
 } from "../lib/factor-attribution";
+import {
+  computeClosedDealsAudit,
+  formatAuditSummary,
+  MISS_THRESHOLD,
+  type ClosedDealAudit,
+} from "../lib/closed-deals-audit";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -167,6 +179,42 @@ export function QuoteListPage() {
     return { kind: "report", report: computeCalibrationReport(r.observations) };
   }, [calibrationQuery.data]);
 
+  /**
+   * Slice 20h: closed-deals audit query. Same role-gate pattern as
+   * calibration — reps see nothing (forbidden → null), managers see
+   * either a broken-endpoint hint or the sorted worst-misses card.
+   *
+   * Tradeoff: we intentionally couple the audit query's `enabled` flag
+   * to the calibration query's success so a rep doesn't fire a second
+   * 403. The downside is that if `/scorer-calibration` ever returns
+   * a non-forbidden failure (500, network, etc.), managers lose the
+   * audit card too. That's acceptable — both cards share auth + data
+   * lineage, so a failure in one is highly likely to be reflected in
+   * the other, and coupled failure is clearer than half-failure.
+   */
+  const closedAuditEnabled = calibrationQuery.data?.ok === true;
+  const closedAuditQuery = useQuery({
+    queryKey: ["quote-builder", "closed-deals-audit"],
+    queryFn: getClosedDealsAudit,
+    staleTime: 5 * 60 * 1000,
+    enabled: closedAuditEnabled,
+  });
+  const closedAuditDisplay = useMemo<
+    | null
+    | { kind: "audits"; audits: ClosedDealAudit[] }
+    | { kind: "error"; message: string }
+  >(() => {
+    const r = closedAuditQuery.data;
+    if (!r) return null;
+    if (!r.ok) {
+      if (r.reason === "forbidden") return null;
+      return { kind: "error", message: r.message };
+    }
+    const audits = computeClosedDealsAudit(r.audits);
+    if (audits.length === 0) return null;
+    return { kind: "audits", audits };
+  }, [closedAuditQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -205,7 +253,17 @@ export function QuoteListPage() {
         <ScorerCalibrationCard report={calibrationDisplay.report} />
       )}
       {calibrationDisplay?.kind === "error" && (
-        <ScorerCalibrationErrorRow message={calibrationDisplay.message} />
+        <InstrumentationErrorRow label="Scorer calibration" message={calibrationDisplay.message} />
+      )}
+
+      {/* Slice 20h: closed-deals audit — manager/owner only, rendered
+          below the calibration card. Hidden for reps (forbidden) and
+          when no closed-deal audits exist yet (empty). */}
+      {closedAuditDisplay?.kind === "audits" && (
+        <ClosedDealsAuditCard audits={closedAuditDisplay.audits} />
+      )}
+      {closedAuditDisplay?.kind === "error" && (
+        <InstrumentationErrorRow label="Closed-deals audit" message={closedAuditDisplay.message} />
       )}
 
       {/* Search + Filters */}
@@ -699,12 +757,20 @@ function FactorAttributionRow({ f }: { f: FactorAttribution }) {
 }
 
 /**
- * Compact error row shown to managers/owners when the calibration
+ * Compact error row shown to managers/owners when an instrumentation
  * endpoint fails. Intentionally subtle — we don't want to block the
  * quote list, we just want to surface that an instrumentation surface
- * broke rather than let it silently vanish.
+ * broke rather than let it silently vanish. `label` is the surface
+ * name ("Scorer calibration", "Closed-deals audit") so one shared
+ * component handles every manager-only error state.
  */
-function ScorerCalibrationErrorRow({ message }: { message: string }) {
+function InstrumentationErrorRow({
+  label = "Scorer calibration",
+  message,
+}: {
+  label?: string;
+  message: string;
+}) {
   return (
     <div
       className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-[11px] text-amber-300"
@@ -713,9 +779,170 @@ function ScorerCalibrationErrorRow({ message }: { message: string }) {
     >
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="truncate" title={message}>
-        Scorer calibration unavailable — {message}
+        {label} unavailable — {message}
       </span>
     </div>
+  );
+}
+/**
+ * Slice 20h — closed-deals audit card.
+ *
+ * Manager/owner-only triage queue: shows the top 5 closed deals ranked
+ * by |delta| (predicted probability vs. realized outcome). These are
+ * the rows where the scorer was most wrong — the natural starting
+ * point for a scorer-evolution PR.
+ *
+ * Each row is expandable to its stored top factors, so managers can
+ * read the rule-list that drove a misread call without leaving the
+ * page. Package ID (truncated) + capture date are enough to pivot to
+ * the deal detail if deeper inspection is needed.
+ */
+function ClosedDealsAuditCard({ audits }: { audits: ClosedDealAudit[] }) {
+  const top = audits.slice(0, 5);
+  const missCount = audits.filter((a) => a.missed).length;
+  return (
+    <Card
+      className="border-rose-500/30 bg-rose-500/5 p-3"
+      role="region"
+      aria-label="Closed-deals audit"
+    >
+      <div className="flex items-start gap-2">
+        <Target className="h-4 w-4 shrink-0 text-rose-400" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-rose-400">
+              Worst scorer misses
+            </span>
+            <span
+              className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap"
+              aria-label={`${audits.length} closed deals analyzed, ${missCount} missed by ${MISS_THRESHOLD}+ points`}
+            >
+              {audits.length} deal{audits.length === 1 ? "" : "s"} · {missCount} missed
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Review these rows when the scorer-evolution PR lands —
+            they're the deals where predicted probability disagreed
+            most with realized outcome.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {top.map((a) => (
+              <ClosedDealAuditRow key={a.packageId} audit={a} />
+            ))}
+          </ul>
+          {audits.length > top.length && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              +{audits.length - top.length} more audited deals with smaller misses
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function outcomeIconFor(outcome: "won" | "lost" | "expired") {
+  if (outcome === "won") return { Icon: Check, tone: "text-emerald-400", word: "Won" };
+  if (outcome === "lost") return { Icon: X, tone: "text-rose-400", word: "Lost" };
+  return { Icon: Clock, tone: "text-muted-foreground", word: "Expired" };
+}
+
+function ClosedDealAuditRow({ audit }: { audit: ClosedDealAudit }) {
+  const [expanded, setExpanded] = useState(false);
+  const { Icon: OutcomeIcon, tone: outcomeTone, word: outcomeWord } = outcomeIconFor(audit.outcome);
+  // Last 8 hex chars of the UUID — birthday collision odds on ~100
+  // rendered rows are negligible, vs ~0.03% at 6 chars.
+  const pkgShort = audit.packageId.slice(-8);
+  const deltaLabel =
+    audit.delta === 0
+      ? "on target"
+      : `${audit.delta > 0 ? "+" : ""}${audit.delta}`;
+  const deltaTone = audit.missed
+    ? "text-rose-400"
+    : audit.delta === 0
+      ? "text-muted-foreground"
+      : "text-amber-400";
+  const summary = formatAuditSummary(audit);
+  const panelId = `audit-factors-${audit.packageId}`;
+  return (
+    <li className="rounded border border-rose-500/20 bg-background/40">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] focus:outline-none focus:ring-2 focus:ring-rose-500/50 rounded"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        aria-label={summary}
+      >
+        {/* Visible content is duplicated by the button's aria-label, so
+            mark it aria-hidden to prevent screen readers from reading
+            both the summary and the column soup. Same pattern as
+            CalibrationBandCell. */}
+        {expanded ? (
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+        <span className="flex flex-1 items-center gap-2" aria-hidden="true">
+          <OutcomeIcon className={`h-3 w-3 shrink-0 ${outcomeTone}`} />
+          <span className={`tabular-nums font-semibold w-10 text-right ${outcomeTone}`}>
+            {outcomeWord}
+          </span>
+          <span className="tabular-nums text-muted-foreground whitespace-nowrap">
+            said {audit.predicted}%
+          </span>
+          <span className={`tabular-nums font-semibold whitespace-nowrap ${deltaTone}`}>
+            Δ {deltaLabel}
+          </span>
+          <span className="flex-1 truncate text-muted-foreground text-[10px] text-right">
+            …{pkgShort}
+          </span>
+        </span>
+      </button>
+      {expanded && (
+        <div id={panelId} className="border-t border-rose-500/20 px-2 py-1.5">
+          {audit.topFactors.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground">
+              No factor list stored with this snapshot.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {audit.topFactors.map((f) => {
+                const sign = f.weight > 0 ? "+" : "";
+                const tone =
+                  f.weight > 0
+                    ? "text-emerald-400"
+                    : f.weight < 0
+                      ? "text-rose-400"
+                      : "text-muted-foreground";
+                return (
+                  <li
+                    key={f.label}
+                    className="flex items-center gap-2 text-[10px]"
+                  >
+                    <span className={`tabular-nums font-semibold w-10 text-right ${tone}`}>
+                      {sign}
+                      {f.weight}
+                    </span>
+                    <span className="truncate text-foreground" title={f.label}>
+                      {f.label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {audit.capturedAt && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Outcome captured{" "}
+              <time dateTime={audit.capturedAt}>
+                {new Date(audit.capturedAt).toLocaleDateString()}
+              </time>
+            </p>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

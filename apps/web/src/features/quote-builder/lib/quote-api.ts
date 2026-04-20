@@ -184,6 +184,48 @@ export async function getFactorAttributionDeals(): Promise<
   return { ok: true, deals: Array.isArray(body.deals) ? body.deals : [] };
 }
 
+/**
+ * Slice 20h — fetch closed-deal audit rows. Discriminated union so the
+ * card can distinguish forbidden (hide) / error (warn) / empty (hint)
+ * states without string-parsing the message.
+ *
+ * The edge function version-gates on weightsVersion="v1" and filters
+ * malformed rows; this helper just shuttles the list.
+ */
+export async function getClosedDealsAudit(): Promise<
+  | {
+      ok: true;
+      audits: Array<{
+        packageId: string;
+        score: number;
+        outcome: "won" | "lost" | "expired";
+        factors: Array<{ label: string; weight: number }>;
+        capturedAt: string | null;
+      }>;
+    }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/closed-deals-audit`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    audits?: Array<{
+      packageId: string;
+      score: number;
+      outcome: "won" | "lost" | "expired";
+      factors: Array<{ label: string; weight: number }>;
+      capturedAt: string | null;
+    }>;
+  };
+  return { ok: true, audits: Array.isArray(body.audits) ? body.audits : [] };
+}
+
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/competitors`, {
     method: "POST",

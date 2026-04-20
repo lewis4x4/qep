@@ -579,6 +579,97 @@ Deno.serve(async (req) => {
         return safeJsonOk({ deals }, origin);
       }
 
+      // ── GET /closed-deals-audit (Slice 20h) ─────────────────────────
+      // Manager/owner-only triage queue: the last N closed deals with
+      // stored snapshots, flattened to { packageId, score, outcome,
+      // factors, capturedAt }. The client lib computes |delta| and
+      // surfaces the worst misses so managers can click in and read
+      // the factor list that led to a bad call. Same version gate as
+      // /factor-attribution — snapshots carry weightsVersion and we
+      // only emit v1 rows to keep the triage list from mixing scorer
+      // generations.
+      if (action === "closed-deals-audit") {
+        if (!canPublish) {
+          return safeJsonError("Closed deals audit requires manager or owner role", 403, origin);
+        }
+
+        // Same `!inner` + embedded-column filter pattern as the other
+        // two instrumentation endpoints: parent outcome rows are
+        // dropped when the snapshot is null, so the limit budget is
+        // populated with real observations.
+        //
+        // limit(100) vs. 500 on calibration/attribution: the audit UI
+        // only surfaces the top 5 by |delta|, so 100 rows is enough
+        // headroom to guarantee the worst misses aren't off-screen
+        // while keeping the payload lean. The other two endpoints
+        // feed aggregate statistics that benefit from more samples.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select(
+            "outcome, captured_at, quote_package_id, quote_packages!inner(win_probability_score, win_probability_snapshot)",
+          )
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(100);
+
+        if (error) {
+          console.error("closed-deals-audit query error:", error);
+          return safeJsonError("Failed to load closed deals audit", 500, origin);
+        }
+
+        // Defensive flatMap — validate every field before emitting.
+        const audits = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const pkgObj = pkg as
+            | { win_probability_score?: unknown; win_probability_snapshot?: unknown }
+            | null;
+          const score = pkgObj?.win_probability_score;
+          const snapshot = pkgObj?.win_probability_snapshot;
+          const outcome = row.outcome;
+          const packageId = row.quote_package_id;
+          const capturedAt = row.captured_at;
+          if (
+            typeof packageId !== "string" ||
+            packageId.length === 0 ||
+            typeof score !== "number" ||
+            !Number.isFinite(score) ||
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((f: unknown) => {
+            if (!f || typeof f !== "object") return [];
+            const rec = f as { label?: unknown; weight?: unknown };
+            if (
+              typeof rec.label !== "string" ||
+              typeof rec.weight !== "number" ||
+              !Number.isFinite(rec.weight)
+            ) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [
+            {
+              packageId,
+              score,
+              outcome,
+              factors,
+              capturedAt: typeof capturedAt === "string" ? capturedAt : null,
+            },
+          ];
+        });
+
+        return safeJsonOk({ audits }, origin);
+      }
+
       // ── GET /scorer-calibration (Slice 20f) ─────────────────────────
       // Manager/owner-only aggregate of (win_probability_score) ×
       // (qb_quote_outcomes.outcome) pairs. Returns raw observations so
