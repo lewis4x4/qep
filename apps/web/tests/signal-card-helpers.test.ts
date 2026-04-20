@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  formatIronTriagePrompt,
   hrefForSignalEntity,
   labelForSignalKind,
   relativeTimeLabel,
@@ -167,5 +168,106 @@ describe("relativeTimeLabel", () => {
 
   it("clamps future timestamps to 'just now'", () => {
     expect(relativeTimeLabel("2026-04-21T00:00:00Z", now)).toBe("just now");
+  });
+});
+
+describe("formatIronTriagePrompt", () => {
+  // Pin "now" to the same moment the default makeSignal uses so age labels
+  // are deterministic without mocking Date.
+  const now = new Date("2026-04-20T12:00:00Z").getTime();
+
+  it("leads with a clear triage directive and severity", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ severity: "critical", title: "Hot deal cooling off" }),
+      now,
+    );
+    expect(p.startsWith("Triage this critical-severity signal")).toBe(true);
+  });
+
+  it("includes the signal kind label, title, and relative age", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({
+        kind: "sla_breach",
+        title: "Response overdue",
+        occurred_at: "2026-04-20T11:45:00Z",
+      }),
+      now,
+    );
+    expect(p).toContain("SLA breach");
+    expect(p).toContain("Response overdue");
+    expect(p).toContain("15m ago");
+  });
+
+  it("falls back to 'untitled signal' when the title is whitespace-only", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ title: "   " }),
+      now,
+    );
+    expect(p).toContain("untitled signal");
+  });
+
+  it("includes description when present and collapses whitespace", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ description: "Rep   has not replied in\n\n24 hours." }),
+      now,
+    );
+    expect(p).toContain("• Detail: Rep has not replied in 24 hours.");
+  });
+
+  it("caps long descriptions at 240 chars with an ellipsis", () => {
+    const long = "a".repeat(400);
+    const p = formatIronTriagePrompt(
+      makeSignal({ description: long }),
+      now,
+    );
+    // The detail line should contain the ellipsis marker and not the full 400
+    // chars — the cap is 239 chars of content + 1 ellipsis char = 240 visual.
+    expect(p).toContain("…");
+    expect(p).not.toContain("a".repeat(300));
+  });
+
+  it("omits description line when description is null", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ description: null }),
+      now,
+    );
+    expect(p).not.toContain("• Detail:");
+  });
+
+  it("omits description line when description is empty after trim", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ description: "   \n  " }),
+      now,
+    );
+    expect(p).not.toContain("• Detail:");
+  });
+
+  it("includes entity scope hint when type + id are present", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "deal", entity_id: "d-42" }),
+      now,
+    );
+    expect(p).toContain("• Entity: deal (d-42)");
+  });
+
+  it("omits entity hint when entity_type is null", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: null, entity_id: "x" }),
+      now,
+    );
+    expect(p).not.toContain("• Entity:");
+  });
+
+  it("closes with the explicit propose_move invitation", () => {
+    const p = formatIronTriagePrompt(makeSignal(), now);
+    expect(p).toContain("propose_move");
+  });
+
+  it("produces a multi-line string joined by newlines", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ description: "Needs review" }),
+      now,
+    );
+    expect(p.split("\n").length).toBeGreaterThanOrEqual(4);
   });
 });

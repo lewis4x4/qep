@@ -86,6 +86,68 @@ export function hrefForSignalEntity(signal: QrmSignal): string | null {
 }
 
 /**
+ * Slice 8 — Pulse → Ask Iron triage handoff.
+ *
+ * Build a well-scoped seed question for Ask Iron when the operator clicks
+ * "Ask Iron" on a Pulse row. The question carries the signal's kind,
+ * severity, entity scope, and (optionally) title + relative age — enough
+ * for Iron to (a) look up the entity with search_entities, (b) read
+ * related signals via list_recent_signals, and (c) queue a move with
+ * propose_move.
+ *
+ * Kept pure so Bun can exercise formatting without the HTTP client: the
+ * caller composes a string, navigates to the Ask Iron surface with it in
+ * router state, and AskIronSurface auto-sends on mount.
+ *
+ * Not a system-prompt override: this is a user-role message. Iron's
+ * existing system prompt already tells it to use tools and only propose
+ * moves when explicitly asked — the word "triage" here is the explicit
+ * ask.
+ */
+export function formatIronTriagePrompt(
+  signal: Pick<
+    QrmSignal,
+    "kind" | "severity" | "title" | "description" | "entity_type" | "entity_id" | "occurred_at"
+  >,
+  nowMs: number = Date.now(),
+): string {
+  const parts: string[] = [];
+  parts.push(
+    `Triage this ${signal.severity}-severity signal and propose the best next move:`,
+  );
+
+  // Core descriptors — kind, title, source time. Title is the most
+  // operator-recognizable piece so it leads.
+  const kindLabel = labelForSignalKind(signal.kind);
+  const when = relativeTimeLabel(signal.occurred_at, nowMs);
+  parts.push(
+    `• ${kindLabel}${when ? ` (${when})` : ""}: ${signal.title.trim() || "untitled signal"}`,
+  );
+
+  // Cap description to keep the seed question tight — Iron will read the
+  // signal row directly via list_recent_signals if it needs more.
+  if (signal.description) {
+    const desc = signal.description.replace(/\s+/g, " ").trim();
+    if (desc.length > 0) {
+      const capped = desc.length > 240 ? `${desc.slice(0, 239)}…` : desc;
+      parts.push(`• Detail: ${capped}`);
+    }
+  }
+
+  // Entity scope hint — Iron can search_entities if this is missing, but
+  // passing it when we have it saves a tool round-trip.
+  if (signal.entity_type && signal.entity_id) {
+    parts.push(`• Entity: ${signal.entity_type} (${signal.entity_id})`);
+  }
+
+  parts.push(
+    "If there's a clear follow-up, call propose_move. Otherwise explain what you'd want to know before queueing anything.",
+  );
+
+  return parts.join("\n");
+}
+
+/**
  * Short, fuzzy "how long ago" label. Deterministic given a fixed `nowMs`
  * so the test suite can pin time without mocking Date.
  */

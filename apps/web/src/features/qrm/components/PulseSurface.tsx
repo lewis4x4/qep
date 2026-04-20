@@ -19,7 +19,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Radio,
@@ -27,6 +27,7 @@ import {
   Mail,
   Newspaper,
   Phone,
+  Sparkles,
   Wrench,
   Users,
   DollarSign,
@@ -41,12 +42,15 @@ import {
   type QrmSignalSeverity,
 } from "../lib/qrm-router-api";
 import {
+  formatIronTriagePrompt,
   hrefForSignalEntity,
   labelForSignalKind,
   relativeTimeLabel,
   severityDotClass,
   severityTextClass,
 } from "./signalCardHelpers";
+import type { AskIronSeedState } from "./askIronHandoff";
+import { ASK_IRON_PATH } from "./askIronHandoff";
 
 interface PulseSurfaceProps {
   className?: string;
@@ -156,8 +160,25 @@ function iconForKind(kind: QrmSignalKind) {
 }
 
 export function PulseSurface({ className }: PulseSurfaceProps) {
+  const navigate = useNavigate();
   const [severityFloor, setSeverityFloor] = useState<SeverityFloor>("all");
   const [familyId, setFamilyId] = useState<string>("all");
+
+  // Slice 8: hand a pre-seeded triage question to Ask Iron. State travels
+  // in router state (not URL params) because the question can be long and
+  // carries metadata. isAskIronSeedState guards consumption on the other
+  // end so refresh doesn't re-fire the message.
+  const handleTriage = (signal: QrmSignal) => {
+    const question = formatIronTriagePrompt(signal);
+    const state: AskIronSeedState = {
+      askIronSeed: {
+        question,
+        source: "pulse",
+        sourceId: signal.id,
+      },
+    };
+    navigate(ASK_IRON_PATH, { state });
+  };
 
   const signalsQuery = useQuery<QrmSignal[]>({
     queryKey: ["qrm", "pulse-signals"],
@@ -258,8 +279,11 @@ export function PulseSurface({ className }: PulseSurfaceProps) {
         {filtered.map((signal) => {
           const Icon = iconForKind(signal.kind);
           const href = hrefForSignalEntity(signal);
-          const content = (
-            <div className="flex flex-1 items-start gap-3 px-4 py-3">
+          // Row body — kept as a separate node so the primary-action Link
+          // and the secondary Ask-Iron button can be SIBLINGS (nesting
+          // <button> inside <a> is invalid HTML and trips screen readers).
+          const body = (
+            <div className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3">
               <span
                 aria-hidden
                 className={cn(
@@ -295,27 +319,46 @@ export function PulseSurface({ className }: PulseSurfaceProps) {
                   </span>
                 )}
               </div>
-              {href && (
-                <ArrowRight
-                  className="mt-2 h-4 w-4 shrink-0 text-muted-foreground"
-                  aria-hidden
-                />
-              )}
             </div>
           );
 
           return (
-            <li key={signal.id}>
+            <li
+              key={signal.id}
+              className="group flex w-full items-stretch transition hover:bg-muted/40"
+            >
               {href ? (
                 <Link
                   to={href}
-                  className="flex w-full items-stretch transition hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="flex min-w-0 flex-1 items-stretch focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  {content}
+                  {body}
                 </Link>
               ) : (
-                <div className="flex w-full items-stretch">{content}</div>
+                <div className="flex min-w-0 flex-1 items-stretch">{body}</div>
               )}
+              <div className="flex shrink-0 items-center gap-1 pr-3">
+                <button
+                  type="button"
+                  onClick={() => handleTriage(signal)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2.5 py-1 text-[11px] font-medium text-qep-orange",
+                    "transition-colors hover:border-qep-orange/60 hover:bg-qep-orange/10",
+                    "focus:outline-none focus:ring-2 focus:ring-qep-orange/40",
+                  )}
+                  aria-label={`Ask Iron to triage: ${signal.title}`}
+                  title="Hand this signal to Ask Iron"
+                >
+                  <Sparkles className="h-3 w-3" aria-hidden />
+                  Ask Iron
+                </button>
+                {href && (
+                  <ArrowRight
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                )}
+              </div>
             </li>
           );
         })}

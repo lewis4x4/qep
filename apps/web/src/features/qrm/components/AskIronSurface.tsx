@@ -16,8 +16,8 @@
  * shell still looks intentional.
  */
 
-import { FormEvent, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Sparkles,
@@ -43,13 +43,20 @@ import {
   SUGGESTED_STARTERS,
   summarizeToolTrace,
 } from "./askIronHelpers";
+import { isAskIronSeedState } from "./askIronHandoff";
 
 export function AskIronSurface() {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<AskIronMessage[]>([]);
   const [input, setInput] = useState("");
   const [offline, setOffline] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Slice 8 — re-entry guard for the location-state handoff. React StrictMode
+  // double-invokes effects in dev; without this we'd auto-send the seeded
+  // question twice and double-bill the edge function.
+  const seedConsumedRef = useRef(false);
 
   const askMutation = useMutation({
     mutationFn: async (question: string) => {
@@ -114,6 +121,26 @@ export function AskIronSurface() {
     e.preventDefault();
     send(input);
   };
+
+  // Slice 8 — consume the router-state handoff from Pulse (and future surfaces).
+  // When a caller navigates here with `askIronSeed.question` set, auto-send it
+  // once and then strip the state so a browser refresh doesn't re-fire the
+  // same question. The seedConsumedRef guards against React StrictMode's
+  // double-invocation in dev.
+  useEffect(() => {
+    if (seedConsumedRef.current) return;
+    if (!isAskIronSeedState(location.state)) return;
+    const seeded = location.state.askIronSeed.question;
+    seedConsumedRef.current = true;
+    // Clear the router state synchronously so a refresh lands on a clean
+    // surface. Uses replace so the back-stack doesn't grow.
+    navigate(location.pathname, { replace: true, state: {} });
+    // Defer the send so React Query sees the mutation after the initial
+    // render has flushed — otherwise the "Iron is thinking…" pending state
+    // races with the mount.
+    queueMicrotask(() => send(seeded));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const showStarters = messages.length === 0 && !askMutation.isPending;
 
