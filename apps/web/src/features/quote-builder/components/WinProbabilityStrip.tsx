@@ -59,6 +59,11 @@ import {
   computeWinProbabilityRisks,
   type WinProbabilityRisk,
 } from "../lib/win-probability-risks";
+import {
+  computeEnsembleWinProbability,
+  describeEnsembleHeadline,
+  type EnsembleWinProbabilityResult,
+} from "../lib/ensemble-win-probability";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 export interface WinProbabilityStripProps {
@@ -147,6 +152,20 @@ export function WinProbabilityStrip({
     () => computeShadowCallout(result.score, shadow, shadowCalibration),
     [result.score, shadow, shadowCalibration],
   );
+  // Slice 20q: consensus ensemble score — blend rule + shadow weighted
+  // by their demonstrated above-chance accuracy from the 20k summary.
+  // We only SURFACE the ensemble pill when the blend produced something
+  // different enough from the rule score to matter (blended / shadow-
+  // only). Rule-only branches are silently folded into the main pill,
+  // and `calibration-thin` is dropped because we'd just be repeating
+  // the shadow chip that's already there.
+  const ensemble = useMemo<EnsembleWinProbabilityResult>(
+    () => computeEnsembleWinProbability(result.score, shadow, shadowCalibration ?? null),
+    [result.score, shadow, shadowCalibration],
+  );
+  const showEnsemblePill =
+    (ensemble.reason === "blended" || ensemble.reason === "shadow-only") &&
+    ensemble.ensembleScore !== result.score;
   const style = BAND_STYLE[result.band];
   // Top 3 factors by absolute weight; scorer already sorted them.
   const topFactors = result.factors.slice(0, 3);
@@ -176,6 +195,9 @@ export function WinProbabilityStrip({
               <div className="flex items-center gap-2">
                 {shadow && !shadow.lowConfidence && (
                   <ShadowChip liveScore={result.score} shadow={shadow} />
+                )}
+                {showEnsemblePill && (
+                  <EnsemblePill ensemble={ensemble} liveScore={result.score} />
                 )}
                 <div className="text-[10px] text-muted-foreground">Win probability</div>
               </div>
@@ -536,6 +558,75 @@ function ShadowDisagreementCallout({ callout }: { callout: ShadowCallout }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Slice 20q — EnsemblePill. A third, smaller number next to the rule
+ * score + shadow chip that shows the SKILL-WEIGHTED consensus between
+ * them. Only rendered when:
+ *
+ *   • The ensemble actually blended two signals (reason ∈ {blended,
+ *     shadow-only}) — otherwise the ensemble == rule score and we'd
+ *     just be repeating the big number.
+ *   • The ensemble landed on a different integer than the rule score —
+ *     a consensus that agrees with the main pill to the point isn't
+ *     worth the visual cost.
+ *
+ * Color grammar:
+ *   • `blended`     → violet (signals "synthesis", not accuracy panic)
+ *   • `shadow-only` → sky (same palette as the shadow callout, because
+ *                     this is the shadow winning outright)
+ *
+ * Tooltip surfaces the full explanation string from the pure function
+ * so the rep can read the receipts ("Weighted 67/33 rule/shadow based
+ * on historical accuracy..."). aria-label carries the same content for
+ * screenreader users.
+ */
+function EnsemblePill({
+  ensemble,
+  liveScore,
+}: {
+  ensemble: EnsembleWinProbabilityResult;
+  liveScore: number;
+}) {
+  const tone =
+    ensemble.reason === "shadow-only"
+      ? "border-sky-500/40 bg-sky-500/10 text-sky-300"
+      : "border-violet-500/40 bg-violet-500/10 text-violet-300";
+  const delta = ensemble.ensembleScore - liveScore;
+  const headline = describeEnsembleHeadline(ensemble);
+  const ariaLabel = `${headline}. ${ensemble.explanation ?? ""}`.trim();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          aria-label={ariaLabel}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-help focus:outline-none focus:ring-2 focus:ring-ring transition-colors",
+            tone,
+          )}
+        >
+          <Sparkles className="h-3 w-3" aria-hidden />
+          <span className="tabular-nums">{headline}</span>
+          {delta !== 0 && (
+            <span className="text-[9px] opacity-80 tabular-nums" aria-hidden>
+              ({delta > 0 ? "+" : ""}{delta} vs. rule)
+            </span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs text-xs">
+        <p className="font-medium">{headline}</p>
+        {ensemble.explanation && (
+          <p className="mt-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground">
+            {ensemble.explanation}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
