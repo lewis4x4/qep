@@ -82,6 +82,40 @@ export interface ShadowScoreResult {
   lowConfidence: boolean;
   /** Why lowConfidence fired (or "ok" when confident). */
   reason: ShadowReason;
+  /**
+   * Slice 20o — the actual K-NN neighbors driving the shadow score.
+   * Sorted by distance ascending (closest first). The rep sees a
+   * subset of these in the Shadow chip tooltip as concrete evidence
+   * behind the aggregate ("70% comes from: won · won · lost").
+   *
+   * Empty array for `empty-history` and for any edge case where we
+   * can't form neighbors — callers should check `.length` rather than
+   * trusting the aggregate alone. This is informational; it does NOT
+   * re-drive the `shadowScore` computation.
+   */
+  neighbors: ShadowNeighbor[];
+}
+
+/**
+ * One K-NN neighbor exposed for UI display. Carries no PII — just the
+ * opaque package id + outcome + distance + a derived `matchPct` the
+ * rep can read at a glance. If we later want to pivot to the deal
+ * detail page, `packageId` is the handle.
+ */
+export interface ShadowNeighbor {
+  /** quote_packages.id — opaque to the rep, useful for navigation. */
+  packageId: string;
+  /** Realized outcome of this past deal. */
+  outcome: CalibrationOutcome;
+  /** Raw distance against the live factor profile. */
+  distance: number;
+  /**
+   * Rep-readable 0..100 match score. Monotonically decreasing in
+   * distance. We invert distance linearly against a calibration
+   * ceiling so 0 distance → 100% match, `MATCH_ZERO_DISTANCE` → 0.
+   * See `MATCH_ZERO_DISTANCE` below for the tuning rationale.
+   */
+  matchPct: number;
 }
 
 export type ShadowReason =
@@ -107,6 +141,28 @@ export const SHADOW_K_DEFAULT = 10;
  * enough that early datasets still surface something.
  */
 export const SHADOW_DISTANT_THRESHOLD = 15;
+
+/**
+ * Distance at which matchPct hits 0. Beyond this, two deals are more
+ * different than similar — showing them as neighbors would misinform
+ * the rep. We pick 2 × SHADOW_DISTANT_THRESHOLD (= 30) so `matchPct`
+ * stays comfortably positive through the "distant neighbors" band
+ * (matchPct ≈ 50% at threshold) and only bottoms out in regions
+ * callers already flag as unreliable via `lowConfidence`.
+ */
+export const MATCH_ZERO_DISTANCE = 30;
+
+/**
+ * Convert a raw distance to a 0..100 rep-readable match score.
+ * Linear, clamped. `distance=0 → 100`, `distance=MATCH_ZERO_DISTANCE → 0`.
+ * Exported so tests (and the edge-side consumer if we add one) can
+ * pin the formula without re-implementing it.
+ */
+export function matchPctForDistance(distance: number): number {
+  if (!Number.isFinite(distance) || distance < 0) return 0;
+  const raw = 1 - distance / MATCH_ZERO_DISTANCE;
+  return Math.max(0, Math.min(100, Math.round(raw * 100)));
+}
 
 export interface ShadowScoreOptions {
   k?: number;
@@ -199,6 +255,7 @@ export function computeShadowScore(
       meanDistance: 0,
       lowConfidence: true,
       reason: "empty-history",
+      neighbors: [],
     };
   }
 
@@ -239,12 +296,23 @@ export function computeShadowScore(
     reason = "distant-neighbors";
   }
 
+  // Slice 20o — emit the neighbors themselves so the UI can expose
+  // concrete evidence. `used` is already distance-sorted by the
+  // ranking above; transform each to the display shape.
+  const neighbors: ShadowNeighbor[] = used.map((r) => ({
+    packageId: r.snapshot.packageId,
+    outcome: r.snapshot.outcome,
+    distance: r.distance,
+    matchPct: matchPctForDistance(r.distance),
+  }));
+
   return {
     shadowScore,
     kUsed: used.length,
     meanDistance,
     lowConfidence,
     reason,
+    neighbors,
   };
 }
 

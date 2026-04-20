@@ -20,6 +20,9 @@ import {
   computeShadowScore,
   computeSnapshotDistance,
   describeShadowAgreement,
+  matchPctForDistance,
+  MATCH_ZERO_DISTANCE,
+  SHADOW_DISTANT_THRESHOLD,
   SHADOW_K_DEFAULT,
   type ShadowHistoricalSnapshot,
 } from "../shadow-score";
@@ -272,6 +275,7 @@ describe("describeShadowAgreement", () => {
       meanDistance: 0,
       lowConfidence: true,
       reason: "empty-history",
+      neighbors: [],
     });
     expect(msg.toLowerCase()).toContain("not enough closed deals");
   });
@@ -283,6 +287,7 @@ describe("describeShadowAgreement", () => {
       meanDistance: 2,
       lowConfidence: true,
       reason: "sparse-sample",
+      neighbors: [],
     });
     expect(one).toContain("1 close match");
     expect(one).not.toContain("matches");
@@ -293,6 +298,7 @@ describe("describeShadowAgreement", () => {
       meanDistance: 2,
       lowConfidence: true,
       reason: "sparse-sample",
+      neighbors: [],
     });
     expect(many).toContain("4 close matches");
   });
@@ -304,6 +310,7 @@ describe("describeShadowAgreement", () => {
       meanDistance: 3,
       lowConfidence: false,
       reason: "ok",
+      neighbors: [],
     });
     expect(msg.toLowerCase()).toContain("agrees");
   });
@@ -315,6 +322,7 @@ describe("describeShadowAgreement", () => {
       meanDistance: 3,
       lowConfidence: false,
       reason: "ok",
+      neighbors: [],
     });
     expect(msg.toLowerCase()).toContain("won more often");
   });
@@ -326,7 +334,120 @@ describe("describeShadowAgreement", () => {
       meanDistance: 3,
       lowConfidence: false,
       reason: "ok",
+      neighbors: [],
     });
     expect(msg.toLowerCase()).toContain("won less often");
+  });
+});
+
+// ── Slice 20o: neighbors + matchPct ────────────────────────────────────────
+
+describe("matchPctForDistance", () => {
+  test("distance 0 → 100% match", () => {
+    expect(matchPctForDistance(0)).toBe(100);
+  });
+
+  test("distance at MATCH_ZERO_DISTANCE → 0% match", () => {
+    expect(matchPctForDistance(MATCH_ZERO_DISTANCE)).toBe(0);
+  });
+
+  test("distance at SHADOW_DISTANT_THRESHOLD (15) → 50% match", () => {
+    expect(matchPctForDistance(SHADOW_DISTANT_THRESHOLD)).toBe(50);
+  });
+
+  test("distance beyond MATCH_ZERO_DISTANCE clamps to 0", () => {
+    expect(matchPctForDistance(MATCH_ZERO_DISTANCE + 5)).toBe(0);
+    expect(matchPctForDistance(9999)).toBe(0);
+  });
+
+  test("negative or non-finite distance → 0 (defensive)", () => {
+    expect(matchPctForDistance(-1)).toBe(0);
+    expect(matchPctForDistance(Number.NaN)).toBe(0);
+    expect(matchPctForDistance(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  test("monotonically non-increasing across the reasonable band", () => {
+    const distances = [0, 1, 5, 10, 15, 20, 25, MATCH_ZERO_DISTANCE];
+    const pcts = distances.map(matchPctForDistance);
+    for (let i = 1; i < pcts.length; i++) {
+      expect(pcts[i]).toBeLessThanOrEqual(pcts[i - 1]);
+    }
+  });
+});
+
+describe("computeShadowScore — neighbors payload", () => {
+  test("empty history → neighbors: []", () => {
+    const r = computeShadowScore([f("A", 5)], []);
+    expect(r.neighbors).toEqual([]);
+  });
+
+  test("neighbors returned with kUsed = neighbors.length", () => {
+    const live = [f("A", 5), f("B", -3)];
+    const history = makeHistory(
+      SHADOW_K_DEFAULT + 2,
+      (i) => (i % 2 === 0 ? "won" : "lost"),
+      (i) => [f("A", 5 + i * 0.1), f("B", -3 + i * 0.1)],
+    );
+    const r = computeShadowScore(live, history);
+    expect(r.neighbors.length).toBe(r.kUsed);
+  });
+
+  test("neighbors sorted by distance ascending (closest first)", () => {
+    const live = [f("A", 5)];
+    // Distances:  0,   5,   10,  15  (lives with A @5; weights shift)
+    const history: ShadowHistoricalSnapshot[] = [
+      { packageId: "far",   factors: [f("A", 20)], outcome: "lost" },  // d=15
+      { packageId: "exact", factors: [f("A", 5)],  outcome: "won"  },  // d=0
+      { packageId: "mid",   factors: [f("A", 15)], outcome: "won"  },  // d=10
+      { packageId: "close", factors: [f("A", 10)], outcome: "lost" },  // d=5
+    ];
+    const r = computeShadowScore(live, history);
+    expect(r.neighbors.map((n) => n.packageId)).toEqual(["exact", "close", "mid", "far"]);
+    // distances should be non-decreasing
+    for (let i = 1; i < r.neighbors.length; i++) {
+      expect(r.neighbors[i].distance).toBeGreaterThanOrEqual(r.neighbors[i - 1].distance);
+    }
+  });
+
+  test("neighbors carry outcome + matchPct", () => {
+    const live = [f("A", 5)];
+    const history: ShadowHistoricalSnapshot[] = [
+      { packageId: "exact", factors: [f("A", 5)], outcome: "won" },
+    ];
+    const r = computeShadowScore(live, history);
+    expect(r.neighbors[0]).toMatchObject({
+      packageId: "exact",
+      outcome: "won",
+      distance: 0,
+      matchPct: 100,
+    });
+  });
+
+  test("tied boundary produces neighbors ≥ K (honors tie-inclusive K)", () => {
+    const live = [f("A", 5)];
+    // All identical twins → distance 0 across the board.
+    const history = makeHistory(
+      SHADOW_K_DEFAULT + 3,
+      () => "won",
+      () => [f("A", 5)],
+    );
+    const r = computeShadowScore(live, history);
+    expect(r.neighbors.length).toBe(r.kUsed);
+    expect(r.neighbors.length).toBeGreaterThanOrEqual(SHADOW_K_DEFAULT);
+  });
+
+  test("matchPct values descend with distance in the neighbor list", () => {
+    const live = [f("A", 5)];
+    const history: ShadowHistoricalSnapshot[] = [
+      { packageId: "a", factors: [f("A", 5)],  outcome: "won" },  // d=0  → 100
+      { packageId: "b", factors: [f("A", 10)], outcome: "won" },  // d=5  → 83
+      { packageId: "c", factors: [f("A", 15)], outcome: "won" },  // d=10 → 67
+    ];
+    const r = computeShadowScore(live, history);
+    const pcts = r.neighbors.map((n) => n.matchPct);
+    for (let i = 1; i < pcts.length; i++) {
+      expect(pcts[i]).toBeLessThanOrEqual(pcts[i - 1]);
+    }
+    expect(pcts[0]).toBe(100);
   });
 });

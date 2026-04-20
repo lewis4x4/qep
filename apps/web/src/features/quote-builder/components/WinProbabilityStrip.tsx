@@ -47,6 +47,7 @@ import {
   computeShadowScore,
   describeShadowAgreement,
   type ShadowHistoricalSnapshot,
+  type ShadowNeighbor,
   type ShadowScoreResult,
 } from "../lib/shadow-score";
 import type { ShadowAgreementSummary } from "../lib/retrospective-shadow";
@@ -402,6 +403,15 @@ function ShadowChip({
   const delta = Math.round(shadow.shadowScore - liveScore);
   const disagrees = Math.abs(delta) > 10;
   const tooltip = describeShadowAgreement(liveScore, shadow);
+  // Slice 20o — surface the actual K-NN neighbors the shadow rests on.
+  // Rep reads "70% comes from these 3 closest matches" as concrete
+  // evidence, not black-box aggregate. We cap the visible preview at 3
+  // (matches MAX_LIFTS / MAX_RISKS conventions in the strip); the chip
+  // footer disclaims the remainder so the rep knows the aggregate
+  // leans on more than what's shown.
+  const NEIGHBOR_PREVIEW_COUNT = 3;
+  const previewNeighbors = shadow.neighbors.slice(0, NEIGHBOR_PREVIEW_COUNT);
+  const hiddenNeighbors = shadow.neighbors.length - previewNeighbors.length;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -425,8 +435,56 @@ function ShadowChip({
         <p className="mt-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground">
           Based on the {shadow.kUsed} closed deal{shadow.kUsed === 1 ? "" : "s"} whose factor profile looks most like this one.
         </p>
+        {previewNeighbors.length > 0 && (
+          <div className="mt-1 border-t border-border/40 pt-1">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Closest matches
+            </p>
+            <ul className="mt-0.5 space-y-0.5">
+              {previewNeighbors.map((n) => (
+                <ShadowNeighborRow key={n.packageId} neighbor={n} />
+              ))}
+            </ul>
+            {hiddenNeighbors > 0 && (
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                + {hiddenNeighbors} more in the window
+              </p>
+            )}
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * Slice 20o — single neighbor row inside the Shadow chip tooltip.
+ * Shows outcome icon + short id + match%. No customer name: package
+ * id is deliberately opaque (K-NN window may include other reps' deals
+ * in a shared workspace, and the shadow is a statistical witness, not
+ * a rolodex). The match% converts raw distance to an intuitive
+ * familiarity reading.
+ */
+function ShadowNeighborRow({ neighbor }: { neighbor: ShadowNeighbor }) {
+  const { Icon, tone, word } =
+    neighbor.outcome === "won"
+      ? { Icon: CheckCircle2, tone: "text-emerald-400", word: "Won" }
+      : neighbor.outcome === "lost"
+        ? { Icon: TrendingDown, tone: "text-rose-400",    word: "Lost" }
+        : { Icon: Minus,         tone: "text-muted-foreground", word: "Expired" };
+  // Last 6 hex of packageId — collision-safe for tooltip rows (shown at
+  // most 3 at a time), and avoids leaking full id into the DOM tree.
+  const shortId = neighbor.packageId.slice(-6);
+  return (
+    <li
+      className="flex items-center gap-1.5 text-[10px] tabular-nums"
+      aria-label={`${word}, match ${neighbor.matchPct} percent`}
+    >
+      <Icon className={cn("h-3 w-3 shrink-0", tone)} aria-hidden />
+      <span className={cn("w-10 text-right font-semibold", tone)}>{word}</span>
+      <span className="font-mono text-muted-foreground">·{shortId}</span>
+      <span className="ml-auto text-muted-foreground">{neighbor.matchPct}% match</span>
+    </li>
   );
 }
 

@@ -36,6 +36,7 @@ function shadow(overrides: Partial<ShadowScoreResult> = {}): ShadowScoreResult {
     meanDistance: 3,
     lowConfidence: false,
     reason: "ok",
+    neighbors: [],
     ...overrides,
   };
 }
