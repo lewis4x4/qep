@@ -36,6 +36,7 @@
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { emitAdminFlare } from "../_shared/admin-flare.ts";
@@ -79,10 +80,26 @@ Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
-  const auth = await requireServiceUser(req.headers.get("authorization"), origin);
-  if (!auth.ok) return auth.response;
-  if (!["admin", "manager", "owner"].includes(auth.role)) {
-    return safeJsonError("Watchdog requires admin, manager, or owner role", 403, origin);
+  // Two accepted caller identities:
+  //   1. Admin/manager/owner user JWT — from the "Check now" button in
+  //      the admin UI. Populates auth.userId so manual_trigger events
+  //      can attribute the click.
+  //   2. pg_cron via x-internal-service-secret OR service_role bearer —
+  //      from migration 307's 15-minute schedule. No user attribution;
+  //      manual_trigger events are skipped (batch mode only).
+  //
+  // Ordering matters: check the cron path first because cron requests
+  // carry only the internal-service-secret header, no JWT, so the JWT
+  // path would 401 them needlessly.
+  const cronCaller = isServiceRoleCaller(req);
+  let userIdForAudit: string | null = null;
+  if (!cronCaller) {
+    const auth = await requireServiceUser(req.headers.get("authorization"), origin);
+    if (!auth.ok) return auth.response;
+    if (!["admin", "manager", "owner"].includes(auth.role)) {
+      return safeJsonError("Watchdog requires admin, manager, or owner role", 403, origin);
+    }
+    userIdForAudit = auth.userId;
   }
 
   const parsed = await parseJsonBody(req, origin);
@@ -122,13 +139,15 @@ Deno.serve(async (req: Request) => {
   const results: Array<{ sourceId: string; outcome: CheckOutcome }> = [];
 
   for (const source of sources) {
-    // Log the manual_trigger event upfront so the admin UI sees an immediate entry
-    if (body.manualTrigger && body.sourceId === source.id) {
+    // Log the manual_trigger event upfront so the admin UI sees an immediate entry.
+    // Cron-initiated batches never carry manualTrigger=true, so this branch is
+    // skipped for scheduled runs even when a sourceId happens to be set.
+    if (body.manualTrigger && body.sourceId === source.id && userIdForAudit) {
       await service.from("qb_sheet_watch_events").insert({
         workspace_id: source.workspace_id,
         source_id:    source.id,
         event_type:   "manual_trigger",
-        detail:       { triggered_by_user: auth.userId },
+        detail:       { triggered_by_user: userIdForAudit },
       });
     }
 
