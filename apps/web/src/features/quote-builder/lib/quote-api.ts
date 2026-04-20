@@ -61,7 +61,15 @@ export async function listQuotePackages(params?: {
   const res = await fetch(`${QUOTE_API_URL}/list${suffix}`, {
     headers: await getAuthHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to list quotes");
+  if (!res.ok) {
+    // Preserve the real server detail. The edge function returns a
+    // structured { error: string } body on 4xx/5xx; bubble it up so the
+    // sidebar can show the specific cause (auth expired vs DB error vs
+    // RLS block) instead of a generic "failed" that hides the root.
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error?.trim();
+    throw new Error(detail || `Failed to list quotes (HTTP ${res.status})`);
+  }
   return res.json();
 }
 
