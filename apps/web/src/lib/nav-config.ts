@@ -43,6 +43,7 @@ import {
   Activity,
   FileSpreadsheet,
   History,
+  LineChart,
 } from "lucide-react";
 import type { UserRole } from "@/lib/database.types";
 
@@ -564,6 +565,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     label: "Audit Log",
     href: "/admin/audit-log",
     icon: History,
+    roles: ["admin", "manager", "owner"],
+    utility: true,
+    sectionLabel: "Admin",
+  },
+  {
+    label: "Deal Velocity",
+    href: "/admin/deal-velocity",
+    icon: LineChart,
     roles: ["admin", "manager", "owner"],
     utility: true,
     sectionLabel: "Admin",
