@@ -77,6 +77,12 @@ export interface QuotePacketReadiness {
 export interface QuoteWorkspaceDraft {
   dealId?: string;
   contactId?: string;
+  /** CRM company id resolved when the rep picks an existing customer
+   *  via the Customer Picker. Null for brand-new customers typed in
+   *  manually. Enables downstream signal-driven experiences (Deal
+   *  Coach can filter similar deals by company, outcome capture can
+   *  attribute by company, etc.). */
+  companyId?: string;
   entryMode: QuoteEntryMode;
   branchSlug: string;
   recommendation: QuoteRecommendation | null;
