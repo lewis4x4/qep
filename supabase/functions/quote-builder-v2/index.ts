@@ -507,6 +507,54 @@ Deno.serve(async (req) => {
         }, origin);
       }
 
+      // ── GET /scorer-calibration (Slice 20f) ─────────────────────────
+      // Manager/owner-only aggregate of (win_probability_score) ×
+      // (qb_quote_outcomes.outcome) pairs. Returns raw observations so
+      // the pure calibration math lives in the client lib; the edge
+      // function just handles auth + JOIN + shape.
+      //
+      // This is the baseline the counterfactual ML model must beat.
+      if (action === "scorer-calibration") {
+        if (!canPublish) {
+          return safeJsonError("Scorer calibration requires manager or owner role", 403, origin);
+        }
+
+        // Pull only the columns we need. Limit 500 for now — enough to
+        // power a dashboard on QB's current volume, and well below the
+        // per-request payload budget. A future slice can paginate or
+        // roll up server-side if dealer volume outgrows this.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_package_id, quote_packages!inner(win_probability_score)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_score", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("scorer-calibration query error:", error);
+          return safeJsonError("Failed to load calibration data", 500, origin);
+        }
+
+        // Shape to CalibrationObservation[] — the client lib takes it
+        // verbatim. Defensive: skip rows where the join produced null.
+        const observations = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const score = (pkg as { win_probability_score?: unknown } | null)?.win_probability_score;
+          const outcome = row.outcome;
+          if (
+            typeof score === "number" &&
+            Number.isFinite(score) &&
+            (outcome === "won" || outcome === "lost" || outcome === "expired")
+          ) {
+            return [{ score, outcome }];
+          }
+          return [];
+        });
+
+        return safeJsonOk({ observations }, origin);
+      }
+
       const dealId = url.searchParams.get("deal_id");
       if (!dealId) return safeJsonError("deal_id required", 400, origin);
 

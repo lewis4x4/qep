@@ -126,6 +126,37 @@ export async function listQuotePackages(params?: {
   return res.json();
 }
 
+/**
+ * Slice 20f — fetch the raw (score, outcome) observations the edge
+ * function joined from quote_packages × qb_quote_outcomes. The pure
+ * calibration math is done client-side by `computeCalibrationReport`
+ * so the report can be re-derived without another round trip if the
+ * component needs to re-render with different filters later.
+ *
+ * 403 means the user isn't manager/owner — callers should render the
+ * card as hidden rather than an error. We surface the role-gated error
+ * as a distinct typed return so the component doesn't have to parse
+ * the message.
+ */
+export async function getScorerCalibrationObservations(): Promise<
+  | { ok: true; observations: Array<{ score: number; outcome: "won" | "lost" | "expired" }> }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/scorer-calibration`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    observations?: Array<{ score: number; outcome: "won" | "lost" | "expired" }>;
+  };
+  return { ok: true, observations: Array.isArray(body.observations) ? body.observations : [] };
+}
+
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/competitors`, {
     method: "POST",

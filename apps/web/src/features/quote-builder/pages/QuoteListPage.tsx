@@ -9,8 +9,15 @@ import {
   Plus, Search, FileText, Mic, MessageSquare,
   AlertTriangle, RotateCcw, Sparkles, Gauge,
 } from "lucide-react";
-import { listQuotePackages } from "../lib/quote-api";
+import { listQuotePackages, getScorerCalibrationObservations } from "../lib/quote-api";
 import { OutcomeCaptureDrawer } from "../components/OutcomeCaptureDrawer";
+import {
+  calibrationHeadline,
+  computeCalibrationReport,
+  formatPct,
+  type BandCalibration,
+  type CalibrationReport,
+} from "../lib/scorer-calibration";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -118,6 +125,41 @@ export function QuoteListPage() {
     staleTime: 10_000,
   });
 
+  // Slice 20f: scorer calibration. Pulls the full (score × outcome)
+  // observation set once and derives the report client-side so the
+  // card can be restructured without another round trip.
+  //
+  // The query resolves to a discriminated union — forbidden (rep role)
+  // and error (500/network) are NOT thrown, so retries won't happen
+  // for those paths. 5-minute stale time because calibration changes
+  // on closed-deal timescale, not minute timescale.
+  const calibrationQuery = useQuery({
+    queryKey: ["quote-builder", "scorer-calibration"],
+    queryFn: getScorerCalibrationObservations,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  /**
+   * Three display states for the card:
+   *   - null                   → don't render anything (rep role / still loading).
+   *   - { kind: "report", … }  → show the calibration numbers.
+   *   - { kind: "error", … }   → show a compact error row so a broken
+   *     endpoint doesn't silently disappear for managers.
+   */
+  const calibrationDisplay = useMemo<
+    | null
+    | { kind: "report"; report: CalibrationReport }
+    | { kind: "error"; message: string }
+  >(() => {
+    const r = calibrationQuery.data;
+    if (!r) return null;
+    if (!r.ok) {
+      if (r.reason === "forbidden") return null; // reps see no card
+      return { kind: "error", message: r.message };
+    }
+    return { kind: "report", report: computeCalibrationReport(r.observations) };
+  }, [calibrationQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -145,6 +187,18 @@ export function QuoteListPage() {
           <Stat label="Pipeline" value={fmtCompactCurrency(stats.pipelineValue)} hint="net total on open" />
           <Stat label="Wins MTD" value={stats.winsThisMonth.toString()} hint={fmtCompactCurrency(stats.winsValueMTD)} emphasis />
         </div>
+      )}
+
+      {/* Slice 20f: scorer calibration card — manager/owner only.
+          Rendered above the filter row. Three display states:
+            - loading / forbidden (rep): nothing rendered
+            - error: compact row so a broken endpoint is visible
+            - data: the full calibration card */}
+      {calibrationDisplay?.kind === "report" && (
+        <ScorerCalibrationCard report={calibrationDisplay.report} />
+      )}
+      {calibrationDisplay?.kind === "error" && (
+        <ScorerCalibrationErrorRow message={calibrationDisplay.message} />
       )}
 
       {/* Search + Filters */}
@@ -396,6 +450,134 @@ function QuoteCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Slice 20f — scorer calibration card. This is the baseline
+ * instrumentation for Move 2 (counterfactual win-probability engine).
+ * Before any ML model ships, we want to know: "how often is the
+ * rule-based scorer right today?" Everything downstream is measured
+ * against this number.
+ *
+ * Why a card on the list page instead of its own admin dashboard:
+ * managers already open the list to triage pipeline — putting the
+ * calibration at the top means they see the baseline *every day*
+ * without a separate nav. When the ML model ships, this card swaps
+ * its data source seamlessly.
+ *
+ * Design bar: *transparent over confident*. We never hide the sample
+ * size; we never round away a low-confidence warning. Per-band win
+ * rates are shown in a mini-strip so reps can see where the scorer is
+ * miscalibrated at a glance.
+ */
+function ScorerCalibrationCard({ report }: { report: CalibrationReport }) {
+  const headline = calibrationHeadline(report);
+  const hasData = report.sampleSize > 0;
+  return (
+    <Card
+      className={`border p-3 ${hasData ? "border-sky-500/30 bg-sky-500/5" : "border-border bg-muted/10"}`}
+      role="region"
+      aria-label="Win-probability scorer calibration"
+    >
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 rounded-full bg-sky-500/10 p-2">
+          <Gauge className="h-4 w-4 text-sky-400" aria-hidden />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+              Scorer calibration
+            </div>
+            {hasData && (
+              <div
+                className="text-[10px] text-muted-foreground"
+                title="Brier score = mean squared error between predicted probability and binary outcome. Lower is better. 0.25 = coin flip."
+                aria-label={`Brier score ${report.brierScore!.toFixed(3)} — mean squared error between predicted probability and actual outcome. Lower is better; 0.25 is coin-flip baseline.`}
+              >
+                Brier {report.brierScore!.toFixed(3)}
+              </div>
+            )}
+          </div>
+          <p className="mt-0.5 text-sm text-foreground">{headline}</p>
+          {hasData && (
+            <div className="mt-2 grid grid-cols-4 gap-1.5">
+              {report.bands.map((b) => (
+                <CalibrationBandCell key={b.band} band={b} />
+              ))}
+            </div>
+          )}
+          {report.lowConfidence && hasData && (
+            <p
+              className="mt-2 text-[11px] text-amber-400"
+              title="We need at least 10 closed deals with a saved win-probability score before the aggregate number is reliable."
+            >
+              Small sample — capture more outcomes to tighten this.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Compact error row shown to managers/owners when the calibration
+ * endpoint fails. Intentionally subtle — we don't want to block the
+ * quote list, we just want to surface that an instrumentation surface
+ * broke rather than let it silently vanish.
+ */
+function ScorerCalibrationErrorRow({ message }: { message: string }) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-[11px] text-amber-300"
+      role="status"
+      aria-live="polite"
+    >
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="truncate" title={message}>
+        Scorer calibration unavailable — {message}
+      </span>
+    </div>
+  );
+}
+
+const BAND_DISPLAY: Record<
+  BandCalibration["band"],
+  { label: string; accent: string; bg: string }
+> = {
+  strong:  { label: "Strong",  accent: "text-emerald-400", bg: "bg-emerald-500/5 border-emerald-500/20" },
+  healthy: { label: "Healthy", accent: "text-sky-400",     bg: "bg-sky-500/5 border-sky-500/20" },
+  mixed:   { label: "Mixed",   accent: "text-amber-400",   bg: "bg-amber-500/5 border-amber-500/20" },
+  at_risk: { label: "At risk", accent: "text-rose-400",    bg: "bg-rose-500/5 border-rose-500/20" },
+};
+
+function CalibrationBandCell({ band }: { band: BandCalibration }) {
+  const style = BAND_DISPLAY[band.band];
+  const winPct = formatPct(band.winRate);
+  const detail =
+    band.n === 0
+      ? `No closed deals in the ${style.label.toLowerCase()} band yet.`
+      : `${band.n} deals · ${band.won} won · ${band.lost} lost — empirical win rate ${winPct}.`;
+  return (
+    <div
+      className={`rounded-md border px-2 py-1.5 ${style.bg}`}
+      title={detail}
+      role="group"
+      aria-label={`${style.label} band: ${detail}`}
+    >
+      <div className={`text-[10px] uppercase tracking-wide ${style.accent}`} aria-hidden>
+        {style.label}
+      </div>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-xs font-bold text-foreground tabular-nums" aria-hidden>
+          {winPct}
+        </span>
+        <span className="text-[10px] text-muted-foreground" aria-hidden>
+          n={band.n}
+        </span>
+      </div>
+    </div>
   );
 }
 
