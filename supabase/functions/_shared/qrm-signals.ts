@@ -328,6 +328,35 @@ export async function ingestSignalDetailed(
   return { row: data as SignalRow, deduped: false };
 }
 
+/**
+ * Fetch a fixed set of signals by id, workspace-scoped.
+ *
+ * Backs the "Triggered by" panel on a MoveCard — given a move's
+ * `signal_ids: uuid[]` array, the UI fetches the referenced signals lazily
+ * when the panel is expanded. RLS still applies on top of the workspace
+ * check, so a rep only sees signals they're authorised for.
+ *
+ * Returns up to 20 signals; we truncate defensively because a pathological
+ * move could in principle reference many signal ids.
+ */
+export async function listSignalsByIds(
+  ctx: RouterCtx,
+  ids: readonly string[],
+): Promise<SignalRow[]> {
+  const capped = ids.filter((id) => typeof id === "string" && id.length > 0).slice(0, 20);
+  if (capped.length === 0) return [];
+
+  const { data, error } = await ctx.callerDb
+    .from("signals")
+    .select("*")
+    .eq("workspace_id", ctx.workspaceId)
+    .in("id", capped)
+    .order("occurred_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as SignalRow[];
+}
+
 export async function listSignals(
   ctx: RouterCtx,
   filters: SignalListFilters,

@@ -37,6 +37,7 @@ import {
 import {
   ingestSignal,
   listSignals,
+  listSignalsByIds,
   parseSignalListFilters,
   type SignalIngestPayload,
 } from "../_shared/qrm-signals.ts";
@@ -780,10 +781,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // PATCH /qrm/moves/:id — lifecycle transition (accept/snooze/dismiss/
       // complete/reopen). RLS lets reps patch only their own assigned moves.
+      // On `complete`, the service also auto-logs a touch (optionally with
+      // the rep's channel/summary payload) and suppresses the triggering
+      // signals for 7 days — Slice 5 closure loop.
       if (req.method === "PATCH" && segments.length === 3) {
         const body = await readJsonBody<MovePatchPayload>(req);
-        const move = await patchMove(ctx, segments[2], body);
-        return crmOk({ move }, { origin });
+        const result = await patchMove(ctx, segments[2], body);
+        return crmOk(
+          {
+            move: result.move,
+            touch_id: result.touchId,
+            signals_suppressed: result.signalsSuppressed,
+          },
+          { origin },
+        );
       }
 
       // POST /qrm/moves — create (recommender / service-role + elevated only).
@@ -801,8 +812,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
       requireCaller(ctx);
 
       // GET /qrm/signals — the Pulse feed. Any authenticated caller; RLS
-      // filters to rows the caller can see.
+      // filters to rows the caller can see. When the caller passes
+      // `?ids=uuid1,uuid2,...`, the endpoint returns exactly those signals
+      // (bounded to 20). This is what powers the "Triggered by" panel on
+      // a MoveCard — Slice 5 closure loop.
       if (req.method === "GET" && segments.length === 2) {
+        const idsParam = url.searchParams.get("ids");
+        if (idsParam) {
+          const ids = idsParam
+            .split(",")
+            .map((raw) => raw.trim())
+            .filter((raw) => raw.length > 0);
+          const signals = await listSignalsByIds(ctx, ids);
+          return crmOk({ signals }, { origin });
+        }
         const filters = parseSignalListFilters(url.searchParams);
         const signals = await listSignals(ctx, filters);
         return crmOk({ signals }, { origin });

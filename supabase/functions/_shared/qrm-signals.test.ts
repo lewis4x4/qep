@@ -3,6 +3,7 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   ingestSignal,
   listSignals,
+  listSignalsByIds,
   parseSignalListFilters,
   validateSignalPayload,
 } from "./qrm-signals.ts";
@@ -566,4 +567,68 @@ Deno.test("ingestSignal validates the payload before touching the DB", async () 
 
   // No DB calls should have fired.
   assertEquals(captures.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// listSignalsByIds (Slice 5 — "Triggered by" panel)
+// ---------------------------------------------------------------------------
+
+Deno.test("listSignalsByIds returns empty without touching DB when ids is empty", async () => {
+  const { client, captures } = makeStubClient({
+    signals: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const rows = await listSignalsByIds(ctx, []);
+  assertEquals(rows, []);
+  assertEquals(captures.length, 0);
+});
+
+Deno.test("listSignalsByIds scopes to workspace and uses IN on id", async () => {
+  const { client, captures } = makeStubClient({
+    signals: {
+      data: [{ id: "sig-a" }, { id: "sig-b" }],
+      error: null,
+    },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const rows = await listSignalsByIds(ctx, ["sig-a", "sig-b"]);
+  assertEquals(rows.length, 2);
+
+  const q = captures.find((c) => c.table === "signals");
+  if (!q) throw new Error("signals query not captured");
+  const ws = q.filters.find((f) => f.column === "workspace_id");
+  assertEquals(ws?.value, "ws-1");
+  const inFilter = q.filters.find((f) => f.op === "in" && f.column === "id");
+  assertEquals((inFilter?.value as string[]).sort(), ["sig-a", "sig-b"]);
+});
+
+Deno.test("listSignalsByIds caps the id list at 20", async () => {
+  const { client, captures } = makeStubClient({
+    signals: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  const ids = Array.from({ length: 50 }, (_, i) => `sig-${i}`);
+  await listSignalsByIds(ctx, ids);
+
+  const q = captures.find((c) => c.table === "signals");
+  const inFilter = q?.filters.find((f) => f.op === "in" && f.column === "id");
+  assertEquals((inFilter?.value as string[]).length, 20);
+});
+
+Deno.test("listSignalsByIds drops empty/non-string ids before capping", async () => {
+  const { client, captures } = makeStubClient({
+    signals: { data: [], error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+
+  // The cast keeps the test honest: router passes already-string ids, but
+  // a malformed caller shouldn't blow up the query.
+  await listSignalsByIds(ctx, ["", "sig-real", "", "sig-also-real"]);
+
+  const q = captures.find((c) => c.table === "signals");
+  const inFilter = q?.filters.find((f) => f.op === "in" && f.column === "id");
+  assertEquals((inFilter?.value as string[]).sort(), ["sig-also-real", "sig-real"]);
 });

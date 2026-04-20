@@ -192,6 +192,48 @@ export async function listMoves(
   return (data ?? []) as MoveRow[];
 }
 
+/** Touch channel enum — mirrors the public.operator_touch_channel DB enum. */
+export type TouchChannel =
+  | "call"
+  | "email"
+  | "meeting"
+  | "sms"
+  | "field_visit"
+  | "voice_note"
+  | "chat"
+  | "other";
+
+const TOUCH_CHANNELS: Set<TouchChannel> = new Set<TouchChannel>([
+  "call",
+  "email",
+  "meeting",
+  "sms",
+  "field_visit",
+  "voice_note",
+  "chat",
+  "other",
+]);
+
+/**
+ * Optional touch payload attached to a move-complete action.
+ *
+ * When a rep finishes a move ("Done"), they can log what they actually did
+ * (called, emailed, visited) and the backend auto-creates a `touches` row
+ * linked back to the move via `from_move_id`. The deal health score reads
+ * from touches, so this is what makes completed moves "count" for scoring.
+ *
+ * If the rep skips the composer and just taps Done, the router still creates
+ * a minimal touch (channel: "other", summary derived from the move title)
+ * so the graph always records that work happened — that way an operator
+ * can't silently complete 50 moves without any visible touches.
+ */
+export interface MoveCompleteTouch {
+  channel: TouchChannel;
+  summary?: string;
+  body?: string;
+  durationSeconds?: number;
+}
+
 export interface MovePatchPayload {
   /**
    * Lifecycle action. Explicit over a free-form `status` so callers can't set
@@ -202,13 +244,151 @@ export interface MovePatchPayload {
   snoozedUntil?: string;
   /** Optional human-readable reason, surfaced on dismiss/complete. */
   reason?: string;
+  /**
+   * Optional touch payload for `complete`. When provided, the router creates
+   * a `touches` row and suppresses the signals that triggered the move for
+   * a 7-day cool-off window. Ignored for non-complete actions.
+   */
+  touch?: MoveCompleteTouch;
+}
+
+/** Default cool-off for suppressed signals after a move completes. */
+const SIGNAL_SUPPRESS_DAYS = 7;
+
+function validateTouchPayload(touch: MoveCompleteTouch): void {
+  if (!TOUCH_CHANNELS.has(touch.channel)) {
+    throw new Error("VALIDATION_ERROR:touch_channel");
+  }
+  if (touch.summary != null && typeof touch.summary !== "string") {
+    throw new Error("VALIDATION_ERROR:touch_summary");
+  }
+  if (touch.body != null && typeof touch.body !== "string") {
+    throw new Error("VALIDATION_ERROR:touch_body");
+  }
+  if (
+    touch.durationSeconds != null &&
+    (!Number.isFinite(touch.durationSeconds) || touch.durationSeconds < 0)
+  ) {
+    throw new Error("VALIDATION_ERROR:touch_duration");
+  }
+}
+
+/**
+ * Insert a touch tied to a just-completed move and suppress the signals
+ * that triggered it.
+ *
+ * Runs on the admin client because:
+ *   - touch insert needs to stamp actor_user_id = the caller (RLS on touches
+ *     requires the actor to be the caller, which we already guarantee), but
+ *     cross-entity FK checks (contact/company/deal/equipment) are simpler
+ *     on the service-role client, and
+ *   - signal suppression must succeed even if the rep doesn't directly
+ *     "own" a signal row per RLS (e.g. a workspace-scoped SLA signal).
+ *
+ * Returns the touch id on success. Failures here do NOT roll back the
+ * move status — the move is considered completed regardless so the rep's
+ * action isn't lost; the caller logs the error and moves on. The touch
+ * can be re-logged manually if ingest misfires.
+ */
+async function recordMoveCompletionSideEffects(
+  ctx: RouterCtx,
+  move: MoveRow,
+  touch: MoveCompleteTouch | undefined,
+): Promise<{ touchId: string | null; signalsSuppressed: number }> {
+  // Build the touch row. If the rep didn't supply a payload, we still log
+  // a minimal "other" touch so the graph reflects that work happened.
+  const channel: TouchChannel = touch?.channel ?? "other";
+  const summary = touch?.summary ?? move.title;
+  const body = touch?.body ?? null;
+  const duration = touch?.durationSeconds ?? null;
+
+  const touchInsert: Record<string, unknown> = {
+    workspace_id: ctx.workspaceId,
+    channel,
+    direction: "outbound", // Moves are always rep-initiated → outbound.
+    summary,
+    body,
+    duration_seconds: duration,
+    actor_user_id: ctx.caller.userId,
+    from_move_id: move.id,
+    occurred_at: new Date().toISOString(),
+    metadata: { source: "move_complete", move_kind: move.kind },
+  };
+
+  // Wire the touch to whichever entity the move targeted. The touches table
+  // requires at least one of (contact, company, deal, equipment) to be set;
+  // activity-, rental-, workspace-typed moves don't map to any of those
+  // columns cleanly, so we skip touch creation entirely for those and only
+  // do signal suppression.
+  let entityAssigned = false;
+  switch (move.entity_type) {
+    case "contact":
+      touchInsert.contact_id = move.entity_id;
+      entityAssigned = true;
+      break;
+    case "company":
+      touchInsert.company_id = move.entity_id;
+      entityAssigned = true;
+      break;
+    case "deal":
+      touchInsert.deal_id = move.entity_id;
+      entityAssigned = true;
+      break;
+    case "equipment":
+      touchInsert.equipment_id = move.entity_id;
+      entityAssigned = true;
+      break;
+  }
+
+  let touchId: string | null = null;
+  if (entityAssigned) {
+    const { data: inserted, error: insertErr } = await ctx.admin
+      .from("touches")
+      .insert(touchInsert)
+      .select("id")
+      .single();
+    if (insertErr) {
+      // Surface the error but don't block the move status update: the caller
+      // catches this and logs so observability is preserved.
+      throw new Error(`TOUCH_INSERT_FAILED:${insertErr.message}`);
+    }
+    touchId = (inserted as { id: string } | null)?.id ?? null;
+  }
+
+  // Suppress the signals that triggered this move so they don't re-fire
+  // on the next recommender sweep. Scoped to workspace so we never reach
+  // across tenants even if a stale signal id got wedged into the move.
+  let suppressed = 0;
+  if (move.signal_ids && move.signal_ids.length > 0) {
+    const suppressedUntil = new Date(
+      Date.now() + SIGNAL_SUPPRESS_DAYS * 86_400_000,
+    ).toISOString();
+    const { error: suppressErr, count } = await ctx.admin
+      .from("signals")
+      .update({ suppressed_until: suppressedUntil }, { count: "exact" })
+      .eq("workspace_id", ctx.workspaceId)
+      .in("id", move.signal_ids);
+    if (suppressErr) {
+      throw new Error(`SIGNAL_SUPPRESS_FAILED:${suppressErr.message}`);
+    }
+    suppressed = count ?? 0;
+  }
+
+  return { touchId, signalsSuppressed: suppressed };
+}
+
+/** Shape returned by patchMove — may include touch/suppression summary. */
+export interface MovePatchResult {
+  move: MoveRow;
+  touchId: string | null;
+  signalsSuppressed: number;
 }
 
 export async function patchMove(
   ctx: RouterCtx,
   moveId: string,
   body: MovePatchPayload,
-): Promise<MoveRow> {
+): Promise<MovePatchResult> {
   const now = new Date().toISOString();
   const update: Record<string, unknown> = { updated_at: now };
 
@@ -237,6 +417,7 @@ export async function patchMove(
     case "complete":
       update.status = "completed";
       update.completed_at = now;
+      if (body.touch) validateTouchPayload(body.touch);
       break;
     case "reopen":
       // Reopen takes a snoozed/dismissed move back to suggested so reps can
@@ -250,16 +431,58 @@ export async function patchMove(
       throw new Error("VALIDATION_ERROR:unknown_action");
   }
 
-  const { data, error } = await ctx.callerDb
+  // Double-completion guard: when action=complete, gate the UPDATE on
+  // `completed_at is null`. A stale client retrying after a successful
+  // complete will get back 0 rows (no data, PGRST116 error), at which
+  // point we fetch the move verbatim and return it without re-firing the
+  // side effects. This keeps touch insertions exactly-once-per-completion
+  // without needing a transaction / stored procedure.
+  let mutation = ctx.callerDb
     .from("moves")
     .update(update)
     .eq("id", moveId)
-    .eq("workspace_id", ctx.workspaceId)
-    .select("*")
-    .single();
+    .eq("workspace_id", ctx.workspaceId);
+  if (body.action === "complete") {
+    mutation = mutation.is("completed_at", null);
+  }
+  const { data, error } = await mutation.select("*").single();
 
-  if (error) throw error;
-  return data as MoveRow;
+  if (error) {
+    // PGRST116 = "The result contains 0 rows", the specific code PostgREST
+    // returns when a .single() query matches nothing. We only hit that on
+    // the complete-path because of the is("completed_at", null) filter;
+    // treat it as "already completed" and fall through to a re-fetch.
+    const alreadyCompleted =
+      body.action === "complete" && (error as { code?: string }).code === "PGRST116";
+    if (!alreadyCompleted) throw error;
+
+    const { data: existing, error: fetchError } = await ctx.callerDb
+      .from("moves")
+      .select("*")
+      .eq("id", moveId)
+      .eq("workspace_id", ctx.workspaceId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!existing) throw new Error("move_not_found");
+    return { move: existing as MoveRow, touchId: null, signalsSuppressed: 0 };
+  }
+
+  const move = data as MoveRow;
+
+  if (body.action === "complete") {
+    const sideEffects = await recordMoveCompletionSideEffects(
+      ctx,
+      move,
+      body.touch,
+    );
+    return {
+      move,
+      touchId: sideEffects.touchId,
+      signalsSuppressed: sideEffects.signalsSuppressed,
+    };
+  }
+
+  return { move, touchId: null, signalsSuppressed: 0 };
 }
 
 export interface MoveCreatePayload {

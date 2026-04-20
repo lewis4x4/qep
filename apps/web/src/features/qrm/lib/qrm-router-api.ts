@@ -423,18 +423,70 @@ export async function listQrmMoves(params: ListMovesParams = {}): Promise<QrmMov
   return payload.moves;
 }
 
+/**
+ * Touch channel enum for the move-complete touch composer (Slice 5).
+ * Mirrors the server's `operator_touch_channel` DB enum exactly — keep
+ * these aligned, or the backend will reject "unknown channel".
+ */
+export type QrmTouchChannel =
+  | "call"
+  | "email"
+  | "meeting"
+  | "sms"
+  | "field_visit"
+  | "voice_note"
+  | "chat"
+  | "other";
+
+export interface PatchMoveTouchInput {
+  channel: QrmTouchChannel;
+  summary?: string;
+  body?: string;
+  durationSeconds?: number;
+}
+
 export interface PatchMoveInput {
   action: import("./moves-types").QrmMoveAction;
   snoozedUntil?: string;
   reason?: string;
+  /**
+   * Optional touch payload. Only relevant for action === "complete". The
+   * server also creates a minimal auto-touch when this is omitted, so it's
+   * safe to leave out when the rep just taps Done without filling the
+   * composer.
+   */
+  touch?: PatchMoveTouchInput;
 }
 
-export async function patchQrmMove(moveId: string, input: PatchMoveInput): Promise<QrmMove> {
-  const payload = await requestRouter<{ move: QrmMove }>(`/qrm/moves/${moveId}`, {
+/**
+ * PATCH response shape. `touch_id` is non-null when the server logged a
+ * touch as part of a complete action; `signals_suppressed` is the number
+ * of signals cooled off (usually equal to move.signal_ids.length, unless
+ * some were already suppressed).
+ */
+export interface QrmMovePatchResult {
+  move: QrmMove;
+  touchId: string | null;
+  signalsSuppressed: number;
+}
+
+export async function patchQrmMove(
+  moveId: string,
+  input: PatchMoveInput,
+): Promise<QrmMovePatchResult> {
+  const payload = await requestRouter<{
+    move: QrmMove;
+    touch_id: string | null;
+    signals_suppressed: number;
+  }>(`/qrm/moves/${moveId}`, {
     method: "PATCH",
     body: input,
   });
-  return payload.move;
+  return {
+    move: payload.move,
+    touchId: payload.touch_id ?? null,
+    signalsSuppressed: payload.signals_suppressed ?? 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +536,21 @@ export async function listQrmSignals(
   const qs = q.toString();
   const payload = await requestRouter<{ signals: QrmSignal[] }>(
     `/qrm/signals${qs ? `?${qs}` : ""}`,
+  );
+  return payload.signals;
+}
+
+/**
+ * Fetch a fixed set of signals by id — backs the "Triggered by" panel on
+ * a MoveCard. Returns in the same order as the server (occurred_at desc).
+ * Capped to 20 ids server-side; extras are silently dropped.
+ */
+export async function listQrmSignalsByIds(ids: readonly string[]): Promise<QrmSignal[]> {
+  const filtered = ids.filter((id) => typeof id === "string" && id.length > 0);
+  if (filtered.length === 0) return [];
+  const q = new URLSearchParams({ ids: filtered.join(",") });
+  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+    `/qrm/signals?${q.toString()}`,
   );
   return payload.signals;
 }

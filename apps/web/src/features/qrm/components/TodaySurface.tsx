@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   listQrmMoves,
   patchQrmMove,
+  type PatchMoveTouchInput,
   type QrmMove,
   type QrmMoveAction,
 } from "../lib/qrm-router-api";
@@ -71,11 +72,13 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
       moveId,
       action,
       snoozedUntil,
+      touch,
     }: {
       moveId: string;
       action: QrmMoveAction;
       snoozedUntil?: string;
-    }) => patchQrmMove(moveId, { action, snoozedUntil }),
+      touch?: PatchMoveTouchInput;
+    }) => patchQrmMove(moveId, { action, snoozedUntil, touch }),
     onMutate: async ({ moveId }) => {
       setPendingIds((prev) => {
         const next = new Set(prev);
@@ -89,7 +92,14 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
         next.delete(vars.moveId);
         return next;
       });
+      // When a move completes, the server may have suppressed Pulse signals.
+      // Invalidate signal queries so PulseSurface reflects the cool-off
+      // without a manual refresh.
       await queryClient.invalidateQueries({ queryKey });
+      if (vars.action === "complete") {
+        await queryClient.invalidateQueries({ queryKey: ["qrm", "signals"] });
+        await queryClient.invalidateQueries({ queryKey: ["qrm", "move-signals"] });
+      }
     },
   });
 
@@ -113,7 +123,8 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
   );
 
   const handleComplete = useCallback(
-    (moveId: string) => mutation.mutate({ moveId, action: "complete" }),
+    (moveId: string, touch?: PatchMoveTouchInput) =>
+      mutation.mutate({ moveId, action: "complete", touch }),
     [mutation],
   );
 
