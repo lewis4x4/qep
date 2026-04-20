@@ -15,6 +15,27 @@
  *      `app.settings.supabase_url` / `app.settings.service_role_key` GUCs
  *      that the legacy migrations depend on no longer exist.
  *
+ * ────────────────────────────────────────────────────────────────────────
+ * CRITICAL OPS NOTE — Functions Gateway verify_jwt flag
+ * ────────────────────────────────────────────────────────────────────────
+ * Every edge function that is cron-invoked via path #2 MUST be deployed
+ * with `verify_jwt = false` on the function gateway. The gateway's JWT
+ * verification only accepts anon-key / user-JWT / service-role-key in
+ * the `Authorization: Bearer` header — it does NOT inspect the
+ * `x-internal-service-secret` header. A cron request using path #2 with
+ * verify_jwt=true hits the gateway's `{"code":"UNAUTHORIZED_NO_AUTH_HEADER"}`
+ * reject before reaching our code. Deploy with
+ * `supabase functions deploy <name> --no-verify-jwt`, or pass
+ * `verify_jwt: false` to the deploy_edge_function MCP tool. This file's
+ * auth check is the authoritative gate at that point.
+ *
+ * Audited 2026-04-20: 13 cron-targeted fns had verify_jwt=true and every
+ * single cron tick was 401ing. Flipping them to false restored the
+ * entire scheduled pipeline. If you add a new cron-invoked fn and it
+ * silently starts 401ing in edge-function logs, this is the first thing
+ * to check.
+ * ────────────────────────────────────────────────────────────────────────
+ *
  * NOTE: this file is named `cron-auth.ts` (not `service-auth.ts`) because
  * `_shared/service-auth.ts` already exists and serves a different purpose
  * — `requireServiceUser()` for JWT-based service-engine endpoints. The
