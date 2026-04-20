@@ -21,6 +21,13 @@ import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
+import { MarginFloorGate } from "../components/MarginFloorGate";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  getApplicableThreshold,
+  isUnderThreshold,
+  logMarginException,
+} from "@/features/admin/lib/pricing-discipline-api";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
@@ -136,6 +143,7 @@ export function QuoteBuilderV2Page() {
   } = computeQuoteWorkspace(draft);
 
   const { generateAndDownload: downloadPDF, generating: pdfGenerating, error: pdfError } = useQuotePDF();
+  const { profile } = useAuth();
 
   const userRoleQuery = useQuery({
     queryKey: ["quote-builder", "role"],
@@ -192,6 +200,54 @@ export function QuoteBuilderV2Page() {
         }),
       ),
   });
+
+  // Slice 15: margin-floor gate state. The gate blocks the save action
+  // when the current margin is below the applicable threshold until the
+  // rep provides a one-sentence reason. Threshold is looked up against
+  // null brandId for MVP — the workspace default floor. Per-brand
+  // lookups hang on the draft's primary equipment brand_id which we
+  // don't thread yet; enable later when Slice 09's full migration ships.
+  const [marginGateOpen, setMarginGateOpen] = useState(false);
+
+  async function handleSaveClick() {
+    // Resolve threshold just-in-time so a new workspace-default created
+    // in a sibling tab applies to this session without a refresh.
+    const { threshold } = await getApplicableThreshold(null);
+    const thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
+    if (isUnderThreshold(marginPct, thresholdPct)) {
+      setMarginGateOpen(true);
+      return;
+    }
+    saveMutation.mutate();
+  }
+
+  async function handleMarginReasonConfirm(payload: {
+    reason: string;
+    thresholdPct: number;
+    estimatedGapCents: number;
+  }) {
+    setMarginGateOpen(false);
+    // Fire the save first so we have a quote_package_id to attach to the
+    // exception. Wait for it, then log the exception; if the save fails,
+    // no orphan exception row.
+    try {
+      const saveResult = await saveMutation.mutateAsync();
+      const savedId = saveResult.quote?.id ?? saveResult.id;
+      if (!savedId || !profile) return;
+      await logMarginException({
+        workspaceId:        profile.active_workspace_id ?? "default",
+        quotePackageId:     savedId,
+        brandId:            null,
+        quotedMarginPct:    marginPct,
+        thresholdMarginPct: payload.thresholdPct,
+        estimatedGapCents:  payload.estimatedGapCents,
+        reason:             payload.reason,
+        repId:              profile.id,
+      });
+    } catch {
+      // saveMutation.error path handles user-visible feedback.
+    }
+  }
 
   const savedQuotePackageId = saveMutation.data?.quote?.id ?? saveMutation.data?.id ?? null;
 
@@ -871,7 +927,7 @@ export function QuoteBuilderV2Page() {
                 {pdfGenerating ? "Generating..." : "Download PDF"}
               </Button>
               <Button
-                onClick={() => saveMutation.mutate()}
+                onClick={() => { void handleSaveClick(); }}
                 disabled={saveMutation.isPending || !packetReadiness.canSave}
               >
                 <Save className="mr-1 h-4 w-4" />
@@ -879,6 +935,17 @@ export function QuoteBuilderV2Page() {
               </Button>
             </div>
           </div>
+
+          {/* Slice 15: margin-floor gate — renders banner when under floor,
+              and hosts the reason modal opened by handleSaveClick. */}
+          <MarginFloorGate
+            brandId={null}
+            marginPct={marginPct}
+            netTotalCents={Math.round(netTotal * 100)}
+            reasonModalOpen={marginGateOpen}
+            onReasonModalOpenChange={setMarginGateOpen}
+            onReasonConfirm={(payload) => { void handleMarginReasonConfirm(payload); }}
+          />
 
           {pdfError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">

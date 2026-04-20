@@ -5,6 +5,7 @@ import { InternalFreightRulesForm } from "../components/DealEconomics/InternalFr
 import { BrandFreightKeysForm } from "../components/DealEconomics/BrandFreightKeysForm";
 import { BrandEngineStatusForm } from "../components/DealEconomics/BrandEngineStatusForm";
 import { WinLossRollup } from "../components/DealEconomics/WinLossRollup";
+import { MarginDisciplineForm } from "../components/DealEconomics/MarginDisciplineForm";
 
 export function DealEconomicsPage() {
   return (
@@ -28,6 +29,7 @@ function DealEconomicsPageInner() {
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="brand-engine-status">Deal Engine Status</TabsTrigger>
           <TabsTrigger value="win-loss">Win/Loss</TabsTrigger>
+          <TabsTrigger value="margin-discipline">Margin Discipline</TabsTrigger>
           <TabsTrigger value="service-credits">Service Credits</TabsTrigger>
           <TabsTrigger value="freight-rules">Internal Freight Rules</TabsTrigger>
           <TabsTrigger value="brand-freight-keys">Brand Freight Keys</TabsTrigger>
@@ -39,6 +41,10 @@ function DealEconomicsPageInner() {
 
         <TabsContent value="win-loss" className="mt-4">
           <WinLossRollup />
+        </TabsContent>
+
+        <TabsContent value="margin-discipline" className="mt-4">
+          <MarginDisciplineForm />
         </TabsContent>
 
         <TabsContent value="service-credits" className="mt-4">
