@@ -28,11 +28,14 @@ declare
   v_cmd_changelog text;
   v_cmd_brief text;
 begin
+  -- Skip gracefully on shadow / local where these extensions aren't installed.
   if not exists (select 1 from pg_namespace where nspname = 'cron') then
-    raise exception 'pg_cron is not installed; cannot schedule hub cron jobs';
+    raise notice 'Skipping hub cron jobs: pg_cron not installed in this environment';
+    return;
   end if;
   if not exists (select 1 from pg_namespace where nspname = 'net') then
-    raise exception 'pg_net is not installed; cannot schedule hub cron jobs';
+    raise notice 'Skipping hub cron jobs: pg_net not installed in this environment';
+    return;
   end if;
 
   -- Pull the internal secret out of the existing flow-runner cron command.

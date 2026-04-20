@@ -18,11 +18,14 @@ declare
   v_url_base constant text := 'https://iciddijgonywtxoelous.supabase.co';
   v_command text;
 begin
+  -- Skip gracefully on shadow / local where these extensions aren't installed.
   if not exists (select 1 from pg_namespace where nspname = 'cron') then
-    raise exception 'pg_cron is not installed; cannot schedule hub-knowledge-sync';
+    raise notice 'Skipping hub-knowledge-sync-every-4h: pg_cron not installed in this environment';
+    return;
   end if;
   if not exists (select 1 from pg_namespace where nspname = 'net') then
-    raise exception 'pg_net is not installed; cannot schedule hub-knowledge-sync';
+    raise notice 'Skipping hub-knowledge-sync-every-4h: pg_net not installed in this environment';
+    return;
   end if;
 
   v_secret := split_part(
