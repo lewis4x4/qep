@@ -29,14 +29,22 @@ import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 export type AdminFlareSource =
   | "extract-price-sheet"
-  | "publish-price-sheet";
+  | "publish-price-sheet"
+  | "qb-price-sheet-watchdog";
 
 export interface AdminFlareInput {
   source: AdminFlareSource;
   priceSheetId: string | null;
   brandId?: string | null;
   /** Which step of the pipeline broke. */
-  phase: "extract" | "publish" | "download" | "parse" | "apply";
+  phase:
+    | "extract"
+    | "publish"
+    | "download"
+    | "parse"
+    | "apply"
+    | "poll"
+    | "extract-trigger";
   /** Short human-readable summary — goes into user_description. */
   message: string;
   /** Extra structured context for the admin triage view. */
