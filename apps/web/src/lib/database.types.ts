@@ -13885,6 +13885,125 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_margin_exceptions: {
+        Row: {
+          brand_id: string | null
+          created_at: string
+          delta_pts: number | null
+          estimated_gap_cents: number | null
+          id: string
+          quote_package_id: string
+          quoted_margin_pct: number
+          reason: string
+          rep_id: string | null
+          threshold_margin_pct: number
+          workspace_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string
+          delta_pts?: number | null
+          estimated_gap_cents?: number | null
+          id?: string
+          quote_package_id: string
+          quoted_margin_pct: number
+          reason: string
+          rep_id?: string | null
+          threshold_margin_pct: number
+          workspace_id?: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string
+          delta_pts?: number | null
+          estimated_gap_cents?: number | null
+          id?: string
+          quote_package_id?: string
+          quoted_margin_pct?: number
+          reason?: string
+          rep_id?: string | null
+          threshold_margin_pct?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_margin_exceptions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_margin_exceptions_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "qb_margin_exceptions_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_margin_exceptions_rep_id_fkey"
+            columns: ["rep_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_margin_thresholds: {
+        Row: {
+          brand_id: string | null
+          created_at: string
+          id: string
+          min_margin_pct: number
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string
+          id?: string
+          min_margin_pct: number
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string
+          id?: string
+          min_margin_pct?: number
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_margin_thresholds_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_margin_thresholds_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_notifications: {
         Row: {
           body: string
