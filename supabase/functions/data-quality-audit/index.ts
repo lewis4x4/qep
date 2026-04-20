@@ -21,6 +21,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
 interface AuditResult {
@@ -187,13 +188,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
+    // Cron path: accept x-internal-service-secret header before the
+    // Authorization-required branch so pg_cron ticks get through without
+    // needing a Bearer JWT. See _shared/cron-auth.ts for the contract.
+    const cronCaller = isServiceRoleCaller(req);
     const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    if (!cronCaller && !authHeader) {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    const isServiceRole = cronCaller || authHeader === `Bearer ${serviceRoleKey}`;
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -204,7 +209,7 @@ Deno.serve(async (req) => {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user) return safeJsonError("Unauthorized", 401, origin);

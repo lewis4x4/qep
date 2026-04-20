@@ -11,6 +11,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -21,13 +22,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Cron path: accept x-internal-service-secret before requiring Bearer.
+    const cronCaller = isServiceRoleCaller(req);
     const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    if (!cronCaller && !authHeader) {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    const isServiceRole = cronCaller || authHeader === `Bearer ${serviceRoleKey}`;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -35,10 +38,12 @@ Deno.serve(async (req) => {
     );
 
     if (!isServiceRole) {
+      // !authHeader is impossible here — cronCaller==true forces
+      // isServiceRole==true above, which would have skipped this branch.
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
 
       const { data: { user }, error } = await supabase.auth.getUser();

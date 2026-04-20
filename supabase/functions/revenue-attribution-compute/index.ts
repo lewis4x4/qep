@@ -22,6 +22,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface Touch {
@@ -57,12 +58,19 @@ Deno.serve(async (req) => {
 
     // Auth path 1: authed user via Bearer token (validated below)
     // Auth path 2: cron via x-service-role-key — MUST match the real key
+    //              (legacy, retained for back-compat with existing callers)
+    // Auth path 3: cron via x-internal-service-secret (canonical modern
+    //              pattern — see _shared/cron-auth.ts). Migration 309
+    //              rewrites this fn's cron job to use path 3, but we
+    //              keep path 2 to avoid breaking any direct invokes that
+    //              may still use it.
     const serviceKeyValid = providedServiceKey !== undefined
       && providedServiceKey !== ""
       && providedServiceKey.length === expectedServiceKey.length
       && timingSafeEqual(providedServiceKey, expectedServiceKey);
+    const cronCaller = isServiceRoleCaller(req);
 
-    if (!authHeader && !serviceKeyValid) {
+    if (!authHeader && !serviceKeyValid && !cronCaller) {
       return safeJsonError("Unauthorized", 401, origin);
     }
 
