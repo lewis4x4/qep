@@ -187,6 +187,9 @@ const AiRequestLogPage = lazy(() =>
 const AuditLogPage = lazy(() =>
   import("./features/admin/pages/AuditLogPage").then((m) => ({ default: m.AuditLogPage }))
 );
+const DealVelocityPage = lazy(() =>
+  import("./features/admin/pages/DealVelocityPage").then((m) => ({ default: m.DealVelocityPage }))
+);
 const PriceSheetsPage = lazy(() =>
   import("./features/admin/pages/PriceSheetsPage").then((m) => ({ default: m.PriceSheetsPage }))
 );
@@ -2346,6 +2349,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <AuditLogPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/deal-velocity"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <DealVelocityPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
