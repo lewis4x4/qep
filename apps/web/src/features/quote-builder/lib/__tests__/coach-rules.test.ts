@@ -331,6 +331,102 @@ describe("registry behavior", () => {
     });
   });
 
+  describe("reason_intelligence rule", () => {
+    const richStats = {
+      stats: [
+        { bucket: "customer_relationship" as const, samples: 11, wins: 8, losses: 3, winRatePct: 72.7, avgGapCents: 500 },
+        { bucket: "volume_commitment"     as const, samples: 9,  wins: 5, losses: 4, winRatePct: 55.6, avgGapCents: 800 },
+        { bucket: "competitive_response"  as const, samples: 11, wins: 4, losses: 7, winRatePct: 36.4, avgGapCents: 1200 },
+      ],
+      totalSamples: 31,
+    };
+
+    test("silent when fewer than 2 buckets of data", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 15 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: { stats: [richStats.stats[0]], totalSamples: 11 },
+      });
+      expect(evaluateCoachRules(c).find((r) => r.ruleId === "reason_intelligence")).toBeUndefined();
+    });
+
+    test("silent when current margin is at or above baseline", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 21 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: richStats,
+      });
+      expect(evaluateCoachRules(c).find((r) => r.ruleId === "reason_intelligence")).toBeUndefined();
+    });
+
+    test("silent when draft not yet priced", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 0 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: richStats,
+      });
+      expect(evaluateCoachRules(c).find((r) => r.ruleId === "reason_intelligence")).toBeUndefined();
+    });
+
+    test("silent when no baseline available", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 15 },
+        marginBaseline: { medianPct: null, sampleSize: 0, usingTeamFallback: false },
+        reasonIntelligence: richStats,
+      });
+      expect(evaluateCoachRules(c).find((r) => r.ruleId === "reason_intelligence")).toBeUndefined();
+    });
+
+    test("fires as info when below baseline with rich stats", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 15 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: richStats,
+      });
+      const r = evaluateCoachRules(c).find((rr) => rr.ruleId === "reason_intelligence");
+      expect(r).toBeDefined();
+      expect(r?.severity).toBe("info");
+      expect(r?.title).toMatch(/Customer relationship/);
+      expect(r?.body).toMatch(/Customer relationship.*73%/);  // 72.7 rounds up
+      expect(r?.body).toMatch(/Competitive response.*36%/);
+    });
+
+    test("shows only the top 3 buckets by win rate", () => {
+      const manyBuckets = {
+        stats: [
+          { bucket: "customer_relationship"   as const, samples: 5, wins: 5, losses: 0, winRatePct: 100, avgGapCents: 0 },
+          { bucket: "volume_commitment"       as const, samples: 5, wins: 4, losses: 1, winRatePct: 80,  avgGapCents: 0 },
+          { bucket: "service_trade_in_offset" as const, samples: 5, wins: 3, losses: 2, winRatePct: 60,  avgGapCents: 0 },
+          { bucket: "competitive_response"    as const, samples: 5, wins: 2, losses: 3, winRatePct: 40,  avgGapCents: 0 },
+        ],
+        totalSamples: 20,
+      };
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 15 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: manyBuckets,
+      });
+      const r = evaluateCoachRules(c).find((rr) => rr.ruleId === "reason_intelligence");
+      expect(r?.body).toMatch(/Customer relationship/);
+      expect(r?.body).toMatch(/Volume commitment/);
+      expect(r?.body).toMatch(/Service \/ trade-in/);
+      expect(r?.body).not.toMatch(/Competitive response/);
+    });
+
+    test("metrics snapshot captured for training", () => {
+      const c = ctx({
+        computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 15 },
+        marginBaseline: { medianPct: 20, sampleSize: 30, usingTeamFallback: false },
+        reasonIntelligence: richStats,
+      });
+      const r = evaluateCoachRules(c).find((rr) => rr.ruleId === "reason_intelligence");
+      expect(r?.metrics?.total_samples).toBe(31);
+      expect(r?.metrics?.top_bucket).toBe("customer_relationship");
+      expect(r?.metrics?.top_bucket_win_rate_pct).toBe(72.7);
+      expect(r?.metrics?.buckets_shown).toBe(3);
+    });
+  });
+
   test("rule result contract: each has required fields", () => {
     const c = ctx({
       computed: { equipmentTotal: 0, attachmentTotal: 0, subtotal: 0, netTotal: 0, marginAmount: 0, marginPct: 12 },
