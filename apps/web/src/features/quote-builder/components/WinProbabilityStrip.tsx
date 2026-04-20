@@ -26,7 +26,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight,
-  CheckCircle2, AlertTriangle,
+  CheckCircle2, AlertTriangle, History,
 } from "lucide-react";
 import {
   Tooltip,
@@ -43,6 +43,12 @@ import {
   type WinProbabilityResult,
 } from "../lib/win-probability-scorer";
 import type { FactorVerdict } from "../lib/factor-verdict";
+import {
+  computeShadowScore,
+  describeShadowAgreement,
+  type ShadowHistoricalSnapshot,
+  type ShadowScoreResult,
+} from "../lib/shadow-score";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 export interface WinProbabilityStripProps {
@@ -58,6 +64,16 @@ export interface WinProbabilityStripProps {
    * annotate something we can't back up.
    */
   verdicts?: Map<string, FactorVerdict> | null;
+  /**
+   * Slice 20j — closed-deal history for the K-nearest-neighbor
+   * shadow score. When non-null and non-empty, the strip renders a
+   * "Shadow {N}%" chip that acts as a second witness to the rule-based
+   * live score. The endpoint feeding this is manager/owner-only, so
+   * reps simply won't see the chip — by design, not an error state.
+   * `null` means "not loaded / not permitted", empty array means
+   * "loaded but no closed deals yet"; both hide the chip cleanly.
+   */
+  closedHistory?: ShadowHistoricalSnapshot[] | null;
 }
 
 const BAND_STYLE: Record<
@@ -75,6 +91,7 @@ export function WinProbabilityStrip({
   context,
   compact = false,
   verdicts = null,
+  closedHistory = null,
 }: WinProbabilityStripProps) {
   const result = useMemo(
     () => computeWinProbability(draft, context),
@@ -87,6 +104,14 @@ export function WinProbabilityStrip({
     () => (result.score < 70 ? computeWinProbabilityLifts(draft, context) : []),
     [draft, context, result.score],
   );
+  // Slice 20j: K-NN shadow score. Computed only when we have history
+  // available (manager role, endpoint responded with data). The
+  // `result.factors` list is the authoritative live factor profile —
+  // using it (not `topFactors`) keeps the distance metric honest.
+  const shadow = useMemo(() => {
+    if (!closedHistory || closedHistory.length === 0) return null;
+    return computeShadowScore(result.factors, closedHistory);
+  }, [result.factors, closedHistory]);
   const style = BAND_STYLE[result.band];
   // Top 3 factors by absolute weight; scorer already sorted them.
   const topFactors = result.factors.slice(0, 3);
@@ -113,7 +138,12 @@ export function WinProbabilityStrip({
               <div className={cn("text-xs font-semibold uppercase tracking-wide", style.text)}>
                 {style.label}
               </div>
-              <div className="text-[10px] text-muted-foreground">Win probability</div>
+              <div className="flex items-center gap-2">
+                {shadow && !shadow.lowConfidence && (
+                  <ShadowChip liveScore={result.score} shadow={shadow} />
+                )}
+                <div className="text-[10px] text-muted-foreground">Win probability</div>
+              </div>
             </div>
             <p className="mt-0.5 text-sm text-foreground truncate" title={result.headline}>
               {result.headline}
@@ -282,6 +312,57 @@ function FactorChip({
 
 function factorDirClass(weight: number): string {
   return weight > 0 ? "text-emerald-400" : weight < 0 ? "text-rose-400" : "text-muted-foreground";
+}
+
+/**
+ * Slice 20j — Shadow chip. Renders a compact "Shadow {N}%" pill next
+ * to the "Win probability" label so managers can see both numbers at
+ * a glance. We intentionally keep this small — the live score is the
+ * hero; the shadow is corroboration.
+ *
+ * Agreement coloring (live vs. shadow within ±10):
+ *   • Agreement → neutral border (no alarm, just confirmation).
+ *   • Disagreement ≥11 in either direction → amber border, "worth a
+ *     second look" copy. We don't color it red: a disagreement isn't
+ *     bad news, it's a signal that the deal doesn't fit the mental
+ *     model the scorer encodes. That's a prompt to think, not to panic.
+ */
+function ShadowChip({
+  liveScore,
+  shadow,
+}: {
+  liveScore: number;
+  shadow: ShadowScoreResult;
+}) {
+  const delta = Math.round(shadow.shadowScore - liveScore);
+  const disagrees = Math.abs(delta) > 10;
+  const tooltip = describeShadowAgreement(liveScore, shadow);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          aria-label={`Shadow score ${shadow.shadowScore} percent, based on ${shadow.kUsed} similar closed deals. ${tooltip}`}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-help focus:outline-none focus:ring-2 focus:ring-ring transition-colors",
+            disagrees
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+              : "border-border/60 bg-background/60 text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <History className="h-3 w-3" aria-hidden />
+          <span className="tabular-nums">Shadow {shadow.shadowScore}%</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs text-xs">
+        <p>{tooltip}</p>
+        <p className="mt-1 border-t border-border/40 pt-1 text-[11px] text-muted-foreground">
+          Based on the {shadow.kUsed} closed deal{shadow.kUsed === 1 ? "" : "s"} whose factor profile looks most like this one.
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function LiftChip({ lift }: { lift: WinProbabilityLift }) {

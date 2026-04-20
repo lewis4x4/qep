@@ -46,6 +46,7 @@ import {
   buildQuoteSavePayload,
   calculateFinancing,
   getAiEquipmentRecommendation,
+  getClosedDealsAudit,
   getFactorVerdicts,
   getPortalRevision,
   publishPortalRevision,
@@ -268,6 +269,35 @@ export function QuoteBuilderV2Page() {
     staleTime: 5 * 60_000,
   });
   const factorVerdicts = factorVerdictsQuery.data ?? null;
+
+  // Slice 20j: closed-deals history feeds the K-nearest-neighbor
+  // shadow score. The endpoint is manager/owner-only; on reps it
+  // returns `{ok:false, reason:"forbidden"}` and we silently render
+  // the strip without a shadow chip. Same 5-minute stale time as the
+  // verdicts query for the same reason — history updates on
+  // closed-deal timescale, not keystroke timescale.
+  //
+  // Role-gated so we don't round-trip a guaranteed-403 request every
+  // 5 minutes on rep sessions. `userRoleQuery.data` can momentarily
+  // be undefined; we wait for it to resolve before firing.
+  const canLoadShadowHistory =
+    !!profile?.id
+    && (userRoleQuery.data === "manager" || userRoleQuery.data === "owner");
+  const closedDealsAuditQuery = useQuery({
+    queryKey: ["quote-builder", "closed-deals-audit"],
+    queryFn: getClosedDealsAudit,
+    enabled: canLoadShadowHistory,
+    staleTime: 5 * 60_000,
+  });
+  const shadowHistory = useMemo(() => {
+    const result = closedDealsAuditQuery.data;
+    if (!result || !result.ok) return null;
+    return result.audits.map((a) => ({
+      packageId: a.packageId,
+      factors: a.factors,
+      outcome: a.outcome,
+    }));
+  }, [closedDealsAuditQuery.data]);
   const winProbContext = useMemo(
     () => ({ marginPct, marginBaselineMedianPct }),
     [marginPct, marginBaselineMedianPct],
@@ -858,7 +888,7 @@ export function QuoteBuilderV2Page() {
 
           {/* Slice 20c: always-on win-probability strip. Rule-based today;
               becomes the rule-baseline for Move 2's counterfactual engine. */}
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
 
           <CustomerSection
             draft={draft}
@@ -984,7 +1014,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
 
           <EquipmentSelector
             onSelect={(entry) => {
@@ -1129,7 +1159,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
 
           <MarginCheckBanner
             marginPct={marginPct}
