@@ -9,7 +9,7 @@ import {
   Plus, Search, FileText, Mic, MessageSquare,
   AlertTriangle, RotateCcw, Sparkles, Gauge,
   ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertOctagon,
-  Target, Check, X, Clock,
+  Target, Check, X, Clock, Wand2, Copy, CheckCircle2,
 } from "lucide-react";
 import {
   listQuotePackages,
@@ -43,6 +43,12 @@ import {
   describeShadowTrustHeadline,
   type ShadowAgreementSummary,
 } from "../lib/retrospective-shadow";
+import {
+  computeScorerProposal,
+  renderScorerProposalMarkdown,
+  type ScorerProposal,
+  type ScorerFactorChange,
+} from "../lib/scorer-proposal";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -238,6 +244,42 @@ export function QuoteListPage() {
     return computeShadowAgreementSummary(retros);
   }, [closedAuditQuery.data]);
 
+  /**
+   * Slice 20m — scorer-evolution proposal. Top-level factor-attribution
+   * query feeds the `ScorerProposalCard` below. We intentionally declare
+   * this at page level (not inside FactorAttributionPanel) even though
+   * the query key matches, because TanStack Query dedupes identical keys
+   * into a single fetch and shared cache — so when a manager expands the
+   * factor breakdown *and* we render the proposal card, only one request
+   * goes out. Same gating as the other instrumentation queries: enabled
+   * once calibration has proven the role has access, to avoid spraying
+   * 403s at reps.
+   */
+  const factorsQueryTop = useQuery({
+    queryKey: ["quote-builder", "factor-attribution"],
+    queryFn: getFactorAttributionDeals,
+    staleTime: 5 * 60 * 1000,
+    enabled: closedAuditEnabled,
+  });
+
+  /**
+   * Proposal renders iff:
+   *   • factors query loaded and ok (managers+ only via role gate)
+   *   • report has ≥ 1 factor — otherwise the headline is the only
+   *     content and a full card is dead weight
+   * We feed `shadowCalibrationSummary` as the second arg so the
+   * corroboration line reflects the Move-2 shadow's track record; a
+   * null summary (rep / thin data / no closed deals) gracefully yields
+   * null corroboration.
+   */
+  const scorerProposal = useMemo<ScorerProposal | null>(() => {
+    const r = factorsQueryTop.data;
+    if (!r || !r.ok) return null;
+    const report = computeFactorAttribution(r.deals);
+    if (report.factors.length === 0) return null;
+    return computeScorerProposal(report, shadowCalibrationSummary);
+  }, [factorsQueryTop.data, shadowCalibrationSummary]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -298,6 +340,19 @@ export function QuoteListPage() {
       )}
       {closedAuditDisplay?.kind === "error" && (
         <InstrumentationErrorRow label="Closed-deals audit" message={closedAuditDisplay.message} />
+      )}
+
+      {/* Slice 20m: scorer-evolution proposal. Sits at the bottom of the
+          instrumentation stack because it synthesizes every card above:
+          calibration tells us the scorer's aggregate accuracy, the
+          factor panel tells us which rules earn their weight, the
+          worst-misses card surfaces the individual failures, and the
+          shadow calibration tells us whether the K-NN alternative is
+          worth listening to. The proposal is the human-actionable
+          handoff — "here's how to evolve the scorer based on all of
+          the above." Hidden for reps + thin data. */}
+      {scorerProposal && (
+        <ScorerProposalCard proposal={scorerProposal} />
       )}
 
       {/* Search + Filters */}
@@ -1082,6 +1137,216 @@ function ClosedDealAuditRow({ audit }: { audit: ClosedDealAudit }) {
           )}
         </div>
       )}
+    </li>
+  );
+}
+
+/**
+ * Slice 20m — scorer-evolution proposal card.
+ *
+ * Translates the raw attribution + calibration numbers into a
+ * human-actionable "here's how to change the scorer" recommendation.
+ * Collapsed by default: the headline alone is enough daily context;
+ * the expanded state shows per-factor actions and an optional shadow
+ * corroboration note, plus a one-click copy to lift the whole thing
+ * into a ticket for the scorer-evolution PR.
+ *
+ * Design rules:
+ *   • Violet accent — distinct from calibration (sky), misses (rose),
+ *     and the general app palette, so managers recognize this card's
+ *     role as "recommendation" rather than "report".
+ *   • Action badges borrow the scorer-verdict color grammar:
+ *     flip / strengthen = emerald-adjacent, drop / weaken = rose-adjacent,
+ *     keep = muted. Never stronger than the underlying data — the
+ *     same "transparency, not advocacy" rule as the shadow card.
+ *   • Low-confidence shows a visible amber caveat; the tone mirrors
+ *     calibration's own low-confidence warning so the pattern reads
+ *     identically across cards.
+ *   • The copy button lifts the rendered markdown to the clipboard
+ *     via `navigator.clipboard.writeText`. We swallow failures (older
+ *     browsers, permission denied) and flash a fallback toast-less
+ *     inline confirmation. Copy, not select-text-manually, because
+ *     the whole point of this card is a frictionless handoff.
+ */
+function ScorerProposalCard({ proposal }: { proposal: ScorerProposal }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    },
+    [],
+  );
+
+  const actionable = proposal.changes.filter((c) => c.action !== "keep");
+  const keeps = proposal.changes.filter((c) => c.action === "keep");
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(renderScorerProposalMarkdown(proposal));
+      setCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fall back silently — structured rows are still visible and
+      // selectable in the expanded panel below, so a manager can
+      // copy+paste a less-formatted version manually. Surfacing an
+      // error toast here would be worse UX than silent degradation.
+    }
+  }
+
+  return (
+    <Card
+      className="border-violet-500/30 bg-violet-500/5 p-3"
+      role="region"
+      aria-label="Scorer evolution proposal"
+    >
+      <div className="flex items-start gap-2">
+        <Wand2 className="h-4 w-4 shrink-0 text-violet-400" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-400">
+              Scorer evolution proposal
+            </span>
+            <span
+              className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap"
+              aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
+            >
+              {actionable.length} change{actionable.length === 1 ? "" : "s"}
+              {keeps.length > 0 && ` · ${keeps.length} keep`}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-foreground">{proposal.headline}</p>
+          {proposal.lowConfidence && (
+            <p
+              className="mt-1 text-[10px] text-amber-400"
+              title="Based on a small closed-deal sample — re-run once more deals accumulate."
+            >
+              ⚠ Thin sample — treat these recommendations as directional.
+            </p>
+          )}
+
+          <div className="mt-2 flex items-center gap-2 border-t border-violet-500/20 pt-2">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="inline-flex items-center gap-1 rounded text-[11px] font-medium text-violet-400 hover:text-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              aria-expanded={expanded}
+              aria-controls="scorer-proposal-body"
+            >
+              {expanded ? (
+                <ChevronDown className="h-3 w-3" aria-hidden />
+              ) : (
+                <ChevronRight className="h-3 w-3" aria-hidden />
+              )}
+              {expanded ? "Hide proposal" : "Review proposal"}
+            </button>
+            {expanded && actionable.length + keeps.length > 0 && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="ml-auto inline-flex items-center gap-1 rounded border border-violet-500/30 bg-background/40 px-2 py-0.5 text-[10px] font-medium text-violet-300 hover:bg-violet-500/10 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                aria-label="Copy proposal as ticket markdown"
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" aria-hidden /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" aria-hidden /> Copy as ticket
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {expanded && (
+            <div id="scorer-proposal-body" className="mt-2 space-y-2">
+              {actionable.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+                    Recommended changes
+                  </div>
+                  <ul className="mt-1 space-y-1">
+                    {actionable.map((c) => (
+                      <ScorerProposalChangeRow key={c.label} change={c} />
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {keeps.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Keep as-is
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {keeps.map((c) => (
+                      <li
+                        key={c.label}
+                        className="flex items-center gap-2 text-[10px] text-muted-foreground"
+                      >
+                        <span className="truncate text-foreground" title={c.label}>
+                          {c.label}
+                        </span>
+                        <span className="flex-1 truncate" title={c.rationale}>
+                          — {c.rationale}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {proposal.shadowCorroboration && (
+                <p className="border-t border-violet-500/20 pt-2 text-[11px] text-muted-foreground">
+                  <span className="font-semibold text-sky-400">Shadow K-NN:</span>{" "}
+                  {proposal.shadowCorroboration}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Per-factor row for the scorer proposal's actionable section. Action
+ * badge + label + rationale. Color grammar is deliberately muted (see
+ * parent card's docstring) — we want the manager to read the rationale,
+ * not feel pressured by a neon recommendation.
+ */
+function ScorerProposalChangeRow({ change }: { change: ScorerFactorChange }) {
+  const palette: Record<
+    ScorerFactorChange["action"],
+    { bg: string; text: string; border: string }
+  > = {
+    flip:       { bg: "bg-rose-500/10",    text: "text-rose-300",    border: "border-rose-500/30" },
+    strengthen: { bg: "bg-emerald-500/10", text: "text-emerald-300", border: "border-emerald-500/30" },
+    weaken:     { bg: "bg-amber-500/10",   text: "text-amber-300",   border: "border-amber-500/30" },
+    drop:       { bg: "bg-muted/30",       text: "text-muted-foreground", border: "border-border" },
+    keep:       { bg: "bg-muted/20",       text: "text-muted-foreground", border: "border-border" },
+  };
+  const p = palette[change.action];
+  const ariaSummary = `${change.action} ${change.label}: ${change.rationale}`;
+  return (
+    <li>
+      <span role="group" aria-label={ariaSummary} className="flex items-start gap-2 text-[11px]">
+        <span
+          className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${p.bg} ${p.text} ${p.border}`}
+          aria-hidden
+        >
+          {change.action}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="font-mono text-foreground" title={change.label}>
+            {change.label}
+          </span>
+          <span className="text-muted-foreground"> — {change.rationale}</span>
+        </span>
+      </span>
     </li>
   );
 }
