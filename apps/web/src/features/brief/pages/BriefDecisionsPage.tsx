@@ -94,10 +94,19 @@ function DecisionCard({
 }) {
   return (
     <li
-      className={`cursor-pointer rounded-lg border p-4 shadow-sm transition ${
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      className={`cursor-pointer rounded-lg border p-4 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
         selected ? "border-sky-400 bg-sky-50" : "border-slate-200 bg-white hover:border-slate-300"
       }`}
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
     >
       <div className="flex flex-wrap items-center gap-2">
         {row.affects_modules.slice(0, 4).map((m) => (

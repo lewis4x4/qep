@@ -71,7 +71,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg shadow-slate-900/25 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:bottom-8 sm:right-8"
+        className="fixed bottom-5 right-5 z-40 flex min-h-11 min-w-11 items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 text-sm font-medium text-white shadow-lg shadow-slate-900/25 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:bottom-8 sm:right-8"
         aria-label="Send feedback"
       >
         <MessageCirclePlus className="h-4 w-4" aria-hidden />
@@ -113,7 +113,8 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
                     type="button"
                     onClick={() => setType(type === opt.value ? "" : opt.value)}
                     disabled={submitting}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                    aria-pressed={type === opt.value}
+                    className={`min-h-9 rounded-full border px-4 py-2 text-xs transition ${
                       type === opt.value
                         ? "border-slate-900 bg-slate-900 text-white"
                         : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"
