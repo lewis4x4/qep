@@ -10,6 +10,8 @@ export interface CachedProfile {
   is_support: boolean;
   /** Nullable to match Profile in useAuth.ts — Slice 08 M4 fix. */
   active_workspace_id: string | null;
+  audience: "internal" | "stakeholder" | null;
+  stakeholder_subrole: "owner" | "primary_contact" | "technical" | "admin" | null;
 }
 
 interface CachedProfileEnvelope {

@@ -20,6 +20,18 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("rental")).toBe("/rentals");
     expect(resolveHomeRoute("rentals")).toBe("/rentals");
   });
+
+  test("routes stakeholders to /brief regardless of role or iron role", () => {
+    expect(resolveHomeRoute("client_stakeholder", null, "stakeholder")).toBe("/brief");
+    // Audience overrides even a role that would otherwise route elsewhere.
+    expect(resolveHomeRoute("owner", null, "stakeholder")).toBe("/brief");
+    expect(resolveHomeRoute("rep", "iron_man", "stakeholder")).toBe("/brief");
+  });
+
+  test("does not route internal users to /brief", () => {
+    expect(resolveHomeRoute("owner", null, "internal")).toBe("/owner");
+    expect(resolveHomeRoute("owner", null, null)).toBe("/owner");
+  });
 });
 
 describe("canUseElevatedQrmScopes", () => {
