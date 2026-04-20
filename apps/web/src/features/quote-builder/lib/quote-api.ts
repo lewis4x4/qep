@@ -376,12 +376,33 @@ export async function searchCatalog(query: string) {
   if (!sanitized) return [];
 
   const { data, error } = await supabase
-    .from("catalog_entries")
-    .select("*")
-    .eq("is_available", true)
-    .or(`make.ilike.%${sanitized}%,model.ilike.%${sanitized}%,category.ilike.%${sanitized}%`)
-    .order("make", { ascending: true })
+    .from("qb_equipment_models")
+    .select(
+      `id, model_code, family, series, name_display, model_year, list_price_cents,
+       brand:qb_brands!brand_id ( id, code, name, category )`,
+    )
+    .eq("active", true)
+    .is("deleted_at", null)
+    .or(
+      `model_code.ilike.%${sanitized}%,family.ilike.%${sanitized}%,series.ilike.%${sanitized}%,name_display.ilike.%${sanitized}%`,
+    )
+    .order("name_display", { ascending: true })
     .limit(20);
   if (error) throw error;
-  return data ?? [];
+
+  return (data ?? []).map((row) => {
+    const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
+    const make = brand?.name ?? row.name_display?.split(" ")[0] ?? "";
+    return {
+      id: row.id,
+      make,
+      model: row.model_code ?? "",
+      year: row.model_year ?? null,
+      category: row.family ?? brand?.category ?? null,
+      list_price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : null,
+      stock_number: null as string | null,
+      condition: "new" as const,
+      attachments: [] as Array<{ name: string; price: number }>,
+    };
+  });
 }
