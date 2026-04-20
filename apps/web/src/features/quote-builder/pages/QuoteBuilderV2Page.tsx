@@ -20,6 +20,7 @@ import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
 import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
 import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
+import { PointShootTradeCard } from "../components/PointShootTradeCard";
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
@@ -799,6 +800,29 @@ export function QuoteBuilderV2Page() {
             signals={draft.customerSignals ?? null}
             warmth={draft.customerWarmth ?? null}
           />
+
+          {/* Slice 20b: Point, Shoot, Trade — inline trade-in capture once
+              a customer is selected. Rep snaps a photo on their phone; we
+              identify the machine, fetch a multi-source book-value range,
+              and drop a trade credit into the draft without leaving the
+              wizard. Gated on hasCustomer so the flow is: pick customer →
+              see intel → capture their trade → pick their new machine. */}
+          {hasCustomer && (
+            <PointShootTradeCard
+              dealId={draft.dealId ?? null}
+              appliedAllowanceDollars={draft.tradeAllowance || null}
+              onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
+                ...cur,
+                tradeAllowance: allowanceDollars,
+                tradeValuationId: valuationId,
+              }))}
+              onClear={() => setDraft((cur) => ({
+                ...cur,
+                tradeAllowance: 0,
+                tradeValuationId: null,
+              }))}
+            />
+          )}
 
           <div className="flex items-center justify-between gap-3">
             <Button variant="outline" onClick={() => setStep("entry")}>
