@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "notebooklm-qep": {
+      "command": "/Users/brianlewis/.local/bin/notebooklm-mcp",
+      "args": [
+        "-c",
+        "/Users/brianlewis/.config/notebooklm-mcp/config-qep.toml",
+        "server"
+      ]
+    }
+  }
+}
