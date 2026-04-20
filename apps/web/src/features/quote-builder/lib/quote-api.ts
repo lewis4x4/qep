@@ -147,7 +147,11 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
     body: JSON.stringify({ job_description: jobDescription }),
   });
   if (!res.ok) throw new Error("AI recommendation failed");
-  return res.json();
+  // Tolerate both flat { machine, ... } and wrapped { recommendation: { machine, ... } }
+  // response shapes. Older deployments of quote-builder-v2 wrapped the payload;
+  // the current version returns it flat (see the /recommend handler).
+  const json = await res.json();
+  return (json?.recommendation ?? json) as QuoteRecommendation;
 }
 
 export async function calculateFinancing(

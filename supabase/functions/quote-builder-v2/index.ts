@@ -525,20 +525,45 @@ Deno.serve(async (req) => {
         return safeJsonError("job_description required", 400, origin);
       }
 
-      // Fetch available catalog — yard stock first (inventory-first logic)
-      const { data: catalog } = await supabase
-        .from("catalog_entries")
-        .select("id, make, model, year, category, list_price, dealer_cost, cost_to_qep, source_location, is_yard_stock, attachments")
-        .eq("is_available", true)
-        .order("is_yard_stock", { ascending: false, nullsFirst: false })
+      // Pull real inventory from the QB catalog (qb_equipment_models is the
+      // seeded source of truth; legacy catalog_entries is intentionally
+      // empty pending IntelliDealer sync). Shape the rows to match what
+      // aiEquipmentRecommendation() expects so the model sees "Make Model
+      // (Year) - Category - $Price" per line.
+      const { data: models } = await supabase
+        .from("qb_equipment_models")
+        .select(
+          `id, model_code, family, series, name_display, model_year, list_price_cents,
+           brand:qb_brands!brand_id ( id, code, name, category )`,
+        )
+        .eq("active", true)
+        .is("deleted_at", null)
+        .order("name_display", { ascending: true })
         .limit(50);
+
+      const catalog = (models ?? []).map((row: Record<string, unknown>) => {
+        const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
+        const brandName = (brand as { name?: string } | null)?.name ?? "";
+        return {
+          id: row.id,
+          make: brandName,
+          model: row.model_code ?? "",
+          year: row.model_year ?? null,
+          category: row.family ?? (brand as { category?: string } | null)?.category ?? null,
+          list_price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : null,
+        };
+      });
 
       const recommendation = await aiEquipmentRecommendation(
         body.job_description,
-        catalog ?? [],
+        catalog,
       );
 
-      return safeJsonOk({ recommendation }, origin);
+      // Return the recommendation flat — the frontend contract (see
+      // getAiEquipmentRecommendation in quote-api.ts) expects the shape
+      // { machine, attachments, reasoning, alternative?, jobConsiderations? }
+      // at the top level, not wrapped.
+      return safeJsonOk(recommendation, origin);
     }
 
     // ── POST /competitors: Nearby competitor listings (manager/owner) ────

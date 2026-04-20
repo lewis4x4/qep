@@ -99,6 +99,28 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
   };
 }
 
+// When the catalog search misses (AI recommended a Make+Model we don't
+// carry, or the match was fuzzy and the sanitized ilike returned 0 rows),
+// seed the workspace with the AI's textual pick so the rep sees something
+// concrete to refine — never land on an empty Equipment step after a
+// successful AI intake.
+function buildEquipmentLineFromRecommendation(
+  machine: string | null | undefined,
+): QuoteLineItemDraft | null {
+  const text = (machine ?? "").trim();
+  if (!text) return null;
+  const [firstToken, ...rest] = text.split(/\s+/);
+  return {
+    kind: "equipment",
+    title: text,
+    make: firstToken ?? text,
+    model: rest.join(" "),
+    year: null,
+    quantity: 1,
+    unitPrice: 0,
+  };
+}
+
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
@@ -287,14 +309,20 @@ export function QuoteBuilderV2Page() {
       return { voiceResult, recommendation, catalogMatches };
     },
     onSuccess: ({ voiceResult, recommendation, catalogMatches }) => {
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: voiceResult.transcript,
-        equipment: catalogMatches.length > 0
+      setDraft((current) => {
+        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
+        const seededEquipment = catalogMatches.length > 0
           ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : current.equipment,
-      }));
+          : fallback
+            ? [fallback]
+            : current.equipment;
+        return {
+          ...current,
+          recommendation,
+          voiceSummary: voiceResult.transcript,
+          equipment: seededEquipment,
+        };
+      });
       setStep("equipment");
     },
   });
@@ -306,14 +334,20 @@ export function QuoteBuilderV2Page() {
       return { recommendation, catalogMatches, prompt };
     },
     onSuccess: ({ recommendation, catalogMatches, prompt }) => {
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: prompt,
-        equipment: catalogMatches.length > 0
+      setDraft((current) => {
+        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
+        const seededEquipment = catalogMatches.length > 0
           ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : current.equipment,
-      }));
+          : fallback
+            ? [fallback]
+            : current.equipment;
+        return {
+          ...current,
+          recommendation,
+          voiceSummary: prompt,
+          equipment: seededEquipment,
+        };
+      });
       setStep("equipment");
     },
   });
