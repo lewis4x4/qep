@@ -13341,6 +13341,81 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_brand_sheet_sources: {
+        Row: {
+          active: boolean
+          brand_id: string
+          check_freq_hours: number
+          consecutive_failures: number
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          last_checked_at: string | null
+          last_error: string | null
+          last_etag: string | null
+          last_hash: string | null
+          last_http_status: number | null
+          notes: string | null
+          updated_at: string
+          url: string | null
+          workspace_id: string
+        }
+        Insert: {
+          active?: boolean
+          brand_id: string
+          check_freq_hours?: number
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_etag?: string | null
+          last_hash?: string | null
+          last_http_status?: number | null
+          notes?: string | null
+          updated_at?: string
+          url?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          active?: boolean
+          brand_id?: string
+          check_freq_hours?: number
+          consecutive_failures?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_etag?: string | null
+          last_hash?: string | null
+          last_http_status?: number | null
+          notes?: string | null
+          updated_at?: string
+          url?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_brand_sheet_sources_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_brand_sheet_sources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_brands: {
         Row: {
           attachment_markup_pct: number
@@ -14204,6 +14279,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           sheet_type: string | null
+          source_id: string | null
           status: string
           supersedes_price_sheet_id: string | null
           updated_at: string
@@ -14226,6 +14302,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sheet_type?: string | null
+          source_id?: string | null
           status?: string
           supersedes_price_sheet_id?: string | null
           updated_at?: string
@@ -14248,6 +14325,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sheet_type?: string | null
+          source_id?: string | null
           status?: string
           supersedes_price_sheet_id?: string | null
           updated_at?: string
@@ -14261,6 +14339,13 @@ export type Database = {
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "qb_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_price_sheets_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brand_sheet_sources"
             referencedColumns: ["id"]
           },
           {
@@ -14859,6 +14944,51 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: []
+      }
+      qb_sheet_watch_events: {
+        Row: {
+          created_at: string
+          detail: Json | null
+          event_type: string
+          id: string
+          price_sheet_id: string | null
+          source_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json | null
+          event_type: string
+          id?: string
+          price_sheet_id?: string | null
+          source_id: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json | null
+          event_type?: string
+          id?: string
+          price_sheet_id?: string | null
+          source_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_sheet_watch_events_price_sheet_id_fkey"
+            columns: ["price_sheet_id"]
+            isOneToOne: false
+            referencedRelation: "qb_price_sheets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_sheet_watch_events_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "qb_brand_sheet_sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       qb_trade_ins: {
         Row: {
@@ -29257,5 +29387,6 @@ export const Constants = {
     },
   },
 } as const
+
 
 export type UserRole = Database["public"]["Enums"]["user_role"]
