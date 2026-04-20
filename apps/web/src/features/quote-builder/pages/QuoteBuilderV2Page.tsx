@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicke
 import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
 import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
 import { PointShootTradeCard } from "../components/PointShootTradeCard";
+import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
+import { getMarginBaseline } from "../lib/coach-api";
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
@@ -233,6 +235,25 @@ export function QuoteBuilderV2Page() {
     },
     staleTime: 60_000,
   });
+
+  // Slice 20c: margin baseline powers the win-probability strip's "margin
+  // discipline" factor. Same data source DealCoachSidebar uses; we fetch it
+  // here once so every step can render the strip without each surface
+  // refetching. `enabled` gates on profile.id because the query hits
+  // quote_packages.created_by — firing pre-auth would always come back empty.
+  const marginBaselineQuery = useQuery({
+    queryKey: ["quote-builder", "margin-baseline", profile?.id ?? ""],
+    queryFn: () => (profile?.id ? getMarginBaseline(profile.id) : Promise.resolve(null)),
+    enabled: !!profile?.id,
+    staleTime: 5 * 60_000,
+  });
+  // Memoized so the strip's `useMemo([draft, context])` scorer can actually
+  // hit — a fresh object literal on every render would invalidate it.
+  const marginBaselineMedianPct = marginBaselineQuery.data?.medianPct ?? null;
+  const winProbContext = useMemo(
+    () => ({ marginPct, marginBaselineMedianPct }),
+    [marginPct, marginBaselineMedianPct],
+  );
 
   useEffect(() => {
     setFinanceScenarios([]);
@@ -802,6 +823,10 @@ export function QuoteBuilderV2Page() {
             </p>
           </div>
 
+          {/* Slice 20c: always-on win-probability strip. Rule-based today;
+              becomes the rule-baseline for Move 2's counterfactual engine. */}
+          <WinProbabilityStrip draft={draft} context={winProbContext} />
+
           <CustomerSection
             draft={draft}
             onPick={(picked) => setDraft((cur) => ({
@@ -925,6 +950,8 @@ export function QuoteBuilderV2Page() {
       {step === "equipment" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
+
+          <WinProbabilityStrip draft={draft} context={winProbContext} />
 
           <EquipmentSelector
             onSelect={(entry) => {
@@ -1068,6 +1095,8 @@ export function QuoteBuilderV2Page() {
       {step === "review" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
+
+          <WinProbabilityStrip draft={draft} context={winProbContext} />
 
           <MarginCheckBanner
             marginPct={marginPct}
