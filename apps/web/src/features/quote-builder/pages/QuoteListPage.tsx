@@ -74,6 +74,11 @@ import {
   type ProposalUrgency,
   type ProposalUrgencyResult,
 } from "../lib/proposal-urgency";
+import {
+  computeProposalConfidence,
+  describeProposalConfidencePill,
+  type ProposalConfidenceResult,
+} from "../lib/proposal-confidence";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -376,6 +381,36 @@ export function QuoteListPage() {
     [calibrationDrift],
   );
 
+  /**
+   * Slice 20v — proposal meta-confidence. Composes every signal we've
+   * already computed (sample size from closed audits, calibration drift
+   * direction, what-if Brier/hit-rate delta, shadow disagreement track
+   * record, factor-drift coherence) into a single 0..100 score with
+   * per-driver rationale. Answers the manager's "should I actually
+   * apply this?" question without asking them to triangulate across
+   * five cards. Null when there's no proposal.
+   */
+  const proposalConfidence = useMemo<ProposalConfidenceResult | null>(() => {
+    if (!scorerProposal) return null;
+    const auditCount = closedAuditQuery.data?.ok
+      ? closedAuditQuery.data.audits.length
+      : 0;
+    return computeProposalConfidence(scorerProposal, {
+      calibrationDrift,
+      factorDrift: factorDriftReport,
+      whatIf: scorerWhatIf,
+      shadowAgreement: shadowCalibrationSummary,
+      auditCount,
+    });
+  }, [
+    scorerProposal,
+    calibrationDrift,
+    factorDriftReport,
+    scorerWhatIf,
+    shadowCalibrationSummary,
+    closedAuditQuery.data,
+  ]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -464,11 +499,12 @@ export function QuoteListPage() {
           worth listening to. The proposal is the human-actionable
           handoff — "here's how to evolve the scorer based on all of
           the above." Hidden for reps + thin data. */}
-      {scorerProposal && (
+      {scorerProposal && proposalConfidence && (
         <ScorerProposalCard
           proposal={scorerProposal}
           whatIf={scorerWhatIf}
           urgency={proposalUrgency}
+          confidence={proposalConfidence}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1539,6 +1575,7 @@ function ScorerProposalCard({
   proposal,
   whatIf,
   urgency,
+  confidence,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1552,6 +1589,13 @@ function ScorerProposalCard({
    *  sentence so a dulling scorer escalates and an improving one
    *  softens. `medium` with `rationale=null` is the silent default. */
   urgency: ProposalUrgencyResult;
+  /** Slice 20v — proposal meta-confidence. Composes sample size,
+   *  calibration drift, what-if delta, shadow corroboration, and
+   *  factor-drift coherence into one 0..100 number with per-driver
+   *  rationale. Rendered as a second pill next to urgency and as a
+   *  drivers list in the expanded panel so the manager can see
+   *  exactly how the confidence was earned. */
+  confidence: ProposalConfidenceResult;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1630,6 +1674,25 @@ function ScorerProposalCard({
               >
                 {describeProposalUrgencyPill(urgency.urgency)}
               </span>
+              {/* Slice 20v — meta-confidence pill. Separate from urgency
+                  because the two answer different questions: urgency is
+                  "how fast should I act?", confidence is "how much
+                  should I trust the call?". Color maps by band so
+                  managers can read confidence independent of how
+                  urgently the card is shouting. */}
+              <span
+                className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${
+                  confidence.band === "high"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : confidence.band === "low"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : "bg-sky-500/15 text-sky-300"
+                }`}
+                aria-label={`Confidence: ${confidence.confidence} out of 100 — ${confidence.band} band`}
+                title={confidence.rationale}
+              >
+                {confidence.confidence} · {describeProposalConfidencePill(confidence.band)}
+              </span>
               <span
                 className="text-[10px] text-muted-foreground tabular-nums"
                 aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
@@ -1701,6 +1764,48 @@ function ScorerProposalCard({
 
           {expanded && (
             <div id="scorer-proposal-body" className="mt-2 space-y-2">
+              {/* Slice 20v — confidence rationale + per-driver breakdown.
+                  Rendered first in the expanded body because the manager's
+                  next decision is "do I trust this?" before "what would
+                  I change?" — answer that up front, then show the changes. */}
+              <div className="rounded border border-sky-500/20 bg-sky-500/5 p-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+                    Confidence breakdown
+                  </div>
+                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                    {confidence.confidence}/100
+                  </div>
+                </div>
+                <p className="mt-0.5 text-[11px] text-foreground">
+                  {confidence.rationale}
+                </p>
+                {confidence.drivers.length > 0 && (
+                  <ul className="mt-1.5 space-y-0.5">
+                    {confidence.drivers.map((d) => (
+                      <li
+                        key={d.signal}
+                        className="flex items-start gap-2 text-[10px] text-muted-foreground"
+                      >
+                        <span
+                          className={`shrink-0 tabular-nums font-semibold ${
+                            d.contribution > 0
+                              ? "text-emerald-400"
+                              : d.contribution < 0
+                                ? "text-rose-400"
+                                : "text-muted-foreground"
+                          }`}
+                          aria-label={`contribution ${d.contribution}`}
+                        >
+                          {d.contribution > 0 ? "+" : ""}
+                          {d.contribution}
+                        </span>
+                        <span className="flex-1">{d.rationale}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               {actionable.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
