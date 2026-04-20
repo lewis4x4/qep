@@ -312,7 +312,7 @@ export function QuoteBuilderV2Page() {
   // Behavior: (a) set equipment from resolved model, (b) store prompt as
   // voiceSummary, (c) advance to equipment step for review — never auto-save.
   const handleScenarioSelection = (selection: ScenarioSelection) => {
-    const { scenario, resolvedModelId, deliveryState, customerType, prompt } = selection;
+    const { scenario, resolvedModelId, deliveryState, customerType, prompt, originatingLogId } = selection;
     setDealAssistantOpen(false);
 
     // Build equipment line from the resolved model embedded in the SSE complete event.
@@ -321,6 +321,9 @@ export function QuoteBuilderV2Page() {
     setDraft((current) => ({
       ...current,
       voiceSummary: prompt,
+      // Slice 09: thread the originating qb_ai_request_log id through the draft
+      // so the save path can persist it on quote_packages.originating_log_id.
+      originatingLogId: originatingLogId ?? current.originatingLogId ?? null,
       // If no equipment yet and we have a resolved model ID, add a placeholder.
       // The rep confirms/refines in the equipment step.
       ...(resolvedModelId && current.equipment.length === 0

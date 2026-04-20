@@ -266,6 +266,7 @@ export function buildQuoteSavePayload(
     customer_company: draft.customerCompany || null,
     customer_phone: draft.customerPhone || null,
     customer_email: draft.customerEmail || null,
+    originating_log_id: draft.originatingLogId ?? null,
   };
 }
 

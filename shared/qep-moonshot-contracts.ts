@@ -89,6 +89,10 @@ export interface QuoteWorkspaceDraft {
   customerCompany?: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** Slice 09: when a draft was seeded by an AI-scenario stream, the
+   *  qb_ai_request_log.id that generated it. Threaded through the save
+   *  flow so the AI Request Log can show real time-to-quote numbers. */
+  originatingLogId?: string | null;
 }
 
 export interface QuoteListItem {

@@ -44,6 +44,10 @@ export interface ScenarioSelection {
   customerType: "standard" | "gmu";
   /** The prompt that produced this selection (for voiceSummary) */
   prompt: string;
+  /** Slice 09: qb_ai_request_log id from the SSE complete event. Used to
+   *  link the resulting quote back to the originating AI request so the
+   *  admin AI Request Log can show real time-to-quote. */
+  originatingLogId: string | null;
 }
 
 interface ConversationalDealEngineProps {
@@ -79,6 +83,9 @@ export function ConversationalDealEngine({
   const [scenarios, setScenarios]       = useState<QuoteScenario[]>([]);
   const [selectedIdx, setSelectedIdx]   = useState<number | null>(null);
   const [resolved, setResolved]         = useState<SseResolvedEvent | null>(null);
+  // Slice 09: capture logId from SSE complete event so we can thread it
+  // into the quote draft when the rep selects a scenario
+  const [originatingLogId, setOriginatingLogId] = useState<string | null>(null);
 
   // Track the active SSE session for cancellation on unmount / close
   const sessionRef = useRef<ScenarioSession | null>(null);
@@ -95,6 +102,7 @@ export function ConversationalDealEngine({
     setScenarios([]);
     setSelectedIdx(null);
     setResolved(null);
+    setOriginatingLogId(null);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -157,6 +165,9 @@ export function ConversationalDealEngine({
           return;
 
         case "complete":
+          // Slice 09: persist logId so a subsequent scenario select can
+          // thread it into the resulting quote's originating_log_id.
+          setOriginatingLogId(event.logId ?? null);
           setPanelState({
             phase:     "done",
             scenarios: collectedScenarios,
@@ -210,8 +221,9 @@ export function ConversationalDealEngine({
       deliveryState: resolved?.deliveryState ?? null,
       customerType:  resolved?.customerType ?? "standard",
       prompt:        textPrompt,
+      originatingLogId,
     });
-  }, [resolved, textPrompt, onScenarioSelect]);
+  }, [resolved, textPrompt, onScenarioSelect, originatingLogId]);
 
   if (!open) return null;
 

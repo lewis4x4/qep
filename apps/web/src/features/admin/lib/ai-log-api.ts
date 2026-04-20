@@ -3,16 +3,19 @@
  *
  * R4: customer_type (raw DB value) is shown, NOT a display name — the plan
  *     defers display-name mapping to a later slice.
- * R5 (Slice 07 CP8): time-to-quote is computed by joining qb_quotes via
- *     originating_log_id (FK added in migration 301). For each log row we
- *     find the earliest qb_quote with a matching originating_log_id and
- *     return the seconds between log.created_at and quote.created_at.
- *     Rows with no matching quote return null (rendered as "—").
+ * R5 (Slice 07 CP8 + Slice 09 CP4): time-to-quote is computed by joining
+ *     against BOTH qb_quotes.originating_log_id AND
+ *     quote_packages.originating_log_id. The live Quote Builder V2 flow
+ *     writes to quote_packages (qb_quotes requires a cents-denominated
+ *     pricing breakdown not available at QuoteBuilderV2 save time — a
+ *     future slice migrates that). For each log row we find the EARLIEST
+ *     quote across both tables and return the seconds between
+ *     log.created_at and quote.created_at. Rows with no matching quote
+ *     return null (rendered as "—").
  *
  * Join strategy: brand name and model name are joined via Supabase FK syntax.
- * qb_quotes is fetched in a second round-trip scoped to the visible log ids
- * (500 max) because Supabase's reverse-FK join syntax doesn't cleanly
- * aggregate "earliest match" in one query.
+ * Quotes are fetched in parallel from both tables, scoped to the visible log
+ * ids (500 max).
  *
  * User email is NOT joined — profile table join is complex and not worth the
  * query cost for a read-only log view. The UI shows user_id[:8] + ellipsis.
@@ -109,17 +112,26 @@ export async function getAiRequestLogs(opts: AiLogFilter = {}): Promise<AiLogRow
   const logs = (data ?? []) as Omit<AiLogRow, "time_to_quote_seconds" | "originating_quote_id">[];
   if (logs.length === 0) return [];
 
-  // Fetch originating quotes for this page of logs (single round-trip).
+  // Fetch originating quotes for this page of logs from BOTH tables in
+  // parallel. Slice 07 CP8 queried qb_quotes; Slice 09 CP4 adds
+  // quote_packages (where live Quote Builder V2 writes actually land).
   const logIds = logs.map((l) => l.id);
-  const { data: quoteRows } = await supabase
-    .from("qb_quotes")
-    .select("id, originating_log_id, created_at")
-    .in("originating_log_id", logIds);
+  const [qbRes, pkgRes] = await Promise.all([
+    supabase
+      .from("qb_quotes")
+      .select("id, originating_log_id, created_at")
+      .in("originating_log_id", logIds),
+    supabase
+      .from("quote_packages")
+      .select("id, originating_log_id, created_at")
+      .in("originating_log_id", logIds),
+  ]);
+  const quoteRows = [
+    ...((qbRes.data  ?? []) as Array<{ id: string; originating_log_id: string | null; created_at: string }>),
+    ...((pkgRes.data ?? []) as Array<{ id: string; originating_log_id: string | null; created_at: string }>),
+  ];
 
-  const deltas = deriveTimeToQuote(
-    logs,
-    (quoteRows ?? []) as Array<{ id: string; originating_log_id: string | null; created_at: string }>,
-  );
+  const deltas = deriveTimeToQuote(logs, quoteRows);
 
   return logs.map((l) => {
     const match = deltas.get(l.id);
