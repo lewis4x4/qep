@@ -62,7 +62,7 @@ describe("ai-log-api", () => {
     expect(mockEqVoice).toHaveBeenCalledWith("prompt_source", "voice");
   });
 
-  test("getAiRequestLogs: when logs return rows, a second query to qb_quotes is made with those log ids", async () => {
+  test("getAiRequestLogs: when logs return rows, parallel queries to qb_quotes AND quote_packages are made", async () => {
     mockLimit.mockImplementationOnce(() =>
       Promise.resolve({
         data: [
@@ -72,20 +72,24 @@ describe("ai-log-api", () => {
         error: null,
       }),
     );
+    // Slice 09 CP4: two parallel .in() calls (qb_quotes + quote_packages)
+    mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
     mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
 
     const rows = await getAiRequestLogs({});
 
     expect(mockFrom).toHaveBeenCalledWith("qb_ai_request_log");
     expect(mockFrom).toHaveBeenCalledWith("qb_quotes");
+    expect(mockFrom).toHaveBeenCalledWith("quote_packages");
     expect(mockIn).toHaveBeenCalledWith("originating_log_id", ["log-1", "log-2"]);
+    expect(mockIn.mock.calls.length).toBe(2);
     // With no quotes, both rows should report null time-to-quote
     expect(rows[0].time_to_quote_seconds).toBeNull();
     expect(rows[1].time_to_quote_seconds).toBeNull();
     expect(rows[0].originating_quote_id).toBeNull();
   });
 
-  test("getAiRequestLogs: merges qb_quotes into log rows by originating_log_id", async () => {
+  test("getAiRequestLogs: merges qb_quotes rows into log rows by originating_log_id", async () => {
     mockLimit.mockImplementationOnce(() =>
       Promise.resolve({
         data: [
@@ -95,16 +99,17 @@ describe("ai-log-api", () => {
         error: null,
       }),
     );
+    // qb_quotes has log-1 → quote 42s later
     mockIn.mockImplementationOnce(() =>
       Promise.resolve({
         data: [
-          // log-1 gets a quote 42 seconds later
           { id: "q-1", originating_log_id: "log-1", created_at: "2026-04-19T10:00:42Z" },
-          // log-2 has no quote
         ],
         error: null,
       }),
     );
+    // quote_packages has nothing
+    mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
 
     const rows = await getAiRequestLogs({});
 
@@ -116,7 +121,57 @@ describe("ai-log-api", () => {
     expect(row2.originating_quote_id).toBeNull();
   });
 
-  test("getAiRequestLogs: skips the qb_quotes round-trip when logs are empty", async () => {
+  test("getAiRequestLogs (Slice 09 CP4): quote_packages match counts when qb_quotes is empty", async () => {
+    mockLimit.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: [{ id: "log-1", created_at: "2026-04-19T10:00:00Z", resolved_model_id: "m1" }],
+        error: null,
+      }),
+    );
+    // qb_quotes empty; quote_packages has the match
+    mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
+    mockIn.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: [
+          { id: "pkg-1", originating_log_id: "log-1", created_at: "2026-04-19T10:01:30Z" },
+        ],
+        error: null,
+      }),
+    );
+
+    const rows = await getAiRequestLogs({});
+    expect(rows[0].time_to_quote_seconds).toBe(90);
+    expect(rows[0].originating_quote_id).toBe("pkg-1");
+  });
+
+  test("getAiRequestLogs (Slice 09 CP4): earliest wins across both tables", async () => {
+    mockLimit.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: [{ id: "log-1", created_at: "2026-04-19T10:00:00Z", resolved_model_id: "m1" }],
+        error: null,
+      }),
+    );
+    // qb_quotes match at +60s
+    mockIn.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: [{ id: "q-late", originating_log_id: "log-1", created_at: "2026-04-19T10:01:00Z" }],
+        error: null,
+      }),
+    );
+    // quote_packages match at +30s — should win
+    mockIn.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: [{ id: "pkg-early", originating_log_id: "log-1", created_at: "2026-04-19T10:00:30Z" }],
+        error: null,
+      }),
+    );
+
+    const rows = await getAiRequestLogs({});
+    expect(rows[0].time_to_quote_seconds).toBe(30);
+    expect(rows[0].originating_quote_id).toBe("pkg-early");
+  });
+
+  test("getAiRequestLogs: skips both join round-trips when logs are empty", async () => {
     mockIn.mockClear();
     mockLimit.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
     const rows = await getAiRequestLogs({});
@@ -137,7 +192,9 @@ describe("ai-log-api", () => {
       { resolved_model_id: null,     prompt_source: "text" },
     ];
     mockLimit.mockImplementationOnce(() => Promise.resolve({ data: mockRows, error: null }));
-    // getAiLogStats calls getAiRequestLogs internally, which triggers the qb_quotes join
+    // getAiLogStats calls getAiRequestLogs internally, which triggers the
+    // qb_quotes + quote_packages joins (Slice 09 CP4 added the second one)
+    mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
     mockIn.mockImplementationOnce(() => Promise.resolve({ data: [], error: null }));
     const stats = await getAiLogStats({});
     expect(stats.total).toBe(3);
