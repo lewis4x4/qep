@@ -379,3 +379,60 @@ export async function mergeDuplicateContacts(input: {
     body: input,
   });
 }
+
+// ─── Moves (Slice 2 Today surface) ──────────────────────────────────────────
+// A "move" is a recommended unit of work. The recommender writes them, the
+// operator accepts/dismisses/snoozes them, and the card collapses back to
+// quiet once the move is completed or dismissed.
+
+export type {
+  QrmMove,
+  QrmMoveAction,
+  QrmMoveEntityType,
+  QrmMoveKind,
+  QrmMoveStatus,
+} from "./moves-types";
+import type {
+  QrmMove,
+  QrmMoveEntityType,
+  QrmMoveStatus,
+} from "./moves-types";
+
+export interface ListMovesParams {
+  statuses?: QrmMoveStatus[];
+  assignedRepId?: string | null;
+  entityType?: QrmMoveEntityType | null;
+  entityId?: string | null;
+  limit?: number;
+}
+
+export async function listQrmMoves(params: ListMovesParams = {}): Promise<QrmMove[]> {
+  const q = new URLSearchParams();
+  if (params.statuses && params.statuses.length > 0) {
+    q.set("status", params.statuses.join(","));
+  }
+  if (params.assignedRepId) q.set("assigned_rep_id", params.assignedRepId);
+  if (params.entityType) q.set("entity_type", params.entityType);
+  if (params.entityId) q.set("entity_id", params.entityId);
+  if (params.limit != null) q.set("limit", String(params.limit));
+
+  const qs = q.toString();
+  const payload = await requestRouter<{ moves: QrmMove[] }>(
+    `/qrm/moves${qs ? `?${qs}` : ""}`,
+  );
+  return payload.moves;
+}
+
+export interface PatchMoveInput {
+  action: import("./moves-types").QrmMoveAction;
+  snoozedUntil?: string;
+  reason?: string;
+}
+
+export async function patchQrmMove(moveId: string, input: PatchMoveInput): Promise<QrmMove> {
+  const payload = await requestRouter<{ move: QrmMove }>(`/qrm/moves/${moveId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.move;
+}

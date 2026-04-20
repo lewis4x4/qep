@@ -150,3 +150,10 @@ verify_jwt = false
 
 [functions.post-sale-parts-playbook]
 verify_jwt = false
+
+# Slice 2: deterministic recommender. Consumes recent signals and writes moves.
+# Called by pg_cron every 5 minutes + on-demand by elevated users from the
+# Today surface. Auth is validated inside the function via x-internal-service
+# -secret header or resolved caller role.
+[functions.recommend-moves]
+verify_jwt = false

@@ -27,6 +27,14 @@ import {
   type CampaignPayload,
 } from "../_shared/crm-campaigns.ts";
 import {
+  createMove,
+  listMoves,
+  parseMoveListFilters,
+  patchMove,
+  type MoveCreatePayload,
+  type MovePatchPayload,
+} from "../_shared/qrm-moves.ts";
+import {
   createActivity,
   createCompany,
   createContact,
@@ -751,6 +759,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
         requireElevated(ctx);
         await dismissDuplicateCandidate(ctx, segments[2]);
         return crmOk({ ok: true }, { origin });
+      }
+    }
+
+    if (segments[1] === "moves") {
+      requireCaller(ctx);
+
+      // GET /qrm/moves — list moves (rep sees own, elevated sees all).
+      if (req.method === "GET" && segments.length === 2) {
+        const filters = parseMoveListFilters(url.searchParams);
+        const moves = await listMoves(ctx, filters);
+        return crmOk({ moves }, { origin });
+      }
+
+      // PATCH /qrm/moves/:id — lifecycle transition (accept/snooze/dismiss/
+      // complete/reopen). RLS lets reps patch only their own assigned moves.
+      if (req.method === "PATCH" && segments.length === 3) {
+        const body = await readJsonBody<MovePatchPayload>(req);
+        const move = await patchMove(ctx, segments[2], body);
+        return crmOk({ move }, { origin });
+      }
+
+      // POST /qrm/moves — create (recommender / service-role + elevated only).
+      // Reps cannot author moves directly; the recommender is the canonical
+      // source, with elevated users able to hand-craft a move when needed.
+      if (req.method === "POST" && segments.length === 2) {
+        requireElevated(ctx);
+        const body = await readJsonBody<MoveCreatePayload>(req);
+        const move = await createMove(ctx, body);
+        return crmOk({ move }, { origin, status: 201 });
       }
     }
 

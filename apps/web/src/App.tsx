@@ -442,6 +442,12 @@ const WithGraphExplorer = lazy(() =>
     default: m.WithGraphExplorer,
   }))
 );
+// Shell v2: Today surface replaces the legacy activities feed when the flag is on.
+const WithTodaySurface = lazy(() =>
+  import("./features/qrm/shell/withTodaySurface").then((m) => ({
+    default: m.WithTodaySurface,
+  }))
+);
 const QrmContactDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
     default: m.QrmContactDetailPage,
@@ -1684,7 +1690,7 @@ function App() {
                 path="/qrm/activities"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmActivitiesPage />
+                    <WithTodaySurface fallback={<QrmActivitiesPage />} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
