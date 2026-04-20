@@ -507,6 +507,78 @@ Deno.serve(async (req) => {
         }, origin);
       }
 
+      // ── GET /factor-attribution (Slice 20g) ─────────────────────────
+      // Manager/owner-only: returns per-deal (factors[] × outcome)
+      // tuples so the client-side pure-function attribution calculator
+      // can compute which factors actually predict wins.
+      //
+      // Why we return deal-grouped rows rather than flattened factor
+      // rows: "absent" means "factor didn't appear in this deal's
+      // snapshot", which requires knowing the full factor list per
+      // deal. Flattening server-side loses that structure.
+      //
+      // Version gate: we filter by weightsVersion="v1" to avoid mixing
+      // rows from different scorer generations. When the scorer bumps
+      // to v2, downstream callers will explicitly request the version
+      // they want to audit.
+      if (action === "factor-attribution") {
+        if (!canPublish) {
+          return safeJsonError("Factor attribution requires manager or owner role", 403, origin);
+        }
+
+        // PostgREST semantics: `!inner` combined with a filter on the
+        // embedded resource column (`quote_packages.win_probability_snapshot`)
+        // drops the parent outcome row when the embedded match is null —
+        // so this is truly a parent-filtering query, not a payload shaper.
+        // The flatMap below is a belt-and-suspenders guard, not load-bearing.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_packages!inner(win_probability_snapshot)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("factor-attribution query error:", error);
+          return safeJsonError("Failed to load factor attribution data", 500, origin);
+        }
+
+        // Flatten to DealFactorObservation[] shape. Defensive: validate
+        // snapshot shape, factor shape, and version gate per row so a
+        // malformed row can't poison the aggregate.
+        const deals = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const snapshot = (pkg as { win_probability_snapshot?: unknown } | null)?.win_probability_snapshot;
+          const outcome = row.outcome;
+          if (
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          // Version gate — only v1 rows for now. Unversioned rows from
+          // pre-slice-20e saves don't exist (the snapshot column itself
+          // didn't exist then), but be defensive.
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((f: unknown) => {
+            if (!f || typeof f !== "object") return [];
+            const rec = f as { label?: unknown; weight?: unknown };
+            if (typeof rec.label !== "string" || typeof rec.weight !== "number" || !Number.isFinite(rec.weight)) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [{ factors, outcome }];
+        });
+
+        return safeJsonOk({ deals }, origin);
+      }
+
       // ── GET /scorer-calibration (Slice 20f) ─────────────────────────
       // Manager/owner-only aggregate of (win_probability_score) ×
       // (qb_quote_outcomes.outcome) pairs. Returns raw observations so
@@ -523,6 +595,10 @@ Deno.serve(async (req) => {
         // power a dashboard on QB's current volume, and well below the
         // per-request payload budget. A future slice can paginate or
         // roll up server-side if dealer volume outgrows this.
+        // Same PostgREST `!inner` + embedded-column filter pattern as
+        // /factor-attribution below — the null-score join row is dropped
+        // at the parent level, so `limit(500)` is populated with real
+        // observations, not padded with null joins.
         const { data, error } = await supabase
           .from("qb_quote_outcomes")
           .select("outcome, quote_package_id, quote_packages!inner(win_probability_score)")

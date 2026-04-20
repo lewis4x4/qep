@@ -157,6 +157,33 @@ export async function getScorerCalibrationObservations(): Promise<
   return { ok: true, observations: Array.isArray(body.observations) ? body.observations : [] };
 }
 
+/**
+ * Slice 20g — fetch deal-grouped factor observations for attribution
+ * analysis. Same discriminated-union shape as the calibration helper
+ * so the card can render a distinct empty / forbidden / error state.
+ *
+ * The edge function does the version-gate filter + malformed-row
+ * filter; this helper just shuttles the list.
+ */
+export async function getFactorAttributionDeals(): Promise<
+  | { ok: true; deals: Array<{ factors: Array<{ label: string; weight: number }>; outcome: "won" | "lost" | "expired" }> }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/factor-attribution`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    deals?: Array<{ factors: Array<{ label: string; weight: number }>; outcome: "won" | "lost" | "expired" }>;
+  };
+  return { ok: true, deals: Array.isArray(body.deals) ? body.deals : [] };
+}
+
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/competitors`, {
     method: "POST",

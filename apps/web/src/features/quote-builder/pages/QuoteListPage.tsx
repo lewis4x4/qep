@@ -8,8 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Plus, Search, FileText, Mic, MessageSquare,
   AlertTriangle, RotateCcw, Sparkles, Gauge,
+  ChevronDown, ChevronRight, TrendingUp, TrendingDown, AlertOctagon,
 } from "lucide-react";
-import { listQuotePackages, getScorerCalibrationObservations } from "../lib/quote-api";
+import { listQuotePackages, getScorerCalibrationObservations, getFactorAttributionDeals } from "../lib/quote-api";
 import { OutcomeCaptureDrawer } from "../components/OutcomeCaptureDrawer";
 import {
   calibrationHeadline,
@@ -18,6 +19,12 @@ import {
   type BandCalibration,
   type CalibrationReport,
 } from "../lib/scorer-calibration";
+import {
+  computeFactorAttribution,
+  isFactorSurprising,
+  type FactorAttribution,
+  type FactorAttributionReport,
+} from "../lib/factor-attribution";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -474,6 +481,11 @@ function QuoteCard({
 function ScorerCalibrationCard({ report }: { report: CalibrationReport }) {
   const headline = calibrationHeadline(report);
   const hasData = report.sampleSize > 0;
+  // Slice 20g: factor attribution breakdown is gated behind an
+  // expansion toggle. Collapsed by default so the card stays scannable
+  // for the daily triage case; expansion lazy-loads the jsonb-heavy
+  // factor data only when the manager actually wants the audit view.
+  const [expanded, setExpanded] = useState(false);
   return (
     <Card
       className={`border p-3 ${hasData ? "border-sky-500/30 bg-sky-500/5" : "border-border bg-muted/10"}`}
@@ -515,9 +527,174 @@ function ScorerCalibrationCard({ report }: { report: CalibrationReport }) {
               Small sample — capture more outcomes to tighten this.
             </p>
           )}
+
+          {/* Slice 20g: expandable factor audit. Only offered when the
+              aggregate already has at least one closed-deal observation
+              — no point showing "which factors matter?" before any
+              factors have had a chance to be judged by reality. */}
+          {hasData && (
+            <div className="mt-3 border-t border-sky-500/20 pt-2">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-500/50 rounded"
+                aria-expanded={expanded}
+                aria-controls="scorer-factor-breakdown"
+              >
+                {expanded ? (
+                  <ChevronDown className="h-3 w-3" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-3 w-3" aria-hidden />
+                )}
+                {expanded ? "Hide factor breakdown" : "Show factor breakdown"}
+              </button>
+              {expanded && (
+                <div id="scorer-factor-breakdown" className="mt-2">
+                  <FactorAttributionPanel />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Slice 20g — factor attribution panel.
+ *
+ * Lazy-mounted inside the scorer calibration card expansion. Owns its
+ * own query (fires only on expand) and its own derived report so the
+ * parent card doesn't pay the jsonb download cost unless the manager
+ * actually wants to audit the rules.
+ *
+ * What it shows:
+ *   - Top 5 factors by absolute lift, each with a signed delta showing
+ *     "deals-with-this-factor win %" vs. "deals-without win %".
+ *   - Surprising factors (scorer weight disagrees with reality) get a
+ *     warning icon — these are the rules to review for the next
+ *     scorer-evolution PR.
+ *   - Low-confidence rows render at reduced opacity with an "(n=X)"
+ *     annotation so the reader can weight them appropriately.
+ */
+function FactorAttributionPanel() {
+  const factorsQuery = useQuery({
+    queryKey: ["quote-builder", "factor-attribution"],
+    queryFn: getFactorAttributionDeals,
+    staleTime: 5 * 60 * 1000,
+  });
+  const report: FactorAttributionReport | null = useMemo(() => {
+    const r = factorsQuery.data;
+    if (!r || !r.ok) return null;
+    return computeFactorAttribution(r.deals);
+  }, [factorsQuery.data]);
+
+  if (factorsQuery.isLoading) {
+    return (
+      <p className="text-[11px] text-muted-foreground" aria-live="polite">
+        Loading factor breakdown…
+      </p>
+    );
+  }
+  if (factorsQuery.data && !factorsQuery.data.ok) {
+    // Forbidden should never fire here — the parent ScorerCalibrationCard
+    // only mounts when calibrationQuery already passed the same role
+    // check — but if the two endpoints ever diverge on role gating, we
+    // still want the rep-facing fail mode to be a clean hide, not a
+    // permissions-error leak. Real errors still render as an amber hint.
+    if (factorsQuery.data.reason === "forbidden") return null;
+    return (
+      <p className="text-[11px] text-amber-400" role="status" aria-live="polite">
+        Couldn't load factor breakdown — {factorsQuery.data.message}
+      </p>
+    );
+  }
+  if (!report || report.dealsAnalyzed === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        No closed deals with a saved snapshot yet — factor attribution fills in as outcomes are captured.
+      </p>
+    );
+  }
+  const topFactors = report.factors.slice(0, 5);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+          Top factors by lift
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          {report.dealsAnalyzed} deal{report.dealsAnalyzed === 1 ? "" : "s"}
+        </span>
+      </div>
+      <ul className="mt-1 space-y-1">
+        {topFactors.map((f) => (
+          <FactorAttributionRow key={f.label} f={f} />
+        ))}
+      </ul>
+      {report.factors.length > topFactors.length && (
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          +{report.factors.length - topFactors.length} more factors with weaker or null lift
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FactorAttributionRow({ f }: { f: FactorAttribution }) {
+  const surprising = isFactorSurprising(f);
+  const liftPct =
+    f.lift === null ? "—" : `${f.lift > 0 ? "+" : ""}${(f.lift * 100).toFixed(0)} pts`;
+  const Icon = f.lift === null ? null : f.lift > 0 ? TrendingUp : TrendingDown;
+  const color =
+    f.lift === null
+      ? "text-muted-foreground"
+      : f.lift > 0
+        ? "text-emerald-400"
+        : "text-rose-400";
+  const presentPct = formatPct(f.winRateWhenPresent);
+  const absentPct = formatPct(f.winRateWhenAbsent);
+  // A11y note: aria-label on bare <li> is inconsistently honored across
+  // screen readers. Wrap the visible content in a role="group" span,
+  // which universally takes aria-label as its accessible name while
+  // leaving the <li>'s implicit listitem role intact.
+  const ariaSummary =
+    `${f.label}: win rate when present ${presentPct}, when absent ${absentPct}, lift ${liftPct}` +
+    (f.lowConfidence ? " (low confidence)" : "") +
+    (surprising ? ". Surprising: scorer weight disagrees with observed lift." : "");
+  return (
+    <li className={`${f.lowConfidence ? "opacity-60" : ""}`}>
+      <span role="group" aria-label={ariaSummary} className="flex items-center gap-2 text-[11px]">
+        {Icon ? (
+          <Icon className={`h-3 w-3 ${color}`} aria-hidden />
+        ) : (
+          <span className="inline-block h-3 w-3" aria-hidden />
+        )}
+        <span className={`tabular-nums font-semibold w-16 text-right ${color}`}>{liftPct}</span>
+        <span className="flex-1 truncate text-foreground" title={f.label}>
+          {f.label}
+        </span>
+        <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+          {presentPct}/{absentPct}
+        </span>
+        <span className="text-muted-foreground text-[10px] whitespace-nowrap">
+          n={f.present}
+        </span>
+        {surprising && (
+          // Accessible name is already carried by the parent group's
+          // aria-label ("Surprising: …"). The icon is decorative here;
+          // title stays for sighted hover affordance.
+          <span
+            title="Surprising: scorer weight disagrees with observed lift. Review this rule's weight."
+            aria-hidden="true"
+            className="inline-flex items-center"
+          >
+            <AlertOctagon className="h-3 w-3 text-amber-400" />
+          </span>
+        )}
+      </span>
+    </li>
   );
 }
 
