@@ -79,6 +79,13 @@ import {
   describeProposalConfidencePill,
   type ProposalConfidenceResult,
 } from "../lib/proposal-confidence";
+import {
+  computeProposalCallFlips,
+  describeCallFlipsHeadline,
+  formatFlipRow,
+  type ProposalCallFlipReport,
+  type CallFlip,
+} from "../lib/proposal-call-flips";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -411,6 +418,23 @@ export function QuoteListPage() {
     closedAuditQuery.data,
   ]);
 
+  /**
+   * Slice 20w — per-deal call flips. Converts 20p's aggregate what-if
+   * into a concrete "which specific closed deals would the proposal
+   * have called differently, and did the flip agree with reality?"
+   * Bucketizes into corroborating / regressing / unchanged so a
+   * manager can eyeball the specific deals the proposal touches —
+   * especially important when there's even a single regressing flip.
+   * Null when we don't have a what-if (no audits yet) or when the
+   * proposal is all-keep (nothing to simulate a flip from).
+   */
+  const proposalCallFlips = useMemo<ProposalCallFlipReport | null>(() => {
+    if (!scorerWhatIf) return null;
+    const report = computeProposalCallFlips(scorerWhatIf);
+    if (report.empty || report.noActionableChanges) return null;
+    return report;
+  }, [scorerWhatIf]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -505,6 +529,7 @@ export function QuoteListPage() {
           whatIf={scorerWhatIf}
           urgency={proposalUrgency}
           confidence={proposalConfidence}
+          callFlips={proposalCallFlips}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1576,6 +1601,7 @@ function ScorerProposalCard({
   whatIf,
   urgency,
   confidence,
+  callFlips,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1596,6 +1622,13 @@ function ScorerProposalCard({
    *  drivers list in the expanded panel so the manager can see
    *  exactly how the confidence was earned. */
   confidence: ProposalConfidenceResult;
+  /** Slice 20w — per-deal call flips. The concrete version of 20p's
+   *  aggregate Brier delta: which specific closed deals would flip
+   *  verdict, and did the flip agree with reality? Rendered in the
+   *  expanded panel so the manager can eyeball the exact deals
+   *  before approving. Null when what-if is unavailable or the
+   *  proposal has no actionable changes. */
+  callFlips: ProposalCallFlipReport | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1806,6 +1839,13 @@ function ScorerProposalCard({
                   </ul>
                 )}
               </div>
+              {/* Slice 20w — per-deal call flips. The concrete evidence
+                  for (or against) the aggregate what-if number above.
+                  Rendered whenever we have a report — including the
+                  zero-flip case ("proposal refines scores without
+                  changing any verdicts"), because that's still a fact
+                  the manager wants to know before approving. */}
+              {callFlips && <ScorerProposalCallFlipsRow report={callFlips} />}
               {actionable.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
@@ -1851,6 +1891,109 @@ function ScorerProposalCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Slice 20w — per-deal call-flip evidence rendered inside the expanded
+ * ScorerProposalCard panel.
+ *
+ * Composition:
+ *   • One headline line (`describeCallFlipsHeadline`) that reads like
+ *     a verdict sentence ("2 corroborating, 1 regressing (net +1…)").
+ *   • Two bucket stacks underneath — emerald for corroborating,
+ *     rose for regressing. Either bucket may be empty; when both are
+ *     empty we still show the headline ("proposal refines scores
+ *     without changing any verdicts") because that's a useful fact.
+ *
+ * We intentionally don't render the unchanged-call totals as rows —
+ * they're in the headline as context but surfacing 25 unchanged deals
+ * would drown the 1 regressing deal that actually needs eyeballing.
+ *
+ * Accessibility: the buckets are ordered corroborating-then-regressing
+ * in DOM, and each row includes an aria-label that spells out the
+ * package id, outcome, and score transition so a screen reader gets
+ * the full flip story without relying on color alone.
+ */
+function ScorerProposalCallFlipsRow({
+  report,
+}: {
+  report: ProposalCallFlipReport;
+}) {
+  const headline = describeCallFlipsHeadline(report);
+  if (!headline) return null;
+
+  const showCorroborating = report.corroborating.length > 0;
+  const showRegressing = report.regressing.length > 0;
+
+  return (
+    <div
+      className="rounded border border-violet-500/15 bg-background/40 p-2"
+      role="region"
+      aria-label="Per-deal call flips"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+          Call flips
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {report.resolvedCount} resolved · {report.expiredCount} expired
+        </div>
+      </div>
+      <p className="mt-0.5 text-[11px] text-foreground">{headline}</p>
+      {(showCorroborating || showRegressing) && (
+        <div className="mt-1.5 space-y-1.5">
+          {showCorroborating && (
+            <CallFlipBucket
+              label="Corroborating — proposal calls the outcome right"
+              flips={report.corroborating}
+              tone="emerald"
+            />
+          )}
+          {showRegressing && (
+            <CallFlipBucket
+              label="Regressing — proposal would get the call wrong"
+              flips={report.regressing}
+              tone="rose"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CallFlipBucket({
+  label,
+  flips,
+  tone,
+}: {
+  label: string;
+  flips: CallFlip[];
+  tone: "emerald" | "rose";
+}) {
+  const labelColor = tone === "emerald" ? "text-emerald-400" : "text-rose-400";
+  const rowColor = tone === "emerald" ? "text-emerald-300" : "text-rose-300";
+  return (
+    <div>
+      <div className={`text-[10px] font-semibold ${labelColor}`}>{label}</div>
+      <ul className="mt-0.5 space-y-0.5">
+        {flips.map((f) => (
+          <li
+            key={f.packageId}
+            className={`flex items-center gap-2 text-[10px] tabular-nums ${rowColor}`}
+            aria-label={`Deal ${f.packageId} outcome ${f.outcome}: ${f.previous}% previous call ${f.previousCall}, ${f.proposed}% proposed call ${f.proposedCall}`}
+          >
+            <span className="font-mono truncate max-w-[8rem]" title={f.packageId}>
+              {f.packageId}
+            </span>
+            <span className="flex-1 truncate text-muted-foreground">
+              {formatFlipRow(f)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
