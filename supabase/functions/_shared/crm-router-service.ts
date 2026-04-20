@@ -22,14 +22,29 @@ export interface RouterCtx {
   userAgent: string | null;
 }
 
+export type CrmSearchEntityType =
+  | "company"
+  | "contact"
+  | "deal"
+  | "equipment"
+  | "rental";
+
 export interface CrmSearchResult {
-  type: "company" | "contact";
+  type: CrmSearchEntityType;
   id: string;
   title: string;
   subtitle: string | null;
   updatedAt: string;
   rank: number;
 }
+
+const SEARCHABLE_TYPES: readonly CrmSearchEntityType[] = [
+  "company",
+  "contact",
+  "deal",
+  "equipment",
+  "rental",
+] as const;
 
 export function createRequestContext(req: Request, route: string, method: string): RouterCtx {
   const admin = createAdminClient();
@@ -151,8 +166,13 @@ export async function crmSearch(
   const types = rawTypes
     .split(",")
     .map((value) => value.trim().toLowerCase())
-    .filter((value) => value === "company" || value === "contact");
-  const includeTypes = types.length > 0 ? new Set(types) : new Set(["company", "contact"]);
+    .filter((value): value is CrmSearchEntityType =>
+      SEARCHABLE_TYPES.includes(value as CrmSearchEntityType),
+    );
+  const includeTypes =
+    types.length > 0
+      ? new Set<CrmSearchEntityType>(types)
+      : new Set<CrmSearchEntityType>(SEARCHABLE_TYPES);
 
   const results: CrmSearchResult[] = [];
 
@@ -211,12 +231,146 @@ export async function crmSearch(
     }
   }
 
+  // Deals: query the rep-safe view so rep-scope callers never see margin.
+  if (includeTypes.has("deal")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_deals_rep_safe")
+      .select("id, name, amount, expected_close_on, updated_at")
+      .eq("workspace_id", ctx.workspaceId)
+      .ilike("name", `%${query}%`)
+      .order("updated_at", { ascending: false })
+      .limit(30);
+
+    if (error) throw error;
+
+    for (const row of data ?? []) {
+      const name = String(row.name ?? "");
+      const amount =
+        row.amount != null && Number.isFinite(Number(row.amount))
+          ? `$${Number(row.amount).toLocaleString()}`
+          : null;
+      const closeOn = row.expected_close_on ? String(row.expected_close_on) : null;
+      const subtitle = [amount, closeOn && `close ${closeOn}`].filter(Boolean).join(" · ") || null;
+      results.push({
+        type: "deal",
+        id: String(row.id),
+        title: name || "Untitled deal",
+        subtitle,
+        updatedAt: String(row.updated_at),
+        rank: scoreText(name.toLowerCase(), query),
+      });
+    }
+  }
+
+  // Equipment: fleet/iron search by name, make, model, VIN, asset tag, serial.
+  // We OR across the most-used identifier fields so typing "CAT 305" matches
+  // a Caterpillar 305, and typing a VIN still hits.
+  if (includeTypes.has("equipment")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_equipment")
+      .select(
+        "id, name, make, model, year, asset_tag, serial_number, vin_pin, availability, updated_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .or(
+        [
+          `name.ilike.%${query}%`,
+          `make.ilike.%${query}%`,
+          `model.ilike.%${query}%`,
+          `asset_tag.ilike.%${query}%`,
+          `serial_number.ilike.%${query}%`,
+          `vin_pin.ilike.%${query}%`,
+        ].join(","),
+      )
+      .order("updated_at", { ascending: false })
+      .limit(30);
+
+    if (error) throw error;
+
+    for (const row of data ?? []) {
+      const parts = [row.year, row.make, row.model].filter(Boolean).map(String);
+      const labelFromSpec = parts.join(" ");
+      const fallback = String(row.name ?? "");
+      const title = labelFromSpec.trim() || fallback || "Equipment";
+      const subtitleParts = [
+        row.asset_tag ? `Tag ${row.asset_tag}` : null,
+        row.vin_pin ? `VIN ${row.vin_pin}` : null,
+        row.availability ? String(row.availability) : null,
+      ].filter(Boolean);
+      const searchable =
+        `${labelFromSpec} ${fallback} ${row.asset_tag ?? ""} ${row.serial_number ?? ""} ${row.vin_pin ?? ""}`
+          .toLowerCase();
+      results.push({
+        type: "equipment",
+        id: String(row.id),
+        title,
+        subtitle: subtitleParts.join(" · ") || null,
+        updatedAt: String(row.updated_at),
+        rank: scoreText(searchable, query),
+      });
+    }
+  }
+
+  // Rentals: search the rental contract requests/agreements by make/model or
+  // delivery location. Customer identity comes from the linked equipment +
+  // portal_customer when present.
+  if (includeTypes.has("rental")) {
+    const { data, error } = await ctx.callerDb
+      .from("rental_contracts")
+      .select(
+        "id, requested_make, requested_model, requested_category, delivery_location, status, requested_start_date, requested_end_date, updated_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .or(
+        [
+          `requested_make.ilike.%${query}%`,
+          `requested_model.ilike.%${query}%`,
+          `requested_category.ilike.%${query}%`,
+          `delivery_location.ilike.%${query}%`,
+        ].join(","),
+      )
+      .order("updated_at", { ascending: false })
+      .limit(20);
+
+    // Rentals may not be visible to all callers under RLS; a permission error
+    // should not poison the whole search.
+    if (!error) {
+      for (const row of data ?? []) {
+        const parts = [row.requested_make, row.requested_model, row.requested_category]
+          .filter(Boolean)
+          .map(String);
+        const title = parts.join(" ").trim() || "Rental request";
+        const subtitle =
+          [
+            row.status ? String(row.status) : null,
+            row.requested_start_date && row.requested_end_date
+              ? `${row.requested_start_date} → ${row.requested_end_date}`
+              : null,
+            row.delivery_location ? String(row.delivery_location) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null;
+        const searchable =
+          `${parts.join(" ")} ${row.delivery_location ?? ""}`.toLowerCase();
+        results.push({
+          type: "rental",
+          id: String(row.id),
+          title,
+          subtitle,
+          updatedAt: String(row.updated_at),
+          rank: scoreText(searchable, query),
+        });
+      }
+    }
+  }
+
   return results
     .sort((a, b) => {
       if (a.rank !== b.rank) return a.rank - b.rank;
       return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
     })
-    .slice(0, 25);
+    .slice(0, 40);
 }
 
 /** All company ids in the subtree rooted at `rootId` (includes the root). */

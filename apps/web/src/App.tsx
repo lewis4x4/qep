@@ -435,6 +435,13 @@ const HubSpotConnectPage = lazy(() =>
 const QrmContactsPage = lazy(() =>
   import("./features/qrm/pages/QrmContactsPage").then((m) => ({ default: m.QrmContactsPage }))
 );
+// Shell v2: when flag is on, legacy list pages are replaced by the universal
+// GraphExplorer via the WithGraphExplorer wrapper (see shell/withGraphExplorer).
+const WithGraphExplorer = lazy(() =>
+  import("./features/qrm/shell/withGraphExplorer").then((m) => ({
+    default: m.WithGraphExplorer,
+  }))
+);
 const QrmContactDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
     default: m.QrmContactDetailPage,
@@ -1695,7 +1702,12 @@ function App() {
                 path="/qrm/deals"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmPipelinePage userRole={profile.role} />
+                    <WithGraphExplorer
+                      defaultLens="deal"
+                      title="Deals"
+                      subtitle="Every active deal — filtered, searched, one list."
+                      fallback={<QrmPipelinePage userRole={profile.role} />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1706,7 +1718,12 @@ function App() {
                 path="/qrm/contacts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmContactsPage />
+                    <WithGraphExplorer
+                      defaultLens="contact"
+                      title="Contacts"
+                      subtitle="Every person — searchable across the graph."
+                      fallback={<QrmContactsPage />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2007,7 +2024,12 @@ function App() {
                 path="/qrm/companies"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmCompaniesPage />
+                    <WithGraphExplorer
+                      defaultLens="company"
+                      title="Companies"
+                      subtitle="Every business — searchable across the graph."
+                      fallback={<QrmCompaniesPage />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

@@ -324,8 +324,17 @@ export interface QrmActivityPatchInput {
 
 export type QrmRecordType = "contact" | "company" | "equipment";
 
+// Mirrors CrmSearchResult in supabase/functions/_shared/crm-router-service.ts.
+// Keep in sync; the router returns raw JSON, so the contract lives in both places.
+export type QrmSearchEntityType =
+  | "company"
+  | "contact"
+  | "deal"
+  | "equipment"
+  | "rental";
+
 export interface QrmSearchItem {
-  type: "company" | "contact";
+  type: QrmSearchEntityType;
   id: string;
   title: string;
   subtitle: string | null;

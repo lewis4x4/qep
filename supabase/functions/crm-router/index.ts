@@ -399,7 +399,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (req.method === "GET" && segments[1] === "search") {
       requireCaller(ctx);
       const q = url.searchParams.get("q") ?? "";
-      const types = url.searchParams.get("types") ?? "contact,company";
+      // Default to universal search across all known entity types; callers
+      // that want a narrower slice (e.g. the header search bar) pass `types`.
+      const types = url.searchParams.get("types") ?? "contact,company,deal,equipment,rental";
       const results = await crmSearch(ctx, q, types);
       return crmOk({ results }, { origin });
     }

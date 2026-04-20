@@ -18,6 +18,7 @@ import type {
   QrmDuplicateCandidate,
   QrmEquipment,
   QrmRecordType,
+  QrmSearchEntityType,
   QrmSearchItem,
 } from "./types";
 
@@ -76,6 +77,25 @@ export async function searchCrm(query: string): Promise<QrmSearchItem[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim(), types: "contact,company" });
   const payload = await requestRouter<{ results: QrmSearchItem[] }>(`/qrm/search?${params.toString()}`);
+  return payload.results;
+}
+
+/**
+ * Universal search across the operator graph. Pass `types` to narrow the
+ * lookup, or omit to search every known entity type. Used by the GraphExplorer
+ * surface and the global command-k bar.
+ */
+export async function searchQrmGraph(
+  query: string,
+  types?: QrmSearchEntityType[],
+): Promise<QrmSearchItem[]> {
+  if (!query.trim()) return [];
+  const allTypes: QrmSearchEntityType[] =
+    types && types.length > 0 ? types : ["contact", "company", "deal", "equipment", "rental"];
+  const params = new URLSearchParams({ q: query.trim(), types: allTypes.join(",") });
+  const payload = await requestRouter<{ results: QrmSearchItem[] }>(
+    `/qrm/search?${params.toString()}`,
+  );
   return payload.results;
 }
 
