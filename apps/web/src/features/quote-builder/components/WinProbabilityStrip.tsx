@@ -24,7 +24,7 @@
 import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, Gauge } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -33,8 +33,10 @@ import {
 } from "@/components/ui/tooltip";
 import {
   computeWinProbability,
+  computeWinProbabilityLifts,
   type WinProbabilityContext,
   type WinProbabilityFactor,
+  type WinProbabilityLift,
   type WinProbabilityResult,
 } from "../lib/win-probability-scorer";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
@@ -60,6 +62,13 @@ export function WinProbabilityStrip({ draft, context, compact = false }: WinProb
   const result = useMemo(
     () => computeWinProbability(draft, context),
     [draft, context],
+  );
+  // Slice 20d: counterfactual lifts — only surfaced when the deal has
+  // real room to move. We deliberately hide lifts on already-strong
+  // deals (>=70) so the rep isn't nagged on a win-likely quote.
+  const lifts = useMemo(
+    () => (result.score < 70 ? computeWinProbabilityLifts(draft, context) : []),
+    [draft, context, result.score],
   );
   const style = BAND_STYLE[result.band];
   // Top 3 factors by absolute weight; scorer already sorted them.
@@ -125,6 +134,25 @@ export function WinProbabilityStrip({ draft, context, compact = false }: WinProb
             )}
           </div>
         )}
+
+        {/* Slice 20d: counterfactual biggest lifts. Only rendered when
+            the score has real room to move AND the scorer found at least
+            one actionable lift; strong deals stay quiet. */}
+        {!compact && lifts.length > 0 && (
+          <div className="mt-3 border-t border-border/40 pt-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <ArrowUpRight className="h-3 w-3 text-emerald-400" aria-hidden />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
+                Biggest lifts
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {lifts.map((l) => (
+                <LiftChip key={l.id} lift={l} />
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
     </TooltipProvider>
   );
@@ -163,8 +191,11 @@ function FactorChip({ factor }: { factor: WinProbabilityFactor }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
+          tabIndex={0}
+          role="button"
+          aria-label={`${factor.label}: ${factor.rationale}`}
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] cursor-help",
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] cursor-help focus:outline-none focus:ring-2 focus:ring-ring",
             factor.weight > 0
               ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
               : factor.weight < 0
@@ -188,4 +219,29 @@ function FactorChip({ factor }: { factor: WinProbabilityFactor }) {
 
 function factorDirClass(weight: number): string {
   return weight > 0 ? "text-emerald-400" : weight < 0 ? "text-rose-400" : "text-muted-foreground";
+}
+
+function LiftChip({ lift }: { lift: WinProbabilityLift }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          aria-label={`${lift.label}: +${lift.deltaPts} points. ${lift.actionHint}`}
+          className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200 cursor-help hover:bg-emerald-500/15 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+        >
+          <ArrowUpRight className="h-3 w-3" aria-hidden />
+          <span className="tabular-nums font-semibold">+{lift.deltaPts}</span>
+          <span>{lift.label}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <p className="text-xs">{lift.rationale}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground italic">
+          {lift.actionHint}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
 }

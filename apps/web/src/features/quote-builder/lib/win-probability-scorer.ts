@@ -330,3 +330,155 @@ function buildHeadline(
     ? `At risk — ${strongestNeg.label.toLowerCase()} is dragging the deal.`
     : "At risk — not enough positive signal to carry the quote yet.";
 }
+
+// ── Counterfactual lifts (Slice 20d) ─────────────────────────────────────
+//
+// Given the same draft + context, simulate a handful of rep-actionable
+// tweaks and return the ones that would measurably lift the score.
+// This turns the strip from diagnostic ("here's your score") into
+// prescriptive ("here's the single highest-impact thing to do").
+//
+// Philosophy:
+//   • Only surface lifts the rep can actually *act on*. "Be warmer" is
+//     not actionable — "capture their trade today" is.
+//   • Use the same scorer for the simulation so the delta is mechanical
+//     and auditable. No magic numbers here; every lift comes from
+//     toggling a draft field and re-running the pure function.
+//   • When the ML counterfactual engine (Move 2) ships, this function
+//     doesn't need to change — we just point it at the new scorer.
+//   • Skip lifts whose state already applies (don't nag the rep to
+//     "capture a trade" if `tradeAllowance > 0`).
+
+export type WinProbabilityLiftId =
+  | "capture_trade"
+  | "select_equipment"
+  | "ai_recommendation"
+  | "reconnect_customer"
+  | "raise_margin";
+
+export interface WinProbabilityLift {
+  id: WinProbabilityLiftId;
+  /** Imperative action verb + noun ("Capture their trade"). */
+  label: string;
+  /** Expected positive point lift (>0). */
+  deltaPts: number;
+  /** Short explanation the rep sees on hover. */
+  rationale: string;
+  /** One-line next action the rep can take right now. */
+  actionHint: string;
+}
+
+/** Maximum lifts returned (keep UI uncluttered). */
+export const MAX_LIFTS = 3;
+
+/** Lifts below this delta are dropped as noise. */
+export const MIN_LIFT_DELTA = 3;
+
+export function computeWinProbabilityLifts(
+  draft: Partial<QuoteWorkspaceDraft>,
+  ctx: WinProbabilityContext,
+): WinProbabilityLift[] {
+  // Use `rawScore` for delta arithmetic — if we used the clamped score
+  // a base already near the 95 ceiling would silently truncate big
+  // real lifts (sim 105 clamped to 95 → delta 0, even though the lift
+  // is genuinely +10). The rep sees the clamped number, but the
+  // delta chip should show the mechanical effect of the action.
+  const base = computeWinProbability(draft, ctx).rawScore;
+
+  // Each candidate is a `(description, mutated draft|ctx)` pair. We run
+  // the scorer against the mutation and keep the positive-delta ones.
+  const candidates: Array<{
+    id: WinProbabilityLiftId;
+    label: string;
+    rationale: string;
+    actionHint: string;
+    /** Returns true if the lift is already satisfied and should be skipped. */
+    skipIf: () => boolean;
+    simulate: () => { draft: Partial<QuoteWorkspaceDraft>; ctx: WinProbabilityContext };
+  }> = [
+    {
+      id: "capture_trade",
+      label: "Capture their trade",
+      rationale: "Customers who commit a trade close at materially higher rates — a photo-valued trade is the strongest short-of-signature engagement signal.",
+      actionHint: "Use Point, Shoot, Trade on the Customer step to capture a photo-valued trade.",
+      skipIf: () => (draft.tradeAllowance ?? 0) > 0,
+      simulate: () => ({ draft: { ...draft, tradeAllowance: 1 }, ctx }),
+    },
+    {
+      id: "select_equipment",
+      label: "Pick a machine",
+      rationale: "Quotes with a specific spec convert better than price-anchoring conversations — the customer commits to a real configuration.",
+      actionHint: "Move to the Equipment step and select the model you've been discussing.",
+      skipIf: () => (draft.equipment?.length ?? 0) > 0,
+      simulate: () => ({
+        draft: { ...draft, equipment: [{ kind: "equipment", title: "Simulated", quantity: 1, unitPrice: 0 }] },
+        ctx,
+      }),
+    },
+    {
+      id: "ai_recommendation",
+      label: "Run AI Match",
+      rationale: "When AI intake has enough job context to recommend a specific machine, close rates lift.",
+      actionHint: "Go back to intake and describe the job; the recommender needs site + attachment notes.",
+      skipIf: () => !!draft.recommendation,
+      simulate: () => ({
+        draft: { ...draft, recommendation: { machine: "sim", attachments: [], reasoning: "sim" } },
+        ctx,
+      }),
+    },
+    {
+      id: "reconnect_customer",
+      label: "Reconnect this week",
+      rationale: "Stale relationships close worse. A fresh touch pulls recency back into 'warm', which lifts the score.",
+      actionHint: "Call or email — even a short check-in resets the recency clock.",
+      // Only relevant if we HAVE a recency signal and it's 46+ days stale.
+      skipIf: () => {
+        const r = draft.customerSignals?.lastContactDaysAgo;
+        return r == null || r <= 45;
+      },
+      simulate: () => ({
+        draft: {
+          ...draft,
+          customerSignals: draft.customerSignals
+            ? { ...draft.customerSignals, lastContactDaysAgo: 7 }
+            : draft.customerSignals,
+        },
+        ctx,
+      }),
+    },
+    {
+      id: "raise_margin",
+      label: "Hold the margin line",
+      rationale: "Closing at spec shouldn't cost P&L. Bringing margin back to your baseline flips this factor from drag to lift.",
+      actionHint: "Trim discretionary discounts or revisit attachment mix before sending.",
+      // Only relevant when we have a baseline AND current margin is below it.
+      skipIf: () => {
+        if (ctx.marginPct == null || ctx.marginBaselineMedianPct == null) return true;
+        return ctx.marginPct >= ctx.marginBaselineMedianPct;
+      },
+      simulate: () => ({
+        draft,
+        ctx: { ...ctx, marginPct: ctx.marginBaselineMedianPct ?? ctx.marginPct },
+      }),
+    },
+  ];
+
+  const lifts: WinProbabilityLift[] = [];
+  for (const c of candidates) {
+    if (c.skipIf()) continue;
+    const sim = c.simulate();
+    const simRaw = computeWinProbability(sim.draft, sim.ctx).rawScore;
+    const delta = Math.round(simRaw - base);
+    if (delta < MIN_LIFT_DELTA) continue;
+    lifts.push({
+      id: c.id,
+      label: c.label,
+      deltaPts: delta,
+      rationale: c.rationale,
+      actionHint: c.actionHint,
+    });
+  }
+
+  lifts.sort((a, b) => b.deltaPts - a.deltaPts);
+  return lifts.slice(0, MAX_LIFTS);
+}

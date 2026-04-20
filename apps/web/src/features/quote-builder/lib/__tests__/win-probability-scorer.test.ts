@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   computeWinProbability,
+  computeWinProbabilityLifts,
+  MAX_LIFTS,
+  MIN_LIFT_DELTA,
   WIN_PROB_WEIGHTS,
   type WinProbabilityContext,
 } from "../win-probability-scorer";
@@ -451,5 +454,154 @@ describe("computeWinProbability — determinism", () => {
     expect(a.band).toBe(b.band);
     expect(a.headline).toBe(b.headline);
     expect(a.factors.length).toBe(b.factors.length);
+  });
+});
+
+// ── Counterfactual lifts (Slice 20d) ─────────────────────────────────────
+
+describe("computeWinProbabilityLifts — core behavior", () => {
+  test("empty draft suggests capture_trade, select_equipment, ai_recommendation", () => {
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    const ids = lifts.map((l) => l.id);
+    expect(ids).toContain("capture_trade");
+    expect(ids).toContain("select_equipment");
+    // reconnect needs a recency signal; raise_margin needs baseline →
+    // neither applies on an empty draft.
+    expect(ids).not.toContain("reconnect_customer");
+    expect(ids).not.toContain("raise_margin");
+  });
+
+  test("caps returned lifts at MAX_LIFTS", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({
+        customerSignals: signals({ lastContactDaysAgo: 120 }),
+      }),
+      { marginPct: 5, marginBaselineMedianPct: 20 },
+    );
+    expect(lifts.length).toBeLessThanOrEqual(MAX_LIFTS);
+  });
+
+  test("sorts lifts by deltaPts descending", () => {
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    for (let i = 1; i < lifts.length; i++) {
+      expect(lifts[i - 1]!.deltaPts >= lifts[i]!.deltaPts).toBe(true);
+    }
+  });
+
+  test("every returned lift has deltaPts >= MIN_LIFT_DELTA", () => {
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    for (const l of lifts) {
+      expect(l.deltaPts).toBeGreaterThanOrEqual(MIN_LIFT_DELTA);
+    }
+  });
+
+  test("lift deltas never exceed unclamped scorer ceiling", () => {
+    // Sanity: no lift should claim to lift more than 95 - 5 = 90 pts.
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    for (const l of lifts) {
+      expect(l.deltaPts).toBeLessThan(90);
+    }
+  });
+});
+
+describe("computeWinProbabilityLifts — skip-when-satisfied", () => {
+  test("skips capture_trade when tradeAllowance > 0", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ tradeAllowance: 5000 }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "capture_trade")).toBe(false);
+  });
+
+  test("skips select_equipment when equipment already selected", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({
+        equipment: [{ kind: "equipment" as const, title: "CAT", quantity: 1, unitPrice: 100 }],
+      }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "select_equipment")).toBe(false);
+  });
+
+  test("skips ai_recommendation when recommendation present", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ recommendation: { machine: "X", attachments: [], reasoning: "r" } }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "ai_recommendation")).toBe(false);
+  });
+
+  test("skips reconnect_customer when recency is fresh", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ lastContactDaysAgo: 10 }) }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "reconnect_customer")).toBe(false);
+  });
+
+  test("skips reconnect_customer when no recency signal at all", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ lastContactDaysAgo: null }) }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "reconnect_customer")).toBe(false);
+  });
+
+  test("suggests reconnect_customer when stale >45d", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ lastContactDaysAgo: 120 }) }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "reconnect_customer")).toBe(true);
+  });
+
+  test("skips raise_margin when margin baseline absent", () => {
+    const lifts = computeWinProbabilityLifts(draft(), { marginPct: 10 });
+    expect(lifts.some((l) => l.id === "raise_margin")).toBe(false);
+  });
+
+  test("skips raise_margin when margin already at/above baseline", () => {
+    const lifts = computeWinProbabilityLifts(draft(), {
+      marginPct: 20,
+      marginBaselineMedianPct: 15,
+    });
+    expect(lifts.some((l) => l.id === "raise_margin")).toBe(false);
+  });
+
+  test("suggests raise_margin when below baseline", () => {
+    const lifts = computeWinProbabilityLifts(draft(), {
+      marginPct: 5,
+      marginBaselineMedianPct: 20,
+    });
+    expect(lifts.some((l) => l.id === "raise_margin")).toBe(true);
+  });
+});
+
+describe("computeWinProbabilityLifts — deltas use real scorer", () => {
+  test("capture_trade delta matches tradeCommitment weight", () => {
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    const trade = lifts.find((l) => l.id === "capture_trade");
+    expect(trade).toBeDefined();
+    // The scorer adds WIN_PROB_WEIGHTS.tradeCommitment (+10) for a
+    // trade. Delta should match exactly since clamp doesn't engage.
+    expect(trade?.deltaPts).toBe(WIN_PROB_WEIGHTS.tradeCommitment);
+  });
+
+  test("select_equipment delta matches equipmentSelected weight", () => {
+    const lifts = computeWinProbabilityLifts(draft(), noCtx);
+    const eq = lifts.find((l) => l.id === "select_equipment");
+    expect(eq?.deltaPts).toBe(WIN_PROB_WEIGHTS.equipmentSelected);
+  });
+
+  test("all lifts carry non-empty label, rationale, actionHint", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ lastContactDaysAgo: 120 }) }),
+      { marginPct: 5, marginBaselineMedianPct: 20 },
+    );
+    for (const l of lifts) {
+      expect(l.label.length).toBeGreaterThan(0);
+      expect(l.rationale.length).toBeGreaterThan(0);
+      expect(l.actionHint.length).toBeGreaterThan(0);
+    }
   });
 });
