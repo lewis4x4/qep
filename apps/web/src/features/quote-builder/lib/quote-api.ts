@@ -34,13 +34,33 @@ export interface PortalRevisionEnvelope {
   publishState: PortalQuoteRevisionPublishState | null;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+/**
+ * Buffer in seconds — if the JWT expires within this window we refresh
+ * proactively rather than send a soon-to-expire token. 30s is generous
+ * enough to ride out the edge function round trip.
+ */
+const JWT_REFRESH_BUFFER_SECONDS = 30;
+
+async function getAuthHeaders(forceRefresh = false): Promise<Record<string, string>> {
   const sessionResult = await supabase.auth.getSession();
   let session = sessionResult.data.session;
-  if (!session?.access_token) {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = session?.expires_at ?? 0;
+
+  // Refresh when: caller asked us to (post-401 retry), we have no token,
+  // or the token is within JWT_REFRESH_BUFFER_SECONDS of expiry. The
+  // previous version only refreshed on the no-token branch, which let
+  // stale-but-present JWTs sail through to the gateway and 401 there.
+  const needsRefresh =
+    forceRefresh
+    || !session?.access_token
+    || expiresAt <= now + JWT_REFRESH_BUFFER_SECONDS;
+
+  if (needsRefresh) {
     const refreshed = await supabase.auth.refreshSession();
     session = refreshed.data.session ?? null;
   }
+
   if (!session?.access_token) {
     throw new Error("Quote session unavailable. Sign in again to continue.");
   }
@@ -48,6 +68,29 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     Authorization: `Bearer ${session.access_token}`,
     "Content-Type": "application/json",
   };
+}
+
+/**
+ * Wraps fetch with one automatic retry on 401 — covers the edge case
+ * where our token passed `expires_at` checks client-side but still
+ * got rejected by the gateway (clock skew, mid-flight expiry). The
+ * second attempt forces a refresh before trying again.
+ *
+ * Non-401 errors pass through unmodified.
+ */
+async function fetchWithSessionRetry(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const res = await fetch(url, {
+    ...init,
+    headers: { ...(init.headers ?? {}), ...(await getAuthHeaders()) },
+  });
+  if (res.status !== 401) return res;
+  return fetch(url, {
+    ...init,
+    headers: { ...(init.headers ?? {}), ...(await getAuthHeaders(true)) },
+  });
 }
 
 export async function listQuotePackages(params?: {
@@ -58,25 +101,34 @@ export async function listQuotePackages(params?: {
   if (params?.status && params.status !== "all") qs.set("status", params.status);
   if (params?.search) qs.set("search", params.search);
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  const res = await fetch(`${QUOTE_API_URL}/list${suffix}`, {
-    headers: await getAuthHeaders(),
-  });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/list${suffix}`);
   if (!res.ok) {
     // Preserve the real server detail. The edge function returns a
     // structured { error: string } body on 4xx/5xx; bubble it up so the
     // sidebar can show the specific cause (auth expired vs DB error vs
     // RLS block) instead of a generic "failed" that hides the root.
+    // 401 after the retry means the gateway is still rejecting — the
+    // session is genuinely unrecoverable at that point and the user
+    // needs to sign out / in.
     const body = await res.json().catch(() => ({}));
-    const detail = (body as { error?: string }).error?.trim();
-    throw new Error(detail || `Failed to list quotes (HTTP ${res.status})`);
+    const detail = (body as { error?: string; message?: string }).error
+      ?? (body as { message?: string }).message
+      ?? "";
+    if (res.status === 401) {
+      throw new Error(
+        detail
+          ? `Session expired: ${detail}. Sign out and sign in again.`
+          : "Session expired. Sign out and sign in again to continue.",
+      );
+    }
+    throw new Error(detail.trim() || `Failed to list quotes (HTTP ${res.status})`);
   }
   return res.json();
 }
 
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
-  const res = await fetch(`${QUOTE_API_URL}/competitors`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/competitors`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify({ make, model }),
   });
   if (!res.ok) return { listings: [] };
@@ -84,17 +136,14 @@ export async function getCompetitorListings(make: string, model?: string): Promi
 }
 
 export async function getQuoteForDeal(dealId: string) {
-  const res = await fetch(`${QUOTE_API_URL}?deal_id=${dealId}`, {
-    headers: await getAuthHeaders(),
-  });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}?deal_id=${dealId}`);
   if (!res.ok) throw new Error("Failed to load quote");
   return res.json();
 }
 
 export async function getAiEquipmentRecommendation(jobDescription: string): Promise<QuoteRecommendation> {
-  const res = await fetch(`${QUOTE_API_URL}/recommend`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/recommend`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify({ job_description: jobDescription }),
   });
   if (!res.ok) throw new Error("AI recommendation failed");
@@ -106,9 +155,8 @@ export async function calculateFinancing(
   marginPct?: number,
   manufacturer?: string,
 ): Promise<QuoteFinancingPreview> {
-  const res = await fetch(`${QUOTE_API_URL}/calculate`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/calculate`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify({ total_amount: totalAmount, margin_pct: marginPct, manufacturer }),
   });
   if (!res.ok) throw new Error("Financing calculation failed");
@@ -116,9 +164,8 @@ export async function calculateFinancing(
 }
 
 export async function saveQuotePackage(data: Record<string, unknown>): Promise<QuotePackageSaveResponse> {
-  const res = await fetch(`${QUOTE_API_URL}/save`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/save`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to save quote");
@@ -126,9 +173,8 @@ export async function saveQuotePackage(data: Record<string, unknown>): Promise<Q
 }
 
 export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: boolean; to_email: string }> {
-  const res = await fetch(`${QUOTE_API_URL}/send-package`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/send-package`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify({ quote_package_id: quotePackageId }),
   });
   if (!res.ok) {
@@ -145,9 +191,8 @@ export async function saveQuoteSignature(data: {
   signer_email?: string | null;
   signature_png_base64?: string | null;
 }) {
-  const res = await fetch(`${QUOTE_API_URL}/sign`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/sign`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -158,9 +203,7 @@ export async function saveQuoteSignature(data: {
 }
 
 export async function getPortalRevision(dealId: string): Promise<PortalRevisionEnvelope> {
-  const res = await fetch(`${QUOTE_API_URL}/portal-revision?deal_id=${encodeURIComponent(dealId)}`, {
-    headers: await getAuthHeaders(),
-  });
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision?deal_id=${encodeURIComponent(dealId)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Failed to load portal revision" }));
     throw new Error((err as { error?: string }).error ?? "Failed to load portal revision");
@@ -176,9 +219,8 @@ export async function savePortalRevisionDraft(data: {
   dealer_message?: string | null;
   revision_summary?: string | null;
 }): Promise<{ draft: PortalQuoteRevisionDraft; publishState: PortalQuoteRevisionPublishState }> {
-  const res = await fetch(`${QUOTE_API_URL}/portal-revision/draft`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision/draft`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -191,9 +233,8 @@ export async function savePortalRevisionDraft(data: {
 export async function submitPortalRevision(data: {
   deal_id: string;
 }): Promise<{ draft: PortalQuoteRevisionDraft; publishState: PortalQuoteRevisionPublishState }> {
-  const res = await fetch(`${QUOTE_API_URL}/portal-revision/submit`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision/submit`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -206,9 +247,8 @@ export async function submitPortalRevision(data: {
 export async function returnPortalRevisionToDraft(data: {
   deal_id: string;
 }): Promise<{ draft: PortalQuoteRevisionDraft; publishState: PortalQuoteRevisionPublishState }> {
-  const res = await fetch(`${QUOTE_API_URL}/portal-revision/return-to-draft`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision/return-to-draft`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -221,9 +261,8 @@ export async function returnPortalRevisionToDraft(data: {
 export async function publishPortalRevision(data: {
   deal_id: string;
 }): Promise<{ draft: PortalQuoteRevisionDraft | null; publishState: PortalQuoteRevisionPublishState }> {
-  const res = await fetch(`${QUOTE_API_URL}/portal-revision/publish`, {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/portal-revision/publish`, {
     method: "POST",
-    headers: await getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) {
