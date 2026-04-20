@@ -264,24 +264,41 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    // IMPORTANT: Pass the JWT explicitly to auth.getUser(token). The
-    // argless form silently 401s on the JSR/Deno supabase-js build —
-    // it falls into the _useSession path which needs either a stored
-    // session or hasCustomAuthorizationHeader on the auth client,
-    // neither of which exists here. Every user-facing call to /list
-    // was 401ing in production because of this. See
-    // supabase/functions/_shared/service-auth.ts for the canonical
-    // pattern.
+    // Project is on ES256 JWT signing keys; supabase-js v2's local JWT
+    // verifier rejects ES256 with "Unsupported JWT algorithm ES256" and
+    // 401s every legit user token. Validate by calling GoTrue's /user
+    // endpoint directly — it knows its own signing key. See
+    // _shared/service-auth.ts for the canonical pattern.
     const token = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()
       : authHeader.trim();
     if (!token) {
       return safeJsonError("Missing bearer token", 401, origin);
     }
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
+    let user: { id: string } | null = null;
+    try {
+      const userResp = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        },
+      });
+      if (!userResp.ok) {
+        const body = await userResp.json().catch(() => ({}));
+        const message =
+          (body as { msg?: string; message?: string }).msg
+          ?? (body as { message?: string }).message
+          ?? `HTTP ${userResp.status}`;
+        return safeJsonError(`Unauthorized: ${message}`, 401, origin);
+      }
+      const userBody = await userResp.json();
+      if (!userBody || typeof userBody.id !== "string") {
+        return safeJsonError("Unauthorized: malformed user", 401, origin);
+      }
+      user = { id: userBody.id };
+    } catch (e) {
       return safeJsonError(
-        authError?.message ? `Unauthorized: ${authError.message}` : "Unauthorized",
+        `Unauthorized: ${e instanceof Error ? e.message : "token verification failed"}`,
         401,
         origin,
       );
