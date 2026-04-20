@@ -17560,6 +17560,7 @@ export type Database = {
           margin_amount: number | null
           margin_pct: number | null
           net_total: number | null
+          originating_log_id: string | null
           pdf_generated_at: string | null
           pdf_url: string | null
           photos_included: Json | null
@@ -17604,6 +17605,7 @@ export type Database = {
           margin_amount?: number | null
           margin_pct?: number | null
           net_total?: number | null
+          originating_log_id?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -17648,6 +17650,7 @@ export type Database = {
           margin_amount?: number | null
           margin_pct?: number | null
           net_total?: number | null
+          originating_log_id?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -17730,6 +17733,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_rep_pipeline"
             referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "quote_packages_originating_log_id_fkey"
+            columns: ["originating_log_id"]
+            isOneToOne: false
+            referencedRelation: "qb_ai_request_log"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "quote_packages_requote_draft_email_id_fkey"
