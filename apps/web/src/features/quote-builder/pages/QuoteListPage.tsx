@@ -61,6 +61,13 @@ import {
   type FactorDrift,
   type FactorDriftReport,
 } from "../lib/factor-drift";
+import {
+  computeCalibrationDrift,
+  describeCalibrationDriftHeadline,
+  formatSignedPct,
+  formatBrierDelta,
+  type CalibrationDriftReport,
+} from "../lib/calibration-drift";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -331,6 +338,24 @@ export function QuoteListPage() {
     return report;
   }, [closedAuditQuery.data]);
 
+  /**
+   * Slice 20s — calibration drift. Same reference data as 20r (closed-
+   * deal audit rows) but aggregates to the scorer-wide level: is the
+   * engine getting sharper or dulling, and by how much? Pairs with 20r
+   * above — drift tells the manager *which rules* moved; this card
+   * tells them *whether the whole scorer* moved.
+   *
+   * Hidden when we have no closed deals at all. Stable-with-data still
+   * renders — "calibration is holding steady" is itself a useful fact
+   * for a quarterly review, not noise to hide.
+   */
+  const calibrationDrift = useMemo<CalibrationDriftReport | null>(() => {
+    const r = closedAuditQuery.data;
+    if (!r || !r.ok) return null;
+    if (r.audits.length === 0) return null;
+    return computeCalibrationDrift(r.audits);
+  }, [closedAuditQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -371,6 +396,15 @@ export function QuoteListPage() {
       {calibrationDisplay?.kind === "error" && (
         <InstrumentationErrorRow label="Scorer calibration" message={calibrationDisplay.message} />
       )}
+
+      {/* Slice 20s: calibration drift. Immediately below the calibration
+          card because the two are a natural pair — one reads "the scorer
+          is 67% accurate", the next reads "and that's +8pp vs last
+          quarter." Direction-colored accent pills ride on a neutral
+          indigo-violet card so the palette doesn't over-claim either
+          direction while the underlying calibration card keeps its
+          emerald. Hidden when we have no closed deals at all. */}
+      {calibrationDrift && <CalibrationDriftCard report={calibrationDrift} />}
 
       {/* Slice 20k: shadow calibration — "does the shadow score deserve
           to sit next to the live score?" Renders between calibration
@@ -1033,6 +1067,144 @@ function AgreementRatePill({
       </div>
       <div className="mt-0.5 text-[10px] text-muted-foreground tabular-nums" aria-hidden="true">
         {count} / {total}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Slice 20s — calibration drift card.
+ *
+ * Manager/owner-only. Complements the scorer-calibration card directly
+ * above it: that card shows current hit-rate + Brier; this card shows
+ * whether either has moved between a recent and a prior window. The
+ * copy comes from the lib so tests pin the wording.
+ *
+ * Direction drives tone:
+ *   • improving → emerald accent pill
+ *   • degrading → rose accent pill
+ *   • stable    → muted accent pill
+ * The card itself uses a neutral indigo-violet palette so a "holding
+ * steady" reading doesn't look like a win or a loss.
+ */
+function CalibrationDriftCard({ report }: { report: CalibrationDriftReport }) {
+  const headline = describeCalibrationDriftHeadline(report);
+  const tone =
+    report.lowConfidence
+      ? { border: "border-muted/40", text: "text-muted-foreground", bg: "bg-muted/30" }
+      : report.direction === "improving"
+        ? { border: "border-emerald-500/30", text: "text-emerald-300", bg: "bg-emerald-500/15" }
+        : report.direction === "degrading"
+          ? { border: "border-rose-500/30", text: "text-rose-300", bg: "bg-rose-500/15" }
+          : { border: "border-muted/40", text: "text-muted-foreground", bg: "bg-muted/30" };
+  const directionLabel =
+    report.direction === "improving"
+      ? "SHARPENING"
+      : report.direction === "degrading"
+        ? "DULLING"
+        : "STABLE";
+  return (
+    <Card
+      className="border-indigo-500/30 bg-indigo-500/5 p-3"
+      role="region"
+      aria-label="Calibration drift"
+    >
+      <div className="flex items-start gap-2">
+        <Gauge className="h-4 w-4 shrink-0 text-indigo-400" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-400">
+              Calibration drift ({report.windowDays}d)
+            </span>
+            <span
+              className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${tone.text} ${tone.bg}`}
+            >
+              {directionLabel}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-foreground">{headline}</p>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <CalibrationDriftMetric
+              label="Hit rate"
+              recent={report.recentAccuracy}
+              prior={report.priorAccuracy}
+              delta={report.accuracyDelta}
+              deltaFormatter={formatSignedPct}
+              valueFormatter={(v) => (v === null ? "—" : `${Math.round(v * 100)}%`)}
+              higherIsBetter
+            />
+            <CalibrationDriftMetric
+              label="Brier"
+              recent={report.recentBrier}
+              prior={report.priorBrier}
+              delta={report.brierDelta}
+              deltaFormatter={formatBrierDelta}
+              valueFormatter={(v) => (v === null ? "—" : v.toFixed(3))}
+              higherIsBetter={false}
+            />
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
+            {report.recentN} recent · {report.priorN} prior deals
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * One side-by-side metric cell for the calibration-drift card. "higher
+ * is better" flips the good/bad interpretation of positive delta: for
+ * hit-rate, +5pp is good → emerald; for Brier, +0.02 is bad → rose.
+ */
+function CalibrationDriftMetric({
+  label,
+  recent,
+  prior,
+  delta,
+  deltaFormatter,
+  valueFormatter,
+  higherIsBetter,
+}: {
+  label: string;
+  recent: number | null;
+  prior: number | null;
+  delta: number | null;
+  deltaFormatter: (v: number | null) => string;
+  valueFormatter: (v: number | null) => string;
+  higherIsBetter: boolean;
+}) {
+  const deltaTone =
+    delta === null || delta === 0
+      ? "text-muted-foreground"
+      : higherIsBetter
+        ? delta > 0
+          ? "text-emerald-300"
+          : "text-rose-300"
+        : delta > 0
+          ? "text-rose-300"
+          : "text-emerald-300";
+  const ariaLabel =
+    delta === null
+      ? `${label}: delta unavailable`
+      : `${label}: recent ${valueFormatter(recent)}, prior ${valueFormatter(prior)}, change ${deltaFormatter(delta)}`;
+  return (
+    <div
+      className="rounded-md border border-indigo-500/20 bg-background/40 px-2 py-1.5"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-baseline justify-between gap-2" aria-hidden="true">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+        <span className={`text-xs font-semibold tabular-nums ${deltaTone}`}>
+          {deltaFormatter(delta)}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-baseline gap-1 text-[10px] text-muted-foreground tabular-nums" aria-hidden="true">
+        <span>{valueFormatter(prior)}</span>
+        <span>→</span>
+        <span className="font-semibold text-foreground">{valueFormatter(recent)}</span>
       </div>
     </div>
   );
