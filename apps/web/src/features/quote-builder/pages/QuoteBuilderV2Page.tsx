@@ -17,6 +17,8 @@ import {
   PenTool,
 } from "lucide-react";
 import { CustomerInfoCard } from "../components/CustomerInfoCard";
+import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
+import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
@@ -558,12 +560,27 @@ export function QuoteBuilderV2Page() {
             </div>
           )}
 
-          <CustomerInfoCard
-            customerName={draft.customerName ?? ""}
-            customerCompany={draft.customerCompany ?? ""}
-            customerPhone={draft.customerPhone ?? ""}
-            customerEmail={draft.customerEmail ?? ""}
-            onChange={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
+          <CustomerSection
+            draft={draft}
+            onPick={(picked) => setDraft((cur) => ({
+              ...cur,
+              contactId:       picked.contactId ?? undefined,
+              companyId:       picked.companyId ?? undefined,
+              customerName:    picked.customerName,
+              customerCompany: picked.customerCompany,
+              customerPhone:   picked.customerPhone,
+              customerEmail:   picked.customerEmail,
+            }))}
+            onManualChange={(field, value) => setDraft((cur) => ({ ...cur, [field]: value }))}
+            onClear={() => setDraft((cur) => ({
+              ...cur,
+              contactId:       undefined,
+              companyId:       undefined,
+              customerName:    "",
+              customerCompany: "",
+              customerPhone:   "",
+              customerEmail:   "",
+            }))}
           />
 
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
@@ -1153,5 +1170,91 @@ export function QuoteBuilderV2Page() {
         dealId={dealId || undefined}
       />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// CustomerSection — small composite wrapping the picker / chip / manual
+// fallback. Pulled out of the main component to keep the step-1 render
+// focused and to make the picker→chip transition legible. Consumes the
+// draft to decide which UI to show:
+//
+//   - No customer selected AND no manual input → picker
+//   - Customer selected (has CRM contactId/companyId OR manual data) → chip
+//   - "New customer" requested from picker → inline 4-field manual form
+//
+// Keeps state minimal: the picker's query string and whether manual
+// fallback mode is active. Everything else lives in the draft.
+// ────────────────────────────────────────────────────────────────────────
+
+function CustomerSection({
+  draft,
+  onPick,
+  onManualChange,
+  onClear,
+}: {
+  draft: QuoteWorkspaceDraft;
+  onPick: (picked: PickedCustomer) => void;
+  onManualChange: (
+    field: "customerName" | "customerCompany" | "customerPhone" | "customerEmail",
+    value: string,
+  ) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [manualMode, setManualMode] = useState(false);
+
+  const hasCustomer = Boolean(
+    draft.customerCompany?.trim() || draft.customerName?.trim(),
+  );
+  const fromCrm = Boolean(draft.contactId || draft.companyId);
+
+  // Chip view — something's selected / entered
+  if (hasCustomer && !manualMode) {
+    return (
+      <SelectedCustomerChip
+        customerName={draft.customerName ?? ""}
+        customerCompany={draft.customerCompany ?? ""}
+        customerPhone={draft.customerPhone ?? ""}
+        customerEmail={draft.customerEmail ?? ""}
+        fromCrm={fromCrm}
+        onChange={() => {
+          onClear();
+          setQuery("");
+          setManualMode(false);
+        }}
+      />
+    );
+  }
+
+  // Manual mode — 4-field form for brand-new customers
+  if (manualMode) {
+    return (
+      <CustomerInfoCard
+        customerName={draft.customerName ?? ""}
+        customerCompany={draft.customerCompany ?? ""}
+        customerPhone={draft.customerPhone ?? ""}
+        customerEmail={draft.customerEmail ?? ""}
+        onChange={onManualChange}
+      />
+    );
+  }
+
+  // Default — picker
+  return (
+    <CustomerPicker
+      query={query}
+      onQueryChange={setQuery}
+      onPick={(picked) => {
+        onPick(picked);
+        setQuery("");
+      }}
+      onRequestManualEntry={(startingQuery) => {
+        // Seed customer name with what the rep was typing so they don't
+        // have to retype it in the manual form
+        onManualChange("customerName", startingQuery);
+        setManualMode(true);
+      }}
+    />
   );
 }

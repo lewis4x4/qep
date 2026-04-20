@@ -286,6 +286,12 @@ export function buildQuoteSavePayload(
   return {
     deal_id: draft.dealId,
     contact_id: draft.contactId || undefined,
+    // Slice: Customer Picker. When the rep picks an existing customer
+    // from the CRM, companyId flows through to the save payload so
+    // Slice-17 similar-deals + Slice-10 outcome capture can attribute
+    // the quote to the company without relying on string matching on
+    // customer_company.
+    company_id: draft.companyId || undefined,
     equipment: draft.equipment.map((item) => ({
       id: item.id,
       make: item.make,
