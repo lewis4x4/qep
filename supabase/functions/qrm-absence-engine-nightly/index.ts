@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
   buildRepAbsence,
@@ -23,11 +24,13 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
+    // Cron path: accept x-internal-service-secret before requiring Bearer.
+    const cronCaller = isServiceRoleCaller(req);
     const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
+    if (!cronCaller && !authHeader) return safeJsonError("Unauthorized", 401, origin);
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
+    const isServiceRole = cronCaller || authHeader === `Bearer ${serviceRoleKey}`;
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -38,7 +41,7 @@ Deno.serve(async (req) => {
       const caller = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+        { global: { headers: { Authorization: authHeader! } } },
       );
       const { data: { user }, error } = await caller.auth.getUser();
       if (error || !user) return safeJsonError("Unauthorized", 401, origin);
