@@ -113,6 +113,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Execution",
   },
   {
+    label: "Voice Quote",
+    href: "/voice-quote",
+    icon: Mic,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "sales",
+    sectionLabel: "Execution",
+  },
+  {
     label: "Parts Command",
     href: "/parts",
     icon: Boxes,

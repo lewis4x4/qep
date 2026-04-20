@@ -153,6 +153,31 @@ export function QuoteBuilderV2Page() {
     setFinanceScenarios([]);
   }, [draft.equipment, draft.attachments, draft.tradeAllowance]);
 
+  // Slice 14: pick up a pending voice-quote handoff on mount. The VoiceQuotePage
+  // stashes the selected scenario in sessionStorage; we read + clear it here
+  // and seed the draft via the same handler the in-place ConversationalDealEngine
+  // uses. Deliberately one-shot: once consumed, the key is deleted so a browser
+  // refresh doesn't re-apply it.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("qep.voiceQuote.pendingSelection");
+      if (!raw) return;
+      sessionStorage.removeItem("qep.voiceQuote.pendingSelection");
+      const parsed = JSON.parse(raw) as ScenarioSelection & { at?: string };
+      // Older-than-10-minute handoffs are suspicious (closed tab, came back later)
+      if (parsed.at) {
+        const ageMs = Date.now() - new Date(parsed.at).getTime();
+        if (ageMs > 10 * 60 * 1000) return;
+      }
+      handleScenarioSelection(parsed);
+    } catch {
+      // Malformed payload — ignore silently; the user is in the quote builder
+      // and can proceed manually.
+    }
+    // Intentionally one-shot: no deps; runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const saveMutation = useMutation({
     mutationFn: (): Promise<QuotePackageSaveResponse> =>
       saveQuotePackage(
