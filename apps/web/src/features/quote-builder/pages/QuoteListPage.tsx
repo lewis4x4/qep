@@ -68,6 +68,12 @@ import {
   formatBrierDelta,
   type CalibrationDriftReport,
 } from "../lib/calibration-drift";
+import {
+  computeProposalUrgency,
+  describeProposalUrgencyPill,
+  type ProposalUrgency,
+  type ProposalUrgencyResult,
+} from "../lib/proposal-urgency";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -356,6 +362,20 @@ export function QuoteListPage() {
     return computeCalibrationDrift(r.audits);
   }, [closedAuditQuery.data]);
 
+  /**
+   * Slice 20t — proposal urgency. Decides how loudly the scorer-
+   * evolution card speaks based on 20s's calibration trend. High when
+   * the scorer is dulling substantively on trusted data; low when it's
+   * sharpening on its own; medium otherwise. The proposal card props
+   * through `urgency` to pick its border tone + pill copy, so a
+   * degrading calibration escalates the manager's attention without
+   * the rep-facing surfaces changing at all.
+   */
+  const proposalUrgency = useMemo<ProposalUrgencyResult>(
+    () => computeProposalUrgency(calibrationDrift),
+    [calibrationDrift],
+  );
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -445,7 +465,11 @@ export function QuoteListPage() {
           handoff — "here's how to evolve the scorer based on all of
           the above." Hidden for reps + thin data. */}
       {scorerProposal && (
-        <ScorerProposalCard proposal={scorerProposal} whatIf={scorerWhatIf} />
+        <ScorerProposalCard
+          proposal={scorerProposal}
+          whatIf={scorerWhatIf}
+          urgency={proposalUrgency}
+        />
       )}
 
       {/* Search + Filters */}
@@ -1512,12 +1536,18 @@ function ClosedDealAuditRow({ audit }: { audit: ClosedDealAudit }) {
 function ScorerProposalCard({
   proposal,
   whatIf,
+  urgency,
 }: {
   proposal: ScorerProposal;
   /** Slice 20p — simulated Brier + hit-rate under the proposal. Null
    *  when we don't have closed-deal audits to simulate against, or when
    *  the proposal has no actionable changes. */
   whatIf: ScorerWhatIfResult | null;
+  /** Slice 20t — urgency + rationale derived from 20s's calibration
+   *  drift. Tunes card tone and adds a priority pill + contextual
+   *  sentence so a dulling scorer escalates and an improving one
+   *  softens. `medium` with `rationale=null` is the silent default. */
+  urgency: ProposalUrgencyResult;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1546,11 +1576,22 @@ function ScorerProposalCard({
     }
   }
 
+  // Urgency drives the card's border tone + header-area pill so a
+  // dulling scorer escalates and an improving one softens. Headline
+  // accent color (violet) is preserved so the card identity holds even
+  // when escalated — only the border + pill change.
+  const urgencyTone =
+    urgency.urgency === "high"
+      ? { border: "border-rose-500/40", cardBg: "bg-rose-500/5", pillBg: "bg-rose-500/15", pillText: "text-rose-300" }
+      : urgency.urgency === "low"
+        ? { border: "border-emerald-500/30", cardBg: "bg-emerald-500/5", pillBg: "bg-emerald-500/15", pillText: "text-emerald-300" }
+        : { border: "border-violet-500/30", cardBg: "bg-violet-500/5", pillBg: "bg-violet-500/15", pillText: "text-violet-300" };
+
   return (
     <Card
-      className="border-violet-500/30 bg-violet-500/5 p-3"
+      className={`${urgencyTone.border} ${urgencyTone.cardBg} p-3`}
       role="region"
-      aria-label="Scorer evolution proposal"
+      aria-label={`Scorer evolution proposal (${urgency.urgency} urgency)`}
     >
       <div className="flex items-start gap-2">
         <Wand2 className="h-4 w-4 shrink-0 text-violet-400" aria-hidden />
@@ -1559,15 +1600,30 @@ function ScorerProposalCard({
             <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-400">
               Scorer evolution proposal
             </span>
-            <span
-              className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap"
-              aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
-            >
-              {actionable.length} change{actionable.length === 1 ? "" : "s"}
-              {keeps.length > 0 && ` · ${keeps.length} keep`}
-            </span>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <span
+                className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${urgencyTone.pillBg} ${urgencyTone.pillText}`}
+                aria-label={`Urgency: ${urgency.urgency}`}
+              >
+                {describeProposalUrgencyPill(urgency.urgency)}
+              </span>
+              <span
+                className="text-[10px] text-muted-foreground tabular-nums"
+                aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
+              >
+                {actionable.length} change{actionable.length === 1 ? "" : "s"}
+                {keeps.length > 0 && ` · ${keeps.length} keep`}
+              </span>
+            </div>
           </div>
           <p className="mt-0.5 text-[11px] text-foreground">{proposal.headline}</p>
+          {urgency.rationale && (
+            <p
+              className={`mt-1 text-[10px] ${urgency.urgency === "high" ? "text-rose-300" : urgency.urgency === "low" ? "text-emerald-300" : "text-muted-foreground"}`}
+            >
+              {urgency.rationale}
+            </p>
+          )}
           {proposal.lowConfidence && (
             <p
               className="mt-1 text-[10px] text-amber-400"
