@@ -25,8 +25,8 @@ import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight,
-  CheckCircle2, AlertTriangle, History, Sparkles,
+  TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight, ArrowDownRight,
+  CheckCircle2, AlertTriangle, History, Sparkles, Anchor,
 } from "lucide-react";
 import {
   Tooltip,
@@ -54,6 +54,10 @@ import {
   computeShadowCallout,
   type ShadowCallout,
 } from "../lib/shadow-callout";
+import {
+  computeWinProbabilityRisks,
+  type WinProbabilityRisk,
+} from "../lib/win-probability-risks";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 export interface WinProbabilityStripProps {
@@ -119,6 +123,13 @@ export function WinProbabilityStrip({
     () => (result.score < 70 ? computeWinProbabilityLifts(draft, context) : []),
     [draft, context, result.score],
   );
+  // Slice 20n: "Resting on" — counterweight to lifts. Lifts show
+  // unclaimed upside; risks show the factors the current score is
+  // leaning on that, if they slip, would dent the rep's read on this
+  // deal. Unlike lifts we do NOT gate on score band — a strong deal
+  // leaning on one warm-customer signal is the exact case where the
+  // rep needs brittleness awareness before sending.
+  const risks = useMemo(() => computeWinProbabilityRisks(result), [result]);
   // Slice 20j: K-NN shadow score. Computed only when we have history
   // available (manager role, endpoint responded with data). The
   // `result.factors` list is the authoritative live factor profile —
@@ -232,6 +243,28 @@ export function WinProbabilityStrip({
             <div className="flex flex-wrap gap-1.5">
               {lifts.map((l) => (
                 <LiftChip key={l.id} lift={l} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Slice 20n: resting-on risks. Mirror shape to lifts, but
+            counter-directional — "what is this deal leaning on?" Visible
+            across all bands (strong deals need it MOST — fragility
+            warning before send). Amber (not rose) because these are
+            assumption dependencies, not known bad news — we're flagging
+            brittleness, not failure. */}
+        {!compact && risks.length > 0 && (
+          <div className="mt-3 border-t border-border/40 pt-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Anchor className="h-3 w-3 text-amber-400" aria-hidden />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+                Resting on
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {risks.map((r) => (
+                <RiskChip key={r.label} risk={r} />
               ))}
             </div>
           </div>
@@ -445,6 +478,42 @@ function ShadowDisagreementCallout({ callout }: { callout: ShadowCallout }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Slice 20n — RiskChip. Compact "−N {label}" pill surfacing a factor
+ * the deal's current score is leaning on. Styled amber rather than
+ * rose because these are assumption-dependencies (neutral information)
+ * not known bad news. The minus sign + downward arrow iconography
+ * carries the "fragility" semantic without the alarm of red.
+ *
+ * Tooltip copy reinforces that this is rep-actionable: the rationale
+ * cites the delta in human terms; the action hint nudges the rep to
+ * harden the assumption before sending.
+ */
+function RiskChip({ risk }: { risk: WinProbabilityRisk }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          tabIndex={0}
+          role="button"
+          aria-label={`Resting on ${risk.label}: −${risk.deltaPts} points if this assumption slips.`}
+          className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200 cursor-help hover:bg-amber-500/15 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+        >
+          <ArrowDownRight className="h-3 w-3" aria-hidden />
+          <span className="tabular-nums font-semibold">−{risk.deltaPts}</span>
+          <span>{risk.label}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <p className="text-xs">{risk.rationale}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground italic">
+          If this assumption falls through, the score would drop by about {risk.deltaPts} pts — worth hardening before you send.
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
