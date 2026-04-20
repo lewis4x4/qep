@@ -26,7 +26,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus, Gauge, ArrowUpRight,
-  CheckCircle2, AlertTriangle, History,
+  CheckCircle2, AlertTriangle, History, Sparkles,
 } from "lucide-react";
 import {
   Tooltip,
@@ -49,6 +49,11 @@ import {
   type ShadowHistoricalSnapshot,
   type ShadowScoreResult,
 } from "../lib/shadow-score";
+import type { ShadowAgreementSummary } from "../lib/retrospective-shadow";
+import {
+  computeShadowCallout,
+  type ShadowCallout,
+} from "../lib/shadow-callout";
 import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
 
 export interface WinProbabilityStripProps {
@@ -74,6 +79,15 @@ export interface WinProbabilityStripProps {
    * "loaded but no closed deals yet"; both hide the chip cleanly.
    */
   closedHistory?: ShadowHistoricalSnapshot[] | null;
+  /**
+   * Slice 20l — aggregate shadow-vs-rule agreement summary derived
+   * from `closedHistory`. Used solely to decide whether to promote
+   * a shadow disagreement from a passive chip to a first-class
+   * callout; suppressed when the calibration evidence is thin. Passed
+   * as a prop (rather than computed inside the strip) so all mount
+   * sites share the O(N²) retrospective computation.
+   */
+  shadowCalibration?: ShadowAgreementSummary | null;
 }
 
 const BAND_STYLE: Record<
@@ -92,6 +106,7 @@ export function WinProbabilityStrip({
   compact = false,
   verdicts = null,
   closedHistory = null,
+  shadowCalibration = null,
 }: WinProbabilityStripProps) {
   const result = useMemo(
     () => computeWinProbability(draft, context),
@@ -112,6 +127,14 @@ export function WinProbabilityStrip({
     if (!closedHistory || closedHistory.length === 0) return null;
     return computeShadowScore(result.factors, closedHistory);
   }, [result.factors, closedHistory]);
+  // Slice 20l: disagreement callout. `computeShadowCallout` handles
+  // every gate (missing data, low confidence, below-threshold delta,
+  // losing shadow track record) and returns null when we shouldn't
+  // speak. The strip simply renders whatever it returns.
+  const callout = useMemo(
+    () => computeShadowCallout(result.score, shadow, shadowCalibration),
+    [result.score, shadow, shadowCalibration],
+  );
   const style = BAND_STYLE[result.band];
   // Top 3 factors by absolute weight; scorer already sorted them.
   const topFactors = result.factors.slice(0, 3);
@@ -151,6 +174,15 @@ export function WinProbabilityStrip({
             <GaugeBar score={result.score} barColor={style.bar} />
           </div>
         </div>
+
+        {/* Slice 20l: disagreement callout. Surfaces only when
+            `computeShadowCallout` approved promotion — i.e. shadow and
+            live disagree by ≥ threshold AND the shadow has a
+            calibrated track record of winning those disagreements.
+            Compact-mode hides it for tight sidebars. */}
+        {!compact && callout && (
+          <ShadowDisagreementCallout callout={callout} />
+        )}
 
         {/* Factor chips */}
         {!compact && topFactors.length > 0 && (
@@ -362,6 +394,57 @@ function ShadowChip({
         </p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * Slice 20l — disagreement callout row. Sits between the score pill +
+ * gauge and the factor chips. Unlike the chip, this is a full-width
+ * persuasive element — so the gating logic in `computeShadowCallout`
+ * had to be strict. Tone:
+ *   • "strong" → sky accent + evidence line italicized for emphasis.
+ *   • "neutral" → muted border, still cites the win rate so the rep
+ *     understands why they're seeing this.
+ *
+ * We deliberately don't use rose or emerald: the callout describes a
+ * probability disagreement, not a success or failure. The evidence
+ * line cites the literal win-of-disagreement count so the rep can
+ * decide for themselves whether to lean in or not.
+ */
+function ShadowDisagreementCallout({ callout }: { callout: ShadowCallout }) {
+  const Icon = callout.tone === "strong" ? Sparkles : History;
+  return (
+    <div
+      role="region"
+      aria-label={`Shadow disagreement callout: ${callout.headline} ${callout.evidence}`}
+      className={cn(
+        "mt-2.5 flex items-start gap-2 rounded-md border p-2",
+        callout.tone === "strong"
+          ? "border-sky-500/40 bg-sky-500/10"
+          : "border-border/60 bg-background/40",
+      )}
+    >
+      <Icon
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 mt-0.5",
+          callout.tone === "strong" ? "text-sky-400" : "text-muted-foreground",
+        )}
+        aria-hidden
+      />
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "text-[11px] font-medium",
+            callout.tone === "strong" ? "text-sky-100" : "text-foreground",
+          )}
+        >
+          {callout.headline}
+        </p>
+        <p className="mt-0.5 text-[10px] italic text-muted-foreground">
+          {callout.evidence}
+        </p>
+      </div>
+    </div>
   );
 }
 

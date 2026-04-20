@@ -24,6 +24,10 @@ import { PointShootTradeCard } from "../components/PointShootTradeCard";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
 import { getMarginBaseline } from "../lib/coach-api";
 import { computeWinProbability } from "../lib/win-probability-scorer";
+import {
+  computeRetrospectiveShadows,
+  computeShadowAgreementSummary,
+} from "../lib/retrospective-shadow";
 import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
@@ -297,6 +301,18 @@ export function QuoteBuilderV2Page() {
       factors: a.factors,
       outcome: a.outcome,
     }));
+  }, [closedDealsAuditQuery.data]);
+  // Slice 20l: calibrated disagreement callout. Derive the aggregate
+  // shadow-vs-rule agreement summary from the same closed-deals
+  // payload so the strip can modulate its tone by measured evidence.
+  // Computed once here (not on every strip render) so three mounted
+  // strips share the work.
+  const shadowCalibration = useMemo(() => {
+    const result = closedDealsAuditQuery.data;
+    if (!result || !result.ok) return null;
+    if (result.audits.length === 0) return null;
+    const retros = computeRetrospectiveShadows(result.audits);
+    return computeShadowAgreementSummary(retros);
   }, [closedDealsAuditQuery.data]);
   const winProbContext = useMemo(
     () => ({ marginPct, marginBaselineMedianPct }),
@@ -888,7 +904,7 @@ export function QuoteBuilderV2Page() {
 
           {/* Slice 20c: always-on win-probability strip. Rule-based today;
               becomes the rule-baseline for Move 2's counterfactual engine. */}
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
           <CustomerSection
             draft={draft}
@@ -1014,7 +1030,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
           <EquipmentSelector
             onSelect={(entry) => {
@@ -1159,7 +1175,7 @@ export function QuoteBuilderV2Page() {
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
 
-          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} />
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
           <MarginCheckBanner
             marginPct={marginPct}
