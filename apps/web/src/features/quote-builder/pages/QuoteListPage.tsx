@@ -54,6 +54,13 @@ import {
   describeWhatIfHeadline,
   type ScorerWhatIfResult,
 } from "../lib/scorer-what-if";
+import {
+  computeFactorDrift,
+  describeDriftHeadline,
+  describeDriftRationale,
+  type FactorDrift,
+  type FactorDriftReport,
+} from "../lib/factor-drift";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -302,6 +309,28 @@ export function QuoteListPage() {
     return result;
   }, [scorerProposal, closedAuditQuery.data]);
 
+  /**
+   * Slice 20r — factor drift. Splits the same closed-deal audit rows
+   * into recent vs. prior windows and surfaces factors whose predictive
+   * power has moved meaningfully. This is the feedback loop that keeps
+   * the rule scorer honest over time: aggregate attribution can look
+   * fine while the scorer has silently degraded quarter-over-quarter.
+   * Drift makes that degradation visible.
+   *
+   * Hidden when there are no drifting factors (the quiet-good case) or
+   * when we have no audits at all (rep view / empty state). Null-result
+   * gating keeps the instrumentation stack crisp — cards only surface
+   * when they carry a finding.
+   */
+  const factorDriftReport = useMemo<FactorDriftReport | null>(() => {
+    const r = closedAuditQuery.data;
+    if (!r || !r.ok) return null;
+    if (r.audits.length === 0) return null;
+    const report = computeFactorDrift(r.audits);
+    if (report.drifts.length === 0) return null;
+    return report;
+  }, [closedAuditQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -363,6 +392,14 @@ export function QuoteListPage() {
       {closedAuditDisplay?.kind === "error" && (
         <InstrumentationErrorRow label="Closed-deals audit" message={closedAuditDisplay.message} />
       )}
+
+      {/* Slice 20r: factor drift. Sits between worst-misses and the
+          evolution proposal so the narrative flows: (1) which deals the
+          scorer missed → (2) which rules are drifting under the hood →
+          (3) the concrete evolution the manager should consider. Amber
+          palette reads as "watch this" without escalating to the rose
+          alarm used for worst misses. Hidden when no factors drift. */}
+      {factorDriftReport && <FactorDriftCard report={factorDriftReport} />}
 
       {/* Slice 20m: scorer-evolution proposal. Sits at the bottom of the
           instrumentation stack because it synthesizes every card above:
@@ -998,6 +1035,116 @@ function AgreementRatePill({
         {count} / {total}
       </div>
     </div>
+  );
+}
+
+/**
+ * Slice 20r — factor drift card.
+ *
+ * Manager/owner-only quarterly-watch card. Aggregate attribution tells
+ * you which factors earn their weight *across all time*; this card
+ * tells you which factors have *moved* — a tailwind shrinking, a
+ * headwind emerging, or (worst) a sign-flip where the rule now predicts
+ * the opposite of what it used to.
+ *
+ * Amber palette for the card header reads as "watch this" without
+ * escalating to the rose alarm of the worst-misses card. Per-row
+ * coloring runs hotter: rose for flipped, amber for falling, emerald
+ * for rising (good news — undercounted tailwind), muted when the row
+ * is low-confidence.
+ *
+ * The component is presentation-only; copy comes from
+ * `describeDriftHeadline` and `describeDriftRationale` so tests pin
+ * the wording.
+ */
+function FactorDriftCard({ report }: { report: FactorDriftReport }) {
+  const headline = describeDriftHeadline(report);
+  // Cap at 5 rows so the card stays scannable. Drifts are already
+  // sorted by |drift| desc in the lib — the worst-moved factor is on
+  // top.
+  const top = report.drifts.slice(0, 5);
+  const hiddenCount = Math.max(0, report.drifts.length - top.length);
+  return (
+    <Card
+      className="border-amber-500/30 bg-amber-500/5 p-3"
+      role="region"
+      aria-label="Factor drift"
+    >
+      <div className="flex items-start gap-2">
+        <TrendingDown className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+              Factor drift ({report.windowDays}d)
+            </span>
+            <span
+              className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap"
+              aria-label={`${report.recentN} recent and ${report.priorN} prior closed deals`}
+            >
+              {report.recentN} recent · {report.priorN} prior
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-foreground">{headline}</p>
+
+          <ul className="mt-2 space-y-1.5" role="list">
+            {top.map((d) => (
+              <FactorDriftRow key={d.label} drift={d} />
+            ))}
+          </ul>
+          {hiddenCount > 0 && (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              +{hiddenCount} more drifting factor{hiddenCount === 1 ? "" : "s"} not shown.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * One drifting-factor row. Direction drives color; rationale copy
+ * lives in the lib so tests pin it and this stays presentation-only.
+ */
+function FactorDriftRow({ drift }: { drift: FactorDrift }) {
+  const rationale = describeDriftRationale(drift);
+  const tone =
+    drift.lowConfidence
+      ? { border: "border-muted/40", bg: "bg-background/40", pill: "text-muted-foreground", pillBg: "bg-muted/40" }
+      : drift.direction === "flipped"
+        ? { border: "border-rose-500/30", bg: "bg-rose-500/5", pill: "text-rose-300", pillBg: "bg-rose-500/15" }
+        : drift.direction === "falling"
+          ? { border: "border-amber-500/30", bg: "bg-amber-500/5", pill: "text-amber-300", pillBg: "bg-amber-500/15" }
+          : { border: "border-emerald-500/30", bg: "bg-emerald-500/5", pill: "text-emerald-300", pillBg: "bg-emerald-500/15" };
+  const driftPct = drift.drift === null ? null : Math.round(drift.drift * 100);
+  const driftLabel =
+    driftPct === null ? "—" : `${driftPct > 0 ? "+" : ""}${driftPct}pp`;
+  const directionLabel =
+    drift.direction === "flipped"
+      ? "FLIPPED"
+      : drift.direction === "falling"
+        ? "FALLING"
+        : drift.direction === "rising"
+          ? "RISING"
+          : "STABLE";
+  return (
+    <li
+      className={`rounded-md border ${tone.border} ${tone.bg} px-2 py-1.5`}
+      role="group"
+      aria-label={rationale}
+    >
+      <div className="flex items-center justify-between gap-2" aria-hidden="true">
+        <span className="truncate text-[11px] font-medium text-foreground">{drift.label}</span>
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${tone.pill} ${tone.pillBg}`}
+        >
+          {directionLabel} {driftLabel}
+        </span>
+      </div>
+      <p className="mt-0.5 text-[10px] text-muted-foreground" aria-hidden="true">
+        {rationale}
+      </p>
+    </li>
   );
 }
 
