@@ -49,6 +49,11 @@ import {
   type ScorerProposal,
   type ScorerFactorChange,
 } from "../lib/scorer-proposal";
+import {
+  simulateProposalCalibration,
+  describeWhatIfHeadline,
+  type ScorerWhatIfResult,
+} from "../lib/scorer-what-if";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -280,6 +285,23 @@ export function QuoteListPage() {
     return computeScorerProposal(report, shadowCalibrationSummary);
   }, [factorsQueryTop.data, shadowCalibrationSummary]);
 
+  /**
+   * Slice 20p — scorer what-if preview. Runs the proposed changes against
+   * the raw closed-deal audit rows (same data the worst-misses card uses)
+   * and returns current vs. simulated Brier + hit-rate so the manager can
+   * see whether applying the proposal would make the scorer more or less
+   * accurate before they open a ticket. Reuses `closedAuditQuery` — no
+   * extra fetch. Null when we don't have a proposal or no audits yet.
+   */
+  const scorerWhatIf = useMemo<ScorerWhatIfResult | null>(() => {
+    if (!scorerProposal) return null;
+    const r = closedAuditQuery.data;
+    if (!r || !r.ok) return null;
+    const result = simulateProposalCalibration(scorerProposal, r.audits);
+    if (result.dealsSimulated === 0) return null;
+    return result;
+  }, [scorerProposal, closedAuditQuery.data]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -352,7 +374,7 @@ export function QuoteListPage() {
           handoff — "here's how to evolve the scorer based on all of
           the above." Hidden for reps + thin data. */}
       {scorerProposal && (
-        <ScorerProposalCard proposal={scorerProposal} />
+        <ScorerProposalCard proposal={scorerProposal} whatIf={scorerWhatIf} />
       )}
 
       {/* Search + Filters */}
@@ -1168,7 +1190,16 @@ function ClosedDealAuditRow({ audit }: { audit: ClosedDealAudit }) {
  *     inline confirmation. Copy, not select-text-manually, because
  *     the whole point of this card is a frictionless handoff.
  */
-function ScorerProposalCard({ proposal }: { proposal: ScorerProposal }) {
+function ScorerProposalCard({
+  proposal,
+  whatIf,
+}: {
+  proposal: ScorerProposal;
+  /** Slice 20p — simulated Brier + hit-rate under the proposal. Null
+   *  when we don't have closed-deal audits to simulate against, or when
+   *  the proposal has no actionable changes. */
+  whatIf: ScorerWhatIfResult | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1225,6 +1256,14 @@ function ScorerProposalCard({ proposal }: { proposal: ScorerProposal }) {
             >
               ⚠ Thin sample — treat these recommendations as directional.
             </p>
+          )}
+
+          {/* Slice 20p — what-if preview. Renders only when we have
+              audits AND the proposal has at least one actionable change.
+              Hidden deliberately on all-keep / no-audits so the card
+              doesn't read "0.00 → 0.00" and waste the manager's attention. */}
+          {whatIf && !whatIf.noActionableChanges && whatIf.currentBrier !== null && (
+            <ScorerWhatIfRow whatIf={whatIf} />
           )}
 
           <div className="mt-2 flex items-center gap-2 border-t border-violet-500/20 pt-2">
@@ -1309,6 +1348,121 @@ function ScorerProposalCard({ proposal }: { proposal: ScorerProposal }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Slice 20p — what-if preview row inside the ScorerProposalCard.
+ *
+ * Two compact metric pills (Brier + hit-rate) plus a one-line headline
+ * from `describeWhatIfHeadline`. Color grammar:
+ *
+ *   • Emerald: proposal improves accuracy (Brier ↓ or hit-rate ↑)
+ *   • Rose:    proposal regresses (Brier ↑ or hit-rate ↓)
+ *   • Muted:   unchanged (delta exactly 0)
+ *
+ * We surface the `N deals` count in the row's aria-label rather than the
+ * visible pill — the pill is already dense and a screenreader user still
+ * needs the sample size to weigh the number. Low-confidence is carried
+ * by `describeWhatIfHeadline` (it appends "— directional only (N deals)")
+ * so we don't need a second caveat stripe here; the headline already
+ * conveys the tone, and duplicating it would double the visual weight.
+ */
+function ScorerWhatIfRow({ whatIf }: { whatIf: ScorerWhatIfResult }) {
+  const headline = describeWhatIfHeadline(whatIf);
+  if (
+    !headline ||
+    whatIf.currentBrier === null ||
+    whatIf.simulatedBrier === null ||
+    whatIf.brierDelta === null ||
+    whatIf.currentHitRate === null ||
+    whatIf.simulatedHitRate === null ||
+    whatIf.hitRateDelta === null
+  ) {
+    return null;
+  }
+
+  // Brier lower = better. Negative delta = improvement.
+  const brierImproves = whatIf.brierDelta < 0;
+  const brierSame = whatIf.brierDelta === 0;
+  const brierTone = brierSame
+    ? "text-muted-foreground"
+    : brierImproves
+      ? "text-emerald-300"
+      : "text-rose-300";
+  const brierArrow = brierSame ? "·" : brierImproves ? "↓" : "↑";
+  const brierAbs = Math.abs(whatIf.brierDelta).toFixed(3);
+
+  // Hit-rate higher = better. We use the ROUNDED-visible values (not the
+  // raw delta) to compute the pp arrow so the pill is internally
+  // consistent: "60% → 68% ↑8pp", not "60% → 68% ↑7pp" when the raw diff
+  // happened to round down while the endpoints rounded up.
+  const hitCurrentPct = Math.round(whatIf.currentHitRate * 100);
+  const hitSimulatedPct = Math.round(whatIf.simulatedHitRate * 100);
+  const hitVisibleDelta = hitSimulatedPct - hitCurrentPct;
+  const hitImproves = hitVisibleDelta > 0;
+  const hitSame = hitVisibleDelta === 0;
+  const hitTone = hitSame
+    ? "text-muted-foreground"
+    : hitImproves
+      ? "text-emerald-300"
+      : "text-rose-300";
+  const hitArrow = hitSame ? "·" : hitImproves ? "↑" : "↓";
+  const hitAbsPp = Math.abs(hitVisibleDelta);
+
+  const ariaLabel = `What-if preview over ${whatIf.dealsSimulated} closed deals. Brier ${whatIf.currentBrier.toFixed(3)} to ${whatIf.simulatedBrier.toFixed(3)}. Hit rate ${hitCurrentPct} percent to ${hitSimulatedPct} percent.`;
+
+  return (
+    <div
+      className="mt-2 rounded-md border border-violet-500/20 bg-background/40 px-2 py-1.5"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+        <Gauge className="h-3 w-3" aria-hidden />
+        If applied
+      </div>
+      <p
+        className="mt-0.5 text-[11px] text-foreground"
+        title="Lower Brier = more accurate probabilities; higher hit rate = better band calls."
+      >
+        {headline}
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <span
+          className="inline-flex items-center gap-1 rounded border border-violet-500/20 bg-background/40 px-1.5 py-0.5 text-[10px]"
+          title="Brier = mean squared error on probability. Lower is better; 0.25 is a coin-flip baseline."
+          aria-hidden
+        >
+          <span className="text-muted-foreground">Brier</span>
+          <span className="tabular-nums text-foreground">
+            {whatIf.currentBrier.toFixed(3)}
+          </span>
+          <span className="text-muted-foreground">→</span>
+          <span className="tabular-nums text-foreground">
+            {whatIf.simulatedBrier.toFixed(3)}
+          </span>
+          <span className={`tabular-nums font-semibold ${brierTone}`}>
+            {brierArrow}
+            {brierSame ? "" : brierAbs}
+          </span>
+        </span>
+        <span
+          className="inline-flex items-center gap-1 rounded border border-violet-500/20 bg-background/40 px-1.5 py-0.5 text-[10px]"
+          title="Hit rate = share of closed deals where the score's band matched reality (win vs. loss)."
+          aria-hidden
+        >
+          <span className="text-muted-foreground">Hit</span>
+          <span className="tabular-nums text-foreground">{hitCurrentPct}%</span>
+          <span className="text-muted-foreground">→</span>
+          <span className="tabular-nums text-foreground">{hitSimulatedPct}%</span>
+          <span className={`tabular-nums font-semibold ${hitTone}`}>
+            {hitArrow}
+            {hitSame ? "" : `${hitAbsPp}pp`}
+          </span>
+        </span>
+      </div>
+    </div>
   );
 }
 
