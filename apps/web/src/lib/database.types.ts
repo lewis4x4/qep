@@ -13431,6 +13431,73 @@ export type Database = {
         }
         Relationships: []
       }
+      qb_deal_coach_actions: {
+        Row: {
+          acted_at: string | null
+          action: string | null
+          created_at: string
+          id: string
+          quote_package_id: string
+          rule_id: string
+          severity: string
+          shown_at: string
+          shown_by: string | null
+          suggestion_snapshot: Json | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          action?: string | null
+          created_at?: string
+          id?: string
+          quote_package_id: string
+          rule_id: string
+          severity: string
+          shown_at?: string
+          shown_by?: string | null
+          suggestion_snapshot?: Json | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          acted_at?: string | null
+          action?: string | null
+          created_at?: string
+          id?: string
+          quote_package_id?: string
+          rule_id?: string
+          severity?: string
+          shown_at?: string
+          shown_by?: string | null
+          suggestion_snapshot?: Json | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_deal_coach_actions_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "price_change_impact"
+            referencedColumns: ["quote_package_id"]
+          },
+          {
+            foreignKeyName: "qb_deal_coach_actions_quote_package_id_fkey"
+            columns: ["quote_package_id"]
+            isOneToOne: false
+            referencedRelation: "quote_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_deal_coach_actions_shown_by_fkey"
+            columns: ["shown_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_deals: {
         Row: {
           applied_program_ids: string[] | null

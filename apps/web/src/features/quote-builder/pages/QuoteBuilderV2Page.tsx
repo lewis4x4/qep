@@ -20,6 +20,7 @@ import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
+import { DealCoachSidebar } from "../components/DealCoachSidebar";
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
@@ -626,8 +627,17 @@ export function QuoteBuilderV2Page() {
             }}
           />
 
-          {/* Mobile-only intelligence panel (desktop shows in right column) */}
-          <div className="lg:hidden">{intelligencePanel}</div>
+          {/* Mobile-only intelligence panel + Deal Coach (desktop shows in right column) */}
+          <div className="space-y-3 lg:hidden">
+            {intelligencePanel}
+            {draft.equipment.length > 0 && (
+              <DealCoachSidebar
+                draft={draft}
+                computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
+                quotePackageId={savedQuotePackageId}
+              />
+            )}
+          </div>
 
           {draft.equipment.length > 0 && (
             <Card className="p-4">
@@ -1054,9 +1064,18 @@ export function QuoteBuilderV2Page() {
         </div>
       )}
       </div>
-      {/* Right column — intelligence panel (desktop only) */}
+      {/* Right column — intelligence panel + Deal Coach (desktop only) */}
       <aside className="hidden w-80 shrink-0 lg:block">
-        <div className="sticky top-4">{intelligencePanel}</div>
+        <div className="sticky top-4 space-y-3">
+          {intelligencePanel}
+          {draft.equipment.length > 0 && (
+            <DealCoachSidebar
+              draft={draft}
+              computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
+              quotePackageId={savedQuotePackageId}
+            />
+          )}
+        </div>
       </aside>
 
       {/* Deal Assistant panel (Slice 05) */}
