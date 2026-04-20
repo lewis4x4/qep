@@ -146,10 +146,20 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
     method: "POST",
     body: JSON.stringify({ job_description: jobDescription }),
   });
-  if (!res.ok) throw new Error("AI recommendation failed");
-  // Tolerate both flat { machine, ... } and wrapped { recommendation: { machine, ... } }
-  // response shapes. Older deployments of quote-builder-v2 wrapped the payload;
-  // the current version returns it flat (see the /recommend handler).
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string; message?: string }).error
+      ?? (body as { message?: string }).message
+      ?? "";
+    if (res.status === 401) {
+      throw new Error(
+        detail
+          ? `Session expired: ${detail}. Sign out and sign in again.`
+          : "Session expired. Sign out and sign in again to continue.",
+      );
+    }
+    throw new Error(detail.trim() || `AI recommendation failed (HTTP ${res.status})`);
+  }
   const json = await res.json();
   return (json?.recommendation ?? json) as QuoteRecommendation;
 }
