@@ -19,6 +19,8 @@ import {
 import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
 import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
+import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
+import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
@@ -76,7 +78,13 @@ import type {
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
-type Step = "entry" | "equipment" | "financing" | "review";
+// Slice 20a: customer is its own step between intake and equipment. Before
+// this change the CustomerSection lived on the entry screen alongside the
+// intake-mode picker, and AI/Voice mutations auto-advanced straight to
+// equipment — so reps submitting via AI chat were jumping past customer
+// selection entirely. Splitting the step makes "who is this quote for?"
+// explicit and is the anchor for the Customer Digital Twin intel panel.
+type Step = "entry" | "customer" | "equipment" | "financing" | "review";
 
 interface CatalogEntryMatch {
   id?: string;
@@ -141,6 +149,8 @@ export function QuoteBuilderV2Page() {
     customerCompany: "",
     customerPhone: "",
     customerEmail: "",
+    customerSignals: null,
+    customerWarmth: null,
   });
   const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -185,6 +195,43 @@ export function QuoteBuilderV2Page() {
   useEffect(() => {
     setFinanceScenarios([]);
   }, [draft.equipment, draft.attachments, draft.tradeAllowance]);
+
+  // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
+  // ?deal_id=, hydrate the customer from CRM so the Customer step renders
+  // a real name/company + intel panel on arrival instead of an empty form.
+  // Intentionally one-shot: only fires if no customer is already set (avoids
+  // clobbering what the AI/Voice intake or rep typed).
+  useEffect(() => {
+    const hasCustomer = Boolean(
+      draft.customerName?.trim() || draft.customerCompany?.trim(),
+    );
+    if (hasCustomer) return;
+    if (!contactId && !dealId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const hydrated = await hydrateCustomerById({ contactId: contactId || null });
+        if (!hydrated || cancelled) return;
+        setDraft((current) => ({
+          ...current,
+          contactId:       hydrated.contactId ?? current.contactId,
+          companyId:       hydrated.companyId ?? current.companyId,
+          customerName:    hydrated.customerName,
+          customerCompany: hydrated.customerCompany,
+          customerPhone:   hydrated.customerPhone,
+          customerEmail:   hydrated.customerEmail,
+          customerSignals: hydrated.signals,
+          customerWarmth:  hydrated.warmth,
+        }));
+      } catch {
+        // Non-fatal — rep can still search/pick manually.
+      }
+    })();
+    return () => { cancelled = true; };
+    // Intentionally one-shot on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Slice 14: pick up a pending voice-quote handoff on mount. The VoiceQuotePage
   // stashes the selected scenario in sessionStorage; we read + clear it here
@@ -323,7 +370,10 @@ export function QuoteBuilderV2Page() {
           equipment: seededEquipment,
         };
       });
-      setStep("equipment");
+      // Slice 20a: land on the Customer step instead of Equipment. The AI
+      // has picked a machine, but we still don't know who the quote is
+      // for — rep confirms/picks customer next.
+      setStep("customer");
     },
   });
 
@@ -348,7 +398,7 @@ export function QuoteBuilderV2Page() {
           equipment: seededEquipment,
         };
       });
-      setStep("equipment");
+      setStep("customer");
     },
   });
 
@@ -461,7 +511,9 @@ export function QuoteBuilderV2Page() {
         : {}),
     }));
 
-    setStep("equipment");
+    // Slice 20a: land on the Customer step first so the rep picks who the
+    // quote is for before confirming the AI-matched equipment.
+    setStep("customer");
   };
 
   const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
@@ -561,7 +613,7 @@ export function QuoteBuilderV2Page() {
         </Card>
 
       <div className="flex gap-2">
-        {(["entry", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
+        {(["entry", "customer", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
           <button
             key={currentStep}
             onClick={() => setStep(currentStep)}
@@ -594,29 +646,6 @@ export function QuoteBuilderV2Page() {
             </div>
           )}
 
-          <CustomerSection
-            draft={draft}
-            onPick={(picked) => setDraft((cur) => ({
-              ...cur,
-              contactId:       picked.contactId ?? undefined,
-              companyId:       picked.companyId ?? undefined,
-              customerName:    picked.customerName,
-              customerCompany: picked.customerCompany,
-              customerPhone:   picked.customerPhone,
-              customerEmail:   picked.customerEmail,
-            }))}
-            onManualChange={(field, value) => setDraft((cur) => ({ ...cur, [field]: value }))}
-            onClear={() => setDraft((cur) => ({
-              ...cur,
-              contactId:       undefined,
-              companyId:       undefined,
-              customerName:    "",
-              customerCompany: "",
-              customerPhone:   "",
-              customerEmail:   "",
-            }))}
-          />
-
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {([
@@ -628,8 +657,11 @@ export function QuoteBuilderV2Page() {
                 key={mode}
                 onClick={() => {
                   setDraft((current) => ({ ...current, entryMode: mode }));
+                  // Slice 20a: manual mode now advances to the Customer
+                  // step (not equipment) so "who is this for?" happens
+                  // before the rep builds line items.
                   if (mode === "manual") {
-                    setStep("equipment");
+                    setStep("customer");
                   }
                 }}
                 className={`rounded-xl border p-4 text-left transition hover:border-qep-orange/50 ${
@@ -702,6 +734,76 @@ export function QuoteBuilderV2Page() {
                 </Button>
               </div>
             </Card>
+          )}
+        </div>
+      )}
+
+      {step === "customer" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Who is this quote for?</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Pick an existing customer for Digital Twin signals, or add a brand-new one. Quotes for walk-in prospects can use a placeholder name.
+            </p>
+          </div>
+
+          <CustomerSection
+            draft={draft}
+            onPick={(picked) => setDraft((cur) => ({
+              ...cur,
+              contactId:       picked.contactId ?? undefined,
+              companyId:       picked.companyId ?? undefined,
+              customerName:    picked.customerName,
+              customerCompany: picked.customerCompany,
+              customerPhone:   picked.customerPhone,
+              customerEmail:   picked.customerEmail,
+              customerSignals: picked.signals ?? null,
+              customerWarmth:  picked.warmth ?? null,
+            }))}
+            onManualChange={(field, value) => setDraft((cur) => ({
+              ...cur,
+              [field]: value,
+              // Manual edits invalidate the Digital Twin snapshot
+              customerSignals: null,
+              customerWarmth:  null,
+            }))}
+            onClear={() => setDraft((cur) => ({
+              ...cur,
+              contactId:       undefined,
+              companyId:       undefined,
+              customerName:    "",
+              customerCompany: "",
+              customerPhone:   "",
+              customerEmail:   "",
+              customerSignals: null,
+              customerWarmth:  null,
+            }))}
+          />
+
+          <CustomerIntelPanel
+            customerCompany={draft.customerCompany ?? ""}
+            companyId={draft.companyId ?? null}
+            signals={draft.customerSignals ?? null}
+            warmth={draft.customerWarmth ?? null}
+          />
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("entry")}>
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back
+            </Button>
+            <Button
+              onClick={() => setStep("equipment")}
+              disabled={
+                !(draft.customerName?.trim() || draft.customerCompany?.trim() || draft.contactId || draft.companyId)
+              }
+            >
+              Equipment <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+          {!(draft.customerName?.trim() || draft.customerCompany?.trim() || draft.contactId || draft.companyId) && (
+            <p className="text-right text-[11px] text-muted-foreground">
+              Select or add a customer to continue.
+            </p>
           )}
         </div>
       )}
@@ -779,7 +881,7 @@ export function QuoteBuilderV2Page() {
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("entry")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("customer")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button
               onClick={() => {
                 financingMutation.mutate();

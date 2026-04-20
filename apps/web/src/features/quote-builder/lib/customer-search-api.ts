@@ -370,3 +370,154 @@ export function daysBetween(past: Date, now: Date): number {
   if (!Number.isFinite(diffMs) || diffMs < 0) return 0;
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
+
+// ── Slice 20a: Digital Twin hydration ────────────────────────────────────
+
+/**
+ * Fetch a customer's past equipment fleet — the top distinct make+model
+ * combos from prior quote_packages. Rendered on the Customer step so the
+ * rep immediately sees "they've quoted Cat 259D3 × 2 and Kubota SVL75-2"
+ * before picking equipment. Drives the Customer Digital Twin surface.
+ *
+ * Matches on customer_company because quote_packages has no company FK.
+ * Returns top 5 distinct combos by recency, with quote count per combo.
+ */
+export interface CustomerPastEquipment {
+  make:  string;
+  model: string;
+  count: number;
+  lastQuotedAt: string | null;
+}
+
+export async function fetchCustomerPastEquipment(
+  customerCompany: string,
+): Promise<CustomerPastEquipment[]> {
+  const name = customerCompany.trim();
+  if (!name) return [];
+
+  // quote_packages stores equipment as a JSON array on the row itself
+  // (no separate quote_package_items table). Pull the most recent 50
+  // packages for this company and roll up distinct make+model.
+  const { data: packages } = await supabase
+    .from("quote_packages")
+    .select("equipment, created_at")
+    .eq("customer_company", name)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (!packages || packages.length === 0) return [];
+
+  const rollup = new Map<string, CustomerPastEquipment>();
+  for (const row of packages as { equipment: unknown; created_at: string | null }[]) {
+    const createdAt = row.created_at ?? null;
+    const items = Array.isArray(row.equipment) ? row.equipment : [];
+    for (const raw of items) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
+      const kind = typeof item.kind === "string" ? item.kind : null;
+      if (kind && kind !== "equipment") continue;
+      const make  = typeof item.make  === "string" ? item.make.trim()  : "";
+      const model = typeof item.model === "string" ? item.model.trim() : "";
+      if (!make && !model) continue;
+      const key = `${make}|${model}`;
+      const existing = rollup.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (createdAt && (!existing.lastQuotedAt || createdAt > existing.lastQuotedAt)) {
+          existing.lastQuotedAt = createdAt;
+        }
+      } else {
+        rollup.set(key, { make, model, count: 1, lastQuotedAt: createdAt });
+      }
+    }
+  }
+
+  return [...rollup.values()]
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      if (!a.lastQuotedAt) return 1;
+      if (!b.lastQuotedAt) return -1;
+      return b.lastQuotedAt.localeCompare(a.lastQuotedAt);
+    })
+    .slice(0, 5);
+}
+
+/**
+ * Hydrate a customer from a CRM contact id or company id — used when
+ * Quote Builder is deep-linked from QRM with `?contact_id=` or
+ * `?deal_id=`. Resolves the same shape the CustomerPicker emits so the
+ * draft can be seeded and the intel panel renders on mount.
+ */
+export async function hydrateCustomerById(args: {
+  contactId?: string | null;
+  companyId?: string | null;
+}): Promise<{
+  contactId: string | null;
+  companyId: string | null;
+  customerName: string;
+  customerCompany: string;
+  customerPhone: string;
+  customerEmail: string;
+  signals: CompanySignals;
+  warmth: CustomerWarmth;
+} | null> {
+  const { contactId, companyId } = args;
+  if (!contactId && !companyId) return null;
+
+  let resolvedContactId: string | null = null;
+  let resolvedCompanyId: string | null = companyId ?? null;
+  let contactName = "";
+  let contactPhone = "";
+  let contactEmail = "";
+  let companyName = "";
+
+  if (contactId) {
+    const { data: contact } = await supabase
+      .from("crm_contacts")
+      .select("id, first_name, last_name, phone, email, primary_company_id")
+      .eq("id", contactId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (contact) {
+      const c = contact as Pick<ContactRow,
+        "id" | "first_name" | "last_name" | "phone" | "email" | "primary_company_id">;
+      resolvedContactId = c.id ?? null;
+      contactName  = formatContactName(c.first_name, c.last_name);
+      contactPhone = c.phone ?? "";
+      contactEmail = c.email ?? "";
+      if (!resolvedCompanyId && c.primary_company_id) {
+        resolvedCompanyId = c.primary_company_id;
+      }
+    }
+  }
+
+  if (resolvedCompanyId) {
+    const { data: company } = await supabase
+      .from("crm_companies")
+      .select("id, name")
+      .eq("id", resolvedCompanyId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (company) {
+      companyName = (company as { name: string | null }).name ?? "";
+    }
+  }
+
+  if (!resolvedContactId && !resolvedCompanyId) return null;
+
+  const signalsMap = resolvedCompanyId
+    ? await fetchSignalsForCompanies([resolvedCompanyId])
+    : new Map<string, CompanySignals>();
+  const signals = (resolvedCompanyId && signalsMap.get(resolvedCompanyId)) || { ...EMPTY_SIGNALS };
+
+  return {
+    contactId:       resolvedContactId,
+    companyId:       resolvedCompanyId,
+    customerName:    contactName,
+    customerCompany: companyName,
+    customerPhone:   contactPhone,
+    customerEmail:   contactEmail,
+    signals,
+    warmth:          deriveWarmth(signals),
+  };
+}
