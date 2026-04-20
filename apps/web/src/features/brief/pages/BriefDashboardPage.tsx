@@ -158,7 +158,7 @@ export function BriefDashboardPage({
         {briefing?.created_at && (
           <p className="mt-3 text-xs text-slate-400">
             Generated {safeRelativeTime(briefing.created_at)} · model{" "}
-            {String((briefing.data as Record<string, unknown> | null)?.model ?? "claude-sonnet-4-6")}
+            {extractModelName(briefing.data)}
           </p>
         )}
       </section>
@@ -273,6 +273,19 @@ function Tile(props: {
       </div>
     </div>
   );
+}
+
+/**
+ * Defensive extractor for `briefing.data.model`. The `data` column is jsonb
+ * on the server; shape drift (old rows, renamed model field, malformed insert)
+ * shouldn't crash the dashboard. Falls back to the default Sonnet slug.
+ */
+function extractModelName(data: unknown): string {
+  if (data && typeof data === "object" && "model" in data) {
+    const model = (data as { model?: unknown }).model;
+    if (typeof model === "string" && model.length > 0) return model;
+  }
+  return "claude-sonnet-4-6";
 }
 
 function safeRelativeTime(iso: string): string {

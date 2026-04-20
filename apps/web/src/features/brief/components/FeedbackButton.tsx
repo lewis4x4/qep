@@ -4,8 +4,14 @@
  * Anchored bottom-right across every /brief route. Opens a minimal dialog
  * with a textarea, a type picker, and a submit that calls
  * `hub-feedback-intake`. Voice/screenshot capture arrives in a later slice.
+ *
+ * Non-trapping submit policy: Escape and close always work, even while the
+ * request is in flight. The mutation continues in the background so the
+ * stakeholder never stares at a spinner they can't escape. The textarea
+ * contents are persisted to localStorage on close so an accidental dismiss
+ * doesn't throw away typed content.
  */
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { MessageCirclePlus, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -27,6 +33,48 @@ const TYPE_OPTIONS: { value: FeedbackType; label: string; hint: string }[] = [
   { value: "concern", label: "Concern", hint: "Worried about something" },
 ];
 
+const DRAFT_STORAGE_KEY = "hub:feedback-draft";
+
+interface DraftShape {
+  body: string;
+  type: FeedbackType | "";
+}
+
+function readDraft(): DraftShape {
+  if (typeof window === "undefined") return { body: "", type: "" };
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return { body: "", type: "" };
+    const parsed = JSON.parse(raw) as Partial<DraftShape>;
+    return {
+      body: typeof parsed.body === "string" ? parsed.body : "",
+      type:
+        parsed.type === "bug" ||
+        parsed.type === "suggestion" ||
+        parsed.type === "question" ||
+        parsed.type === "approval" ||
+        parsed.type === "concern"
+          ? parsed.type
+          : "",
+    };
+  } catch {
+    return { body: "", type: "" };
+  }
+}
+
+function writeDraft(draft: DraftShape): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!draft.body && !draft.type) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // quota / private mode — silent fallback is fine
+  }
+}
+
 interface FeedbackButtonProps {
   buildItemId?: string | null;
 }
@@ -38,7 +86,43 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
   const [type, setType] = useState<FeedbackType | "">("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function onSubmit() {
+  // Track whether a submit completed cleanly — if so, don't save its body
+  // back to localStorage when the modal unmounts / closes.
+  const submittedCleanlyRef = useRef(false);
+
+  // Load any saved draft exactly once when the modal opens for the first time.
+  useEffect(() => {
+    if (!open) return;
+    const draft = readDraft();
+    if (draft.body || draft.type) {
+      setBody((prev) => (prev ? prev : draft.body));
+      setType((prev) => (prev ? prev : draft.type));
+    }
+  }, [open]);
+
+  // Persist draft whenever body/type change, debounced by React's batching.
+  useEffect(() => {
+    if (submittedCleanlyRef.current) return;
+    writeDraft({ body, type });
+  }, [body, type]);
+
+  const onChipClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    const value = event.currentTarget.dataset.value as FeedbackType | undefined;
+    if (!value) return;
+    setType((prev) => (prev === value ? "" : value));
+  }, []);
+
+  const onOpenChange = useCallback((next: boolean) => {
+    // Non-trapping: allow close even mid-submit. The mutation keeps running;
+    // a toast still fires when it resolves.
+    setOpen(next);
+  }, []);
+
+  const onCancel = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const onSubmit = useCallback(async () => {
     const trimmed = body.trim();
     if (!trimmed) return;
     setSubmitting(true);
@@ -52,6 +136,8 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
         title: "Thanks — Claude triaged it.",
         description: result.feedback.ai_summary ?? "Brian will see this next.",
       });
+      submittedCleanlyRef.current = true;
+      writeDraft({ body: "", type: "" });
       setBody("");
       setType("");
       setOpen(false);
@@ -63,8 +149,10 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
       });
     } finally {
       setSubmitting(false);
+      // Reset the clean-submit flag so the next attempt persists again.
+      submittedCleanlyRef.current = false;
     }
-  }
+  }, [body, type, buildItemId, toast]);
 
   return (
     <>
@@ -78,7 +166,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
         Got feedback?
       </button>
 
-      <Dialog open={open} onOpenChange={(next) => !submitting && setOpen(next)}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Send feedback</DialogTitle>
@@ -111,7 +199,8 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setType(type === opt.value ? "" : opt.value)}
+                    data-value={opt.value}
+                    onClick={onChipClick}
                     disabled={submitting}
                     aria-pressed={type === opt.value}
                     className={`min-h-9 rounded-full border px-4 py-2 text-xs transition ${
@@ -129,11 +218,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setOpen(false)}
-              disabled={submitting}
-            >
+            <Button variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
             <Button onClick={onSubmit} disabled={submitting || !body.trim()}>
