@@ -55,6 +55,12 @@ import {
   sanitizeTouchSummary,
   TOUCH_CHANNEL_OPTIONS,
 } from "./moveCompletionHelpers";
+import {
+  classifyMoveProvenance,
+  PROVENANCE_EXPLAINER,
+  PROVENANCE_LABEL,
+  type MoveProvenance,
+} from "./moveProvenance";
 
 const MOVE_ICON: Record<QrmMoveKind, typeof PhoneCall> = {
   call_now: PhoneCall,
@@ -162,6 +168,7 @@ export function MoveCard({
             <span className={cn("rounded-full px-2 py-0.5", MOVE_INTENT_BG[move.kind])}>
               {move.kind.replace(/_/g, " ")}
             </span>
+            <MoveProvenanceBadge move={move} />
             {typeof move.confidence === "number" && (
               <span>{Math.round(move.confidence * 100)}% confident</span>
             )}
@@ -476,3 +483,41 @@ const SIGNAL_SEVERITY_DOT: Record<string, string> = {
   high: "bg-amber-500",
   critical: "bg-rose-600",
 };
+
+// ---------------------------------------------------------------------------
+// Provenance badge (Slice 7)
+// ---------------------------------------------------------------------------
+
+const PROVENANCE_CHIP_CLASS: Record<MoveProvenance, string> = {
+  // Iron moves borrow the brand orange — matches the Ask Iron spark icon so
+  // operators can read the surface identity without squinting.
+  iron: "bg-qep-orange/15 text-qep-orange ring-1 ring-inset ring-qep-orange/30",
+  // Recommender moves use a cool slate — present but visually quiet, since
+  // they're the baseline.
+  recommender: "bg-slate-200/80 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200",
+  // Manual moves stay almost invisible — no one needs a chip to tell them
+  // they made the move themselves, but we keep it for auditability.
+  manual: "border border-dashed border-muted-foreground/40 text-muted-foreground",
+};
+
+/**
+ * Small inline chip that labels where a move came from (Ask Iron, the
+ * recommender, or manual). Uses `classifyMoveProvenance` so the rule lives
+ * in one place and tests can exercise it without rendering React.
+ */
+function MoveProvenanceBadge({ move }: { move: QrmMove }) {
+  const kind = classifyMoveProvenance(move);
+  const Icon = kind === "iron" ? Sparkles : null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] normal-case",
+        PROVENANCE_CHIP_CLASS[kind],
+      )}
+      title={PROVENANCE_EXPLAINER[kind]}
+    >
+      {Icon ? <Icon className="h-3 w-3" aria-hidden="true" /> : null}
+      {PROVENANCE_LABEL[kind]}
+    </span>
+  );
+}

@@ -28,6 +28,12 @@ import {
   type QrmMoveAction,
 } from "../lib/qrm-router-api";
 import { MoveCard } from "./MoveCard";
+import {
+  countMovesByProvenance,
+  moveMatchesProvenanceFilter,
+  PROVENANCE_LABEL,
+  type ProvenanceFilter,
+} from "./moveProvenance";
 
 type Scope = "mine" | "team";
 
@@ -43,6 +49,9 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
   const role = profile?.role ?? null;
   const userId = profile?.id ?? null;
   const [scope, setScope] = useState<Scope>(defaultScope);
+  const [provenanceFilter, setProvenanceFilter] = useState<ProvenanceFilter>(
+    "all",
+  );
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   const isElevated = role === "admin" || role === "manager" || role === "owner";
@@ -66,6 +75,24 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
   });
 
   const moves = movesQuery.data ?? [];
+
+  // Provenance counts drive the filter-pill badges. Memoized because it
+  // walks the list, and TodaySurface re-renders on every mutation tick.
+  const provenanceCounts = useMemo(
+    () => countMovesByProvenance(moves),
+    [moves],
+  );
+
+  // Client-side filter — no server change needed because the list is already
+  // scoped by status+rep. Applying provenance after the fact keeps the query
+  // cache hot across filter flips.
+  const filteredMoves = useMemo(
+    () =>
+      provenanceFilter === "all"
+        ? moves
+        : moves.filter((m) => moveMatchesProvenanceFilter(m, provenanceFilter)),
+    [moves, provenanceFilter],
+  );
 
   const mutation = useMutation({
     mutationFn: async ({
@@ -131,8 +158,8 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
   // Group: accepted moves ("in flight") first, then suggestions ranked by
   // priority. The recommender already returns them priority-desc, so we only
   // need a stable partition here.
-  const inFlight = moves.filter((m) => m.status === "accepted");
-  const suggestions = moves.filter((m) => m.status === "suggested");
+  const inFlight = filteredMoves.filter((m) => m.status === "accepted");
+  const suggestions = filteredMoves.filter((m) => m.status === "suggested");
 
   return (
     <div className={cn("mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6", className)}>
@@ -161,6 +188,12 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
           Ranked plays pulled from your signals and deal state. Accept to pick one up; snooze to
           revisit later.
         </p>
+        <ProvenanceFilterBar
+          filter={provenanceFilter}
+          counts={provenanceCounts}
+          total={moves.length}
+          onChange={setProvenanceFilter}
+        />
       </header>
 
       {movesQuery.isLoading && (
@@ -187,6 +220,17 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
           body="The recommender is quiet. Log an activity or wait for the next signal sweep."
         />
       )}
+
+      {!movesQuery.isLoading &&
+        !movesQuery.isError &&
+        moves.length > 0 &&
+        filteredMoves.length === 0 &&
+        provenanceFilter !== "all" && (
+          <EmptyState
+            title={`No ${PROVENANCE_LABEL[provenanceFilter]} moves in view.`}
+            body="Try a different filter or switch back to All."
+          />
+        )}
 
       {inFlight.length > 0 && (
         <Section title="In flight" count={inFlight.length}>
@@ -266,6 +310,68 @@ function ScopeButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Filter pills for Today. Four options (All + three provenances) rendered as
+ * a horizontal scrollable pill row so the list still fits on a phone screen.
+ *
+ * The counts come from the unfiltered list so operators always see total
+ * distribution; clicking a pill that has 0 items still works but just shows
+ * an empty-state — better than hiding affordances, which makes the UI feel
+ * broken when Iron hasn't written anything yet.
+ */
+function ProvenanceFilterBar({
+  filter,
+  counts,
+  total,
+  onChange,
+}: {
+  filter: ProvenanceFilter;
+  counts: { iron: number; recommender: number; manual: number };
+  total: number;
+  onChange: (next: ProvenanceFilter) => void;
+}) {
+  const options: Array<{ value: ProvenanceFilter; label: string; count: number }> = [
+    { value: "all", label: "All", count: total },
+    { value: "iron", label: PROVENANCE_LABEL.iron, count: counts.iron },
+    { value: "recommender", label: PROVENANCE_LABEL.recommender, count: counts.recommender },
+    { value: "manual", label: PROVENANCE_LABEL.manual, count: counts.manual },
+  ];
+  return (
+    <nav
+      aria-label="Filter by provenance"
+      className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 pb-1 pt-1 text-xs sm:mx-0 sm:px-0"
+    >
+      {options.map((opt) => {
+        const active = filter === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 transition",
+              active
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:border-foreground hover:text-foreground",
+            )}
+          >
+            <span className="font-medium">{opt.label}</span>
+            <span
+              className={cn(
+                "rounded-full px-1.5 text-[10px] font-medium",
+                active ? "bg-primary-foreground/20" : "bg-muted",
+              )}
+            >
+              {opt.count}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
