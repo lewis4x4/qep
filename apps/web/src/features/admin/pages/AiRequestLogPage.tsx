@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequireAdmin } from "@/components/RequireAdmin";
+import { AddToCrmLeadDialog } from "../components/AddToCrmLeadDialog";
 import { getAiRequestLogs, getAiLogStats, formatTimeToQuote, type AiLogRow, type AiLogFilter, type AiLogStats } from "../lib/ai-log-api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +114,8 @@ function AiRequestLogPageInner() {
   const [stats, setStats]         = useState<AiLogStats | null>(null);
   const [loading, setLoading]     = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Slice 11 CP2: one-click "Add to QRM" target row
+  const [addToCrmContext, setAddToCrmContext] = useState<{ logId: string; rawPrompt: string | null; createdAt: string } | null>(null);
 
   const filter: AiLogFilter = {
     daysBack:     days === "all" ? null : parseInt(days),
@@ -213,7 +216,23 @@ function AiRequestLogPageInner() {
                             {row.resolved_model_id ? (
                               resolveDisplay(row)
                             ) : (
-                              <Badge variant="warning">Unresolved</Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="warning">Unresolved</Badge>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddToCrmContext({
+                                      logId: row.id,
+                                      rawPrompt: row.raw_prompt,
+                                      createdAt: row.created_at,
+                                    });
+                                  }}
+                                  className="text-[11px] text-primary underline-offset-2 hover:underline"
+                                >
+                                  Add to QRM →
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td className="px-4 py-2">{dealSize(row)}</td>
@@ -239,6 +258,12 @@ function AiRequestLogPageInner() {
           )}
         </CardContent>
       </Card>
+
+      <AddToCrmLeadDialog
+        open={addToCrmContext !== null}
+        onOpenChange={(next) => { if (!next) setAddToCrmContext(null); }}
+        context={addToCrmContext}
+      />
     </div>
   );
 }
