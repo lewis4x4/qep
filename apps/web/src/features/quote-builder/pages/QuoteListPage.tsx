@@ -45,10 +45,10 @@ import {
 } from "../lib/retrospective-shadow";
 import {
   computeScorerProposal,
-  renderScorerProposalMarkdown,
   type ScorerProposal,
   type ScorerFactorChange,
 } from "../lib/scorer-proposal";
+import { renderProposalMarkdownWithContext } from "../lib/proposal-markdown";
 import {
   simulateProposalCalibration,
   describeWhatIfHeadline,
@@ -469,6 +469,8 @@ export function QuoteListPage() {
           proposal={scorerProposal}
           whatIf={scorerWhatIf}
           urgency={proposalUrgency}
+          calibrationDrift={calibrationDrift}
+          factorDrift={factorDriftReport}
         />
       )}
 
@@ -1537,6 +1539,8 @@ function ScorerProposalCard({
   proposal,
   whatIf,
   urgency,
+  calibrationDrift,
+  factorDrift,
 }: {
   proposal: ScorerProposal;
   /** Slice 20p — simulated Brier + hit-rate under the proposal. Null
@@ -1548,6 +1552,14 @@ function ScorerProposalCard({
    *  sentence so a dulling scorer escalates and an improving one
    *  softens. `medium` with `rationale=null` is the silent default. */
   urgency: ProposalUrgencyResult;
+  /** Slice 20u — scorer-wide calibration drift (20s) passed through so
+   *  the "Copy as ticket" handoff carries the full evidence chain, not
+   *  just the proposal body. Null when no calibration window exists. */
+  calibrationDrift: CalibrationDriftReport | null;
+  /** Slice 20u — per-factor drift (20r) passed through for the same
+   *  clipboard-evidence reason. Null / empty drifts fall out of the
+   *  rendered markdown cleanly. */
+  factorDrift: FactorDriftReport | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1564,7 +1576,18 @@ function ScorerProposalCard({
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(renderScorerProposalMarkdown(proposal));
+      // Slice 20u — the clipboard now carries the full evidence chain:
+      // urgency, calibration drift, factor drift, and what-if alongside
+      // the proposal body. The context renderer falls through to the
+      // bare 20m output when every section is silent, so nothing bloats
+      // the ticket without earning it.
+      const markdown = renderProposalMarkdownWithContext(proposal, {
+        calibrationDrift,
+        factorDrift,
+        urgency,
+        whatIf,
+      });
+      await navigator.clipboard.writeText(markdown);
       setCopied(true);
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
       copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
