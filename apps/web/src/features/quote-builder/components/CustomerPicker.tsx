@@ -17,10 +17,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Building2, User, Phone, Mail, Plus, Flame, Snowflake } from "lucide-react";
+import { Search, Building2, User, Phone, Mail, Plus, Flame, Snowflake, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   searchCustomers,
   MIN_QUERY_CHARS,
@@ -184,7 +185,22 @@ export function CustomerPicker({
 
   return (
     <Card className="p-3 space-y-2">
-      <p className="text-sm font-semibold text-foreground">Customer</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-foreground">Customer</p>
+        {/* Always-visible escape hatch — the dropdown's "+ New customer"
+            row is only reachable after typing 2+ chars, which made the
+            new-customer path feel hidden. This button skips search and
+            goes straight to the 4-field manual form. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRequestManualEntry("")}
+          className="gap-1.5"
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          Add new
+        </Button>
+      </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -243,7 +259,8 @@ export function CustomerPicker({
 
       {query.trim().length < MIN_QUERY_CHARS && (
         <p className="text-[11px] text-muted-foreground">
-          Type at least {MIN_QUERY_CHARS} characters, or press <kbd className="text-[10px]">↓</kbd> to browse.
+          Type at least {MIN_QUERY_CHARS} characters to search, or click{" "}
+          <span className="font-medium text-foreground">Add new</span> for a brand-new customer.
         </p>
       )}
     </Card>
