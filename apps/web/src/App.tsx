@@ -456,6 +456,14 @@ const WithPulseSurface = lazy(() =>
     default: m.WithPulseSurface,
   }))
 );
+// Shell v2: Ask Iron replaces the legacy OperationsCopilotPage board when
+// the flag is on. Ask Iron is the 4th surface — the ambient agent backed by
+// Claude tool-use over moves/signals/graph (Slice 4).
+const WithAskIronSurface = lazy(() =>
+  import("./features/qrm/shell/withAskIronSurface").then((m) => ({
+    default: m.WithAskIronSurface,
+  }))
+);
 const QrmContactDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
     default: m.QrmContactDetailPage,
@@ -1957,7 +1965,7 @@ function App() {
                 path="/qrm/operations-copilot"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <OperationsCopilotPage />
+                    <WithAskIronSurface fallback={<OperationsCopilotPage />} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
