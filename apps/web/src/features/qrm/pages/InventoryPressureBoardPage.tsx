@@ -149,38 +149,20 @@ export function InventoryPressureBoardPage() {
       {
         queryKey: ["inventory-pressure", "quotes"],
         queryFn: async (): Promise<QuoteRow[]> => {
-          // crm_deal_equipment has no direct FK to quote_packages — the only
-          // path goes crm_deal_equipment.deal_id → qrm_deals.id → quote_packages.deal_id.
-          // PostgREST can't traverse that transitively, so we do two sequential
-          // queries: fetch open quotes (deal_ids), then fetch equipment links.
-          const { data: openQuotes, error: qpErr } = await supabase
-            .from("quote_packages")
-            .select("deal_id")
-            .in("status", ["draft", "sent", "negotiating"])
-            .not("deal_id", "is", null)
-            .limit(1000);
-          if (qpErr) throw new Error(qpErr.message);
-
-          const dealIds = [
-            ...new Set(
-              (openQuotes ?? [])
-                .map((row) => (row as { deal_id: string | null }).deal_id)
-                .filter((id): id is string => typeof id === "string"),
-            ),
-          ];
-          if (dealIds.length === 0) return [];
-
-          const { data: links, error: linkErr } = await supabase
+          const { data, error } = await supabase
             .from("crm_deal_equipment")
-            .select("equipment_id, deal_id")
-            .in("deal_id", dealIds)
-            .limit(2000);
-          if (linkErr) throw new Error(linkErr.message);
-
+            .select("equipment_id, quote_packages!inner(status)")
+            .limit(1000);
+          if (error) throw new Error(error.message);
           const counts = new Map<string, number>();
-          for (const row of links ?? []) {
-            const equipmentId = (row as { equipment_id?: string | null }).equipment_id;
-            if (!equipmentId) continue;
+          for (const row of data ?? []) {
+            const equipmentId = (row as { equipment_id?: string }).equipment_id;
+            const quoteJoin = (
+              row as { quote_packages?: Array<{ status: string }> | { status: string } | null }
+            ).quote_packages;
+            const status = Array.isArray(quoteJoin) ? quoteJoin[0]?.status : quoteJoin?.status;
+            if (!equipmentId || !status || !["draft", "sent", "negotiating"].includes(status))
+              continue;
             counts.set(equipmentId, (counts.get(equipmentId) ?? 0) + 1);
           }
           return [...counts.entries()].map(([equipment_id, open_quotes]) => ({
@@ -249,38 +231,15 @@ export function InventoryPressureBoardPage() {
     board.hot.length +
     board.underMarketed.length +
     board.priceMisaligned.length;
-  const equipmentCount = equipmentQuery.data?.length ?? 0;
 
-  // Iron briefing: name the single biggest lever rather than restate the strip.
-  const ironHeadline = (() => {
-    if (isError) {
-      return "Inventory pressure stream offline — one of the feeder queries failed. Check the console for the failing table; the board recovers as soon as the feed returns.";
-    }
-    if (equipmentCount === 0) {
-      return "No equipment loaded. Add inventory to the graph to start surfacing pressure signals.";
-    }
-    if (totalFlagged === 0) {
-      return `${equipmentCount} units tracked, all inside motion tolerance. No pressure to route.`;
-    }
-    // Find the largest lane — that's the real lever.
-    const lanes = [
-      { id: "hot", count: board.hot.length, label: "hot with quote activity", move: "close the deals on the front line" },
-      { id: "aged", count: board.aged.length, label: "aged past 90 days", move: "run the markdown pass" },
-      { id: "under", count: board.underMarketed.length, label: "under-merchandised", move: "get photos and pricing on file" },
-      { id: "price", count: board.priceMisaligned.length, label: "price-misaligned vs FMV", move: "re-price against the latest valuation" },
-    ]
-      .filter((l) => l.count > 0)
-      .sort((a, b) => b.count - a.count);
-    const top = lanes[0];
-    const tail =
-      lanes.length > 1
-        ? ` ${lanes.slice(1).map((l) => `${l.count} ${l.id}`).join(" · ")}.`
-        : "";
-    return `${top.count} unit${top.count === 1 ? "" : "s"} ${top.label} — biggest lever today is to ${top.move}.${tail}`;
-  })();
+  const ironHeadline = isError
+    ? "Inventory pressure stream offline — last-known state unavailable. Surface recovers automatically when the graph reconnects."
+    : totalFlagged === 0
+      ? "No pressure detected across the fleet. All units within motion tolerance."
+      : `${totalFlagged} unit${totalFlagged === 1 ? "" : "s"} under pressure — ${board.hot.length} hot, ${board.aged.length} aged, ${board.underMarketed.length} under-marketed, ${board.priceMisaligned.length} price-misaligned.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Inventory Pressure"
         subtitle="Aged, hot, under-marketed, and price-misaligned units — scanned from the live inventory graph."
@@ -317,34 +276,14 @@ export function InventoryPressureBoardPage() {
       ) : isError ? (
         <DeckSurface className="flex items-start gap-3 border-qep-hot/40 bg-qep-hot/5 p-5">
           <Zap className="mt-0.5 h-4 w-4 shrink-0 text-qep-hot" />
-          <div className="min-w-0 flex-1">
+          <div>
             <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-qep-hot">
               Signal offline
             </p>
             <p className="mt-1 text-sm text-foreground/90">
-              One of the feeder queries failed. The board will recover automatically once the feed
-              returns.
+              Inventory pressure stream is unavailable right now. The surface will recover
+              automatically when the graph reconnects — no action needed.
             </p>
-            <div className="mt-2 space-y-0.5 font-mono text-[11px] text-muted-foreground">
-              {equipmentQuery.isError && (
-                <p>
-                  <span className="text-qep-hot">equipment</span> →{" "}
-                  {(equipmentQuery.error as Error | null)?.message ?? "unknown error"}
-                </p>
-              )}
-              {quoteQuery.isError && (
-                <p>
-                  <span className="text-qep-hot">quotes</span> →{" "}
-                  {(quoteQuery.error as Error | null)?.message ?? "unknown error"}
-                </p>
-              )}
-              {valuationQuery.isError && (
-                <p>
-                  <span className="text-qep-hot">valuations</span> →{" "}
-                  {(valuationQuery.error as Error | null)?.message ?? "unknown error"}
-                </p>
-              )}
-            </div>
           </div>
         </DeckSurface>
       ) : (

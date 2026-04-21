@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, ArrowUpRight } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { MapWithSidebar, MapLibreCanvas, type MapMarker, type MapOverlay } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
@@ -11,6 +10,7 @@ import { buildAccountCommandHref } from "../lib/account-command";
 import { buildSeasonalOpportunityBoard } from "../lib/seasonal-opportunity-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 import { listCrmWeightedOpenDeals } from "../lib/qrm-deals-api";
 
 const DEFAULT_OVERLAYS: MapOverlay[] = [
@@ -28,6 +28,12 @@ function confidenceTone(confidence: "high" | "medium" | "low"): "green" | "orang
     default:
       return "blue";
   }
+}
+
+function fmtMoney(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
+  return `$${Math.round(v)}`;
 }
 
 export function SeasonalOpportunityMapPage() {
@@ -137,38 +143,65 @@ export function SeasonalOpportunityMapPage() {
     onClick: () => navigate(buildAccountCommandHref(row.companyId)),
   })), [navigate, visibleRows]);
 
+  const summary = boardQuery.data?.summary;
+  const mapped = summary?.mappedAccounts ?? 0;
+  const seasonal = summary?.seasonalAccounts ?? 0;
+  const budget = summary?.budgetCycleAccounts ?? 0;
+  const weighted = summary?.weightedRevenue ?? 0;
+  const visits = summary?.visitTargets ?? 0;
+
+  // Cascading Iron briefing — route to the sharpest seasonal lever.
+  const seasonalIronHeadline = boardQuery.isLoading
+    ? "Fusing seasonal patterns, budget cycles, and visit timing into a routeable canvas…"
+    : boardQuery.isError
+      ? "Seasonal map offline — one of the feeders failed. Check the console."
+      : budget > 0
+        ? `${budget} account${budget === 1 ? "" : "s"} near a budget-cycle month — timing is your sharpest lever. ${fmtMoney(weighted)} weighted · ${visits} visit target${visits === 1 ? "" : "s"}.`
+        : seasonal > 0
+          ? `${seasonal} account${seasonal === 1 ? "" : "s"} in an active seasonal pattern — route before demand peaks. ${fmtMoney(weighted)} weighted revenue on the canvas.`
+          : visits > 0
+            ? `${visits} visit target${visits === 1 ? "" : "s"} on the map today — drive them before the week compounds.`
+            : mapped > 0
+              ? `${mapped} mapped account${mapped === 1 ? "" : "s"}, ${fmtMoney(weighted)} weighted. No peak timing pressure — press white-space.`
+              : "No mapped seasonal signals yet — accounts need coordinates and a pattern before the map lights up.";
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-2 pt-2 sm:px-6 lg:px-8">
       <QrmPageHeader
-        title="Seasonal Opportunity Map"
+        title="Seasonal Opportunity"
         subtitle="Time-of-year demand shifts and budget windows translated into routeable opportunity."
+        crumb={{ surface: "TODAY", lens: "SEASONAL", count: mapped }}
+        metrics={[
+          { label: "Mapped", value: mapped.toLocaleString() },
+          { label: "Seasonal", value: seasonal, tone: seasonal > 0 ? "active" : undefined },
+          { label: "Budget win", value: budget, tone: budget > 0 ? "hot" : undefined },
+          { label: "Weighted", value: fmtMoney(weighted), tone: weighted > 0 ? "live" : undefined },
+          { label: "Visits", value: visits, tone: visits > 0 ? "ok" : undefined },
+        ]}
+        ironBriefing={{
+          headline: seasonalIronHeadline,
+          actions: [{ label: "Opportunity map →", href: "/qrm/opportunity-map" }],
+        }}
       />
       <QrmSubNav />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Mapped Accounts" value={String(boardQuery.data?.summary.mappedAccounts ?? 0)} detail="Accounts with routeable seasonal signals." />
-        <SummaryCard label="Seasonal Patterns" value={String(boardQuery.data?.summary.seasonalAccounts ?? 0)} detail="Accounts with non-steady seasonality." />
-        <SummaryCard label="Budget Windows" value={String(boardQuery.data?.summary.budgetCycleAccounts ?? 0)} detail="Accounts nearing a budget-cycle month." />
-        <SummaryCard label="Weighted Revenue" value={formatCurrency(boardQuery.data?.summary.weightedRevenue ?? 0)} detail={`${boardQuery.data?.summary.visitTargets ?? 0} predictive visit targets`} />
-      </div>
-
       <MapWithSidebar
         sidebarHeader={
-          <div className="text-[10px] text-muted-foreground">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {boardQuery.isLoading ? "Loading…" : `${visibleRows.length} seasonal signals`}
           </div>
         }
         sidebar={
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-qep-deck-rule/40">
             {visibleRows.map((row) => (
-              <div key={row.id} className="p-2">
-                <p className="text-xs font-medium text-foreground">{row.label}</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {formatCurrency(row.weightedRevenue)} weighted revenue · {row.visitTargets} visit target{row.visitTargets === 1 ? "" : "s"}
+              <div key={row.id} className="p-2.5">
+                <p className="truncate text-[13px] font-medium text-foreground">{row.label}</p>
+                <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {formatCurrency(row.weightedRevenue)} weighted · {row.visitTargets} visit{row.visitTargets === 1 ? "" : "s"}
                 </p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">{row.reasons.join(" · ")}</p>
+                <p className="mt-0.5 text-[10.5px] text-muted-foreground">{row.reasons.join(" · ")}</p>
                 <div className="mt-1">
-                  <Button asChild size="sm" variant="ghost" className="h-7 px-0 text-[10px]">
+                  <Button asChild size="sm" variant="ghost" className="h-6 px-0 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
                     <Link to={buildAccountCommandHref(row.companyId)}>
                       Open <ArrowUpRight className="ml-1 h-3 w-3" />
                     </Link>
@@ -177,9 +210,9 @@ export function SeasonalOpportunityMapPage() {
               </div>
             ))}
             {!boardQuery.isLoading && visibleRows.length === 0 && (
-              <Card className="m-2 p-3">
+              <DeckSurface className="m-2 p-3">
                 <p className="text-xs text-muted-foreground">No routeable seasonal signals are active right now.</p>
-              </Card>
+              </DeckSurface>
             )}
           </div>
         }
@@ -203,32 +236,6 @@ export function SeasonalOpportunityMapPage() {
         overlays={overlays}
         onOverlayToggle={(key, enabled) => setOverlays((current) => current.map((overlay) => overlay.key === key ? { ...overlay, enabled } : overlay))}
       />
-
-      <Card className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Open Learning Layer to turn wins, losses, workflows, and repeated operating patterns into dealership memory.
-            </p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link to="/qrm/learning-layer">
-              Learning layer <ArrowUpRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-        </div>
-      </Card>
     </div>
-  );
-}
-
-function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }

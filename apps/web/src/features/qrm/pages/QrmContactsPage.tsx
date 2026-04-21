@@ -171,7 +171,7 @@ export function QrmContactsPage() {
         : `${loaded} contact${loaded === 1 ? "" : "s"} loaded. No urgent signal from this cohort.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Contacts"
         subtitle="Every person in the field — rep, operator, buyer — reachable in one keystroke."
@@ -276,7 +276,7 @@ export function QrmContactsPage() {
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder="Search name · email · phone · role"
-          className="h-8 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[12px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+          className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
         />
         <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-sm border border-qep-deck-rule px-1 font-mono text-[10px] text-muted-foreground md:inline">
           /
@@ -343,7 +343,7 @@ export function QrmContactsPage() {
                 <Link
                   key={contact.id}
                   to={`/qrm/contacts/${contact.id}`}
-                  className="group grid grid-cols-12 items-center gap-3 px-3 py-1.5 text-[13px] transition-colors hover:bg-qep-orange/[0.04]"
+                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04]"
                 >
                   {/* Contact */}
                   <div className="col-span-5 flex min-w-0 items-center gap-2.5 sm:col-span-4">

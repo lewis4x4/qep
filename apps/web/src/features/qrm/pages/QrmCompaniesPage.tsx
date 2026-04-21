@@ -108,7 +108,7 @@ export function QrmCompaniesPage() {
       : `${loaded} account${loaded === 1 ? "" : "s"} across ${states.size} state${states.size === 1 ? "" : "s"}. No breach signal today.`;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Companies"
         subtitle="Every account and sub-account — rolled up by territory, rep, and health."
@@ -165,7 +165,7 @@ export function QrmCompaniesPage() {
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder="Search company · city · state"
-          className="h-8 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[12px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+          className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
         />
       </div>
 
@@ -222,13 +222,13 @@ export function QrmCompaniesPage() {
                 <Link
                   key={company.id}
                   to={buildAccountCommandHref(company.id)}
-                  className="group grid grid-cols-12 items-center gap-3 px-3 py-1.5 text-[13px] transition-colors hover:bg-qep-orange/[0.04]"
+                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04]"
                 >
                   {/* Account */}
                   <div className="col-span-6 flex min-w-0 items-center gap-2.5 sm:col-span-5">
                     <StatusDot tone={tone} pulse={tone === "hot"} />
-                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border border-qep-deck-rule bg-qep-deck-elevated">
-                      <Building2 className="h-3 w-3 text-muted-foreground" aria-hidden />
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-qep-deck-rule bg-qep-deck-elevated">
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-foreground">{company.name}</p>

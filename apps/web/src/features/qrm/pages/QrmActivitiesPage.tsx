@@ -520,17 +520,16 @@ export function QrmActivitiesPage() {
     return { openTasks, overdueTasks, failedDeliveries, todayTouches };
   }, [activities]);
 
-  const activitiesWhatMattersNow = activitiesQuery.isLoading
-    ? "Activity pressure is loading."
-    : `${summary.openTasks} open task${summary.openTasks === 1 ? "" : "s"}, ${summary.overdueTasks} overdue, and ${summary.failedDeliveries} delivery issue${summary.failedDeliveries === 1 ? "" : "s"} need operator attention.`;
-  const activitiesNextMove = summary.failedDeliveries > 0
-    ? `Clear ${summary.failedDeliveries} failed delivery${summary.failedDeliveries === 1 ? "" : "ies"} first so follow-up does not silently stall.`
-    : summary.overdueTasks > 0
-      ? `Work the ${summary.overdueTasks} overdue task${summary.overdueTasks === 1 ? "" : "s"} before adding more outbound.`
-      : `Use today's ${summary.todayTouches} touch${summary.todayTouches === 1 ? "" : "es"} to decide the next send-now or archive action.`;
-  const activitiesRiskIfIgnored = summary.failedDeliveries > 0 || summary.overdueTasks > 0
-    ? "Missed sends and overdue tasks turn the activity lane into noise instead of control."
-    : "Without active inbox discipline, important touches blend into the feed and next moves get buried.";
+  // Cascading Iron briefing — route the operator to the sharpest activity lever.
+  const activitiesIronHeadline = activitiesQuery.isLoading
+    ? "Activity pressure is loading…"
+    : summary.failedDeliveries > 0
+      ? `${summary.failedDeliveries} failed deliver${summary.failedDeliveries === 1 ? "y" : "ies"} — clear these first so follow-up does not silently stall. ${summary.overdueTasks} overdue · ${summary.openTasks} open.`
+      : summary.overdueTasks > 0
+        ? `${summary.overdueTasks} overdue task${summary.overdueTasks === 1 ? "" : "s"} — work these before adding more outbound. ${summary.openTasks} open tasks in scope.`
+        : summary.openTasks > 0
+          ? `${summary.openTasks} open task${summary.openTasks === 1 ? "" : "s"} in scope. ${summary.todayTouches} touch${summary.todayTouches === 1 ? "" : "es"} already logged today — disposition and press the next lever.`
+          : `Inbox clear. ${summary.todayTouches} touch${summary.todayTouches === 1 ? "" : "es"} logged today — pick the next outbound or close the loop.`;
 
   const selectedCommunicationHasPendingWork = useMemo(
     () =>
@@ -1184,61 +1183,23 @@ export function QrmActivitiesPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="QRM Activities"
-        subtitle="Run calls, texts, emails, and task follow-through from one rep-safe activity feed."
+        title="Activities"
+        subtitle="Calls, texts, emails, and task follow-through — one rep-safe feed with drafted next moves."
+        crumb={{ surface: "TODAY", lens: "ACTIVITIES", count: summary.openTasks }}
+        metrics={[
+          { label: "Open", value: summary.openTasks, tone: summary.openTasks > 0 ? "active" : undefined },
+          { label: "Overdue", value: summary.overdueTasks, tone: summary.overdueTasks > 0 ? "hot" : undefined },
+          { label: "Failed", value: summary.failedDeliveries, tone: summary.failedDeliveries > 0 ? "hot" : undefined },
+          { label: "Today", value: summary.todayTouches, tone: summary.todayTouches > 0 ? "live" : undefined },
+        ]}
+        ironBriefing={{
+          headline: activitiesIronHeadline,
+          actions: [{ label: "Templates →", href: "/qrm/activities/templates" }],
+        }}
       />
       <QrmSubNav />
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
-          <p className="mt-2 text-sm text-foreground">{activitiesWhatMattersNow}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
-          <p className="mt-2 text-sm text-foreground">{activitiesNextMove}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
-          <p className="mt-2 text-sm text-foreground">{activitiesRiskIfIgnored}</p>
-        </Card>
-      </div>
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Activity summary">
-        {[
-          {
-            label: "Open tasks",
-            value: summary.openTasks,
-            tone:
-              "border-amber-400/40 bg-gradient-to-br from-amber-400/20 to-amber-950/10 text-amber-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35)] backdrop-blur-md dark:from-amber-400/18 dark:to-amber-950/35 dark:text-amber-50",
-          },
-          {
-            label: "Overdue tasks",
-            value: summary.overdueTasks,
-            tone:
-              "border-rose-400/40 bg-gradient-to-br from-rose-400/18 to-rose-950/12 text-rose-900 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3)] backdrop-blur-md dark:from-rose-400/16 dark:to-rose-950/38 dark:text-rose-50",
-          },
-          {
-            label: "Failed deliveries",
-            value: summary.failedDeliveries,
-            tone:
-              "border-sky-400/40 bg-gradient-to-br from-sky-400/20 to-sky-950/12 text-sky-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3)] backdrop-blur-md dark:from-sky-400/18 dark:to-sky-950/40 dark:text-sky-50",
-          },
-          {
-            label: "Touches today",
-            value: summary.todayTouches,
-            tone:
-              "border-emerald-400/40 bg-gradient-to-br from-emerald-400/20 to-emerald-950/10 text-emerald-950 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.32)] backdrop-blur-md dark:from-emerald-400/18 dark:to-emerald-950/35 dark:text-emerald-50",
-          },
-        ].map((item) => (
-          <Card key={item.label} className={cn("border p-4 shadow-[0_12px_40px_-18px_rgba(0,0,0,0.25)] dark:shadow-[0_16px_48px_-20px_rgba(0,0,0,0.55)]", item.tone)}>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em]">{item.label}</p>
-            <p className="mt-2 text-3xl font-bold">{item.value}</p>
-          </Card>
-        ))}
-      </section>
 
       <Card className="space-y-4 p-3 sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">

@@ -153,29 +153,29 @@ export function QrmPageHeader({
   };
 
   return (
-    <header className="space-y-2">
+    <header className="space-y-3">
       {/* Iron briefing ribbon — the AI narrative that frames the page */}
       {ironBriefing && (
         <IronBar headline={ironBriefing.headline} actions={ironBriefing.actions} />
       )}
 
       {/* Title block */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           {crumb ? (
             <SectionCrumb
               surface={crumb.surface}
               lens={crumb.lens}
               count={crumb.count}
-              className="mb-1"
+              className="mb-1.5"
             />
           ) : (
-            <SectionCrumb surface="QRM" lens="Operator Deck" className="mb-1" />
+            <SectionCrumb surface="QRM" lens="Operator Deck" className="mb-1.5" />
           )}
-          <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-foreground">
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-foreground">
             {title}
           </h1>
-          <p className="mt-0.5 max-w-2xl text-[13px] text-muted-foreground">{subtitle}</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
           {rightRail}

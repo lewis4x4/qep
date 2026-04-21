@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, DollarSign, RefreshCcw, Truck, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -279,71 +279,11 @@ export function RentalCommandCenterPage() {
 
   const center = commandQuery.data;
 
-  const fleet = center?.summary.totalFleet ?? 0;
-  const onRent = center?.summary.onRentCount ?? 0;
-  const ready = center?.summary.readyCount ?? 0;
-  const recovery = center?.summary.recoveryCount ?? 0;
-  const motionRisk = center?.summary.motionRiskCount ?? 0;
-  const utilizationPct = Math.round((center?.summary.utilizationPct ?? 0) * 100);
-  const dailyRev = center?.summary.dailyRevenueInPlay ?? 0;
-
-  // Iron briefing: name the sharpest lever on the fleet right now.
-  const rentalIronHeadline = commandQuery.isLoading
-    ? "Rental feed loading — utilization, returns, and movement streams sync in parallel."
-    : commandQuery.isError
-      ? "Rental command is offline — one of the feeder queries failed. Check the console and retry."
-      : motionRisk > 0
-        ? `${motionRisk} move${motionRisk === 1 ? "" : "s"} at delivery risk — dispatch or reschedule before the promise slips. ${recovery} in recovery · ${formatCurrency(dailyRev)}/day in play.`
-        : recovery > 0
-          ? `${recovery} return case${recovery === 1 ? "" : "s"} in flight — close the work orders so the unit re-enters ready. ${utilizationPct}% utilization · ${formatCurrency(dailyRev)}/day in play.`
-          : ready > 0 && utilizationPct < 60
-            ? `${ready} unit${ready === 1 ? "" : "s"} ready with utilization at ${utilizationPct}%. Merchandise the idle fleet or re-price against the region.`
-            : `${onRent}/${fleet} on rent · ${utilizationPct}% utilization · ${formatCurrency(dailyRev)}/day in play. Fleet inside tolerance.`;
-
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="Rental Command"
-        subtitle="Utilization, returns, recovery, and movement risk — one rental graph."
-        crumb={{ surface: "GRAPH", lens: "RENTALS", count: fleet }}
-        metrics={[
-          { label: "Fleet", value: fleet.toLocaleString() },
-          {
-            label: "On rent",
-            value: onRent.toLocaleString(),
-            tone: "active",
-          },
-          {
-            label: "Utilization",
-            value: `${utilizationPct}%`,
-            tone: utilizationPct >= 75 ? "ok" : utilizationPct >= 50 ? "warm" : "hot",
-          },
-          {
-            label: "Recovery",
-            value: recovery,
-            tone: recovery > 0 ? "warm" : undefined,
-          },
-          {
-            label: "Motion risk",
-            value: motionRisk,
-            tone: motionRisk > 0 ? "hot" : undefined,
-          },
-        ]}
-        ironBriefing={{
-          headline: rentalIronHeadline,
-        }}
-        rightRail={
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]"
-          >
-            <Link to="/admin/rental-pricing">
-              Pricing <ArrowUpRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-        }
+        title="Rental Command Center"
+        subtitle="Dedicated rental operations across utilization, returns, work recovery, and movement risk."
       />
       <QrmSubNav />
 
@@ -355,6 +295,21 @@ export function RentalCommandCenterPage() {
         </Card>
       ) : (
         <>
+          <div className="grid gap-4 md:grid-cols-5">
+            <SummaryCard icon={Truck} label="Fleet" value={String(center.summary.totalFleet)} detail="Active rental fleet units." />
+            <SummaryCard icon={DollarSign} label="On rent" value={String(center.summary.onRentCount)} detail={`Daily revenue in play ${formatCurrency(center.summary.dailyRevenueInPlay)}`} />
+            <SummaryCard icon={RefreshCcw} label="Ready" value={String(center.summary.readyCount)} detail={`${Math.round(center.summary.utilizationPct * 100)}% utilization`} />
+            <SummaryCard icon={Wrench} label="Recovery" value={String(center.summary.recoveryCount)} detail={`${center.summary.returnsInFlight} return cases in flight`} tone="warn" />
+            <SummaryCard icon={Truck} label="Motion risk" value={String(center.summary.motionRiskCount)} detail={`${center.summary.motionCount} rental moves open`} tone={center.summary.motionRiskCount > 0 ? "warn" : "default"} />
+          </div>
+
+          <div className="flex justify-end">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/admin/rental-pricing">
+                Rental pricing admin <ArrowUpRight className="ml-1 h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="p-4">
@@ -621,6 +576,31 @@ export function RentalCommandCenterPage() {
         </>
       )}
     </div>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "default",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "default" | "warn";
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      </div>
+      <p className="mt-3 text-3xl font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </Card>
   );
 }
 

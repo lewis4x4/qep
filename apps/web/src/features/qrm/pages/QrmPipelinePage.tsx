@@ -4,6 +4,7 @@ import { BarChart3, Download, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
@@ -190,116 +191,79 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
   const attentionCount = urgencyEvaluation.counts.attention;
   const overdueCount = urgencyEvaluation.counts.overdue_follow_up;
   const staleCount = urgencyEvaluation.counts.stalled;
-
-  // Iron briefing: name the single sharpest move, not three paragraphs.
-  const fmtMoney = (v: number) =>
-    v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `$${Math.round(v / 1_000)}k` : `$${Math.round(v)}`;
-  const pipelineIronHeadline = isLoading
+  const pipelineWhatMattersNow = isLoading
     ? "Pipeline pressure is loading."
-    : overdueCount > 0
-      ? `${overdueCount} overdue follow-up${overdueCount === 1 ? "" : "s"} on the board — pull those forward before the rest of the pipeline. ${attentionCount} attention · ${staleCount} stale.`
-      : attentionCount > 0
-        ? `${attentionCount} deal${attentionCount === 1 ? "" : "s"} need a next-step touch today. ${staleCount} stale. No overdue follow-ups.`
-        : staleCount > 0
-          ? `${staleCount} stale deal${staleCount === 1 ? "" : "s"} — timing is the lever. Assign a next step or disposition.`
-          : `${filteredDeals.length} deal${filteredDeals.length === 1 ? "" : "s"} in scope, pressure inside tolerance. Work the stage you're weakest in.`;
-
-  const exportDealsCsv = () => {
-    import("@/lib/csv-export").then(({ exportDeals }) => {
-      exportDeals(filteredDeals.map((d) => ({
-        id: d.id,
-        name: d.name,
-        amount: d.amount,
-        expectedCloseOn: d.expectedCloseOn,
-        nextFollowUpAt: d.nextFollowUpAt,
-        lastActivityAt: d.lastActivityAt,
-        depositStatus: d.depositStatus,
-        depositAmount: d.depositAmount,
-        createdAt: d.createdAt,
-        stageName: null,
-        companyName: null,
-        contactName: null,
-        assignedRepName: null,
-      })));
-    });
-  };
+    : `${filteredDeals.length} visible deal${filteredDeals.length === 1 ? "" : "s"}, ${attentionCount} needing attention, ${overdueCount} overdue, ${staleCount} stale.`;
+  const pipelineNextMove = overdueCount > 0
+    ? `Pull the ${overdueCount} overdue deal${overdueCount === 1 ? "" : "s"} forward before touching lower-pressure stages.`
+    : attentionCount > 0
+      ? `Work the ${attentionCount} attention item${attentionCount === 1 ? "" : "s"} so the board reflects real motion, not latent risk.`
+      : "Use the board to tighten the next stage move and keep follow-up timing honest.";
+  const pipelineRiskIfIgnored = overdueCount > 0 || staleCount > 0
+    ? "If pipeline pressure is buried below filters, deals age quietly and operator trust drops."
+    : "Without a clear top brief, the board becomes informative but not decisive.";
 
   return (
-    <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-[1300px] flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="Pipeline"
-        subtitle="21-step deal graph with SLA enforcement and stage-gate drag-and-drop."
-        crumb={{ surface: "GRAPH", lens: "DEALS", count: filteredDeals.length }}
-        metrics={[
-          { label: "Visible", value: filteredDeals.length.toLocaleString() },
-          {
-            label: "Overdue",
-            value: overdueCount,
-            tone: overdueCount > 0 ? "hot" : undefined,
-          },
-          {
-            label: "Attention",
-            value: attentionCount,
-            tone: attentionCount > 0 ? "warm" : undefined,
-          },
-          {
-            label: "Stale",
-            value: staleCount,
-            tone: staleCount > 0 ? "active" : undefined,
-          },
-          ...(showWeightedMetrics
-            ? [
-                {
-                  label: "Weighted",
-                  value: fmtMoney(weightedTotals.weightedPipeline),
-                  tone: "live" as const,
-                },
-              ]
-            : []),
-        ]}
-        ironBriefing={{
-          headline: pipelineIronHeadline,
-          actions:
-            overdueCount > 0
-              ? [{ label: "Filter overdue →", onClick: () => setUrgencyFilter("overdue_follow_up") }]
-              : attentionCount > 0
-                ? [{ label: "Filter attention →", onClick: () => setUrgencyFilter("attention") }]
-                : undefined,
-        }}
-        rightRail={
-          <div className="flex items-center gap-2">
-            {viewMode === "board" && (
-              <Button
-                variant={showAnalytics ? "default" : "outline"}
-                size="sm"
-                className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]"
-                onClick={() => setShowAnalytics((p) => !p)}
-              >
-                <BarChart3 className="mr-1 h-3.5 w-3.5" />
-                {showAnalytics ? "Hide stats" : "Stats"}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]"
-              onClick={exportDealsCsv}
-            >
-              <Download className="mr-1 h-3.5 w-3.5" />
-              CSV
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 px-3 font-mono text-[11px] uppercase tracking-[0.1em]"
-              onClick={() => setEditorOpen(true)}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              New
-            </Button>
-          </div>
-        }
+        title="QRM Pipeline"
+        subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
       />
       <QrmSubNav />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineWhatMattersNow}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineNextMove}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
+          <p className="mt-2 text-sm text-foreground">{pipelineRiskIfIgnored}</p>
+        </Card>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        {viewMode === "board" && (
+          <Button
+            variant={showAnalytics ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowAnalytics((p) => !p)}
+          >
+            <BarChart3 className="mr-1 h-4 w-4" />
+            {showAnalytics ? "Hide Stats" : "Stage Stats"}
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={() => {
+          import("@/lib/csv-export").then(({ exportDeals }) => {
+            exportDeals(filteredDeals.map((d) => ({
+              id: d.id,
+              name: d.name,
+              amount: d.amount,
+              expectedCloseOn: d.expectedCloseOn,
+              nextFollowUpAt: d.nextFollowUpAt,
+              lastActivityAt: d.lastActivityAt,
+              depositStatus: d.depositStatus,
+              depositAmount: d.depositAmount,
+              createdAt: d.createdAt,
+              stageName: null,
+              companyName: null,
+              contactName: null,
+              assignedRepName: null,
+            })));
+          });
+        }}>
+          <Download className="mr-1 h-4 w-4" />
+          Export CSV
+        </Button>
+        <Button onClick={() => setEditorOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New deal
+        </Button>
+      </div>
 
       <PipelineManagerSummary
         showWeightedMetrics={showWeightedMetrics}

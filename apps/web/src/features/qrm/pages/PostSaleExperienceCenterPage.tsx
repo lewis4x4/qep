@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { BookOpen, ArrowUpRight, LifeBuoy, PackagePlus, Wrench } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { buildPostSaleExperienceBoard } from "../lib/post-sale-experience";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface, StatusDot, SignalChip } from "../components/command-deck";
 
 export function PostSaleExperienceCenterPage() {
   const boardQuery = useQuery({
@@ -116,99 +116,105 @@ export function PostSaleExperienceCenterPage() {
   });
 
   const board = boardQuery.data;
+  const summary = board?.summary ?? { accounts: 0, frictionAccounts: 0, documentGapUnits: 0, attachmentGapUnits: 0 };
+
+  // Cascading Iron briefing — route to the sharpest post-sale lever.
+  const postSaleIronHeadline = boardQuery.isLoading
+    ? "Scanning onboarding touches and fleet friction in the first 90 days…"
+    : boardQuery.isError
+      ? "Post-sale center offline. One of the feeders failed — check the console."
+      : summary.frictionAccounts > 0
+        ? `${summary.frictionAccounts} account${summary.frictionAccounts === 1 ? "" : "s"} carrying onboarding friction in the first 90 days — close the gap before it hardens into churn. ${summary.documentGapUnits} doc gap${summary.documentGapUnits === 1 ? "" : "s"}.`
+        : summary.documentGapUnits > 0
+          ? `${summary.documentGapUnits} recent unit${summary.documentGapUnits === 1 ? "" : "s"} missing visible onboarding docs — push them to portal to lift the first-90 experience.`
+          : summary.attachmentGapUnits > 0
+            ? `${summary.attachmentGapUnits} unit${summary.attachmentGapUnits === 1 ? "" : "s"} missing attachment records — close before the next service visit drifts.`
+            : summary.accounts > 0
+              ? `${summary.accounts} account${summary.accounts === 1 ? "" : "s"} in the first-90 window, clean onboarding. Protect the motion.`
+              : "No recent post-sale accounts in the 90-day window.";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="Post-Sale Experience Center"
+        title="Post-Sale"
         subtitle="Onboarding quality, first-90-day friction, and attachment adoption across recently sold accounts."
+        crumb={{ surface: "TODAY", lens: "POST-SALE", count: summary.accounts }}
+        metrics={[
+          { label: "Accounts", value: summary.accounts },
+          { label: "Friction", value: summary.frictionAccounts, tone: summary.frictionAccounts > 0 ? "hot" : undefined },
+          { label: "Doc gaps", value: summary.documentGapUnits, tone: summary.documentGapUnits > 0 ? "warm" : undefined },
+          { label: "Attach gaps", value: summary.attachmentGapUnits, tone: summary.attachmentGapUnits > 0 ? "warm" : undefined },
+        ]}
+        ironBriefing={{
+          headline: postSaleIronHeadline,
+          actions: [{ label: "Portal fleet →", href: "/portal" }],
+        }}
       />
       <QrmSubNav />
 
       {boardQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading post-sale experience…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading post-sale experience…</DeckSurface>
       ) : boardQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-qep-hot/40 bg-qep-hot/5 p-6 text-sm text-qep-hot">
           {boardQuery.error instanceof Error ? boardQuery.error.message : "Post-sale experience is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={LifeBuoy} label="Accounts" value={String(board.summary.accounts)} detail="Accounts with fleet purchased in the last 90 days." />
-            <SummaryCard icon={Wrench} label="Friction" value={String(board.summary.frictionAccounts)} detail="Accounts with service, due-service, or adoption friction." />
-            <SummaryCard icon={BookOpen} label="Doc Gaps" value={String(board.summary.documentGapUnits)} detail="Recent units missing visible onboarding docs." />
-            <SummaryCard icon={PackagePlus} label="Attachment Gaps" value={String(board.summary.attachmentGapUnits)} detail="Recent units with no attachments registered." />
+        <DeckSurface className="p-3 sm:p-4">
+          <div>
+            <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">First-90 accounts</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ranked by first-90-day friction so the team can close onboarding gaps before they harden.
+            </p>
           </div>
-
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">First-90 accounts</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Accounts ranked by first-90-day friction so the team can close onboarding gaps before they harden.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
+          <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
+            {board.accounts.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">No recent post-sale accounts are active right now.</p>
+            ) : (
+              board.accounts.slice(0, 12).map((row) => {
+                const tone = row.openServiceTouches > 0 ? "hot" : row.overdueDueCount > 0 ? "warm" : row.attachmentGapCount > 0 ? "active" : "cool";
+                return (
+                  <Link
+                    key={row.companyId}
+                    to={buildAccountCommandHref(row.companyId)}
+                    className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-qep-orange/[0.04]"
+                  >
+                    <StatusDot tone={tone} pulse={tone === "hot"} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-foreground">{row.companyName}</p>
+                      <p className="mt-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                        {row.recentUnits} unit{row.recentUnits === 1 ? "" : "s"} · {row.serviceTouches} service touch{row.serviceTouches === 1 ? "" : "es"}
+                        {row.openServiceTouches > 0 ? ` · ${row.openServiceTouches} open` : ""}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {row.overdueDueCount > 0 && (
+                          <SignalChip label="Due risk" value={row.overdueDueCount} tone="warm" />
+                        )}
+                        {row.attachmentGapCount > 0 && (
+                          <SignalChip label="Attach gap" value={row.attachmentGapCount} tone="active" />
+                        )}
+                        <SignalChip label="Docs" value={`${row.docCoverageCount}/${row.recentUnits}`} tone={row.docCoverageCount < row.recentUnits ? "warm" : "live"} />
+                      </div>
+                    </div>
+                    <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+                  </Link>
+                );
+              })
+            )}
+          </div>
+          {board.accounts.length > 12 && (
+            <div className="mt-2 flex items-center justify-between px-1">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                12 / {board.accounts.length.toLocaleString()} shown
+              </p>
+              <Button asChild size="sm" variant="outline" className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]">
                 <Link to="/portal">
                   Portal fleet <ArrowUpRight className="ml-1 h-3 w-3" />
                 </Link>
               </Button>
             </div>
-            <div className="mt-4 space-y-3">
-              {board.accounts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recent post-sale accounts are active right now.</p>
-              ) : (
-                board.accounts.slice(0, 12).map((row) => (
-                  <div key={row.companyId} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{row.companyName}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {row.recentUnits} recent unit{row.recentUnits === 1 ? "" : "s"} · {row.serviceTouches} service touch{row.serviceTouches === 1 ? "" : "es"}
-                          {row.openServiceTouches > 0 ? ` · ${row.openServiceTouches} open` : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {row.overdueDueCount} due-service risk · {row.docCoverageCount}/{row.recentUnits} units with visible docs · {row.attachmentGapCount} attachment gaps
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <Button asChild size="sm" variant="ghost">
-                          <Link to={buildAccountCommandHref(row.companyId)}>
-                            Account <ArrowUpRight className="ml-1 h-3 w-3" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </>
+          )}
+        </DeckSurface>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }
