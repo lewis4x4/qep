@@ -22,7 +22,9 @@ import {
   CircleDot,
   ExternalLink,
   GitPullRequest,
+  Link2,
   Loader2,
+  PlayCircle,
   Rocket,
   ShieldOff,
   Sparkles,
@@ -54,6 +56,8 @@ const EVENT_LABEL: Record<FeedbackEventType, string> = {
   wont_fix: "Won't fix",
   reopened: "Reopened",
   admin_note: "Admin note",
+  duplicate_linked: "Linked to existing",
+  preview_ready: "Preview live",
 };
 
 const EVENT_TONE: Record<FeedbackEventType, string> = {
@@ -67,6 +71,8 @@ const EVENT_TONE: Record<FeedbackEventType, string> = {
   wont_fix: "bg-muted text-muted-foreground line-through",
   reopened: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
   admin_note: "bg-muted text-muted-foreground",
+  duplicate_linked: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  preview_ready: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };
 
 function eventIcon(kind: FeedbackEventType): ReactNode {
@@ -87,6 +93,10 @@ function eventIcon(kind: FeedbackEventType): ReactNode {
       return <ShieldOff className="h-3.5 w-3.5" aria-hidden />;
     case "reopened":
       return <Undo2 className="h-3.5 w-3.5" aria-hidden />;
+    case "duplicate_linked":
+      return <Link2 className="h-3.5 w-3.5" aria-hidden />;
+    case "preview_ready":
+      return <PlayCircle className="h-3.5 w-3.5" aria-hidden />;
     default:
       return <CircleDashed className="h-3.5 w-3.5" aria-hidden />;
   }
@@ -183,6 +193,24 @@ function TimelineStep({ event }: { event: HubFeedbackEventRow }) {
             <ExternalLink className="ml-1 h-3 w-3" aria-hidden />
           </a>
         )}
+        {event.event_type === "preview_ready" && (() => {
+          // v3.1: link straight to the Netlify preview so the timeline
+          // step is actionable, not just informational. The poll fn
+          // stashes the URL under `claude_preview_url` in the payload.
+          const previewUrl =
+            (event.payload?.claude_preview_url as string | undefined) ?? null;
+          return previewUrl ? (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-0.5 inline-flex items-center font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+            >
+              Open preview
+              <ExternalLink className="ml-1 h-3 w-3" aria-hidden />
+            </a>
+          ) : null;
+        })()}
       </div>
     </li>
   );

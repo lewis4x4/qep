@@ -198,6 +198,78 @@ export async function listPrsForCommit(
   }));
 }
 
+export interface GithubStatusEntry {
+  context: string;
+  state: "error" | "failure" | "pending" | "success";
+  target_url: string | null;
+  description: string | null;
+  updated_at: string;
+}
+
+/**
+ * Fetch the combined status for a commit SHA. Netlify posts one status per
+ * PR with context `netlify/<site-name>` and `target_url` set to the
+ * preview deploy URL once it's built. We use this instead of the newer
+ * Checks API because Netlify still writes to the classic Statuses API and
+ * it's one round trip.
+ */
+export async function getCombinedStatus(
+  cfg: GithubConfig,
+  sha: string,
+): Promise<GithubStatusEntry[]> {
+  const res = await ghFetch(
+    cfg,
+    `/repos/${cfg.owner}/${cfg.repo}/commits/${encodeURIComponent(sha)}/status?per_page=50`,
+  );
+  const body = (await res.json()) as {
+    statuses?: Array<{
+      context?: string;
+      state?: string;
+      target_url?: string | null;
+      description?: string | null;
+      updated_at?: string;
+    }>;
+  };
+  return (body.statuses ?? []).map((s) => ({
+    context: s.context ?? "",
+    state: (s.state as GithubStatusEntry["state"]) ?? "pending",
+    target_url: s.target_url ?? null,
+    description: s.description ?? null,
+    updated_at: s.updated_at ?? new Date().toISOString(),
+  }));
+}
+
+/**
+ * Fetch a single PR so we can resolve its head SHA + merged flag. The
+ * preview-poll fn needs the head SHA to query combined-status; the merge
+ * flag lets us skip rows whose PR closed out-of-band.
+ */
+export async function getPullRequest(
+  cfg: GithubConfig,
+  prNumber: number,
+): Promise<{
+  head_sha: string;
+  head_ref: string;
+  merged: boolean;
+  state: "open" | "closed";
+  draft: boolean;
+}> {
+  const res = await ghFetch(cfg, `/repos/${cfg.owner}/${cfg.repo}/pulls/${prNumber}`);
+  const body = (await res.json()) as {
+    head?: { sha?: string; ref?: string };
+    merged?: boolean;
+    state?: string;
+    draft?: boolean;
+  };
+  return {
+    head_sha: body.head?.sha ?? "",
+    head_ref: body.head?.ref ?? "",
+    merged: Boolean(body.merged),
+    state: body.state === "closed" ? "closed" : "open",
+    draft: Boolean(body.draft),
+  };
+}
+
 export function slugify(s: string, max = 60): string {
   const base = s
     .toLowerCase()

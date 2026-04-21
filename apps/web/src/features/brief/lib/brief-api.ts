@@ -34,6 +34,14 @@ export interface HubFeedbackRow {
   ai_suggested_action: string | null;
   claude_branch_name: string | null;
   claude_pr_url: string | null;
+  /**
+   * Build Hub v3.1 — Netlify PR-preview deploy URL. Stamped by the
+   * hub-feedback-preview-poll cron the first time a `netlify/*` commit
+   * status goes green on the PR head SHA. NULL when no preview exists
+   * yet (still building, or the repo has no Netlify wiring).
+   */
+  claude_preview_url: string | null;
+  claude_preview_ready_at: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -54,7 +62,9 @@ export type FeedbackEventType =
   | "shipped"
   | "wont_fix"
   | "reopened"
-  | "admin_note";
+  | "admin_note"
+  | "duplicate_linked"
+  | "preview_ready";
 
 export interface HubFeedbackEventRow {
   id: string;
@@ -391,7 +401,7 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
   let q = supabase
     .from("hub_feedback")
     .select(
-      "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, created_at, updated_at, resolved_at, last_seen_events_at",
+      "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, claude_preview_url, claude_preview_ready_at, created_at, updated_at, resolved_at, last_seen_events_at",
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false })

@@ -49,13 +49,16 @@ type EventType =
   | "shipped"
   | "wont_fix"
   | "reopened"
-  | "admin_note";
+  | "admin_note"
+  | "duplicate_linked"
+  | "preview_ready";
 
 /** Event types that trigger a Resend email. */
 const EMAIL_WORTHY: Readonly<Set<EventType>> = new Set([
   "shipped",
   "wont_fix",
   "pr_opened",
+  "preview_ready",
 ]);
 
 interface EventRow {
@@ -79,6 +82,7 @@ interface FeedbackRow {
   ai_suggested_action: string | null;
   claude_pr_url: string | null;
   claude_branch_name: string | null;
+  claude_preview_url: string | null;
 }
 
 interface SubmitterProfile {
@@ -258,7 +262,7 @@ async function loadFeedback(
   const { data, error } = await supabase
     .from("hub_feedback")
     .select(
-      "id, submitted_by, feedback_type, body, ai_summary, ai_suggested_action, claude_pr_url, claude_branch_name",
+      "id, submitted_by, feedback_type, body, ai_summary, ai_suggested_action, claude_pr_url, claude_branch_name, claude_preview_url",
     )
     .eq("id", id)
     .is("deleted_at", null)
@@ -339,6 +343,39 @@ async function renderEmail(
           ``,
           `— QEP OS Build Hub`,
         ].join("\n"),
+      };
+    }
+
+    case "preview_ready": {
+      // v3.1 Build Hub: Angela doesn't have to wait for merge to see her
+      // feedback become a shipped thing. We hand her a live preview URL
+      // the moment Netlify finishes the build, with an explicit invitation
+      // to push back if it's wrong — the single most powerful moment in
+      // the loop, because it's the first time the fix exists in *her*
+      // hands instead of ours.
+      const previewUrl =
+        feedback.claude_preview_url
+        ?? (event.payload.claude_preview_url as string | undefined)
+        ?? "";
+      return {
+        subject: `[QEP OS] Your fix is live to test — ${truncate(summary, 50)}`,
+        text: [
+          `Hi ${firstName} —`,
+          ``,
+          `The proposed fix for your feedback is deployed to a live preview:`,
+          `  "${summary}"`,
+          ``,
+          previewUrl ? `Try it: ${previewUrl}` : `(Preview URL pending — the Build Hub will surface it on your card momentarily.)`,
+          ``,
+          `This is a PR preview — nothing has merged yet. Poke at it.`,
+          `If it misses the mark, reply to this email and we'll spin another take before the merge goes in.`,
+          feedback.claude_pr_url ? `` : null,
+          feedback.claude_pr_url ? `Underlying PR: ${feedback.claude_pr_url}` : null,
+          ``,
+          `— QEP OS Build Hub`,
+        ]
+          .filter((line) => line !== null)
+          .join("\n"),
       };
     }
 
