@@ -26,7 +26,7 @@ export function BriefRoutes({
   canAdminister,
 }: BriefRoutesProps) {
   return (
-    <div className="min-h-[100dvh] bg-slate-50">
+    <div className="min-h-[100dvh] bg-background">
       <BriefNav />
       <Routes>
         <Route
@@ -46,7 +46,6 @@ export function BriefRoutes({
         <Route path="decisions" element={<BriefDecisionsPage />} />
         <Route path="ask" element={<BriefAskPage />} />
       </Routes>
-      <FeedbackButton />
     </div>
   );
 }
@@ -60,7 +59,7 @@ const NAV_ITEMS: Array<{ to: string; label: string; end?: boolean }> = [
 
 function BriefNav() {
   return (
-    <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
+    <nav className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 sm:gap-2">
         {NAV_ITEMS.map((item) => (
           <NavLink
@@ -70,14 +69,17 @@ function BriefNav() {
             className={({ isActive }) =>
               `rounded-full px-3 py-1.5 text-sm font-medium transition ${
                 isActive
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
               }`
             }
           >
             {item.label}
           </NavLink>
         ))}
+        <div className="ml-auto flex-shrink-0">
+          <FeedbackButton />
+        </div>
       </div>
     </nav>
   );

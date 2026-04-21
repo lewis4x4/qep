@@ -159,7 +159,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 flex min-h-11 min-w-11 items-center gap-2 rounded-full bg-slate-900 px-5 py-3.5 text-sm font-medium text-white shadow-lg shadow-slate-900/25 transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:bottom-8 sm:right-8"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Send feedback"
       >
         <MessageCirclePlus className="h-4 w-4" aria-hidden />
@@ -177,7 +177,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
           </DialogHeader>
 
           <div className="space-y-3 py-2">
-            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
               What's on your mind?
             </label>
             <textarea
@@ -187,11 +187,11 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
               rows={5}
               maxLength={4000}
               disabled={submitting}
-              className="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500 disabled:opacity-60"
+              className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
             />
 
             <div>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Type (optional — Claude will infer)
               </div>
               <div className="flex flex-wrap gap-2">
@@ -205,8 +205,8 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
                     aria-pressed={type === opt.value}
                     className={`min-h-9 rounded-full border px-4 py-2 text-xs transition ${
                       type === opt.value
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-input bg-background text-foreground hover:bg-muted"
                     }`}
                     title={opt.hint}
                   >
