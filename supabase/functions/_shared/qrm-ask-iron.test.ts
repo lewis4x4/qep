@@ -18,6 +18,7 @@ import {
   normalizeSummarizeContactInput,
   normalizeSummarizeDayInput,
   normalizeSummarizeDealInput,
+  normalizeSummarizeEquipmentInput,
   normalizeSummarizeSignalInput,
   SUMMARIZE_COMPANY_DEAL_LIMIT,
   SUMMARIZE_CONTACT_DEAL_LIMIT,
@@ -31,6 +32,10 @@ import {
   SUMMARIZE_DEAL_MAX_DAYS,
   SUMMARIZE_DEAL_SIGNAL_LIMIT,
   SUMMARIZE_DEAL_TEXT_CAP,
+  SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES,
+  SUMMARIZE_EQUIPMENT_RENTAL_LIMIT,
+  SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT,
+  SUMMARIZE_EQUIPMENT_TOUCH_LIMIT,
   SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT,
   SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT,
 } from "./qrm-ask-iron.ts";
@@ -171,7 +176,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the twelve tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the thirteen tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -185,6 +190,7 @@ Deno.test("ASK_IRON_TOOLS exposes the twelve tools", () => {
     "summarize_contact",
     "summarize_day",
     "summarize_deal",
+    "summarize_equipment",
     "summarize_signal",
   ]);
 });
@@ -3353,6 +3359,345 @@ Deno.test(
     const { client } = makeStubClient({});
     const ctx = makeCtx(client, { role: "rep" });
     const res = await executeAskIronTool(ctx, "summarize_signal", {});
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);
+
+// ── normalizeSummarizeEquipmentInput (Slice 23) ────────────────────────────
+
+Deno.test("normalizeSummarizeEquipmentInput defaults lookback_days to the shared window", () => {
+  const now = new Date("2026-04-20T12:00:00Z").getTime();
+  const n = normalizeSummarizeEquipmentInput({ equipment_id: "e-1" }, now);
+  assertEquals(n.equipmentId, "e-1");
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeEquipmentInput clamps lookback above max", () => {
+  const n = normalizeSummarizeEquipmentInput(
+    { equipment_id: "e-1", lookback_days: 1000 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_MAX_DAYS);
+});
+
+Deno.test("normalizeSummarizeEquipmentInput clamps lookback below 1", () => {
+  const n = normalizeSummarizeEquipmentInput(
+    { equipment_id: "e-1", lookback_days: 0 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, 1);
+});
+
+Deno.test("normalizeSummarizeEquipmentInput falls back to default when lookback is non-numeric", () => {
+  const n = normalizeSummarizeEquipmentInput(
+    { equipment_id: "e-1", lookback_days: "nope" },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeEquipmentInput trims whitespace from equipment_id", () => {
+  const n = normalizeSummarizeEquipmentInput(
+    { equipment_id: "  e-1  " },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.equipmentId, "e-1");
+});
+
+Deno.test("normalizeSummarizeEquipmentInput throws VALIDATION_ERROR when equipment_id is missing", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeEquipmentInput({});
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+  assertEquals(caught?.message.includes("equipment_id"), true);
+});
+
+Deno.test("normalizeSummarizeEquipmentInput throws when equipment_id is whitespace-only", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeEquipmentInput({ equipment_id: "   " });
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+});
+
+// ── executor: summarize_equipment (Slice 23) ───────────────────────────────
+
+Deno.test(
+  "executeAskIronTool summarize_equipment returns found:false for unknown equipment",
+  async () => {
+    const { client } = makeStubClient({
+      crm_equipment: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "ghost",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as { found: boolean; lookback_days: number };
+    assertEquals(payload.found, false);
+    assertEquals(payload.lookback_days, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment short-circuits rental/touch/signal reads when equipment missing",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_equipment: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "ghost",
+    });
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("crm_equipment"), true);
+    assertEquals(tables.includes("rental_contracts"), false);
+    assertEquals(tables.includes("touches"), false);
+    assertEquals(tables.includes("signals"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment bundles equipment + rentals + touches + signals",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_equipment: {
+        data: {
+          id: "e-1",
+          name: "CAT 320 Excavator",
+          asset_tag: "EX-042",
+          serial_number: "CAT320-99887",
+          company_id: "co-7",
+          primary_contact_id: "c-3",
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+      rental_contracts: {
+        data: [{
+          id: "rc-1",
+          status: "active",
+          request_type: "standard",
+          requested_start_date: "2026-04-10",
+          requested_end_date: "2026-05-10",
+          approved_start_date: "2026-04-10",
+          approved_end_date: "2026-05-10",
+          portal_customer_id: "pc-1",
+          branch_id: "b-1",
+          delivery_mode: "dealer",
+          updated_at: "2026-04-20T09:00:00Z",
+        }],
+        error: null,
+      },
+      touches: {
+        data: [{
+          id: "t-1",
+          channel: "visit",
+          direction: "outbound",
+          summary: "Walked the machine",
+          body: "Hydraulic lines look tight.",
+          occurred_at: "2026-04-19T15:00:00Z",
+          actor_user_id: "user-1",
+          activity_id: null,
+        }],
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "telematics_fault",
+          severity: "high",
+          source: "telematics",
+          title: "Fault code E-042",
+          description: "Hydraulic pressure low",
+          occurred_at: "2026-04-20T06:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "e-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      equipment: { id: string; name: string };
+      open_rentals: Array<{ id: string }>;
+      recent_touches: Array<{ id: string }>;
+      open_signals: Array<{ id: string }>;
+      counts: { open_rentals: number; touches: number; signals: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.equipment.id, "e-1");
+    assertEquals(payload.open_rentals[0].id, "rc-1");
+    assertEquals(payload.recent_touches[0].id, "t-1");
+    assertEquals(payload.open_signals[0].id, "s-1");
+    assertEquals(payload.counts.open_rentals, 1);
+    assertEquals(payload.counts.touches, 1);
+    assertEquals(payload.counts.signals, 1);
+
+    // Rental arm: equipment_id filter + non-terminal status filter + limit.
+    const rentalCapture = captures.find((c) => c.table === "rental_contracts");
+    assertEquals(rentalCapture !== undefined, true);
+    const eqFilter = rentalCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "equipment_id",
+    );
+    assertEquals(eqFilter?.value, "e-1");
+    const statusFilter = rentalCapture!.filters.find((f) => f.op === "in");
+    assertEquals(statusFilter?.column, "status");
+    assertEquals(
+      statusFilter?.value,
+      SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES,
+    );
+    assertEquals(rentalCapture!.limit, SUMMARIZE_EQUIPMENT_RENTAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment scopes touches to the equipment_id with soft-delete-free reads",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_equipment: {
+        data: {
+          id: "e-9",
+          name: "Skid Steer",
+          asset_tag: "SS-01",
+          serial_number: null,
+          company_id: null,
+          primary_contact_id: null,
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "e-9",
+    });
+    const touchCapture = captures.find((c) => c.table === "touches");
+    assertEquals(touchCapture !== undefined, true);
+    const eqFilter = touchCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "equipment_id",
+    );
+    assertEquals(eqFilter?.value, "e-9");
+    assertEquals(touchCapture!.limit, SUMMARIZE_EQUIPMENT_TOUCH_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment scopes signals to entity_type='equipment' + entity_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_equipment: {
+        data: {
+          id: "e-9",
+          name: "Skid Steer",
+          asset_tag: "SS-01",
+          serial_number: null,
+          company_id: null,
+          primary_contact_id: null,
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "e-9",
+    });
+    const signalCapture = captures.find((c) => c.table === "signals");
+    assertEquals(signalCapture !== undefined, true);
+    const typeFilter = signalCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_type",
+    );
+    assertEquals(typeFilter?.value, "equipment");
+    const idFilter = signalCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_id",
+    );
+    assertEquals(idFilter?.value, "e-9");
+    assertEquals(signalCapture!.limit, SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment truncates long touch bodies and signal descriptions",
+  async () => {
+    const longBody = "x".repeat(SUMMARIZE_DEAL_TEXT_CAP + 200);
+    const longDesc = "y".repeat(SUMMARIZE_DEAL_TEXT_CAP + 200);
+    const { client } = makeStubClient({
+      crm_equipment: {
+        data: {
+          id: "e-1",
+          name: "CAT 320",
+          asset_tag: "EX-042",
+          serial_number: null,
+          company_id: null,
+          primary_contact_id: null,
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+      touches: {
+        data: [{
+          id: "t-1",
+          channel: "note",
+          direction: "outbound",
+          summary: "Long note",
+          body: longBody,
+          occurred_at: "2026-04-19T15:00:00Z",
+          actor_user_id: "user-1",
+          activity_id: null,
+        }],
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "telematics_fault",
+          severity: "medium",
+          source: "telematics",
+          title: "Long",
+          description: longDesc,
+          occurred_at: "2026-04-20T06:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_equipment", {
+      equipment_id: "e-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      recent_touches: Array<{ body: string | null }>;
+      open_signals: Array<{ description: string | null }>;
+    };
+    assertEquals(
+      payload.recent_touches[0].body!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(payload.recent_touches[0].body!.endsWith("…"), true);
+    assertEquals(
+      payload.open_signals[0].description!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(payload.open_signals[0].description!.endsWith("…"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_equipment returns VALIDATION_ERROR for missing equipment_id",
+  async () => {
+    const { client } = makeStubClient({});
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_equipment", {});
     assertEquals(res.ok, false);
     assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
   },

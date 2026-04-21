@@ -475,6 +475,59 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
       required: ["signal_id"],
     },
   },
+  {
+    // Slice 23: equipment-centric mirror of summarize_deal/company/contact.
+    // This is an equipment-and-parts dealership — the machine is the
+    // core asset, and "where is #42?" / "what's up with the CAT 320?"
+    // questions are as common on the yard as "brief me on Acme" is in
+    // sales. Before this tool, Iron had no direct way to answer: the
+    // chain was search_entities + (no get_equipment_detail tool) +
+    // list_recent_signals(entity_type='equipment'), which missed
+    // rentals and touches entirely. summarize_equipment bundles four
+    // reads in one shot:
+    //
+    //   1. Equipment row        — crm_equipment (name/asset_tag/serial/
+    //                              company_id/primary_contact_id)
+    //   2. Open rentals         — rental_contracts tied to this
+    //                              equipment, filtered to non-terminal
+    //                              statuses (submitted through active;
+    //                              completed/declined/cancelled dropped)
+    //   3. Recent touches       — touches where equipment_id = target
+    //                              within the lookback window. Equipment
+    //                              activity trail lives in touches, not
+    //                              crm_activities (which is contact/
+    //                              deal/company-only per migration 021).
+    //   4. Open signals         — signals where entity_type='equipment'
+    //                              + entity_id = target within window
+    //
+    // Scope: everything goes through callerDb with explicit workspace_id.
+    // Equipment isn't rep-scoped — reps can see any machine in the yard
+    // — but rental_contracts inherits RLS from portal_customers, which
+    // may filter a rep's visibility. We phrase open_rentals as "rentals
+    // you can see on this machine" in the description to match the
+    // summarize_company / summarize_contact partial-visibility pattern.
+    name: "summarize_equipment",
+    description:
+      "Bundle an equipment row, open rental contracts tied to it, recent touches (yard activity), and active signals into one call. Use for machine-centric questions — 'where is <asset tag>', 'what's up with the CAT 320', 'status of <serial>', 'brief me on this machine before the walk-through'. Distinguish from summarize_deal (one sale) and summarize_company (the whole account): equipment = one asset. Do NOT use for single-field lookups (call search_entities then this). Returns structured data — write the status yourself in 2–4 sentences. open_rentals may be a partial list due to portal visibility rules; describe it as 'rentals you can see on this machine'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        equipment_id: {
+          type: "string",
+          description:
+            "UUID of the equipment to summarize. Obtain from search_entities if only the asset tag / serial / make is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of touches and signals to pull. Default 30.",
+        },
+      },
+      required: ["equipment_id"],
+    },
+  },
 ];
 
 // ── Input normalization (pure, testable) ────────────────────────────────────
@@ -956,6 +1009,69 @@ export function normalizeSummarizeSignalInput(
   return { signalId, lookbackDays, sinceIso };
 }
 
+// ── summarize_equipment normalization (Slice 23) ───────────────────────────
+
+export interface NormalizedSummarizeEquipment {
+  equipmentId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row caps for the list arms of summarize_equipment. A machine rarely
+ * has many concurrent open rentals (1-2 in practice), but the cap
+ * defends against data anomalies where a machine got double-booked in
+ * the source system. Touches + signals share the same caps as the
+ * other summarize_* tools so the context budget is predictable.
+ */
+export const SUMMARIZE_EQUIPMENT_RENTAL_LIMIT = 5;
+export const SUMMARIZE_EQUIPMENT_TOUCH_LIMIT = 10;
+export const SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT = 10;
+
+/**
+ * Rental contract statuses that count as "open" for the synthesizer.
+ * Matches the non-terminal half of the rental_contracts status check —
+ * completed / declined / cancelled are dropped because they're historical,
+ * not "what's going on with this machine right now".
+ */
+export const SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES = [
+  "submitted",
+  "reviewing",
+  "quoted",
+  "approved",
+  "awaiting_payment",
+  "active",
+] as const;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_equipment` input. Throws
+ * VALIDATION_ERROR on missing/empty equipment_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run search_entities with a
+ * type filter). Clamps lookback_days to the same 1..90 window as the
+ * other summarize_* tools so operators don't have to remember five
+ * defaults.
+ */
+export function normalizeSummarizeEquipmentInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeEquipment {
+  const equipmentId = typeof input.equipment_id === "string"
+    ? input.equipment_id.trim()
+    : "";
+  if (!equipmentId) throw new Error("VALIDATION_ERROR:equipment_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { equipmentId, lookbackDays, sinceIso };
+}
+
 // ── list_my_touches normalization (Slice 13) ───────────────────────────────
 
 export interface NormalizedTouchFilters {
@@ -1171,6 +1287,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeContact(ctx, input) };
       case "summarize_signal":
         return { ok: true, data: await toolSummarizeSignal(ctx, input) };
+      case "summarize_equipment":
+        return { ok: true, data: await toolSummarizeEquipment(ctx, input) };
       case "list_my_touches":
         return { ok: true, data: await toolListMyTouches(ctx, input) };
       case "summarize_day":
@@ -1978,6 +2096,130 @@ async function toolSummarizeSignal(
 }
 
 /**
+ * Slice 23 — summarize_equipment executor.
+ *
+ * Four-arm fan-out:
+ *
+ *   1. Equipment row     — crm_equipment (compat view from mig 170; the
+ *                           real table is qrm_equipment). Soft-delete
+ *                           guarded.
+ *   2. Open rentals      — rental_contracts tied to this equipment,
+ *                           filtered to the non-terminal half of the
+ *                           status enum. rental_contracts has its own
+ *                           portal-customer RLS, so a rep's visibility
+ *                           may drop some rows — we phrase this as
+ *                           "rentals you can see" in the tool description.
+ *   3. Recent touches    — touches where equipment_id = target within
+ *                           the lookback window. This is where the
+ *                           yard activity trail lives (crm_activities
+ *                           is constrained to contact/deal/company only).
+ *   4. Open signals      — signals where entity_type='equipment' +
+ *                           entity_id = target within the lookback.
+ *
+ * Returns {found: false} rather than throwing when the equipment
+ * isn't visible — same recovery path as summarize_contact when a
+ * record has been soft-deleted.
+ */
+async function toolSummarizeEquipment(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeEquipmentInput(input);
+
+  // 1) Equipment row — workspace-scoped + soft-delete guard.
+  const { data: equipmentRow, error: equipmentErr } = await ctx.callerDb
+    .from("crm_equipment")
+    .select(
+      "id, name, asset_tag, serial_number, company_id, primary_contact_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.equipmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (equipmentErr) throw equipmentErr;
+  if (!equipmentRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Open rentals — non-terminal statuses only. rental_contracts has
+  // no soft-delete column; status is the single gate.
+  const { data: rentalRows, error: rentalErr } = await ctx.callerDb
+    .from("rental_contracts")
+    .select(
+      "id, status, request_type, requested_start_date, requested_end_date, approved_start_date, approved_end_date, portal_customer_id, branch_id, delivery_mode, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("equipment_id", n.equipmentId)
+    .in("status", SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES)
+    .order("updated_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_RENTAL_LIMIT);
+  if (rentalErr) throw rentalErr;
+
+  // 3) Recent touches on this machine. touches.body is the long-form
+  // field we truncate (summary is already short by design).
+  const { data: touchRows, error: touchErr } = await ctx.callerDb
+    .from("touches")
+    .select(
+      "id, channel, direction, summary, body, occurred_at, actor_user_id, activity_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("equipment_id", n.equipmentId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_TOUCH_LIMIT);
+  if (touchErr) throw touchErr;
+
+  // 4) Signals tied to this equipment within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "equipment")
+    .eq("entity_id", n.equipmentId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const touches = (touchRows ?? []).map((row) => ({
+    id: row.id,
+    channel: row.channel,
+    direction: row.direction,
+    summary: row.summary,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    actor_user_id: row.actor_user_id,
+    activity_id: row.activity_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    equipment: equipmentRow,
+    open_rentals: rentalRows ?? [],
+    recent_touches: touches,
+    open_signals: signals,
+    counts: {
+      open_rentals: (rentalRows ?? []).length,
+      touches: touches.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
  * Slice 13 — the rep's own activity trail.
  *
  * Reads crm_activities filtered by workspace + soft-delete + caller's
@@ -2331,6 +2573,7 @@ Rules:
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
 - For signal-centric triage questions — "triage this signal", "why is this signal hot", "what's going on with this <kind> signal", "brief me on this alert on <entity>" — call summarize_signal with the signal_id (obtain via list_recent_signals if only the kind/title is known). It bundles the signal row, the parent entity, other related signals on that entity, and moves the signal triggered. Do NOT chain list_recent_signals + search_entities + a summarize_* on the parent for triage questions; summarize_signal returns all four in one shot. parent_entity may be null for equipment/rental/activity/workspace signals — say so plainly rather than guessing.
+- For machine-centric questions — "where is <asset tag>", "status of CAT 320", "what's up with serial <serial>", "brief me on this machine", "any activity on <equipment>" — call search_entities to resolve the equipment_id (if only the asset tag or serial is known), then call summarize_equipment. It bundles the equipment row, open (non-terminal) rental contracts tied to the machine, recent touches (yard activity), and open signals on the equipment. Do NOT chain search_entities + list_recent_signals(entity_type='equipment') + a separate rentals read; summarize_equipment returns all four in one shot. open_rentals may be a partial list due to portal-customer visibility — describe it as "rentals you can see on this machine" rather than "all rentals".
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
