@@ -1,4 +1,4 @@
--- 310_qb_equipment_models_demo_seed.sql
+-- 330_qb_equipment_models_demo_seed.sql
 -- Seed a realistic QEP dealer model catalog so Quote Builder's Search Catalog
 -- and the AI Deal Scenarios engine have data to work with across all 13 brands
 -- in qb_brands. Prior to this migration only 6 ASV track loaders were seeded.
