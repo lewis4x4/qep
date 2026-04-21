@@ -9,6 +9,12 @@ import {
   normalizeProposeMoveInput,
   normalizeSearchInput,
   normalizeSignalFilters,
+  normalizeSummarizeDealInput,
+  SUMMARIZE_DEAL_ACTIVITY_LIMIT,
+  SUMMARIZE_DEAL_DEFAULT_DAYS,
+  SUMMARIZE_DEAL_MAX_DAYS,
+  SUMMARIZE_DEAL_SIGNAL_LIMIT,
+  SUMMARIZE_DEAL_TEXT_CAP,
 } from "./qrm-ask-iron.ts";
 import type { RouterCtx } from "./crm-router-service.ts";
 
@@ -139,7 +145,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the six tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the seven tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -148,6 +154,7 @@ Deno.test("ASK_IRON_TOOLS exposes the six tools", () => {
     "list_recent_signals",
     "propose_move",
     "search_entities",
+    "summarize_deal",
   ]);
 });
 
@@ -830,3 +837,353 @@ Deno.test("normalizeProposeMoveInput rejects unknown due_at strings", () => {
     assertEquals((err as Error).message, "VALIDATION_ERROR:due_at");
   }
 });
+
+// ── normalizeSummarizeDealInput (Slice 10) ──────────────────────────────────
+
+Deno.test("normalizeSummarizeDealInput defaults lookback_days to 30", () => {
+  const now = Date.parse("2026-04-20T12:00:00Z");
+  const n = normalizeSummarizeDealInput({ deal_id: "d-1" }, now);
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  // since = now - 30d
+  assertEquals(n.sinceIso, new Date(now - 30 * 86400_000).toISOString());
+});
+
+Deno.test("normalizeSummarizeDealInput clamps lookback_days above max", () => {
+  const n = normalizeSummarizeDealInput(
+    { deal_id: "d-1", lookback_days: 9999 },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_MAX_DAYS);
+});
+
+Deno.test("normalizeSummarizeDealInput clamps lookback_days below 1", () => {
+  const n = normalizeSummarizeDealInput(
+    { deal_id: "d-1", lookback_days: 0 },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, 1);
+});
+
+Deno.test("normalizeSummarizeDealInput falls back to default when lookback is non-numeric", () => {
+  const n = normalizeSummarizeDealInput(
+    { deal_id: "d-1", lookback_days: "two weeks" },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeDealInput trims whitespace from deal_id", () => {
+  const n = normalizeSummarizeDealInput(
+    { deal_id: "  deal-42  " },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.dealId, "deal-42");
+});
+
+Deno.test("normalizeSummarizeDealInput throws VALIDATION_ERROR when deal_id is missing", () => {
+  try {
+    normalizeSummarizeDealInput({});
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:deal_id");
+  }
+});
+
+Deno.test("normalizeSummarizeDealInput throws when deal_id is empty string", () => {
+  try {
+    normalizeSummarizeDealInput({ deal_id: "" });
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:deal_id");
+  }
+});
+
+Deno.test("normalizeSummarizeDealInput throws when deal_id is whitespace-only", () => {
+  try {
+    normalizeSummarizeDealInput({ deal_id: "   " });
+    throw new Error("expected throw");
+  } catch (err) {
+    assertEquals((err as Error).message, "VALIDATION_ERROR:deal_id");
+  }
+});
+
+// ── executor: summarize_deal (Slice 10) ────────────────────────────────────
+
+Deno.test("executeAskIronTool summarize_deal returns found:false for missing/invisible deal", async () => {
+  const { client } = makeStubClient({
+    crm_deals_rep_safe: { data: null, error: null },
+  });
+  const ctx = makeCtx(client, { role: "rep" });
+  const res = await executeAskIronTool(ctx, "summarize_deal", {
+    deal_id: "ghost",
+  });
+  assertEquals(res.ok, true);
+  const payload = res.data as { found: boolean; lookback_days: number };
+  assertEquals(payload.found, false);
+  // Even on miss, lookback is echoed so Claude knows the window it searched.
+  assertEquals(payload.lookback_days, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test(
+  "executeAskIronTool summarize_deal short-circuits: no activity or signal query when deal missing",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_deals_rep_safe: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_deal", { deal_id: "ghost" });
+
+    // Only the deal query should have fired.
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("crm_activities"), false);
+    assertEquals(tables.includes("signals"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal bundles deal + activities + signals in one call",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-1",
+          name: "Acme CAT 305",
+          amount: 140000,
+          stage: "proposal",
+          expected_close_on: "2026-05-15",
+          assigned_rep_id: "rep-me",
+          company_id: "co-1",
+          updated_at: "2026-04-18T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: {
+        data: [
+          {
+            id: "a-1",
+            activity_type: "call",
+            body: "Follow-up on proposal",
+            occurred_at: "2026-04-19T15:00:00Z",
+            created_by: "rep-me",
+          },
+        ],
+        error: null,
+      },
+      signals: {
+        data: [
+          {
+            id: "s-1",
+            kind: "quote_viewed",
+            severity: "medium",
+            source: "docuware",
+            title: "Acme viewed proposal",
+            description: "2nd view",
+            occurred_at: "2026-04-19T16:00:00Z",
+          },
+        ],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep", workspaceId: "ws-1" });
+    const res = await executeAskIronTool(ctx, "summarize_deal", {
+      deal_id: "d-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      deal: { id: string };
+      recent_activities: Array<{ id: string }>;
+      open_signals: Array<{ id: string }>;
+      counts: { activities: number; signals: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.deal.id, "d-1");
+    assertEquals(payload.recent_activities.length, 1);
+    assertEquals(payload.open_signals.length, 1);
+    assertEquals(payload.counts.activities, 1);
+    assertEquals(payload.counts.signals, 1);
+
+    // All three queries must carry the workspace filter.
+    for (const table of ["crm_deals_rep_safe", "crm_activities", "signals"]) {
+      const q = captures.find((c) => c.table === table);
+      if (!q) throw new Error(`missing capture for ${table}`);
+      const ws = q.filters.find(
+        (f) => f.op === "eq" && f.column === "workspace_id",
+      );
+      assertEquals(ws?.value, "ws-1", `${table} missing workspace_id filter`);
+    }
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal filters activities to the exact deal_id and soft-delete-null",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-42",
+          name: "Scope test",
+          amount: null,
+          stage: "qualified",
+          expected_close_on: null,
+          assigned_rep_id: null,
+          company_id: null,
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_deal", { deal_id: "d-42" });
+
+    const activities = captures.find((c) => c.table === "crm_activities");
+    if (!activities) throw new Error("no activity capture");
+    const dealFilter = activities.filters.find(
+      (f) => f.op === "eq" && f.column === "deal_id",
+    );
+    assertEquals(dealFilter?.value, "d-42");
+    const softFilter = activities.filters.find(
+      (f) => f.op === "is" && f.column === "deleted_at",
+    );
+    assertEquals(softFilter?.value, null);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal filters signals to entity_type='deal' + entity_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-9",
+          name: "Scope test",
+          amount: 1,
+          stage: "qualified",
+          expected_close_on: null,
+          assigned_rep_id: null,
+          company_id: null,
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_deal", { deal_id: "d-9" });
+
+    const signals = captures.find((c) => c.table === "signals");
+    if (!signals) throw new Error("no signal capture");
+    const typeFilter = signals.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_type",
+    );
+    assertEquals(typeFilter?.value, "deal");
+    const idFilter = signals.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_id",
+    );
+    assertEquals(idFilter?.value, "d-9");
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal hard-caps activity + signal limits regardless of lookback",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-big",
+          name: "Chatty deal",
+          amount: 1,
+          stage: "qualified",
+          expected_close_on: null,
+          assigned_rep_id: null,
+          company_id: null,
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_deal", {
+      deal_id: "d-big",
+      lookback_days: 90,
+    });
+
+    const activities = captures.find((c) => c.table === "crm_activities");
+    const signals = captures.find((c) => c.table === "signals");
+    assertEquals(activities?.limit, SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+    assertEquals(signals?.limit, SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal truncates long activity bodies and signal descriptions",
+  async () => {
+    const longText = "x".repeat(SUMMARIZE_DEAL_TEXT_CAP + 500);
+    const { client } = makeStubClient({
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-1",
+          name: "Deal",
+          amount: 1,
+          stage: "qualified",
+          expected_close_on: null,
+          assigned_rep_id: null,
+          company_id: null,
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: {
+        data: [{
+          id: "a-1",
+          activity_type: "note",
+          body: longText,
+          occurred_at: "2026-04-19T15:00:00Z",
+          created_by: null,
+        }],
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "quote_viewed",
+          severity: "low",
+          source: "docuware",
+          title: "viewed",
+          description: longText,
+          occurred_at: "2026-04-19T16:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_deal", {
+      deal_id: "d-1",
+    });
+    const payload = res.data as {
+      recent_activities: Array<{ body: string | null }>;
+      open_signals: Array<{ description: string | null }>;
+    };
+    // After truncation the field length must be <= cap.
+    assertEquals(payload.recent_activities[0].body!.length <= SUMMARIZE_DEAL_TEXT_CAP, true);
+    assertEquals(payload.open_signals[0].description!.length <= SUMMARIZE_DEAL_TEXT_CAP, true);
+    // And must show the ellipsis marker (indicates we truncated, not just trimmed).
+    assertEquals(payload.recent_activities[0].body!.endsWith("…"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_deal returns VALIDATION_ERROR for missing deal_id",
+  async () => {
+    const { client } = makeStubClient({});
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_deal", {});
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);

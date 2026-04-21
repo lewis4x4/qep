@@ -226,6 +226,34 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
       required: ["kind", "title"],
     },
   },
+  {
+    // Slice 10: a synthesizer tool for narrative deal questions. Before
+    // this tool, "what's the story on Acme?" forced Claude to chain
+    // get_deal_detail + list_recent_signals + (maybe) list_my_moves in
+    // three LLM turns. summarize_deal bundles all three in one round trip,
+    // scoped to the deal, capped for context, and ready for prose.
+    name: "summarize_deal",
+    description:
+      "Bundle a deal's current row, recent activities, and open signals into one call. Use for narrative questions — 'what's the story on <deal>', 'where does this deal stand', 'brief me on <deal>', 'status of <deal>'. Do NOT use for single-field lookups (call get_deal_detail instead) or for listing all deals (call search_entities). Returns structured data — write the summary yourself in 2–4 sentences.",
+    input_schema: {
+      type: "object",
+      properties: {
+        deal_id: {
+          type: "string",
+          description:
+            "UUID of the deal to summarize. Obtain from search_entities or list_my_moves if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30 — enough to cover a typical sales cycle without blowing context.",
+        },
+      },
+      required: ["deal_id"],
+    },
+  },
 ];
 
 // ── Input normalization (pure, testable) ────────────────────────────────────
@@ -523,6 +551,68 @@ export function normalizeProposeMoveInput(
   return { kind, title, rationale, entityType, entityId, priority, dueAt, assignedRepId };
 }
 
+// ── summarize_deal normalization ───────────────────────────────────────────
+
+export interface NormalizedSummarizeDeal {
+  dealId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+export const SUMMARIZE_DEAL_DEFAULT_DAYS = 30;
+export const SUMMARIZE_DEAL_MAX_DAYS = 90;
+export const SUMMARIZE_DEAL_MIN_DAYS = 1;
+/**
+ * Row caps for the two list arms of summarize_deal. These are hard caps to
+ * keep the tool result small enough for Claude's context even on a chatty
+ * deal with a long lookback window — the LLM rarely needs more than the
+ * 10 most recent items to write a useful status paragraph, and fetching
+ * more only inflates token cost without improving the summary.
+ */
+export const SUMMARIZE_DEAL_ACTIVITY_LIMIT = 10;
+export const SUMMARIZE_DEAL_SIGNAL_LIMIT = 10;
+/**
+ * Per-field text truncation applied to activity bodies and signal
+ * descriptions before we hand them to Claude. 240 matches the Slice 8
+ * triage-prompt cap for signal descriptions — same reasoning: the model
+ * needs a hint, not a transcript.
+ */
+export const SUMMARIZE_DEAL_TEXT_CAP = 240;
+
+/**
+ * Validate + normalize the LLM-supplied `summarize_deal` input. Throws
+ * VALIDATION_ERROR when deal_id is missing so the caller returns a clean
+ * tool error Claude can recover from.
+ */
+export function normalizeSummarizeDealInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeDeal {
+  const dealId = typeof input.deal_id === "string" ? input.deal_id.trim() : "";
+  if (!dealId) throw new Error("VALIDATION_ERROR:deal_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { dealId, lookbackDays, sinceIso };
+}
+
+// Shrink a potentially-long free-text field to keep the tool result small.
+// Single place to change the truncation rule so both activity.body and
+// signal.description cap identically.
+function truncateForSummary(raw: unknown, max: number = SUMMARIZE_DEAL_TEXT_CAP): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+  if (cleaned.length === 0) return null;
+  return cleaned.length <= max ? cleaned : cleaned.slice(0, max - 1) + "…";
+}
+
 // ── Executor ────────────────────────────────────────────────────────────────
 
 /**
@@ -575,6 +665,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolGetDealDetail(ctx, input) };
       case "get_company_detail":
         return { ok: true, data: await toolGetCompanyDetail(ctx, input) };
+      case "summarize_deal":
+        return { ok: true, data: await toolSummarizeDeal(ctx, input) };
       case "propose_move": {
         // Per-request cap. We return a structured error (not throw) so Claude
         // sees it in the tool result and can apologize to the operator
@@ -828,6 +920,109 @@ async function toolGetCompanyDetail(
 }
 
 /**
+ * Slice 10 — synthesizer tool for narrative deal questions.
+ *
+ * Bundles the deal row + recent activities + open signals into one tool
+ * result so Claude can write a 2–4 sentence status paragraph without
+ * chaining multiple tool calls across turns.
+ *
+ * Scoping & RLS:
+ *   - Deal row comes from `crm_deals_rep_safe` — the rep-safe view, same
+ *     surface get_deal_detail / search_entities use. Respects the
+ *     rep-vs-company-deals visibility rules baked into the view.
+ *   - Activities come from `crm_activities` via `ctx.callerDb` with an
+ *     explicit workspace_id + deal_id filter. The `deleted_at is null`
+ *     clause matches every other activity read in this module.
+ *   - Signals use the same `signals` table + query shape as
+ *     toolListRecentSignals, with the added entity_type='deal' filter.
+ *
+ * Returns `{ found: false }` when the deal doesn't exist OR when the rep
+ * can't see it — the view handles the latter by returning an empty row set.
+ */
+async function toolSummarizeDeal(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeDealInput(input);
+
+  // 1) Deal row — workspace-scoped read. If the view filters out a deal
+  // this rep can't see, maybeSingle returns null and we short-circuit
+  // before spending the activity/signal round-trips.
+  const { data: dealRow, error: dealErr } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, name, amount, stage, expected_close_on, assigned_rep_id, company_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.dealId)
+    .maybeSingle();
+  if (dealErr) throw dealErr;
+  if (!dealRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Recent activities on this deal within the lookback window. Hard
+  // cap at SUMMARIZE_DEAL_ACTIVITY_LIMIT regardless of lookback_days.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("deal_id", n.dealId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 3) Signals tied to this deal within the lookback window. The
+  // signals table pairs entity_type='deal' with entity_id=dealId for the
+  // deal-scoped stream; filtering both makes the index work.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "deal")
+    .eq("entity_id", n.dealId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+  }));
+
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    deal: dealRow,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
  * Create a move on behalf of the operator via the normal createMove path.
  * Provenance is stamped so the Today surface can badge this as "proposed by
  * Iron" (and a future recommender can weight or deduplicate against these).
@@ -908,6 +1103,7 @@ Rules:
 - If the question names a customer or a contact, call search_entities first, then drill in.
 - For "what should I do", call list_my_moves.
 - For "what changed" or "anything new", call list_recent_signals.
+- For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
