@@ -20,6 +20,8 @@
     "test:integration": "bun ./scripts/run-integration-tests.mjs",
     "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
+    "db:push": "bun ./scripts/db-push.mjs",
+    "db:push:apply": "bun ./scripts/db-push.mjs --apply",
     "demo:plan": "bun ./scripts/demo/crm-demo-data.mjs plan",
     "demo:seed": "bun ./scripts/demo/crm-demo-data.mjs seed",
     "demo:reset": "bun ./scripts/demo/crm-demo-data.mjs reset",
