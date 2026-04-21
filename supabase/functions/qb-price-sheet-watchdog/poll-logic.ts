@@ -155,7 +155,10 @@ export function buildAutoFilename(input: {
 export async function fetchWithCache(
   url: string,
   prevEtag: string | null | undefined,
-  timeoutMs = 20_000,
+  // 15 s per request so a slow origin can't eat the edge function's 60 s
+  // wall. Caller (processSource) stacks its own 20 s ceiling over this to
+  // cover anything that isn't the fetch itself (e.g. redirect chase).
+  timeoutMs = 15_000,
 ): Promise<FetchResult> {
   const headers: Record<string, string> = {
     "User-Agent": "QEP-Watchdog/1.0 (+https://qep.blackrockai.co)",

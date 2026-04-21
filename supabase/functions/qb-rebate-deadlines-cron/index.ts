@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     deadlines = await enrichWithProgramDetails(raw, supabase as any);
   } catch (err: any) {
     console.error("[qb-rebate-deadlines-cron] fetch error:", err);
-    return safeJsonError(`Failed to load deadlines: ${err.message}`, 500, origin);
+    return safeJsonError("Failed to load deadlines", 500, origin);
   }
 
   if (deadlines.length === 0) {
@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
 
   if (insertError) {
     console.error("[qb-rebate-deadlines-cron] insert error:", insertError);
-    return safeJsonError(`Failed to insert notifications: ${insertError.message}`, 500, origin);
+    return safeJsonError("Failed to insert notifications", 500, origin);
   }
 
   console.log(

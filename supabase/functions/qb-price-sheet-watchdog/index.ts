@@ -122,7 +122,10 @@ Deno.serve(async (req: Request) => {
       .select("*")
       .eq("id", body.sourceId)
       .maybeSingle();
-    if (error) return safeJsonError(`Load source failed: ${error.message}`, 500, origin);
+    if (error) {
+      console.error("[qb-price-sheet-watchdog] load source failed:", error);
+      return safeJsonError("Load source failed", 500, origin);
+    }
     if (!data)  return safeJsonError("Source not found", 404, origin);
     // Workspace isolation: user-initiated triggers must be confined to the
     // caller's own workspace even though the service-role client bypasses RLS.
@@ -136,7 +139,10 @@ Deno.serve(async (req: Request) => {
       .from("qb_brand_sheet_sources")
       .select("*")
       .eq("active", true);
-    if (error) return safeJsonError(`Load sources failed: ${error.message}`, 500, origin);
+    if (error) {
+      console.error("[qb-price-sheet-watchdog] load sources failed:", error);
+      return safeJsonError("Load sources failed", 500, origin);
+    }
     const now = new Date();
     sources = (data as SourceRow[] ?? []).filter((s) => isOverdue(s, now));
   }
@@ -146,6 +152,11 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Process each source in sequence ────────────────────────────────────
+  // Per-source wall so a stalled fetch/parse on one source can't starve
+  // later sources in the same batch. 20 s = 15 s fetch + 5 s headroom for
+  // storage write + hash + extract dispatch. Beyond that we record a
+  // timeout error and move on; the next cron tick will retry.
+  const PER_SOURCE_BUDGET_MS = 20_000;
   const results: Array<{ sourceId: string; outcome: CheckOutcome }> = [];
 
   for (const source of sources) {
@@ -161,12 +172,38 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const outcome = await processSource(service, source);
+    const outcome = await withTimeout(
+      processSource(service, source),
+      PER_SOURCE_BUDGET_MS,
+      async () => await recordError(service, source, "Source processing exceeded 20s budget", "timeout"),
+    );
     results.push({ sourceId: source.id, outcome });
   }
 
   return safeJsonOk({ ok: true, processed: results.length, results }, origin);
 });
+
+/**
+ * Race a promise against a wall-clock deadline. On timeout, invoke the
+ * fallback (typically recordError) and return its result so the batch
+ * loop gets a structured CheckOutcome either way.
+ */
+async function withTimeout<T>(
+  p: Promise<T>,
+  ms: number,
+  onTimeout: () => Promise<T>,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<"__timeout__">((resolve) => {
+    timer = setTimeout(() => resolve("__timeout__"), ms);
+  });
+  const winner = await Promise.race([p, timeout]);
+  if (timer) clearTimeout(timer);
+  if (winner === "__timeout__") {
+    return await onTimeout();
+  }
+  return winner as T;
+}
 
 // ── Per-source pipeline ──────────────────────────────────────────────────
 

@@ -358,25 +358,8 @@ export function FlowAdminPage() {
   const failed = last24h.filter((r) => r.status === "dead_lettered" || r.status === "cancelled").length;
   const awaiting = recentRuns.filter((r) => r.status === "awaiting_approval").length;
 
-  // Shared error banner — any admin mutation that fails surfaces here so
-  // operators get explicit feedback instead of a silent no-op. The button
-  // you clicked stays available; the banner shows the reason.
-  const adminMutError =
-    runNow.error ?? replayDeadLetter.error ?? toggleEnabled.error ??
-    runPatternMining.error ?? dismissSuggestion.error ??
-    synthesize.error ?? promoteSuggestion.error ?? null;
-  const adminMutErrored =
-    runNow.isError || replayDeadLetter.isError || toggleEnabled.isError ||
-    runPatternMining.isError || dismissSuggestion.isError ||
-    synthesize.isError || promoteSuggestion.isError;
-
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-      {adminMutErrored && (
-        <div className="rounded border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          {(adminMutError as Error)?.message ?? "Admin action failed"}
-        </div>
-      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
@@ -386,28 +369,45 @@ export function FlowAdminPage() {
             Internal automation fabric · {workflows.length} workflows registered
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={runPatternMining.isPending}
-            onClick={() => runPatternMining.mutate()}
-            title="Mine iron_messages for repeated CLARIFY/READ_ANSWER intents and write to iron_flow_suggestions"
-          >
-            {runPatternMining.isPending ? (
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-            ) : (
-              <Lightbulb className="mr-1 h-3 w-3" />
-            )}
-            Mine patterns
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setSynthOpen((p) => !p)}>
-            <Sparkles className="mr-1 h-3 w-3" /> Synthesize
-          </Button>
-          <Button size="sm" variant="outline" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
-            {runNow.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PlayCircle className="mr-1 h-3 w-3" />}
-            Run now
-          </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={runPatternMining.isPending}
+              onClick={() => runPatternMining.mutate()}
+              title="Mine iron_messages for repeated CLARIFY/READ_ANSWER intents and write to iron_flow_suggestions"
+            >
+              {runPatternMining.isPending ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <Lightbulb className="mr-1 h-3 w-3" />
+              )}
+              Mine patterns
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSynthOpen((p) => !p)}>
+              <Sparkles className="mr-1 h-3 w-3" /> Synthesize
+            </Button>
+            <Button size="sm" variant="outline" disabled={runNow.isPending} onClick={() => runNow.mutate()}>
+              {runNow.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PlayCircle className="mr-1 h-3 w-3" />}
+              Run now
+            </Button>
+          </div>
+          {/*
+            Per-button error surfaces. Each sits directly under its button
+            so the operator sees the reason at the point of action instead
+            of a single shared banner at the top of the page.
+          */}
+          {runPatternMining.isError && (
+            <span className="text-[10px] text-red-400">
+              Mine patterns: {(runPatternMining.error as Error)?.message ?? "failed"}
+            </span>
+          )}
+          {runNow.isError && (
+            <span className="text-[10px] text-red-400">
+              Run now: {(runNow.error as Error)?.message ?? "failed"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -607,13 +607,20 @@ export function FlowAdminPage() {
                       )}
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant={wf.enabled ? "default" : "outline"}
-                    onClick={() => toggleEnabled.mutate({ id: wf.id, enabled: !wf.enabled })}
-                  >
-                    {wf.enabled ? "Enabled" : "Disabled"}
-                  </Button>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <Button
+                      size="sm"
+                      variant={wf.enabled ? "default" : "outline"}
+                      onClick={() => toggleEnabled.mutate({ id: wf.id, enabled: !wf.enabled })}
+                    >
+                      {wf.enabled ? "Enabled" : "Disabled"}
+                    </Button>
+                    {toggleEnabled.isError && toggleEnabled.variables?.id === wf.id && (
+                      <span className="text-[10px] text-red-400">
+                        {(toggleEnabled.error as Error)?.message ?? "toggle failed"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -684,6 +691,11 @@ export function FlowAdminPage() {
           {promoteSuggestion.error && (
             <p className="mt-2 text-[10px] text-red-400">
               Promote failed: {(promoteSuggestion.error as Error).message}
+            </p>
+          )}
+          {dismissSuggestion.isError && (
+            <p className="mt-2 text-[10px] text-red-400">
+              Dismiss failed: {(dismissSuggestion.error as Error)?.message ?? "unknown"}
             </p>
           )}
           {runPatternMining.data && (
@@ -757,6 +769,11 @@ export function FlowAdminPage() {
                       </Button>
                     )}
                   </div>
+                  {replayDeadLetter.isError && replayDeadLetter.variables?.exceptionId === dl.id && (
+                    <p className="mt-1 text-[10px] text-red-400">
+                      {(replayDeadLetter.error as Error)?.message ?? "replay failed"}
+                    </p>
+                  )}
                 </div>
               );
             })}

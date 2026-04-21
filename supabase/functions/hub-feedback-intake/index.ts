@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
         const embedText_ = [body, triage.ai_summary].filter(Boolean).join("\n").slice(0, 8000);
         const vec = await embedText(embedText_);
         embeddingLiteral = formatVectorLiteral(vec);
-        dedupMatch = await findDedupMatch(auth.supabase, embeddingLiteral);
+        dedupMatch = await findDedupMatch(auth.supabase, embeddingLiteral, auth.workspaceId);
       } catch (err) {
         console.warn(
           `[hub-feedback-intake] dedup skipped: ${(err as Error).message ?? "unknown"}`,
@@ -352,13 +352,19 @@ interface DedupMatch {
 async function findDedupMatch(
   supabase: SupabaseClient,
   embeddingLiteral: string,
+  workspaceId: string,
 ): Promise<DedupMatch | null> {
+  // Pass p_workspace explicitly. The RPC ignores this for authenticated
+  // callers (uses profile.active_workspace_id) — it's the escape hatch
+  // for the day intake starts issuing service-role RPCs. Keeps the call
+  // site tenant-correct either way.
   const { data, error } = await supabase.rpc("match_hub_feedback_dedup", {
     p_query_embedding: embeddingLiteral,
     p_exclude_id: null,
     p_min_similarity: DEDUP_MIN_SIMILARITY,
     p_max_age_days: DEDUP_MAX_AGE_DAYS,
     p_match_count: 1,
+    p_workspace: workspaceId,
   });
   if (error) throw new Error(`match_hub_feedback_dedup: ${error.message}`);
   const rows = (data ?? []) as DedupMatch[];

@@ -425,18 +425,22 @@ Deno.serve(async (req: Request) => {
         });
 
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unexpected error building scenarios";
+        // Keep the full error in server logs + telemetry, but ship a
+        // generic message to the browser. Prior behavior streamed raw
+        // Postgres/Anthropic error text through the SSE channel.
+        const internalMessage = err instanceof Error ? err.message : "Unexpected error building scenarios";
+        const clientMessage = "Unable to build scenarios right now. Please try again.";
         console.error("[qb-ai-scenarios]", err);
 
-        // Update telemetry log with error
+        // Update telemetry log with the full error (internal only).
         if (logId) {
           svcClient.from("qb_ai_request_log")
-            .update({ error: message })
+            .update({ error: internalMessage })
             .eq("id", logId)
             .catch(() => { /* ignore */ });
         }
 
-        emit({ type: "error", fatal: true, message });
+        emit({ type: "error", fatal: true, message: clientMessage });
         emit({ type: "complete", totalScenarios: 0, latencyMs: Date.now() - startMs, logId });
       }
 

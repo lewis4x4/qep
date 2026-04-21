@@ -88,11 +88,22 @@ Deno.serve(async (req) => {
 
     const mime = audioField.type || "audio/webm";
     const ext = mimeToExt(mime);
-    const path = `${auth.workspaceId}/${auth.userId}/${crypto.randomUUID()}.${ext}`;
+
+    // Client-driven idempotency. Voice capture retries over a lossy
+    // connection used to orphan audio blobs because each retry minted a
+    // fresh UUID path. Any client presenting the same x-idempotency-key
+    // (UUID-ish string) reuses the same storage path so the retry over-
+    // writes the prior upload instead of leaving it behind.
+    const rawIdem = req.headers.get("x-idempotency-key");
+    const fileKey = rawIdem && /^[a-zA-Z0-9_-]{8,64}$/.test(rawIdem)
+      ? rawIdem.toLowerCase()
+      : crypto.randomUUID();
+    const path = `${auth.workspaceId}/${auth.userId}/${fileKey}.${ext}`;
+    const upsert = Boolean(rawIdem);
 
     // Upload + transcribe in parallel. Both operations are independently
     // recoverable; we only short-circuit if BOTH fail.
-    const uploadP = uploadAudio(req, path, audioField);
+    const uploadP = uploadAudio(req, path, audioField, upsert);
     const transcribeP = transcribeAudio(audioField);
 
     const [uploadResult, transcribeResult] = await Promise.allSettled([
@@ -135,7 +146,12 @@ Deno.serve(async (req) => {
  * service role (RLS on the bucket allows the service role unrestricted).
  * Returns the storage path on success; throws on error.
  */
-async function uploadAudio(req: Request, path: string, file: File): Promise<string> {
+async function uploadAudio(
+  req: Request,
+  path: string,
+  file: File,
+  upsert: boolean,
+): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) {
@@ -150,7 +166,9 @@ async function uploadAudio(req: Request, path: string, file: File): Promise<stri
     .from(BUCKET)
     .upload(path, file, {
       contentType: file.type || "audio/webm",
-      upsert: false,
+      // upsert only when the client provided an idempotency key — prevents
+      // silent clobbers on the no-key path, allows retries on the key path.
+      upsert,
     });
   if (error) {
     throw new Error(`storage upload: ${error.message}`);

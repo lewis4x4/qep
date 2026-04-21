@@ -95,7 +95,13 @@ interface NotifyOutcome {
   event_id: string;
   event_type: EventType;
   feedback_id: string;
-  action: "emailed" | "skipped_no_email" | "skipped_non_emailable" | "skipped_no_submitter" | "error";
+  action:
+    | "emailed"
+    | "skipped_no_email"
+    | "skipped_non_emailable"
+    | "skipped_no_submitter"
+    | "skipped_already_claimed"
+    | "error";
   error?: string;
 }
 
@@ -192,6 +198,20 @@ async function processEvent(
     };
   }
 
+  // Claim exclusively before any network I/O or DB stamping. If another
+  // cron tick or manual invocation is processing this same event (1-min
+  // cadence + Resend round-trip occasionally races), we hand off to them
+  // instead of double-sending.
+  const claimed = await claimEvent(supabase, event.id);
+  if (!claimed) {
+    return {
+      event_id: event.id,
+      event_type: event.event_type,
+      feedback_id: event.feedback_id,
+      action: "skipped_already_claimed",
+    };
+  }
+
   const feedback = await loadFeedback(supabase, event.feedback_id);
   if (!feedback || !feedback.submitted_by) {
     await stamp(supabase, event.id);
@@ -246,7 +266,9 @@ async function processEvent(
     }));
 
   if (outcome.kind === "transient") {
-    // Don't stamp — let the next cron tick retry.
+    // Release the claim so the next tick can retry. Don't stamp
+    // notified_submitter_at — email was not sent.
+    await releaseClaim(supabase, event.id);
     return {
       event_id: event.id,
       event_type: event.event_type,
@@ -273,6 +295,40 @@ async function processEvent(
     feedback_id: event.feedback_id,
     action: "emailed",
   };
+}
+
+/**
+ * Race-safe claim. Returns true if we own this event for the next
+ * 120 seconds, false if another worker got there first (or the event
+ * is already notified). Backed by the hub_feedback_events_claim RPC
+ * added in migration 335.
+ */
+async function claimEvent(supabase: SupabaseClient, eventId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("hub_feedback_events_claim", {
+    p_event_id: eventId,
+    p_lease_seconds: 120,
+  });
+  if (error) {
+    // If the claim RPC fails, fall back to the legacy "always process"
+    // behavior rather than losing the notification entirely.
+    console.warn(`[hub-feedback-notify] claim RPC failed for ${eventId}: ${error.message}`);
+    return true;
+  }
+  const rows = (data ?? []) as Array<{ claimed: boolean }>;
+  return rows[0]?.claimed ?? true;
+}
+
+/**
+ * Release the claim on transient failure so the next cron tick retries.
+ * Safe to call on already-stamped rows (RPC guards with `notified_submitter_at is null`).
+ */
+async function releaseClaim(supabase: SupabaseClient, eventId: string): Promise<void> {
+  const { error } = await supabase.rpc("hub_feedback_events_release_claim", {
+    p_event_id: eventId,
+  });
+  if (error) {
+    console.warn(`[hub-feedback-notify] release claim failed for ${eventId}: ${error.message}`);
+  }
 }
 
 async function stamp(supabase: SupabaseClient, eventId: string): Promise<void> {
