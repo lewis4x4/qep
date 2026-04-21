@@ -27,18 +27,18 @@ interface BriefFeedbackPageProps {
 }
 
 const STATUS_TONE: Record<FeedbackStatus, string> = {
-  open: "bg-slate-100 text-slate-700",
-  triaged: "bg-sky-100 text-sky-800",
-  drafting: "bg-amber-100 text-amber-900",
-  awaiting_merge: "bg-violet-100 text-violet-900",
-  shipped: "bg-emerald-100 text-emerald-900",
-  wont_fix: "bg-slate-200 text-slate-600 line-through",
+  open: "bg-muted text-muted-foreground",
+  triaged: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  drafting: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  awaiting_merge: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  shipped: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  wont_fix: "bg-muted text-muted-foreground line-through",
 };
 
 const PRIORITY_TONE: Record<FeedbackPriority, string> = {
-  low: "bg-slate-100 text-slate-600",
-  medium: "bg-amber-100 text-amber-900",
-  high: "bg-rose-100 text-rose-900",
+  low: "bg-muted text-muted-foreground",
+  medium: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  high: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
 };
 
 export function BriefFeedbackPage({ userId, canAdminister }: BriefFeedbackPageProps) {
@@ -56,10 +56,10 @@ export function BriefFeedbackPage({ userId, canAdminister }: BriefFeedbackPagePr
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             Feedback inbox
           </h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-muted-foreground">
             Everything you've sent, auto-triaged by Claude. Admins see all
             workspace feedback.
           </p>
@@ -87,12 +87,12 @@ export function BriefFeedbackPage({ userId, canAdminister }: BriefFeedbackPagePr
 
         <TabsContent value={scope} className="mt-4">
           {feedbackQuery.isLoading ? (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading feedback…
             </div>
           ) : feedbackQuery.error ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive">
               Couldn't load feedback: {String((feedbackQuery.error as Error).message)}
             </div>
           ) : rows.length === 0 ? (
@@ -112,11 +112,11 @@ export function BriefFeedbackPage({ userId, canAdminister }: BriefFeedbackPagePr
 
 function EmptyState({ scope }: { scope: "mine" | "all" }) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
-      <p className="text-sm font-medium text-slate-700">
+    <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">
+      <p className="text-sm font-medium text-foreground">
         {scope === "mine" ? "You haven't sent feedback yet." : "No feedback in this workspace yet."}
       </p>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         Use the "Got feedback?" button anywhere in the Build Hub.
       </p>
     </div>
@@ -166,10 +166,10 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
   });
 
   return (
-    <li className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <li className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className={STATUS_TONE[row.status] ?? "bg-slate-100 text-slate-700"}>
+          <Badge className={STATUS_TONE[row.status] ?? "bg-muted text-muted-foreground"}>
             {row.status.replace("_", " ")}
           </Badge>
           <Badge variant="outline" className="capitalize">
@@ -177,17 +177,17 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
           </Badge>
           <Badge className={PRIORITY_TONE[row.priority]}>{row.priority}</Badge>
         </div>
-        <span className="text-xs text-slate-500">{created}</span>
+        <span className="text-xs text-muted-foreground">{created}</span>
       </div>
 
       {row.ai_summary && (
-        <p className="mt-3 text-sm font-medium text-slate-900">{row.ai_summary}</p>
+        <p className="mt-3 text-sm font-medium text-foreground">{row.ai_summary}</p>
       )}
-      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{row.body}</p>
+      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{row.body}</p>
 
       {row.ai_suggested_action && (
-        <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          <span className="font-medium text-slate-700">Suggested:</span>{" "}
+        <div className="mt-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Suggested:</span>{" "}
           {row.ai_suggested_action}
         </div>
       )}
@@ -198,7 +198,7 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
             href={row.claude_pr_url}
             target="_blank"
             rel="noreferrer noopener"
-            className="font-medium text-sky-700 hover:underline"
+            className="font-medium text-sky-600 hover:underline dark:text-sky-400"
           >
             View draft PR →
           </a>
@@ -206,7 +206,7 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
       )}
 
       {canAdminister && (row.status === "triaged" || row.status === "drafting") && (
-        <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-4 flex gap-2 border-t border-border pt-3">
           <Button
             size="sm"
             variant="outline"
@@ -226,7 +226,7 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
       )}
 
       {canAdminister && row.status === "awaiting_merge" && row.claude_pr_url && (
-        <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-4 flex gap-2 border-t border-border pt-3">
           <Button
             size="sm"
             onClick={() => mergeMutation.mutate()}
