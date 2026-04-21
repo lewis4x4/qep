@@ -57,11 +57,23 @@ interface StubCapture {
   limit?: number;
   insert?: Record<string, unknown>;
   update?: Record<string, unknown>;
+  /**
+   * Which client handle issued the read — "admin" for service-role bypass,
+   * "callerDb" for RLS-respecting reads. Set on role-tagged clients built
+   * via `makeRoleClient`; undefined on the default `client` (preserving
+   * the legacy capture shape for the ~130 existing tests that predate the
+   * moves-reads-through-callerDb security fix).
+   */
+  role?: "admin" | "callerDb";
 }
 
 function makeStubClient(
   results: Record<string, StubResult | StubResult[]>,
-): { client: SupabaseClient; captures: StubCapture[] } {
+): {
+  client: SupabaseClient;
+  captures: StubCapture[];
+  makeRoleClient: (role: "admin" | "callerDb") => SupabaseClient;
+} {
   const captures: StubCapture[] = [];
   const cursors: Record<string, number> = {};
 
@@ -144,7 +156,20 @@ function makeStubClient(
     },
   } as unknown as SupabaseClient;
 
-  return { client, captures };
+  // Build a role-tagged client sharing the same results + captures array.
+  // Useful when a test needs to prove a specific read went through
+  // `callerDb` (RLS-respecting) vs `admin` (service-role bypass).
+  const makeRoleClient = (role: "admin" | "callerDb"): SupabaseClient =>
+    ({
+      from: (table: string) => {
+        const capture: StubCapture = { table, filters: [], role };
+        captures.push(capture);
+        const result = pullResult(table);
+        return makeBuilder(capture, result);
+      },
+    }) as unknown as SupabaseClient;
+
+  return { client, captures, makeRoleClient };
 }
 
 function makeCtx(
@@ -155,11 +180,12 @@ function makeCtx(
     workspaceId?: string;
     isServiceRole?: boolean;
     admin?: SupabaseClient;
+    callerDb?: SupabaseClient;
   } = {},
 ): RouterCtx {
   return {
     admin: opts.admin ?? db,
-    callerDb: db,
+    callerDb: opts.callerDb ?? db,
     caller: {
       authHeader: "Bearer token",
       userId: opts.userId ?? "user-1",
@@ -4056,6 +4082,167 @@ Deno.test(
     const res = await executeAskIronTool(ctx, "summarize_rental", {});
     assertEquals(res.ok, false);
     assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);
+
+// ── moves reads pin to callerDb (RLS defence-in-depth) ─────────────────────
+//
+// Pre-PR security review flagged Ask Iron's four `moves` reads as running
+// through `ctx.admin` (service-role, bypasses RLS). CLAUDE.md's non-negotiable
+// is "role and workspace security must be enforced in both API logic and
+// database policy" — i.e. a bug in the explicit workspace/rep filter should
+// still be stopped by `moves_select_rep_scope` / `moves_all_elevated`.
+//
+// The fix switches every moves SELECT to `ctx.callerDb`. These four tests
+// pin the contract so a future refactor cannot silently revert to `admin`.
+
+Deno.test(
+  "executeAskIronTool list_my_moves reads moves through callerDb (RLS backstop)",
+  async () => {
+    const { client, captures, makeRoleClient } = makeStubClient({
+      moves: { data: [], error: null },
+    });
+    const admin = makeRoleClient("admin");
+    const callerDb = makeRoleClient("callerDb");
+    // Unused `client` ensures makeStubClient's legacy shape still returns.
+    void client;
+    const ctx = makeCtx(callerDb, {
+      role: "rep",
+      userId: "rep-me",
+      admin,
+      callerDb,
+    });
+
+    await executeAskIronTool(ctx, "list_my_moves", {});
+
+    const movesCap = captures.find((c) => c.table === "moves");
+    if (!movesCap) throw new Error("moves query not captured");
+    assertEquals(
+      movesCap.role,
+      "callerDb",
+      "list_my_moves must not hit admin (service-role) client",
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal.related_moves reads moves through callerDb (RLS backstop)",
+  async () => {
+    const { captures, makeRoleClient } = makeStubClient({
+      signals: [
+        // 1) target signal row
+        {
+          data: {
+            id: "s-1",
+            kind: "quote_viewed",
+            severity: "high",
+            source: "hubspot",
+            title: "Acme viewed the quote again",
+            description: "Viewed at 10:04am ET",
+            entity_type: "deal",
+            entity_id: "d-42",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T10:04:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        // 2) related signals list
+        { data: [], error: null },
+      ],
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-42",
+          name: "Acme — 12k excavator",
+          amount: 140000,
+          stage: "proposal",
+          company_id: "co-7",
+          assigned_rep_id: "user-1",
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+      moves: { data: [], error: null },
+    });
+    const admin = makeRoleClient("admin");
+    const callerDb = makeRoleClient("callerDb");
+    const ctx = makeCtx(callerDb, { role: "rep", admin, callerDb });
+
+    await executeAskIronTool(ctx, "summarize_signal", { signal_id: "s-1" });
+
+    const movesCap = captures.find((c) => c.table === "moves");
+    if (!movesCap) throw new Error("moves query not captured");
+    assertEquals(
+      movesCap.role,
+      "callerDb",
+      "summarize_signal.related_moves must not hit admin (service-role) client",
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day.active_moves reads moves through callerDb (RLS backstop)",
+  async () => {
+    const { captures, makeRoleClient } = makeStubClient({
+      moves: [
+        { data: [], error: null }, // active arm
+        { data: [], error: null }, // completed arm
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const admin = makeRoleClient("admin");
+    const callerDb = makeRoleClient("callerDb");
+    const ctx = makeCtx(callerDb, {
+      role: "rep",
+      userId: "rep-me",
+      admin,
+      callerDb,
+    });
+
+    await executeAskIronTool(ctx, "summarize_day", {});
+
+    const moveCaps = captures.filter((c) => c.table === "moves");
+    assertEquals(moveCaps.length, 2);
+    // First capture is the active-moves arm.
+    assertEquals(
+      moveCaps[0].role,
+      "callerDb",
+      "summarize_day.active_moves must not hit admin (service-role) client",
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day.completed_moves reads moves through callerDb (RLS backstop)",
+  async () => {
+    const { captures, makeRoleClient } = makeStubClient({
+      moves: [
+        { data: [], error: null }, // active arm
+        { data: [], error: null }, // completed arm
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const admin = makeRoleClient("admin");
+    const callerDb = makeRoleClient("callerDb");
+    const ctx = makeCtx(callerDb, {
+      role: "rep",
+      userId: "rep-me",
+      admin,
+      callerDb,
+    });
+
+    await executeAskIronTool(ctx, "summarize_day", {});
+
+    const moveCaps = captures.filter((c) => c.table === "moves");
+    assertEquals(moveCaps.length, 2);
+    // Second capture is the completed-moves arm.
+    assertEquals(
+      moveCaps[1].role,
+      "callerDb",
+      "summarize_day.completed_moves must not hit admin (service-role) client",
+    );
   },
 );
 

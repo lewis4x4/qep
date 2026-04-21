@@ -1419,10 +1419,12 @@ async function toolListMyMoves(
   input: Record<string, unknown>,
 ): Promise<unknown> {
   const f = normalizeMoveFilters(input, ctx);
-  // Moves live in the `moves` table. We filter via the admin client here
-  // because the rep-scoping is enforced in this module (see
-  // normalizeMoveFilters) — callerDb would also work once RLS lands, but
-  // the explicit filter pattern makes the scoping rule auditable.
+  // Moves live in the `moves` table. Migration 310 ships RLS for moves
+  // (moves_service_all + moves_all_elevated + moves_select_rep_scope),
+  // so we read through callerDb — that way RLS is the last line of
+  // defence if a future regression ever lets a caller-supplied rep_id
+  // slip past the normalizer. The explicit workspace_id + assigned_rep
+  // guards below are kept as belt-and-suspenders and for auditability.
 
   // Defence-in-depth: if an elevated caller passed an `assigned_rep_id`
   // from LLM input, confirm that rep belongs to the caller's workspace
@@ -1451,7 +1453,7 @@ async function toolListMyMoves(
     }
   }
 
-  let q = ctx.admin
+  let q = ctx.callerDb
     .from("moves")
     .select(
       "id, kind, status, title, rationale, confidence, priority, entity_type, entity_id, assigned_rep_id, due_at, created_at",
@@ -2127,10 +2129,10 @@ async function toolSummarizeSignal(
 
   // 4) Related moves — moves that name this signal in their signal_ids
   // array. `.contains` on a uuid[] column expresses "array contains the
-  // given element" in supabase-js. We go through admin here because the
-  // moves table has no RLS for callerDb yet (same pattern as
-  // toolListMyMoves), and we enforce workspace scoping explicitly.
-  const { data: moveRows, error: moveErr } = await ctx.admin
+  // given element" in supabase-js. Reads go through callerDb so the
+  // moves RLS policies (moves_select_rep_scope / moves_all_elevated)
+  // serve as defence-in-depth over the explicit workspace scope.
+  const { data: moveRows, error: moveErr } = await ctx.callerDb
     .from("moves")
     .select(
       "id, kind, status, title, priority, entity_type, entity_id, assigned_rep_id, created_at, updated_at",
@@ -2569,7 +2571,10 @@ async function toolSummarizeDay(
   }
 
   // 1) Active moves for this rep (or everyone, if elevated + repId null).
-  let activeQ = ctx.admin
+  //    Reads go through callerDb so RLS (moves_select_rep_scope /
+  //    moves_all_elevated) is the last line of defence if the
+  //    assigned_rep_id guard ever regresses.
+  let activeQ = ctx.callerDb
     .from("moves")
     .select(
       "id, kind, status, title, rationale, priority, entity_type, entity_id, assigned_rep_id, due_at, created_at",
@@ -2585,8 +2590,9 @@ async function toolSummarizeDay(
 
   // 2) Completed inside the window. completed_at is the source of truth
   // for "closed today" — created_at would double-count stale moves
-  // cleared this morning.
-  let completedQ = ctx.admin
+  // cleared this morning. Reads go through callerDb so moves RLS is
+  // the backstop if the rep-scope guard ever regresses.
+  let completedQ = ctx.callerDb
     .from("moves")
     .select(
       "id, kind, title, priority, entity_type, entity_id, assigned_rep_id, completed_at",
