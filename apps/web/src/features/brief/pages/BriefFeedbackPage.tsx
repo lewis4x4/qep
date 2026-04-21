@@ -167,7 +167,16 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
   });
 
   return (
-    <li className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm">
+    // v2.3: `id` enables Ask-the-Brain's `/brief/feedback#<row-id>` deep link
+    // from submitter-driven citations. `data-build-item-id` lets the
+    // FeedbackButton auto-tag any follow-up feedback with the build item in
+    // context. `scroll-mt-20` clears the sticky nav; `target:ring-2` flashes
+    // a ring on the anchor match.
+    <li
+      id={row.id}
+      data-build-item-id={row.build_item_id ?? undefined}
+      className="scroll-mt-20 rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm target:ring-2 target:ring-ring"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className={STATUS_TONE[row.status] ?? "bg-muted text-muted-foreground"}>

@@ -48,12 +48,13 @@ const MAX_SOURCES_PER_RUN = 200;
 
 interface SyncCandidate {
   key: string; // stable identifier for idempotency (e.g., "changelog:<uuid>")
-  source_type: "changelog" | "decision" | "spec";
+  source_type: "changelog" | "decision" | "spec" | "feedback";
   title: string;
   body: string;
   workspace_id: string;
   related_build_item_id: string | null;
   related_decision_id: string | null;
+  related_feedback_id: string | null;
   drive_filename: string;
 }
 
@@ -178,6 +179,7 @@ async function gatherCandidates(supabase: SupabaseClient): Promise<SyncCandidate
         workspace_id: String(r.workspace_id ?? "default"),
         related_build_item_id: (r.build_item_id as string | null) ?? null,
         related_decision_id: null,
+        related_feedback_id: null,
         drive_filename: `changelog/${String(r.id).slice(0, 8)}-${slugify(String(r.summary))}.md`,
       });
     }
@@ -204,6 +206,7 @@ async function gatherCandidates(supabase: SupabaseClient): Promise<SyncCandidate
         workspace_id: String(r.workspace_id ?? "default"),
         related_build_item_id: null,
         related_decision_id: r.id as string,
+        related_feedback_id: null,
         drive_filename: `decisions/${String(r.id).slice(0, 8)}-${slugify(String(r.title))}.md`,
       });
     }
@@ -231,7 +234,45 @@ async function gatherCandidates(supabase: SupabaseClient): Promise<SyncCandidate
         workspace_id: String(r.workspace_id ?? "default"),
         related_build_item_id: r.id as string,
         related_decision_id: null,
+        related_feedback_id: null,
         drive_filename: `specs/${String(r.id).slice(0, 8)}-${slugify(String(r.title))}.md`,
+      });
+    }
+  }
+
+  // ── shipped + wont_fix feedback ──
+  //
+  // v2.3 "Remembered" tenet: pulls every feedback row that reached a
+  // terminal state (shipped or wont_fix) so Ask-the-Brain can cite the
+  // original submitter story. We include wont_fix because "we considered
+  // X and decided against it because Y" is equally important institutional
+  // memory — and the triage summary + body is where the reasoning lives.
+  {
+    const { data, error } = await supabase
+      .from("hub_feedback")
+      .select(
+        "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, submission_context, priority, status, ai_summary, ai_suggested_action, claude_pr_url, created_at, resolved_at",
+      )
+      .is("deleted_at", null)
+      .in("status", ["shipped", "wont_fix"])
+      .order("resolved_at", { ascending: false, nullsFirst: false })
+      .limit(MAX_SOURCES_PER_RUN);
+    if (error) throw new Error(`feedback query: ${error.message}`);
+    for (const r of data ?? []) {
+      const body = renderFeedbackMarkdown(r as Record<string, unknown>);
+      const summary = typeof r.ai_summary === "string" && r.ai_summary.length > 0
+        ? r.ai_summary
+        : String(r.body ?? "").slice(0, 80);
+      out.push({
+        key: `feedback:${r.id}`,
+        source_type: "feedback",
+        title: `Feedback — ${summary.slice(0, 80)}`,
+        body,
+        workspace_id: String(r.workspace_id ?? "default"),
+        related_build_item_id: (r.build_item_id as string | null) ?? null,
+        related_decision_id: null,
+        related_feedback_id: r.id as string,
+        drive_filename: `feedback/${String(r.id).slice(0, 8)}-${slugify(summary)}.md`,
       });
     }
   }
@@ -297,6 +338,7 @@ async function syncOne(
         content_hash: contentHash,
         related_build_item_id: cand.related_build_item_id,
         related_decision_id: cand.related_decision_id,
+        related_feedback_id: cand.related_feedback_id,
         notebooklm_source_id: realDriveFileId,
         synced_at: new Date().toISOString(),
       })
@@ -316,6 +358,7 @@ async function syncOne(
         content_hash: contentHash,
         related_build_item_id: cand.related_build_item_id,
         related_decision_id: cand.related_decision_id,
+        related_feedback_id: cand.related_feedback_id,
       })
       .select("id")
       .single();
@@ -440,6 +483,47 @@ function renderDecisionMarkdown(r: Record<string, unknown>): string {
     "",
     r.context ? `## Context\n\n${r.context}` : null,
     r.decision ? `## Decision\n\n${r.decision}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function renderFeedbackMarkdown(r: Record<string, unknown>): string {
+  const ctx = (r.submission_context && typeof r.submission_context === "object"
+    ? r.submission_context
+    : {}) as Record<string, unknown>;
+  const path = typeof ctx.path === "string" ? ctx.path : null;
+  const status = String(r.status ?? "");
+  const priority = String(r.priority ?? "");
+  const type = String(r.feedback_type ?? "");
+  const title = typeof r.ai_summary === "string" && r.ai_summary.length > 0
+    ? r.ai_summary
+    : String(r.body ?? "").slice(0, 120);
+
+  const outcomeLine = status === "shipped"
+    ? "- Outcome: **SHIPPED**"
+    : status === "wont_fix"
+      ? "- Outcome: **WONT FIX** — reasoning below is institutional memory for why we didn't pursue this."
+      : `- Status: ${status}`;
+
+  return [
+    `# ${title}`,
+    "",
+    outcomeLine,
+    `- Type: ${type}`,
+    `- Priority: ${priority}`,
+    path ? `- Surface: \`${path}\`` : null,
+    r.created_at ? `- Submitted: ${r.created_at}` : null,
+    r.resolved_at ? `- Resolved: ${r.resolved_at}` : null,
+    r.claude_pr_url ? `- PR: ${r.claude_pr_url}` : null,
+    "",
+    r.ai_suggested_action
+      ? `## Triage\n\n${r.ai_suggested_action}`
+      : null,
+    `## Original feedback\n\n${String(r.body ?? "").slice(0, 4000)}`,
+    typeof r.voice_transcript === "string" && r.voice_transcript.length > 0
+      ? `## Voice transcript\n\n${r.voice_transcript}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");

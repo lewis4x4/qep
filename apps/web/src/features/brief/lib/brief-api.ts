@@ -349,6 +349,12 @@ export interface AskBrainCitation {
   notebooklm_source_id: string | null;
   related_build_item_id: string | null;
   related_decision_id: string | null;
+  /**
+   * v2.3: when a citation came from a shipped/wont_fix feedback row,
+   * this is set so the UI can deep-link back to /brief/feedback and
+   * show the stakeholder story behind the answer.
+   */
+  related_feedback_id: string | null;
   similarity: number;
   body: string;
 }
