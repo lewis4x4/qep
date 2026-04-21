@@ -25,6 +25,7 @@ import type { ProposalApplyVerdict } from "../proposal-apply-verdict";
 import type { ProposalWatchlist } from "../proposal-watchlist";
 import type { ProposalStabilityReport } from "../proposal-stability";
 import type { ProposalRollbackPlan } from "../proposal-rollback";
+import type { PreflightChecklist } from "../proposal-preflight-checklist";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -78,6 +79,7 @@ function nullCtx(): ProposalMarkdownContext {
     watchlist: null,
     stability: null,
     rollback: null,
+    preflight: null,
   };
 }
 
@@ -1358,5 +1360,230 @@ describe("renderProposalMarkdownWithContext — rollback section (20ab)", () => 
     expect(watchlistIdx).toBeGreaterThan(-1);
     expect(rollbackIdx).toBeGreaterThan(-1);
     expect(watchlistIdx).toBeLessThan(rollbackIdx);
+  });
+});
+
+describe("preflight checklist section (20ac)", () => {
+  test("null preflight → no '**Pre-flight**' line rendered", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight: null };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Pre-flight**");
+  });
+
+  test("empty preflight → no section rendered", () => {
+    const preflight: PreflightChecklist = {
+      items: [],
+      passCount: 0,
+      warnCount: 0,
+      failCount: 0,
+      skippedCount: 0,
+      readiness: "hold",
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Pre-flight**");
+  });
+
+  test("ready preflight renders ✓ READY pill + per-row evidence", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "sample",
+          label: "Sample adequate",
+          status: "pass",
+          evidence: "50 deals analyzed (≥ 10)",
+        },
+        {
+          id: "confidence",
+          label: "Confidence",
+          status: "pass",
+          evidence: "82/100 (high)",
+        },
+        {
+          id: "verdict",
+          label: "Verdict",
+          status: "pass",
+          evidence: "apply",
+        },
+      ],
+      passCount: 3,
+      warnCount: 0,
+      failCount: 0,
+      skippedCount: 0,
+      readiness: "ready",
+      headline: "Ready to apply — 3 passed.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Pre-flight**: ✓ READY — Ready to apply — 3 passed.");
+    expect(md).toContain("✓ pass · Sample adequate — 50 deals analyzed (≥ 10)");
+    expect(md).toContain("✓ pass · Confidence — 82/100 (high)");
+    expect(md).toContain("✓ pass · Verdict — apply");
+  });
+
+  test("review preflight renders ⚠ REVIEW pill", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "confidence",
+          label: "Confidence",
+          status: "warn",
+          evidence: "50/100 (medium)",
+        },
+        {
+          id: "verdict",
+          label: "Verdict",
+          status: "warn",
+          evidence: "review",
+        },
+      ],
+      passCount: 0,
+      warnCount: 2,
+      failCount: 0,
+      skippedCount: 5,
+      readiness: "review",
+      headline: "Review recommended — 2 warn, 5 skipped.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Pre-flight**: ⚠ REVIEW");
+    expect(md).toContain("⚠ warn · Confidence — 50/100 (medium)");
+  });
+
+  test("hold preflight renders ✗ HOLD pill", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "verdict",
+          label: "Verdict",
+          status: "fail",
+          evidence: "hold",
+        },
+      ],
+      passCount: 0,
+      warnCount: 0,
+      failCount: 1,
+      skippedCount: 6,
+      readiness: "hold",
+      headline: "Not ready — 1 failed, 6 skipped.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Pre-flight**: ✗ HOLD");
+    expect(md).toContain("✗ fail · Verdict — hold");
+  });
+
+  test("skipped row renders with · skipped prefix", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "what_if",
+          label: "What-if Brier",
+          status: "skipped",
+          evidence: "no historical audit sample",
+        },
+      ],
+      passCount: 0,
+      warnCount: 0,
+      failCount: 0,
+      skippedCount: 1,
+      readiness: "ready",
+      headline: "Ready to apply — 1 skipped.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), preflight };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("· skipped · What-if Brier — no historical audit sample");
+  });
+
+  test("preflight renders above urgency + calibration drift in ordering", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "sample",
+          label: "Sample adequate",
+          status: "pass",
+          evidence: "50 deals analyzed (≥ 10)",
+        },
+      ],
+      passCount: 1,
+      warnCount: 0,
+      failCount: 0,
+      skippedCount: 6,
+      readiness: "ready",
+      headline: "Ready to apply — 1 passed, 6 skipped.",
+      empty: false,
+    };
+    const urgency: ProposalUrgencyResult = {
+      urgency: "high",
+      rationale: "Scorer is dulling.",
+    };
+    const calibrationDrift: CalibrationDriftReport = {
+      referenceDate: "2026-04-20T00:00:00Z",
+      windowDays: 30,
+      recentN: 20,
+      priorN: 20,
+      recentAccuracy: 0.55,
+      priorAccuracy: 0.65,
+      accuracyDelta: -0.1,
+      recentBrier: 0.25,
+      priorBrier: 0.2,
+      brierDelta: 0.05,
+      direction: "degrading",
+      lowConfidence: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      preflight,
+      urgency,
+      calibrationDrift,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxPreflight = md.indexOf("**Pre-flight**");
+    const idxUrgency = md.indexOf("**Urgency**");
+    const idxCalib = md.indexOf("**Calibration drift**");
+    expect(idxPreflight).toBeGreaterThan(-1);
+    expect(idxUrgency).toBeGreaterThan(idxPreflight);
+    expect(idxCalib).toBeGreaterThan(idxUrgency);
+  });
+
+  test("preflight renders below verdict in ordering", () => {
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "verdict",
+          label: "Verdict",
+          status: "pass",
+          evidence: "apply",
+        },
+      ],
+      passCount: 1,
+      warnCount: 0,
+      failCount: 0,
+      skippedCount: 6,
+      readiness: "ready",
+      headline: "Ready to apply — 1 passed, 6 skipped.",
+      empty: false,
+    };
+    const verdict: ProposalApplyVerdict = {
+      verdict: "apply",
+      headline: "Apply.",
+      reasons: [],
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      verdict,
+      preflight,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxVerdict = md.indexOf("**Verdict**");
+    const idxPreflight = md.indexOf("**Pre-flight**");
+    expect(idxVerdict).toBeGreaterThan(-1);
+    expect(idxPreflight).toBeGreaterThan(idxVerdict);
   });
 });

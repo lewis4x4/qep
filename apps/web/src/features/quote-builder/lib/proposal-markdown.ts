@@ -42,6 +42,8 @@ import type { ProposalWatchlist } from "./proposal-watchlist";
 import type { ProposalStabilityReport } from "./proposal-stability";
 import { describeStabilityPill } from "./proposal-stability";
 import type { ProposalRollbackPlan } from "./proposal-rollback";
+import type { PreflightChecklist } from "./proposal-preflight-checklist";
+import { describeReadinessPill } from "./proposal-preflight-checklist";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -79,6 +81,14 @@ export interface ProposalMarkdownContext {
    *  "what to watch" followed by "how to unwind when a watch trips."
    *  Null when caller didn't compute; empty-plan is handled. */
   rollback: ProposalRollbackPlan | null;
+  /** 20ac — the pre-apply audit trail. A row per pre-flight gate with
+   *  pass/warn/fail/skipped status + evidence + overall readiness.
+   *  Rendered at the TOP of the context block because it's the "did we
+   *  check everything?" meta-view the manager wants to see before
+   *  reading the raw signals. Null when caller didn't compute;
+   *  `empty=true` is handled — section omitted cleanly when there's no
+   *  proposal to pre-flight. */
+  preflight: PreflightChecklist | null;
 }
 
 /**
@@ -105,6 +115,31 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
           r.polarity === "positive" ? "✓" : r.polarity === "negative" ? "⚠" : "·";
         lines.push(`  - ${icon} ${r.rationale}`);
       }
+    }
+  }
+
+  // Pre-apply checklist (20ac) — the row-by-row audit trail that
+  // produced the verdict. Pinned directly under the verdict so a
+  // reader's eye goes "recommendation → the gates that passed and
+  // failed → why those gates landed where they did". Each row is
+  // status · label · evidence. Skipped rows ARE rendered so the
+  // reviewer can see "we don't have data on this gate yet" rather
+  // than having gates silently disappear. Empty checklist (no
+  // proposal / all-keep) is omitted cleanly.
+  if (ctx.preflight && !ctx.preflight.empty && ctx.preflight.items.length > 0) {
+    const pill = describeReadinessPill(ctx.preflight.readiness);
+    const headline = ctx.preflight.headline ?? "";
+    lines.push(`**Pre-flight**: ${pill.label} — ${headline}`);
+    for (const item of ctx.preflight.items) {
+      const statusTag =
+        item.status === "pass"
+          ? "✓ pass"
+          : item.status === "warn"
+            ? "⚠ warn"
+            : item.status === "fail"
+              ? "✗ fail"
+              : "· skipped";
+      lines.push(`  - ${statusTag} · ${item.label} — ${item.evidence}`);
     }
   }
 

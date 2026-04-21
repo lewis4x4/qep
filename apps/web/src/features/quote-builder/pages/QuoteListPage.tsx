@@ -104,6 +104,11 @@ import {
   computeProposalRollback,
   type ProposalRollbackPlan,
 } from "../lib/proposal-rollback";
+import {
+  computeProposalPreflightChecklist,
+  describeReadinessPill,
+  type PreflightChecklist,
+} from "../lib/proposal-preflight-checklist";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -529,6 +534,39 @@ export function QuoteListPage() {
     return computeProposalRollback(scorerProposal, proposalWatchlist);
   }, [scorerProposal, proposalWatchlist]);
 
+  /**
+   * Slice 20ac — pre-apply checklist. Row-by-row audit trail that
+   * composes every upstream signal (sample size, confidence, verdict,
+   * stability, what-if, call flips, calibration trend) into a
+   * pass/warn/fail/skipped view. The verdict is the "what does the
+   * system recommend?" — the checklist is the "did we check
+   * everything?" inverse. Readiness pill mirrors verdict most of the
+   * time; when they diverge, the row that broke the tie is visible.
+   * Null when no proposal; empty when all-keep.
+   */
+  const proposalPreflight = useMemo<PreflightChecklist | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalPreflightChecklist({
+      proposal: scorerProposal,
+      confidence: proposalConfidence,
+      verdict: proposalVerdict,
+      stability: proposalStability,
+      whatIf: scorerWhatIf,
+      callFlips: proposalCallFlips,
+      calibrationDrift,
+      dealsAnalyzed: attributionReport?.dealsAnalyzed ?? null,
+    });
+  }, [
+    scorerProposal,
+    proposalConfidence,
+    proposalVerdict,
+    proposalStability,
+    scorerWhatIf,
+    proposalCallFlips,
+    calibrationDrift,
+    attributionReport,
+  ]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -628,6 +666,7 @@ export function QuoteListPage() {
           watchlist={proposalWatchlist}
           stability={proposalStability}
           rollback={proposalRollback}
+          preflight={proposalPreflight}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1704,6 +1743,7 @@ function ScorerProposalCard({
   watchlist,
   stability,
   rollback,
+  preflight,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1758,6 +1798,15 @@ function ScorerProposalCard({
    *  "how to unwind" adjacent. Null when no proposal; empty when
    *  proposal has no actionable changes. */
   rollback: ProposalRollbackPlan | null;
+  /** Slice 20ac — pre-apply audit checklist. Row-by-row pass/warn/fail/
+   *  skipped view of every pre-flight gate (sample, confidence, verdict,
+   *  stability, what-if, call flips, calibration trend) + an overall
+   *  readiness pill. Woven into the card header (readiness pill) and
+   *  the expanded panel (per-row audit trail) so the manager sees the
+   *  gates that produced the verdict alongside the verdict itself.
+   *  Null when no proposal; empty when the proposal has no actionable
+   *  changes. */
+  preflight: PreflightChecklist | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1801,6 +1850,7 @@ function ScorerProposalCard({
         watchlist,
         stability,
         rollback,
+        preflight,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -1908,6 +1958,32 @@ function ScorerProposalCard({
                     className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
                     aria-label={`Stability: ${stability.rating} — ${stability.headline ?? ""}`}
                     title={stability.headline ?? ""}
+                  >
+                    {pill.label}
+                  </span>
+                );
+              })()}
+              {/* Slice 20ac — readiness pill. The "did we check
+                  everything?" counterpart to the verdict pill. Green/
+                  amber/rose mirrors the derived readiness (ready/review/
+                  hold) which is structurally derived from the
+                  pass/warn/fail row counts — so if the verdict says
+                  "apply" but a single gate failed, the readiness pill
+                  will say HOLD and force a second look. Hidden when
+                  empty (no proposal / all-keep). */}
+              {preflight && !preflight.empty && (() => {
+                const pill = describeReadinessPill(preflight.readiness);
+                const cls =
+                  pill.tone === "emerald"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : pill.tone === "amber"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : "bg-rose-500/15 text-rose-300";
+                return (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
+                    aria-label={`Pre-flight readiness: ${preflight.readiness} — ${preflight.headline ?? ""}`}
+                    title={preflight.headline ?? ""}
                   >
                     {pill.label}
                   </span>
@@ -2054,6 +2130,17 @@ function ScorerProposalCard({
                     </ul>
                   )}
                 </div>
+              )}
+              {/* Slice 20ac — pre-apply checklist. Pinned directly
+                  under the verdict because it IS the audit trail that
+                  produced the verdict — row-by-row pass/warn/fail/
+                  skipped view across every pre-flight gate. A reader
+                  who sees "apply" on the verdict can scan the rows and
+                  confirm every gate said yes; a reader who sees "hold"
+                  can see exactly which gate failed. Hidden when the
+                  checklist is empty (no proposal / all-keep). */}
+              {preflight && !preflight.empty && preflight.items.length > 0 && (
+                <ScorerProposalPreflightRow preflight={preflight} />
               )}
               {/* Slice 20v — confidence rationale + per-driver breakdown.
                   Rendered first in the expanded body because the manager's
@@ -2396,6 +2483,94 @@ function ScorerProposalRollbackRow({
               <p className="mt-0.5 text-[10px] text-muted-foreground">
                 <span className="text-foreground">Impact:</span> {step.impact}
               </p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Slice 20ac — pre-apply checklist row inside the ScorerProposalCard.
+ *
+ * The row-by-row audit trail that produced the verdict. Each gate
+ * (sample, confidence, verdict, stability, what-if, call flips,
+ * calibration trend) renders as one line with:
+ *
+ *   • status icon — ✓ emerald (pass), ⚠ amber (warn), ✗ rose (fail),
+ *                   · muted (skipped)
+ *   • label       — "Sample adequate", "Confidence", etc.
+ *   • evidence    — the specific number or state that gave the row
+ *                   its status ("72/100 (high)", "apply", "−0.034 Brier")
+ *
+ * The headline summarises the counts ("Ready to apply — 5 passed, 2
+ * skipped.") and the readiness pill in the card header mirrors the
+ * derived readiness band. A manager who sees "hold" on the header pill
+ * scans these rows to find the specific gate that failed; a manager
+ * who sees "ready" uses them as corroborating receipts.
+ */
+function ScorerProposalPreflightRow({
+  preflight,
+}: {
+  preflight: PreflightChecklist;
+}) {
+  const readinessPill = describeReadinessPill(preflight.readiness);
+  const borderCls =
+    readinessPill.tone === "emerald"
+      ? "border-emerald-500/20 bg-emerald-500/5"
+      : readinessPill.tone === "amber"
+        ? "border-amber-500/20 bg-amber-500/5"
+        : "border-rose-500/20 bg-rose-500/5";
+  const headerCls =
+    readinessPill.tone === "emerald"
+      ? "text-emerald-400"
+      : readinessPill.tone === "amber"
+        ? "text-amber-400"
+        : "text-rose-400";
+  return (
+    <div
+      className={`rounded border p-2 ${borderCls}`}
+      role="region"
+      aria-label={`Pre-apply checklist (${preflight.readiness})`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className={`text-[10px] font-semibold uppercase tracking-wide ${headerCls}`}>
+          Pre-apply checklist
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {readinessPill.label}
+        </div>
+      </div>
+      {preflight.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">{preflight.headline}</p>
+      )}
+      <ul className="mt-1.5 space-y-0.5">
+        {preflight.items.map((item) => {
+          const statusTone =
+            item.status === "pass"
+              ? { icon: "✓", color: "text-emerald-400" }
+              : item.status === "warn"
+                ? { icon: "⚠", color: "text-amber-400" }
+                : item.status === "fail"
+                  ? { icon: "✗", color: "text-rose-400" }
+                  : { icon: "·", color: "text-muted-foreground" };
+          return (
+            <li
+              key={item.id}
+              className="flex items-start gap-2 text-[10px]"
+              aria-label={`${item.label}: ${item.status} — ${item.evidence}`}
+            >
+              <span
+                className={`shrink-0 font-semibold ${statusTone.color}`}
+                aria-hidden
+              >
+                {statusTone.icon}
+              </span>
+              <span className="shrink-0 text-foreground">{item.label}</span>
+              <span className="flex-1 text-muted-foreground">
+                — {item.evidence}
+              </span>
             </li>
           );
         })}
