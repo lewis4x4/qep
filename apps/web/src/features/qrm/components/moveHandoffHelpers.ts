@@ -18,7 +18,11 @@
  * without spinning up the web app (same rule as the Slice 8/9 helpers).
  */
 
-import type { QrmMove, QrmMoveKind } from "../lib/moves-types";
+import type {
+  QrmMove,
+  QrmMoveEntityType,
+  QrmMoveKind,
+} from "../lib/moves-types";
 
 /**
  * Human label for each move kind. Used in the body bullet of the prompt.
@@ -87,6 +91,34 @@ export function openerForMoveKind(kind: QrmMoveKind): string {
 }
 
 /**
+ * Per-entity synthesizer hint. Slice 19 parallel of Slice 17 (Graph) and
+ * Slice 18 (Pulse): when a move is scoped to a deal/company/contact,
+ * name Iron's dedicated synthesizer tool so the LLM reaches for the
+ * bundled read instead of chaining get_*_detail + list_recent_signals.
+ *
+ * Returns null for the entity types that have no synthesizer yet
+ * (equipment, rental, activity, workspace) — those keep the generic
+ * closer. Single spot to wire in a new synthesizer when it ships.
+ */
+function toolHintForMoveEntity(
+  entityType: QrmMoveEntityType,
+): string | null {
+  switch (entityType) {
+    case "deal":
+      return "Then call summarize_deal with the deal_id to pull the deal row + recent activities + open signals in one shot.";
+    case "company":
+      return "Then call summarize_company with the company_id to pull the account row + open deals + recent activities + signals in one shot.";
+    case "contact":
+      return "Then call summarize_contact with the contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
+    case "equipment":
+    case "rental":
+    case "activity":
+    case "workspace":
+      return null;
+  }
+}
+
+/**
  * Slice 12 — Today → Ask Iron per-move handoff.
  *
  * Build a well-scoped seed question for Ask Iron when the operator clicks
@@ -147,9 +179,22 @@ export function formatIronMovePrompt(
     parts.push(`• Triggered by ${n} ${noun} (signal_ids available on the move record).`);
   }
 
-  parts.push(
-    "Use the detail + signal tools to ground your answer. If there's a clearer next step, call propose_move; otherwise tell me what you'd want to know before acting.",
-  );
+  // Slice 19 — synthesizer tool-naming. Only emitted when the move
+  // carries BOTH an entity_type and an entity_id, since a named
+  // synthesizer without the id is just a pointer back to search_entities.
+  const toolHint = move.entity_type && move.entity_id
+    ? toolHintForMoveEntity(move.entity_type)
+    : null;
+  if (toolHint) {
+    parts.push(toolHint);
+    parts.push(
+      "If there's a clearer next step, call propose_move; otherwise tell me what you'd want to know before acting.",
+    );
+  } else {
+    parts.push(
+      "Use the detail + signal tools to ground your answer. If there's a clearer next step, call propose_move; otherwise tell me what you'd want to know before acting.",
+    );
+  }
 
   return parts.join("\n");
 }

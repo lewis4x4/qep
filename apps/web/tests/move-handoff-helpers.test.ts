@@ -227,4 +227,121 @@ describe("formatIronMovePrompt", () => {
     const p = formatIronMovePrompt(makeMove({ kind: "other", title: "ad-hoc" }));
     expect(p).toContain("• move: ad-hoc");
   });
+
+  // Slice 19 — synthesizer tool-naming per entity type. Mirrors Slice 17
+  // (Graph) and Slice 18 (Pulse): when a move is scoped to a deal /
+  // company / contact, the closer should name the dedicated synthesizer
+  // tool explicitly so Iron reaches for the bundled read instead of
+  // chaining get_*_detail + list_recent_signals.
+  it("names summarize_deal when the move is scoped to a deal", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "deal", entity_id: "d-1" }),
+    );
+    expect(p).toContain("summarize_deal");
+  });
+
+  it("names summarize_company when the move is scoped to a company", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "company", entity_id: "co-1" }),
+    );
+    expect(p).toContain("summarize_company");
+  });
+
+  it("names summarize_contact when the move is scoped to a contact", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "contact", entity_id: "c-1" }),
+    );
+    expect(p).toContain("summarize_contact");
+  });
+
+  it("keeps the generic closer for equipment (no synthesizer yet)", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "equipment", entity_id: "eq-1" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail + signal tools");
+  });
+
+  it("keeps the generic closer for rental (no synthesizer yet)", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "rental", entity_id: "r-1" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail + signal tools");
+  });
+
+  it("keeps the generic closer for activity-scoped moves", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "activity", entity_id: "a-1" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail + signal tools");
+  });
+
+  it("keeps the generic closer for workspace-scoped moves", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "workspace", entity_id: "ws-1" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail + signal tools");
+  });
+
+  it("omits the synthesizer hint when entity_id is missing even with entity_type set", () => {
+    // A named tool requires an id to be useful. If the move has a type
+    // but no id, drop the hint — Iron should fall back to search_entities.
+    const p = formatIronMovePrompt(
+      makeMove({ entity_type: "deal", entity_id: null }),
+    );
+    expect(p).not.toContain("summarize_deal");
+  });
+
+  it("still closes with propose_move across every entity type", () => {
+    for (
+      const type of [
+        "deal",
+        "company",
+        "contact",
+        "equipment",
+        "rental",
+        "workspace",
+        "activity",
+      ] as const
+    ) {
+      const p = formatIronMovePrompt(
+        makeMove({ entity_type: type, entity_id: "x-1" }),
+      );
+      expect(p).toContain("propose_move");
+    }
+  });
+
+  it("still closes with propose_move across every move kind", () => {
+    const kinds: QrmMoveKind[] = [
+      "call_now",
+      "send_quote",
+      "send_follow_up",
+      "send_proposal",
+      "schedule_meeting",
+      "escalate",
+      "drop_deal",
+      "reassign",
+      "field_visit",
+      "pricing_review",
+      "inventory_reserve",
+      "service_escalate",
+      "rescue_offer",
+      "other",
+    ];
+    for (const kind of kinds) {
+      const p = formatIronMovePrompt(makeMove({ kind }));
+      expect(p).toContain("propose_move");
+    }
+  });
 });
