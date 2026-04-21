@@ -49,7 +49,19 @@ interface IntakeBody {
   build_item_id?: unknown;
   voice_audio_url?: unknown;
   voice_transcript?: unknown;
+  voice_duration_ms?: unknown;
   screenshot_url?: unknown;
+  submission_context?: unknown;
+}
+
+/** Shape the client sends; validated but stored loosely as jsonb. */
+interface SubmissionContext {
+  path?: string;
+  title?: string;
+  build_item_id?: string | null;
+  screen?: { w?: number; h?: number };
+  dark_mode?: boolean;
+  ua_short?: string;
 }
 
 interface TriageResult {
@@ -81,7 +93,10 @@ Rules:
 - "question": needs answer, not code. Suggested action starts with "Reply:".
 - Summary is plain, no marketing voice. Never start with "The user...".
 - Suggested action is concrete ("Fix X", "Reply: <short answer>", "Draft PR to Y").
-- If the body is ambiguous or < 8 words, confidence is "low".`;
+- If the body is ambiguous or < 8 words, confidence is "low".
+- When a "Submitted from path" is provided, reference it in the summary
+  (e.g., "On /qrm/quotes/new …"). The stakeholder shouldn't have to tell us
+  where they were — we already know.`;
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
@@ -112,7 +127,11 @@ Deno.serve(async (req) => {
       : null;
     const voiceAudioUrl = typeof raw.voice_audio_url === "string" ? raw.voice_audio_url : null;
     const voiceTranscript = typeof raw.voice_transcript === "string" ? raw.voice_transcript : null;
+    const voiceDurationMs = typeof raw.voice_duration_ms === "number" && isFinite(raw.voice_duration_ms)
+      ? Math.max(0, Math.round(raw.voice_duration_ms))
+      : null;
     const screenshotUrl = typeof raw.screenshot_url === "string" ? raw.screenshot_url : null;
+    const submissionContext = sanitizeSubmissionContext(raw.submission_context);
 
     // If the submitter picked a type, we still ask Claude to triage for
     // priority + summary, but we keep their type unless it's clearly wrong
@@ -122,6 +141,7 @@ Deno.serve(async (req) => {
       body,
       providedType,
       voiceTranscript,
+      submissionContext,
       audience: auth.audience,
       subrole: auth.subrole,
     });
@@ -136,11 +156,13 @@ Deno.serve(async (req) => {
       body,
       voice_transcript: voiceTranscript,
       voice_audio_url: voiceAudioUrl,
+      voice_duration_ms: voiceDurationMs,
       screenshot_url: screenshotUrl,
       priority: triage.priority,
       status: "triaged",
       ai_summary: triage.ai_summary,
       ai_suggested_action: triage.ai_suggested_action,
+      submission_context: submissionContext ?? {},
     };
 
     const { data: inserted, error: insertErr } = await auth.supabase
@@ -191,6 +213,33 @@ Deno.serve(async (req) => {
   }
 });
 
+/**
+ * Validate + clamp the client-supplied submission context. We allow-list
+ * fields so a malicious client can't smuggle arbitrary jsonb into the DB
+ * column. Unknown keys are dropped.
+ */
+function sanitizeSubmissionContext(raw: unknown): SubmissionContext | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as Record<string, unknown>;
+  const out: SubmissionContext = {};
+  if (typeof src.path === "string") out.path = src.path.slice(0, 400);
+  if (typeof src.title === "string") out.title = src.title.slice(0, 240);
+  if (typeof src.build_item_id === "string" && src.build_item_id.length === 36) {
+    out.build_item_id = src.build_item_id;
+  } else if (src.build_item_id === null) {
+    out.build_item_id = null;
+  }
+  if (src.screen && typeof src.screen === "object") {
+    const s = src.screen as Record<string, unknown>;
+    const w = typeof s.w === "number" && isFinite(s.w) ? Math.max(0, Math.min(99999, Math.round(s.w))) : undefined;
+    const h = typeof s.h === "number" && isFinite(s.h) ? Math.max(0, Math.min(99999, Math.round(s.h))) : undefined;
+    if (w !== undefined && h !== undefined) out.screen = { w, h };
+  }
+  if (typeof src.dark_mode === "boolean") out.dark_mode = src.dark_mode;
+  if (typeof src.ua_short === "string") out.ua_short = src.ua_short.slice(0, 120);
+  return Object.keys(out).length === 0 ? null : out;
+}
+
 function normalizeType(raw: unknown): FeedbackType | null {
   if (raw === "bug" || raw === "suggestion" || raw === "question" || raw === "approval" || raw === "concern") {
     return raw;
@@ -207,12 +256,23 @@ async function triageWithClaude(params: {
   body: string;
   providedType: FeedbackType | null;
   voiceTranscript: string | null;
+  submissionContext: SubmissionContext | null;
   audience: "internal" | "stakeholder";
   subrole: string | null;
 }): Promise<TriageResult> {
+  const ctx = params.submissionContext;
+  const contextLines: string[] = [];
+  if (ctx) {
+    if (typeof ctx.path === "string") contextLines.push(`Submitted from path: ${ctx.path}`);
+    if (typeof ctx.title === "string") contextLines.push(`Page title: ${ctx.title}`);
+    if (typeof ctx.ua_short === "string") contextLines.push(`Device: ${ctx.ua_short}`);
+    if (ctx.dark_mode === true) contextLines.push("Dark mode: on");
+  }
+
   const userMessage = [
     `Audience: ${params.audience}${params.subrole ? ` (${params.subrole})` : ""}`,
     params.providedType ? `Submitter-picked type: ${params.providedType}` : "Submitter did not pick a type.",
+    ...contextLines,
     params.voiceTranscript ? `Voice transcript: ${params.voiceTranscript}` : null,
     "",
     "Feedback body:",
