@@ -207,9 +207,28 @@ async function pollOne(
     return { feedback_id: row.id, action: "still_pending" };
   }
 
+  // Defense-in-depth: a compromised GitHub status could set target_url
+  // to `javascript:` or a non-HTTPS phishing link. Plain-text email
+  // clients won't execute JS, but Apple Mail / Outlook auto-link every
+  // URL-like substring. Gate on https:// before anything reaches the
+  // submitter's inbox.
+  if (!/^https:\/\//i.test(netlify.target_url)) {
+    console.warn(
+      `preview_ready rejected non-https target_url for ${row.id}: ${netlify.target_url}`,
+    );
+    await stampChecked(supabase, row.id);
+    return { feedback_id: row.id, action: "still_pending" };
+  }
+
   // 3. First-time success: stamp URL + timestamps, emit timeline event.
+  //    CRITICAL: the `.is("claude_preview_ready_at", null)` guard makes
+  //    the UPDATE a no-op if another concurrent tick already stamped
+  //    the row — but Supabase/PostgREST does NOT surface that as an
+  //    error. We MUST read back the affected row count via .select()
+  //    and skip the event insert when it's 0, otherwise both racing
+  //    ticks emit a preview_ready event → duplicate email to Angela.
   const readyAt = new Date().toISOString();
-  const { error: updErr } = await supabase
+  const { data: updRows, error: updErr } = await supabase
     .from("hub_feedback")
     .update({
       claude_preview_url: netlify.target_url,
@@ -217,9 +236,18 @@ async function pollOne(
       claude_preview_checked_at: readyAt,
     })
     .eq("id", row.id)
-    .is("claude_preview_ready_at", null); // idempotent guard
+    .eq("workspace_id", row.workspace_id) // belt-and-braces workspace isolation
+    .is("claude_preview_ready_at", null) // idempotent guard
+    .select("id");
 
   if (updErr) throw new Error(`preview stamp: ${updErr.message}`);
+
+  // Zero rows updated == another tick won the race (or the row was
+  // re-stamped out-of-band). Skip the event insert; the winning tick
+  // already emitted it.
+  if (!updRows || updRows.length === 0) {
+    return { feedback_id: row.id, action: "still_pending" };
+  }
 
   const { error: evtErr } = await supabase.from("hub_feedback_events").insert({
     feedback_id: row.id,
