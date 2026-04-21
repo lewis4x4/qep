@@ -89,16 +89,30 @@ export function PartsInventoryPage({ subNav = "service" }: { subNav?: "service" 
     }
 
     if (sortConfig) {
+        // Type-safe dynamic key access: narrow each row to a string-keyed
+        // record so we don't need `as any`. Coerce the fetched value into a
+        // comparable primitive so the `<`/`>` comparison is well-defined
+        // (object / array values, which would otherwise trigger NaN
+        // comparisons, fall back to their stringified form).
+        const getSortValue = (row: Record<string, unknown>, key: string): string | number | null => {
+            const v = row[key];
+            if (v === null || v === undefined) return null;
+            if (typeof v === "number") return v;
+            if (typeof v === "string") return v;
+            if (typeof v === "boolean") return v ? 1 : 0;
+            return String(v);
+        };
         result.sort((a, b) => {
-            const valA = (a as any)[sortConfig.key];
-            const valB = (b as any)[sortConfig.key];
-            
+            const valA = getSortValue(a as Record<string, unknown>, sortConfig.key);
+            const valB = getSortValue(b as Record<string, unknown>, sortConfig.key);
+
             // Handle nulls gracefully
             if (valA === null && valB !== null) return sortConfig.dir === 'asc' ? 1 : -1;
             if (valA !== null && valB === null) return sortConfig.dir === 'asc' ? -1 : 1;
-            
-            if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
-            if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
+            if (valA === null && valB === null) return 0;
+
+            if (valA! < valB!) return sortConfig.dir === 'asc' ? -1 : 1;
+            if (valA! > valB!) return sortConfig.dir === 'asc' ? 1 : -1;
             return 0;
         });
     }

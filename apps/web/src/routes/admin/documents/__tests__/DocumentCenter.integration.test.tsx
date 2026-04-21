@@ -109,8 +109,15 @@ const { DocumentCenterPage } = await import("../DocumentCenter");
 
 describe("DocumentCenterPage (integration)", () => {
   beforeEach(() => {
-    cleanup();
+    // Order matters: zero the body first, then call cleanup() defensively.
+    // Under happy-dom, a prior test file's teardown can leave @testing-
+    // library's internal container registry pointing at nodes that have
+    // already been detached. Calling cleanup() first then throws
+    // `DOMException: Failed to execute 'removeChild'`. Swapping the order
+    // and wrapping cleanup() in try/catch makes this robust to any file-
+    // load ordering.
     document.body.innerHTML = "";
+    try { cleanup(); } catch { /* stale container registry — safe to ignore */ }
     mockListDocuments.mockClear();
     mockGetDocument.mockClear();
     mockCreateDownload.mockClear();
