@@ -106,6 +106,10 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       traceId: "22222222-2222-2222-2222-222222222222",
       modelVersion: "test",
     })),
+    neighbors: overrides.neighbors ?? (async () => ({
+      documentId: "doc-1",
+      neighbors: [],
+    })),
   };
 }
 
@@ -345,6 +349,42 @@ Deno.test("document-router twin-rerun forwards documentId and returns twin resul
   assertEquals(payload.jobId, "job-99");
   assertEquals(payload.status, "succeeded");
   assertEquals(payload.factCount, 7);
+});
+
+Deno.test("document-router neighbors endpoint returns outbound + inbound edges", async () => {
+  const captured: { documentId: string | null } = { documentId: null };
+  const service = makeService({
+    neighbors: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      return {
+        documentId: input.documentId,
+        neighbors: [
+          {
+            id: "edge-1",
+            direction: "outbound",
+            edgeType: "expires_on",
+            status: "at_risk",
+            validFrom: null,
+            validUntil: "2026-05-01T00:00:00.000Z",
+            toDocumentId: null,
+            toEntityType: "commitment",
+            toEntityId: null,
+            toEntityLabel: "2026-05-01",
+            fromDocumentId: input.documentId,
+            confidence: 0.92,
+            sourceFactIds: ["fact-1"],
+          },
+        ],
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/neighbors?document_id=doc-graph");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(captured.documentId, "doc-graph");
+  assertEquals((payload.neighbors as unknown[]).length, 1);
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

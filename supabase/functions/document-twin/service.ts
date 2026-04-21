@@ -441,6 +441,20 @@ export async function runTwinExtraction(input: TwinRunInput): Promise<TwinRunRes
       })
       .eq("id", jobId);
 
+    // Slice III: fire obligations projection so the graph is fresh. Best-
+    // effort — a projection failure must not bubble up and mark the twin
+    // run as failed.
+    try {
+      const { error: projectionError } = await admin.rpc("project_document_obligations", {
+        p_document_id: documentId,
+      });
+      if (projectionError) {
+        console.warn("[document-twin] project_document_obligations failed", projectionError.message);
+      }
+    } catch (err) {
+      console.warn("[document-twin] project_document_obligations threw", err);
+    }
+
     await logAuditEvent(
       admin,
       documentId,

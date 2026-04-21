@@ -135,6 +135,31 @@ export interface ReindexResult {
   nextStatus: string;
 }
 
+export interface NeighborsInput {
+  documentId: string;
+}
+
+export interface ObligationNeighbor {
+  id: string;
+  direction: "inbound" | "outbound";
+  edgeType: string;
+  status: string;
+  validFrom: string | null;
+  validUntil: string | null;
+  toDocumentId: string | null;
+  toEntityType: string | null;
+  toEntityId: string | null;
+  toEntityLabel: string | null;
+  fromDocumentId: string | null;
+  confidence: number;
+  sourceFactIds: string[];
+}
+
+export interface NeighborsResult {
+  documentId: string;
+  neighbors: ObligationNeighbor[];
+}
+
 export interface TwinRerunInput {
   documentId: string;
   force?: boolean;
@@ -1035,6 +1060,63 @@ export async function searchDocuments(ctx: DocumentRouterContext, input: SearchI
   })();
 
   return { query, traceId, results };
+}
+
+export async function getDocumentNeighbors(
+  ctx: DocumentRouterContext,
+  input: NeighborsInput,
+): Promise<NeighborsResult> {
+  const document = await loadDocumentForMutation(ctx, input.documentId);
+  const [outbound, inbound] = await Promise.all([
+    ctx.callerDb
+      .from("document_obligations")
+      .select(
+        "id, edge_type, status, valid_from, valid_until, from_document_id, to_document_id, to_entity_type, to_entity_id, to_entity_label, confidence, source_fact_ids",
+      )
+      .eq("from_document_id", document.id)
+      .neq("status", "voided")
+      .order("valid_until", { ascending: true, nullsFirst: false }),
+    ctx.callerDb
+      .from("document_obligations")
+      .select(
+        "id, edge_type, status, valid_from, valid_until, from_document_id, to_document_id, to_entity_type, to_entity_id, to_entity_label, confidence, source_fact_ids",
+      )
+      .eq("to_document_id", document.id)
+      .neq("status", "voided")
+      .order("valid_until", { ascending: true, nullsFirst: false }),
+  ]);
+  if (outbound.error) throw new Error(outbound.error.message);
+  if (inbound.error) throw new Error(inbound.error.message);
+
+  const neighbors: ObligationNeighbor[] = [];
+  for (const row of (outbound.data ?? []) as Array<Record<string, unknown>>) {
+    neighbors.push(toObligationNeighbor(row, "outbound"));
+  }
+  for (const row of (inbound.data ?? []) as Array<Record<string, unknown>>) {
+    neighbors.push(toObligationNeighbor(row, "inbound"));
+  }
+
+  return { documentId: document.id, neighbors };
+}
+
+function toObligationNeighbor(row: Record<string, unknown>, direction: "inbound" | "outbound"): ObligationNeighbor {
+  return {
+    id: String(row.id ?? ""),
+    direction,
+    edgeType: String(row.edge_type ?? ""),
+    status: String(row.status ?? ""),
+    validFrom: row.valid_from ? String(row.valid_from) : null,
+    validUntil: row.valid_until ? String(row.valid_until) : null,
+    toDocumentId: row.to_document_id ? String(row.to_document_id) : null,
+    toEntityType: row.to_entity_type ? String(row.to_entity_type) : null,
+    toEntityId: row.to_entity_id ? String(row.to_entity_id) : null,
+    toEntityLabel: row.to_entity_label ? String(row.to_entity_label) : null,
+    fromDocumentId: row.from_document_id ? String(row.from_document_id) : null,
+    confidence: typeof row.confidence === "number" ? row.confidence : 0,
+    sourceFactIds: Array.isArray(row.source_fact_ids)
+      ? (row.source_fact_ids as unknown[]).map(String)
+      : [],
+  };
 }
 
 export async function rerunTwin(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult> {

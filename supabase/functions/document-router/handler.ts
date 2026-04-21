@@ -23,6 +23,8 @@ import type {
   SearchResult,
   TwinRerunInput,
   TwinRerunResult,
+  NeighborsInput,
+  NeighborsResult,
 } from "./service.ts";
 import {
   createDocumentRouterContext,
@@ -30,6 +32,7 @@ import {
   createFolder,
   duplicateLink,
   getDocument,
+  getDocumentNeighbors,
   listDocuments,
   moveDocument,
   moveFolder,
@@ -51,6 +54,7 @@ export interface DocumentRouterService {
   reindex(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult>;
   search(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult>;
   twinRerun(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult>;
+  neighbors(ctx: DocumentRouterContext, input: NeighborsInput): Promise<NeighborsResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -206,6 +210,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     reindex: reindexDocument,
     search: searchDocuments,
     twinRerun: rerunTwin,
+    neighbors: getDocumentNeighbors,
   };
 }
 
@@ -333,6 +338,13 @@ export async function handleDocumentRouterRequest(
         documentId: body.documentId,
         force: body.force === true,
       });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/neighbors") {
+      const documentId = safeText(url.searchParams.get("document_id"));
+      if (!documentId) throw new Error("VALIDATION_ERROR");
+      const payload = await service.neighbors(ctx, { documentId });
       return crmOk(payload, { origin });
     }
 
