@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 
 import { RequireAdmin } from "@/components/RequireAdmin";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,8 +58,14 @@ type DocumentMoveTarget =
 type FolderMoveTarget = { folderId: string } | null;
 
 export function DocumentCenterPage() {
+  // Slice XII: reps get read access to the Document Center. Admin-only
+  // surfaces (Pending Review, Ingest Failures, New folder, Twin re-run)
+  // are role-shaped inside the page by checking profile.role against the
+  // elevated set. RLS on documents/folders/facts backs the UI gate so a
+  // rep hitting /admin/documents directly still can't see finance or
+  // admin-only content.
   return (
-    <RequireAdmin roles={["admin", "manager", "owner"]}>
+    <RequireAdmin roles={["rep", "admin", "manager", "owner"]}>
       <DocumentCenterPageInner />
     </RequireAdmin>
   );
@@ -66,6 +73,9 @@ export function DocumentCenterPage() {
 
 function DocumentCenterPageInner() {
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const callerRole = profile?.role ?? "rep";
+  const isElevated = callerRole === "admin" || callerRole === "manager" || callerRole === "owner";
 
   const [view, setView] = useState<DocumentCenterView>("all");
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -381,10 +391,12 @@ function DocumentCenterPageInner() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => setCreateFolderOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New folder
-            </Button>
+            {isElevated ? (
+              <Button type="button" variant="outline" onClick={() => setCreateFolderOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New folder
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => void loadList()}>
               Refresh
             </Button>
@@ -416,6 +428,7 @@ function DocumentCenterPageInner() {
                 })}
               </div>
 
+              {isElevated ? (
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Review
@@ -439,6 +452,7 @@ function DocumentCenterPageInner() {
                   })}
                 </div>
               </div>
+              ) : null}
 
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -540,6 +554,7 @@ function DocumentCenterPageInner() {
               if (selectedDocumentId) void loadDetail(selectedDocumentId);
             }}
             downloading={downloading}
+            canRunTwin={isElevated}
           />
         </div>
       </div>

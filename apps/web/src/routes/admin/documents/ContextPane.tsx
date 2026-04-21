@@ -21,13 +21,22 @@ export interface ContextPaneProps {
   onDownload: () => void;
   onReloadDetail: () => void;
   downloading: boolean;
+  /** True for admin/manager/owner roles. Reps see a read-only pane (no twin controls). */
+  canRunTwin: boolean;
 }
 
 function formatTokenLabel(value: string): string {
   return value.split("_").join(" ");
 }
 
-export function ContextPane({ detail, loading, onDownload, onReloadDetail, downloading }: ContextPaneProps) {
+export function ContextPane({
+  detail,
+  loading,
+  onDownload,
+  onReloadDetail,
+  downloading,
+  canRunTwin,
+}: ContextPaneProps) {
   const [neighbors, setNeighbors] = useState<DocumentCenterNeighbor[]>([]);
   const [loadingNeighbors, setLoadingNeighbors] = useState(false);
   const [membershipsOpen, setMembershipsOpen] = useState(false);
@@ -145,18 +154,20 @@ export function ContextPane({ detail, loading, onDownload, onReloadDetail, downl
             )}
             Download
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void handleRunTwin(facts.length === 0)}
-            disabled={twinRunning}
-            title={facts.length === 0 ? "Run twin extraction" : "Re-run twin extraction"}
-          >
-            {twinRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-2 hidden sm:inline">
-              {facts.length === 0 ? "Run twin" : "Re-run twin"}
-            </span>
-          </Button>
+          {canRunTwin ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleRunTwin(facts.length === 0)}
+              disabled={twinRunning}
+              title={facts.length === 0 ? "Run twin extraction" : "Re-run twin extraction"}
+            >
+              {twinRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-2 hidden sm:inline">
+                {facts.length === 0 ? "Run twin" : "Re-run twin"}
+              </span>
+            </Button>
+          ) : null}
         </div>
 
         <section>
