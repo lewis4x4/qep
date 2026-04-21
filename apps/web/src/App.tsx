@@ -65,6 +65,9 @@ const AdminPage = lazy(() =>
 const DocumentCenterPage = lazy(() =>
   import("./routes/admin/documents/DocumentCenter").then((m) => ({ default: m.DocumentCenterPage }))
 );
+const DocumentViewerPage = lazy(() =>
+  import("./routes/admin/documents/DocumentViewer").then((m) => ({ default: m.DocumentViewerPage }))
+);
 const VoiceCapturePage = lazy(() =>
   import("./components/VoiceCapturePage").then((m) => ({ default: m.VoiceCapturePage }))
 );
@@ -964,8 +967,18 @@ function App() {
               <Route
                 path="/admin/documents"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <DocumentCenterPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/documents/:id"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <DocumentViewerPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

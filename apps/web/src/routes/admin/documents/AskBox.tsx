@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { Loader2, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -66,10 +67,11 @@ export function AskBox({ documentId }: AskBoxProps) {
                 Citations ({response.citations.length})
               </p>
               {response.citations.map((citation) => (
-                <div
+                <RouterLink
                   key={citation.chunkId}
+                  to={`/admin/documents/${documentId}?chunk=${citation.chunkId}`}
                   className={cn(
-                    "rounded-md border border-border/60 px-2 py-1 text-[11px]",
+                    "block rounded-md border border-border/60 px-2 py-1 text-[11px] transition-colors hover:border-qep-orange",
                     citation.confidence >= 0.8 ? "bg-emerald-500/5" : "",
                   )}
                 >
@@ -78,9 +80,10 @@ export function AskBox({ documentId }: AskBoxProps) {
                     {citation.pageNumber !== null ? ` · p${citation.pageNumber}` : ""}
                     {" · "}
                     {(citation.confidence * 100).toFixed(0)}%
+                    <span className="ml-2 text-[9px] text-qep-orange">Open →</span>
                   </p>
                   <p className="mt-0.5 italic text-foreground">"{citation.excerpt}"</p>
-                </div>
+                </RouterLink>
               ))}
             </div>
           ) : response.answer.length > 0 ? (
