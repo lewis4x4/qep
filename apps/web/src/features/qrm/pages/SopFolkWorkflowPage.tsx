@@ -5,6 +5,7 @@ import { CheckCircle, Lightbulb, Loader2, ShieldAlert, Sparkles, Workflow, XCirc
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import { listSuppressionQueue, resolveSuppressionQueueItem } from "../../sop/lib/sop-api";
 import { summarizeSopFolk } from "../lib/sop-folk";
