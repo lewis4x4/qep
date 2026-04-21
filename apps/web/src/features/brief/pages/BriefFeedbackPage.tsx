@@ -10,10 +10,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Users2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   draftFeedbackFix,
+  listFeedbackLinks,
   listHubFeedback,
   mergeFeedbackPr,
   type FeedbackPriority,
@@ -148,6 +149,16 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
     },
   });
 
+  // v2.4 dedup: count and max-similarity of rows semantically linked to
+  // this feedback. Cheap enough to fetch per card (two bounded-scan
+  // queries); stale-time keeps scroll jitter at zero.
+  const linksQuery = useQuery({
+    queryKey: ["hub-feedback-links", row.id],
+    queryFn: () => listFeedbackLinks(row.id),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
   const mergeMutation = useMutation({
     mutationFn: () => mergeFeedbackPr(row.id),
     onSuccess: (result) => {
@@ -186,6 +197,19 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
             {row.feedback_type}
           </Badge>
           <Badge className={PRIORITY_TONE[row.priority]}>{row.priority}</Badge>
+          {linksQuery.data && linksQuery.data.count > 0 && (
+            // v2.4: "+N linked" chip — tells Brian this isn't isolated
+            // signal. Similarity max is shown as a small right-aligned
+            // hint so admins can eyeball match confidence.
+            <Badge
+              variant="outline"
+              className="gap-1 border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+              title={`Max similarity ${(linksQuery.data.maxSimilarity * 100).toFixed(0)}% — ${linksQuery.data.count} related submission(s)`}
+            >
+              <Users2 className="h-3 w-3" aria-hidden />
+              +{linksQuery.data.count} linked
+            </Badge>
+          )}
         </div>
         <span className="text-xs text-muted-foreground">{created}</span>
       </div>
