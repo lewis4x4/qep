@@ -27,8 +27,15 @@ import type {
   NeighborsResult,
   AskInput,
   AskResult,
+  PlaysListInput,
+  PlaysListResult,
+  PlayActionInput,
+  PlayActionResult,
+  PlaysRunInput,
+  PlaysRunResult,
 } from "./service.ts";
 import {
+  actionDocumentPlay,
   askDocument,
   createDocumentRouterContext,
   createDownloadUrl,
@@ -36,12 +43,14 @@ import {
   duplicateLink,
   getDocument,
   getDocumentNeighbors,
+  listDocumentPlays,
   listDocuments,
   moveDocument,
   moveFolder,
   reindexDocument,
   requireDocumentCenterAccess,
   rerunTwin,
+  runPlaysBatch,
   searchDocuments,
 } from "./service.ts";
 
@@ -59,6 +68,9 @@ export interface DocumentRouterService {
   twinRerun(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult>;
   neighbors(ctx: DocumentRouterContext, input: NeighborsInput): Promise<NeighborsResult>;
   ask(ctx: DocumentRouterContext, input: AskInput): Promise<AskResult>;
+  playsList(ctx: DocumentRouterContext, input: PlaysListInput): Promise<PlaysListResult>;
+  playAction(ctx: DocumentRouterContext, input: PlayActionInput): Promise<PlayActionResult>;
+  playsRun(ctx: DocumentRouterContext, input: PlaysRunInput): Promise<PlaysRunResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -225,6 +237,9 @@ async function defaultService(): Promise<DocumentRouterService> {
     twinRerun: rerunTwin,
     neighbors: getDocumentNeighbors,
     ask: askDocument,
+    playsList: listDocumentPlays,
+    playAction: actionDocumentPlay,
+    playsRun: runPlaysBatch,
   };
 }
 
@@ -368,6 +383,40 @@ export async function handleDocumentRouterRequest(
       const question = safeText(body.question);
       if (!documentId || !question) throw new Error("VALIDATION_ERROR");
       const payload = await service.ask(ctx, { documentId, question });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/plays") {
+      const status = safeText(url.searchParams.get("status")) ?? undefined;
+      const ownerUserId = safeText(url.searchParams.get("owner")) ?? null;
+      const documentIdFilter = safeText(url.searchParams.get("document_id")) ?? null;
+      const limitRaw = url.searchParams.get("limit");
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const payload = await service.playsList(ctx, {
+        status,
+        ownerUserId,
+        documentId: documentIdFilter,
+        limit: Number.isFinite(limit) ? (limit as number) : undefined,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/action") {
+      const body = await readJsonBody<PlayActionInput>(req);
+      if (!safeText(body.playId) || !safeText(body.action)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.playAction(ctx, {
+        playId: body.playId,
+        action: body.action,
+        note: typeof body.note === "string" ? body.note.slice(0, 500) : null,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/run") {
+      const body = await readJsonBody<PlaysRunInput>(req);
+      const payload = await service.playsRun(ctx, {
+        documentId: safeText(body.documentId),
+      });
       return crmOk(payload, { origin });
     }
 

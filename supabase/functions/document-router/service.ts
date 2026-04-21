@@ -254,6 +254,69 @@ export interface AskResult {
   citations: AskCitation[];
 }
 
+export interface PlaysListInput {
+  status?: string;
+  ownerUserId?: string | null;
+  documentId?: string | null;
+  limit?: number;
+}
+
+export interface DocumentPlay {
+  id: string;
+  documentId: string | null;
+  businessKey: string;
+  playKind: string;
+  status: string;
+  projectionWindow: string;
+  projectedDueDate: string | null;
+  probability: number;
+  reason: string;
+  signalType: string;
+  recommendedAction: Record<string, unknown>;
+  suggestedOwnerUserId: string | null;
+  actionedBy: string | null;
+  actionedAt: string | null;
+  actionNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documentTitle: string | null;
+}
+
+export interface PlaysListResult {
+  plays: DocumentPlay[];
+}
+
+export interface PlayActionInput {
+  playId: string;
+  action: "actioned" | "dismissed" | "fulfilled";
+  note?: string | null;
+}
+
+export interface PlayActionResult {
+  play: DocumentPlay;
+}
+
+export interface PlaysRunInput {
+  documentId?: string | null;
+}
+
+export interface PlaysRunResult {
+  batchId: string;
+  plays: Array<{
+    id: string;
+    documentId: string | null;
+    businessKey: string;
+    playKind: string;
+    status: string;
+    projectedDueDate: string | null;
+    probability: number;
+    reason: string;
+  }>;
+  expiredCount: number;
+  fulfilledCount: number;
+  exceptionsPushed: number;
+}
+
 export interface DownloadUrlResult {
   url: string;
   expiresAt: string;
@@ -1379,6 +1442,166 @@ function toObligationNeighbor(row: Record<string, unknown>, direction: "inbound"
       ? (row.source_fact_ids as unknown[]).map(String)
       : [],
   };
+}
+
+function toDocumentPlay(row: Record<string, unknown>, titleLookup: Map<string, string>): DocumentPlay {
+  const docId = row.document_id ? String(row.document_id) : null;
+  return {
+    id: String(row.id ?? ""),
+    documentId: docId,
+    businessKey: String(row.business_key ?? ""),
+    playKind: String(row.play_kind ?? ""),
+    status: String(row.status ?? ""),
+    projectionWindow: String(row.projection_window ?? ""),
+    projectedDueDate: row.projected_due_date ? String(row.projected_due_date) : null,
+    probability: typeof row.probability === "number" ? row.probability : 0,
+    reason: String(row.reason ?? ""),
+    signalType: String(row.signal_type ?? ""),
+    recommendedAction: (row.recommended_action ?? {}) as Record<string, unknown>,
+    suggestedOwnerUserId: row.suggested_owner_user_id ? String(row.suggested_owner_user_id) : null,
+    actionedBy: row.actioned_by ? String(row.actioned_by) : null,
+    actionedAt: row.actioned_at ? String(row.actioned_at) : null,
+    actionNote: row.action_note ? String(row.action_note) : null,
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+    documentTitle: docId ? titleLookup.get(docId) ?? null : null,
+  };
+}
+
+export async function listDocumentPlays(
+  ctx: DocumentRouterContext,
+  input: PlaysListInput,
+): Promise<PlaysListResult> {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  let query = ctx.callerDb
+    .from("document_plays")
+    .select(
+      "id, document_id, business_key, play_kind, status, projection_window, projected_due_date, probability, reason, signal_type, recommended_action, suggested_owner_user_id, actioned_by, actioned_at, action_note, created_at, updated_at",
+    )
+    .order("projected_due_date", { ascending: true, nullsFirst: false })
+    .limit(limit);
+
+  if (input.status) query = query.eq("status", input.status);
+  if (input.documentId) query = query.eq("document_id", input.documentId);
+  if (input.ownerUserId === "me") {
+    if (ctx.caller.userId) query = query.eq("suggested_owner_user_id", ctx.caller.userId);
+  } else if (input.ownerUserId) {
+    query = query.eq("suggested_owner_user_id", input.ownerUserId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const documentIds = Array.from(
+    new Set(rows.map((r) => r.document_id).filter((v): v is string => typeof v === "string")),
+  );
+  const titleLookup = new Map<string, string>();
+  if (documentIds.length > 0) {
+    const { data: docRows } = await ctx.callerDb
+      .from("documents")
+      .select("id, title")
+      .in("id", documentIds);
+    for (const row of (docRows ?? []) as Array<{ id: string; title: string }>) {
+      titleLookup.set(row.id, row.title);
+    }
+  }
+
+  return {
+    plays: rows.map((row) => toDocumentPlay(row, titleLookup)),
+  };
+}
+
+export async function actionDocumentPlay(
+  ctx: DocumentRouterContext,
+  input: PlayActionInput,
+): Promise<PlayActionResult> {
+  if (!input.playId) throw new Error("VALIDATION_ERROR");
+  if (!["actioned", "dismissed", "fulfilled"].includes(input.action)) throw new Error("VALIDATION_ERROR");
+
+  const statusValue = input.action;
+  const now = new Date().toISOString();
+  const { data, error } = await ctx.admin
+    .from("document_plays")
+    .update({
+      status: statusValue,
+      actioned_by: ctx.caller.userId,
+      actioned_at: now,
+      action_note: input.note ?? null,
+      updated_at: now,
+    })
+    .eq("id", input.playId)
+    .eq("workspace_id", ctx.workspaceId)
+    .select(
+      "id, document_id, business_key, play_kind, status, projection_window, projected_due_date, probability, reason, signal_type, recommended_action, suggested_owner_user_id, actioned_by, actioned_at, action_note, created_at, updated_at",
+    )
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("NOT_FOUND");
+
+  const play = toDocumentPlay(data as Record<string, unknown>, new Map());
+
+  if (play.documentId) {
+    try {
+      await ctx.admin.from("document_audit_events").insert({
+        document_id: play.documentId,
+        event_type:
+          statusValue === "actioned"
+            ? "play_actioned"
+            : statusValue === "dismissed"
+            ? "play_dismissed"
+            : "play_fulfilled",
+        actor_user_id: ctx.caller.userId,
+        metadata: {
+          play_id: play.id,
+          play_kind: play.playKind,
+          note: input.note ?? null,
+        },
+      });
+    } catch (err) {
+      console.warn("[document-router] play action audit insert threw", err);
+    }
+  }
+
+  return { play };
+}
+
+export async function runPlaysBatch(
+  ctx: DocumentRouterContext,
+  input: PlaysRunInput,
+): Promise<PlaysRunResult> {
+  const serviceSecret = Deno.env.get("DGE_INTERNAL_SERVICE_SECRET");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!serviceSecret || !supabaseUrl) throw new Error("TWIN_UNCONFIGURED");
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/document-plays-run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-service-secret": serviceSecret,
+      "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    },
+    body: JSON.stringify({
+      documentId: input.documentId ?? null,
+      workspaceId: ctx.workspaceId,
+    }),
+    signal: AbortSignal.timeout(90_000),
+  });
+
+  const raw = await response.text();
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = raw.length > 0 ? JSON.parse(raw) : {};
+  } catch {
+    payload = { error: { code: "UPSTREAM_INVALID_JSON", details: raw.slice(0, 300) } };
+  }
+
+  if (!response.ok) {
+    const errObj = (payload as { error?: { code?: string; message?: string } }).error;
+    throw new Error(`TWIN_UPSTREAM:${errObj?.code ?? "PLAYS_UPSTREAM"}:${errObj?.message ?? ""}`);
+  }
+
+  return payload as unknown as PlaysRunResult;
 }
 
 export async function rerunTwin(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult> {

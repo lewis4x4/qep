@@ -118,6 +118,36 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       answer: "",
       citations: [],
     })),
+    playsList: overrides.playsList ?? (async () => ({ plays: [] })),
+    playAction: overrides.playAction ?? (async (_ctx, input) => ({
+      play: {
+        id: input.playId,
+        documentId: "doc-1",
+        businessKey: "bk",
+        playKind: "expiring_rental",
+        status: input.action,
+        projectionWindow: "14d",
+        projectedDueDate: null,
+        probability: 0.8,
+        reason: "test",
+        signalType: "obligation.expires_on",
+        recommendedAction: {},
+        suggestedOwnerUserId: null,
+        actionedBy: null,
+        actionedAt: new Date().toISOString(),
+        actionNote: input.note ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        documentTitle: null,
+      },
+    })),
+    playsRun: overrides.playsRun ?? (async () => ({
+      batchId: "66666666-6666-6666-6666-666666666666",
+      plays: [],
+      expiredCount: 0,
+      fulfilledCount: 0,
+      exceptionsPushed: 0,
+    })),
   };
 }
 
@@ -425,6 +455,49 @@ Deno.test("document-router ask endpoint forwards question and returns citations"
   const payload = await parseJson(res);
   assertEquals(payload.documentId, "doc-ask");
   assertEquals((payload.citations as unknown[]).length, 1);
+});
+
+Deno.test("document-router plays list forwards status filter and owner='me'", async () => {
+  const captured: { status: string | undefined; ownerUserId: string | null | undefined } = {
+    status: undefined,
+    ownerUserId: undefined,
+  };
+  const service = makeService({
+    playsList: async (_ctx, input) => {
+      captured.status = input.status;
+      captured.ownerUserId = input.ownerUserId;
+      return { plays: [] };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/plays?status=open&owner=me");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  assertEquals(captured.status, "open");
+  assertEquals(captured.ownerUserId, "me");
+});
+
+Deno.test("document-router play action requires playId + action", async () => {
+  const service = makeService();
+  const badReq = new Request("https://example.com/document-router/plays/action", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p1" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const badRes = await handleDocumentRouterRequest(badReq, service);
+  assertEquals(badRes.status, 400);
+
+  const goodReq = new Request("https://example.com/document-router/plays/action", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p1", action: "actioned", note: "drafted renewal" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const goodRes = await handleDocumentRouterRequest(goodReq, service);
+  assertEquals(goodRes.status, 200);
+  const payload = await parseJson(goodRes);
+  const play = payload.play as { status: string; actionNote: string | null };
+  assertEquals(play.status, "actioned");
+  assertEquals(play.actionNote, "drafted renewal");
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

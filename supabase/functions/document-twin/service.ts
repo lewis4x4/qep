@@ -455,6 +455,28 @@ export async function runTwinExtraction(input: TwinRunInput): Promise<TwinRunRes
       console.warn("[document-twin] project_document_obligations threw", err);
     }
 
+    // Slice VI: chain the plays engine so newly-extracted expiration
+    // facts produce actionable cards inside the same request path. Best-
+    // effort — a plays-run failure is logged and dropped.
+    try {
+      const serviceSecret = Deno.env.get("DGE_INTERNAL_SERVICE_SECRET");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      if (serviceSecret && supabaseUrl) {
+        await fetch(`${supabaseUrl}/functions/v1/document-plays-run`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-service-secret": serviceSecret,
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          },
+          body: JSON.stringify({ documentId }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      }
+    } catch (err) {
+      console.warn("[document-twin] plays-run chain threw", err);
+    }
+
     await logAuditEvent(
       admin,
       documentId,
