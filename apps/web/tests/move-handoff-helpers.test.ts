@@ -254,43 +254,52 @@ describe("formatIronMovePrompt", () => {
     expect(p).toContain("summarize_contact");
   });
 
+  // Slice 22: the generic-closer path now requires BOTH "no entity
+  // synthesizer" AND "no signal trail". When signal_ids is non-empty
+  // the summarize_signal-only closer fires instead (covered by its
+  // own Slice 22 tests below). These tests use signal_ids: [] so the
+  // prompt actually reaches the generic closer.
   it("keeps the generic closer for equipment (no synthesizer yet)", () => {
     const p = formatIronMovePrompt(
-      makeMove({ entity_type: "equipment", entity_id: "eq-1" }),
+      makeMove({ entity_type: "equipment", entity_id: "eq-1", signal_ids: [] }),
     );
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
 
   it("keeps the generic closer for rental (no synthesizer yet)", () => {
     const p = formatIronMovePrompt(
-      makeMove({ entity_type: "rental", entity_id: "r-1" }),
+      makeMove({ entity_type: "rental", entity_id: "r-1", signal_ids: [] }),
     );
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
 
   it("keeps the generic closer for activity-scoped moves", () => {
     const p = formatIronMovePrompt(
-      makeMove({ entity_type: "activity", entity_id: "a-1" }),
+      makeMove({ entity_type: "activity", entity_id: "a-1", signal_ids: [] }),
     );
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
 
   it("keeps the generic closer for workspace-scoped moves", () => {
     const p = formatIronMovePrompt(
-      makeMove({ entity_type: "workspace", entity_id: "ws-1" }),
+      makeMove({ entity_type: "workspace", entity_id: "ws-1", signal_ids: [] }),
     );
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
 
@@ -343,5 +352,87 @@ describe("formatIronMovePrompt", () => {
       const p = formatIronMovePrompt(makeMove({ kind }));
       expect(p).toContain("propose_move");
     }
+  });
+
+  // Slice 22 — the move handoff now names summarize_signal (Slice 20)
+  // when the move carries a signal_ids trail. The trigger signal is
+  // the most direct answer to "why was this move queued?" — bundled
+  // with its parent entity and related events in one tool call.
+  it("names summarize_signal with the first signal id when signal_ids has entries", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ signal_ids: ["sig-trigger-1", "sig-trigger-2"] }),
+    );
+    expect(p).toContain("summarize_signal");
+    expect(p).toContain('signal_id "sig-trigger-1"');
+  });
+
+  it("names summarize_signal even when signal_ids has a single entry", () => {
+    const p = formatIronMovePrompt(
+      makeMove({ signal_ids: ["only-signal"] }),
+    );
+    expect(p).toContain("summarize_signal");
+    expect(p).toContain('signal_id "only-signal"');
+  });
+
+  it("omits summarize_signal when signal_ids is empty", () => {
+    const p = formatIronMovePrompt(makeMove({ signal_ids: [] }));
+    expect(p).not.toContain("summarize_signal");
+  });
+
+  it("mentions the first signal id in the trail line when signal_ids is present", () => {
+    // Gives the operator (and Iron) a visible breadcrumb to the
+    // trigger event even before the closer.
+    const p = formatIronMovePrompt(
+      makeMove({ signal_ids: ["sig-xyz"] }),
+    );
+    expect(p).toContain("first: sig-xyz");
+  });
+
+  it("still emits the entity-synthesizer hint alongside summarize_signal when both apply", () => {
+    // summarize_signal bundles the parent entity row, but not the
+    // parent's recent activities or open-deal list. The entity
+    // synthesizer (summarize_deal/company/contact) covers that
+    // broader context — keep both so Iron can pick either.
+    const p = formatIronMovePrompt(
+      makeMove({
+        entity_type: "deal",
+        entity_id: "d-1",
+        signal_ids: ["sig-1"],
+      }),
+    );
+    expect(p).toContain("summarize_signal");
+    expect(p).toContain("summarize_deal");
+  });
+
+  it("emits only summarize_signal when move has signal_ids but no entity synthesizer", () => {
+    // Equipment/rental/activity/workspace have no entity synthesizer;
+    // the signal synthesizer still stands on its own.
+    const p = formatIronMovePrompt(
+      makeMove({
+        entity_type: "equipment",
+        entity_id: "eq-1",
+        signal_ids: ["sig-1"],
+      }),
+    );
+    expect(p).toContain("summarize_signal");
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("propose_move");
+  });
+
+  it("closes with propose_move when only summarize_signal is named", () => {
+    // Entity synthesizer missing, signal synthesizer present — the
+    // closer must still invite propose_move (regression guard for the
+    // else-if branch of the closer logic).
+    const p = formatIronMovePrompt(
+      makeMove({
+        entity_type: null,
+        entity_id: null,
+        signal_ids: ["sig-1"],
+      }),
+    );
+    expect(p).toContain("summarize_signal");
+    expect(p).toContain("propose_move");
   });
 });

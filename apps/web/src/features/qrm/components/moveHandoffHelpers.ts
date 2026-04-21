@@ -170,23 +170,59 @@ export function formatIronMovePrompt(
     parts.push(`• Entity: ${move.entity_type} (${move.entity_id})`);
   }
 
-  // Signal trail — only a hint, not the full list. Iron can read the
-  // full records via list_recent_signals + the signal ids if it needs
-  // the severities or timestamps.
+  // Signal trail — now carries the first signal id explicitly, which
+  // Slice 22 names in the closer so Iron can reach straight for
+  // summarize_signal. The "why was this move queued" question is
+  // signal-centric; pointing Iron at the trigger is the shortest
+  // route to the answer.
+  const firstSignalId = Array.isArray(move.signal_ids) &&
+      move.signal_ids.length > 0 &&
+      typeof move.signal_ids[0] === "string" &&
+      move.signal_ids[0].length > 0
+    ? move.signal_ids[0]
+    : null;
   if (Array.isArray(move.signal_ids) && move.signal_ids.length > 0) {
     const n = move.signal_ids.length;
     const noun = n === 1 ? "signal" : "signals";
-    parts.push(`• Triggered by ${n} ${noun} (signal_ids available on the move record).`);
+    if (firstSignalId) {
+      parts.push(
+        `• Triggered by ${n} ${noun} (first: ${firstSignalId}).`,
+      );
+    } else {
+      parts.push(
+        `• Triggered by ${n} ${noun} (signal_ids available on the move record).`,
+      );
+    }
   }
 
-  // Slice 19 — synthesizer tool-naming. Only emitted when the move
-  // carries BOTH an entity_type and an entity_id, since a named
-  // synthesizer without the id is just a pointer back to search_entities.
-  const toolHint = move.entity_type && move.entity_id
+  // Slice 22 — signal-centric synthesizer naming. When the move has a
+  // trigger signal, summarize_signal is the most direct answer to "why
+  // was this queued": it bundles the trigger event, its parent entity,
+  // the related signals on that entity, and any other moves the signal
+  // kicked off. Iron can follow with the entity synthesizer if it
+  // needs broader account context (activity history, other open
+  // deals), but summarize_signal comes first.
+  if (firstSignalId) {
+    parts.push(
+      `Call summarize_signal with signal_id "${firstSignalId}" to understand why this move was queued — it pulls the trigger signal + its parent entity + related events in one shot.`,
+    );
+  }
+
+  // Slice 19 — entity-synthesizer tool-naming. Kept as a secondary
+  // hint because summarize_signal returns the parent entity row but
+  // NOT the parent's recent activities, open-deal list, or touch
+  // trail — those live in summarize_deal/company/contact. An operator
+  // vetting a move often wants that broader context.
+  const entityHint = move.entity_type && move.entity_id
     ? toolHintForMoveEntity(move.entity_type)
     : null;
-  if (toolHint) {
-    parts.push(toolHint);
+  if (entityHint) {
+    parts.push(entityHint);
+    parts.push(
+      "If there's a clearer next step, call propose_move; otherwise tell me what you'd want to know before acting.",
+    );
+  } else if (firstSignalId) {
+    // Signal synthesizer already named above; just close out.
     parts.push(
       "If there's a clearer next step, call propose_move; otherwise tell me what you'd want to know before acting.",
     );
