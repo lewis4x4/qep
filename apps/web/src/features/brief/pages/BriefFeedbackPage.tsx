@@ -10,7 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Users2 } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, Sparkles, Users2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   draftFeedbackFix,
@@ -226,16 +226,43 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
         </div>
       )}
 
-      {row.claude_pr_url && (
-        <div className="mt-3 text-xs">
-          <a
-            href={row.claude_pr_url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="font-medium text-sky-600 hover:underline dark:text-sky-400"
-          >
-            View draft PR →
-          </a>
+      {(row.claude_preview_url || row.claude_pr_url) && (
+        // v3.1: lead with the live preview. This is the single highest-value
+        // artifact on the card — the submitter sees their fix *working*
+        // before anything merges, which is the moment the Build Hub stops
+        // feeling like a ticket tracker and starts feeling like a team
+        // that ships with your name on it.
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+          {row.claude_preview_url && (
+            <a
+              href={row.claude_preview_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25 dark:text-emerald-300"
+              title="Open the Netlify preview deploy for this PR"
+            >
+              <Sparkles className="h-3 w-3" aria-hidden />
+              See live preview
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          )}
+          {row.claude_pr_url && (
+            <a
+              href={row.claude_pr_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1 font-medium text-sky-600 hover:underline dark:text-sky-400"
+            >
+              {row.claude_preview_url ? "Underlying PR" : "View draft PR"}
+              <ExternalLink className="h-3 w-3" aria-hidden />
+            </a>
+          )}
+          {row.claude_pr_url && !row.claude_preview_url && (
+            // Honest status so Angela doesn't wonder why there's no
+            // "See it live" button yet. Netlify previews take ~60-90 s
+            // to build on a fresh PR branch.
+            <span className="text-muted-foreground">Preview building…</span>
+          )}
         </div>
       )}
 
