@@ -55,15 +55,18 @@ function openerForGraphEntity(type: QrmSearchEntityType): string {
 }
 
 /**
- * Per-entity synthesizer hint. Slice 17: Iron now has three dedicated
- * synthesizer tools (summarize_deal / summarize_company / summarize_contact)
- * that bundle the entity row + related rows + signals into a single tool
- * call. Naming the tool by hand in the prompt keeps Iron's tool selection
- * stable as the catalog grows — otherwise the model may default to the
- * cheaper but noisier get_*_detail + list_recent_signals chain.
+ * Per-entity synthesizer hint. Slice 17 + Slice 24: Iron now has four
+ * dedicated synthesizer tools covering Graph-routable entities
+ * (summarize_deal / summarize_company / summarize_contact /
+ * summarize_equipment) that bundle the entity row + related rows +
+ * signals into a single tool call. Naming the tool by hand in the
+ * prompt keeps Iron's tool selection stable as the catalog grows —
+ * otherwise the model may default to the cheaper but noisier
+ * get_*_detail + list_recent_signals chain.
  *
  * Returns null for entity types that don't have a synthesizer yet
- * (equipment, rental) — those keep the generic closer.
+ * (rental) — those keep the generic closer. Rental is next in line
+ * once the rental synthesizer ships.
  */
 function toolHintForGraphEntity(type: QrmSearchEntityType): string | null {
   switch (type) {
@@ -74,6 +77,7 @@ function toolHintForGraphEntity(type: QrmSearchEntityType): string | null {
     case "contact":
       return "Call summarize_contact with this contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
     case "equipment":
+      return "Call summarize_equipment with this equipment_id to pull the machine row + open rentals + recent touches + open signals in one shot.";
     case "rental":
       return null;
   }

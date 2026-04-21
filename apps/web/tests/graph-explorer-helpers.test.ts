@@ -171,14 +171,18 @@ describe("formatIronGraphPrompt", () => {
     expect(p).toContain("summarize_contact");
   });
 
-  it("keeps the generic closer for equipment (no synthesizer yet)", () => {
+  it("names summarize_equipment in the equipment closer", () => {
     const p = formatIronGraphPrompt(
-      makeItem({ type: "equipment", title: "CAT 320 #42" }),
+      makeItem({ type: "equipment", title: "CAT 320 #42", id: "e-42" }),
     );
+    expect(p).toContain("summarize_equipment");
+    expect(p).toContain("equipment_id");
+    // Regression guard: the old generic closer shouldn't sneak back in.
+    expect(p).not.toContain("Use the detail tools");
+    // And no cross-entity synthesizer leakage.
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
-    expect(p).toContain("Use the detail tools");
   });
 
   it("keeps the generic closer for rental (no synthesizer yet)", () => {
@@ -188,6 +192,7 @@ describe("formatIronGraphPrompt", () => {
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_equipment");
     expect(p).toContain("Use the detail tools");
   });
 
