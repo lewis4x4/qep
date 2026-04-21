@@ -148,6 +148,13 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       fulfilledCount: 0,
       exceptionsPushed: 0,
     })),
+    playDraft: overrides.playDraft ?? (async (_ctx, input) => ({
+      draftDocumentId: "draft-doc-1",
+      draftTitle: "Renewal — Test",
+      flow: input.flow ?? "renewal_draft",
+      playId: input.playId,
+      elapsedMs: 42,
+    })),
   };
 }
 
@@ -498,6 +505,35 @@ Deno.test("document-router play action requires playId + action", async () => {
   const play = payload.play as { status: string; actionNote: string | null };
   assertEquals(play.status, "actioned");
   assertEquals(play.actionNote, "drafted renewal");
+});
+
+Deno.test("document-router plays draft returns draftDocumentId and forwards flow", async () => {
+  const captured: { playId: string | null; flow: string | null } = { playId: null, flow: null };
+  const service = makeService({
+    playDraft: async (_ctx, input) => {
+      captured.playId = input.playId;
+      captured.flow = input.flow ?? null;
+      return {
+        draftDocumentId: "draft-xyz",
+        draftTitle: "Renewal — ACME Rental",
+        flow: input.flow ?? "renewal_draft",
+        playId: input.playId,
+        elapsedMs: 123,
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/plays/draft", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p-42", flow: "renewal_draft" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.draftDocumentId, "draft-xyz");
+  assertEquals(captured.playId, "p-42");
+  assertEquals(captured.flow, "renewal_draft");
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

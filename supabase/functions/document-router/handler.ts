@@ -33,6 +33,8 @@ import type {
   PlayActionResult,
   PlaysRunInput,
   PlaysRunResult,
+  PlayDraftInput,
+  PlayDraftResult,
 } from "./service.ts";
 import {
   actionDocumentPlay,
@@ -40,6 +42,7 @@ import {
   createDocumentRouterContext,
   createDownloadUrl,
   createFolder,
+  draftFromPlay,
   duplicateLink,
   getDocument,
   getDocumentNeighbors,
@@ -71,6 +74,7 @@ export interface DocumentRouterService {
   playsList(ctx: DocumentRouterContext, input: PlaysListInput): Promise<PlaysListResult>;
   playAction(ctx: DocumentRouterContext, input: PlayActionInput): Promise<PlayActionResult>;
   playsRun(ctx: DocumentRouterContext, input: PlaysRunInput): Promise<PlaysRunResult>;
+  playDraft(ctx: DocumentRouterContext, input: PlayDraftInput): Promise<PlayDraftResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -191,6 +195,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "PLAY_NOT_OPEN") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "PLAY_NOT_OPEN",
+      message: "This play is no longer in the open state.",
+    });
+  }
+
   if (message.startsWith("TWIN_UPSTREAM:")) {
     const parts = message.split(":");
     const upstreamCode = parts[1] ?? "TWIN_UPSTREAM_ERROR";
@@ -240,6 +253,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     playsList: listDocumentPlays,
     playAction: actionDocumentPlay,
     playsRun: runPlaysBatch,
+    playDraft: draftFromPlay,
   };
 }
 
@@ -416,6 +430,16 @@ export async function handleDocumentRouterRequest(
       const body = await readJsonBody<PlaysRunInput>(req);
       const payload = await service.playsRun(ctx, {
         documentId: safeText(body.documentId),
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/draft") {
+      const body = await readJsonBody<PlayDraftInput>(req);
+      if (!safeText(body.playId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.playDraft(ctx, {
+        playId: body.playId,
+        flow: body.flow,
       });
       return crmOk(payload, { origin });
     }
