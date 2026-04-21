@@ -98,6 +98,14 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       traceId: "00000000-0000-0000-0000-000000000000",
       results: [],
     })),
+    twinRerun: overrides.twinRerun ?? (async () => ({
+      documentId: "doc-1",
+      jobId: "job-1",
+      status: "succeeded",
+      factCount: 3,
+      traceId: "22222222-2222-2222-2222-222222222222",
+      modelVersion: "test",
+    })),
   };
 }
 
@@ -305,6 +313,38 @@ Deno.test("document-router search endpoint rejects empty queries and normalizes 
   assertEquals(captured.query, "return inspection");
   assertEquals(payload.query, "return inspection");
   assertEquals((payload.results as unknown[]).length, 1);
+});
+
+Deno.test("document-router twin-rerun forwards documentId and returns twin result", async () => {
+  const captured: { documentId: string | null; force: boolean | null } = { documentId: null, force: null };
+  const service = makeService({
+    twinRerun: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      captured.force = input.force ?? false;
+      return {
+        documentId: input.documentId,
+        jobId: "job-99",
+        status: "succeeded",
+        factCount: 7,
+        traceId: "33333333-3333-3333-3333-333333333333",
+        modelVersion: "2026-04-21.1",
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/twin-rerun", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-twin", force: true }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(captured.documentId, "doc-twin");
+  assertEquals(captured.force, true);
+  assertEquals(payload.jobId, "job-99");
+  assertEquals(payload.status, "succeeded");
+  assertEquals(payload.factCount, 7);
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

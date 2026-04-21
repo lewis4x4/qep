@@ -21,6 +21,8 @@ import type {
   ReindexResult,
   SearchInput,
   SearchResult,
+  TwinRerunInput,
+  TwinRerunResult,
 } from "./service.ts";
 import {
   createDocumentRouterContext,
@@ -33,6 +35,7 @@ import {
   moveFolder,
   reindexDocument,
   requireDocumentCenterAccess,
+  rerunTwin,
   searchDocuments,
 } from "./service.ts";
 
@@ -47,6 +50,7 @@ export interface DocumentRouterService {
   downloadUrl(ctx: DocumentRouterContext, input: DownloadUrlInput): Promise<DownloadUrlResult>;
   reindex(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult>;
   search(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult>;
+  twinRerun(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -149,6 +153,28 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "TWIN_UNCONFIGURED") {
+    return crmFail({
+      origin,
+      status: 503,
+      code: "TWIN_UNCONFIGURED",
+      message: "Document twin is not configured on this deployment.",
+    });
+  }
+
+  if (message.startsWith("TWIN_UPSTREAM:")) {
+    const parts = message.split(":");
+    const upstreamCode = parts[1] ?? "TWIN_UPSTREAM_ERROR";
+    const detail = parts.slice(2).join(":").slice(0, 500);
+    return crmFail({
+      origin,
+      status: 502,
+      code: upstreamCode,
+      message: "Document twin pipeline returned an error.",
+      details: detail.length > 0 ? detail : undefined,
+    });
+  }
+
   if (message === "NOT_FOUND" || message.includes("not found")) {
     return crmFail({
       origin,
@@ -179,6 +205,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     downloadUrl: createDownloadUrl,
     reindex: reindexDocument,
     search: searchDocuments,
+    twinRerun: rerunTwin,
   };
 }
 
@@ -296,6 +323,16 @@ export async function handleDocumentRouterRequest(
           ? Math.trunc(body.matchCount)
           : undefined;
       const payload = await service.search(ctx, { query, matchCount });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/twin-rerun") {
+      const body = await readJsonBody<TwinRerunInput>(req);
+      if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.twinRerun(ctx, {
+        documentId: body.documentId,
+        force: body.force === true,
+      });
       return crmOk(payload, { origin });
     }
 

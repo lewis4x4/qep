@@ -135,6 +135,22 @@ export interface ReindexResult {
   nextStatus: string;
 }
 
+export interface TwinRerunInput {
+  documentId: string;
+  force?: boolean;
+}
+
+export interface TwinRerunResult {
+  documentId: string;
+  jobId: string;
+  status: "succeeded" | "skipped" | "failed";
+  factCount: number;
+  traceId: string;
+  modelVersion: string;
+  skippedReason?: string;
+  errorDetail?: string;
+}
+
 export interface SearchInput {
   query: string;
   matchCount?: number;
@@ -1019,6 +1035,70 @@ export async function searchDocuments(ctx: DocumentRouterContext, input: SearchI
   })();
 
   return { query, traceId, results };
+}
+
+export async function rerunTwin(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult> {
+  // Verify the document exists + caller can see it. RLS on documents will
+  // hide out-of-workspace rows even though the admin client below bypasses
+  // it; we keep this check in front to give a clean 404 instead of a
+  // confusing "no rows extracted" shape.
+  const document = await loadDocumentForMutation(ctx, input.documentId);
+
+  const serviceSecret = Deno.env.get("DGE_INTERNAL_SERVICE_SECRET");
+  if (!serviceSecret) throw new Error("TWIN_UNCONFIGURED");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) throw new Error("TWIN_UNCONFIGURED");
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/document-twin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-service-secret": serviceSecret,
+      // Pass service-role anon key so the gateway accepts us even with
+      // verify_jwt enabled; document-twin's own resolveCallerContext
+      // honors the internal-service-secret header.
+      "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    },
+    body: JSON.stringify({ documentId: document.id, force: input.force === true }),
+    signal: AbortSignal.timeout(90_000),
+  });
+
+  const raw = await response.text();
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = raw.length > 0 ? JSON.parse(raw) : {};
+  } catch {
+    payload = { error: { code: "UPSTREAM_INVALID_JSON", details: raw.slice(0, 300) } };
+  }
+
+  if (!response.ok) {
+    const errObj = (payload as { error?: { code?: string; message?: string; details?: unknown } }).error;
+    const code = errObj?.code ?? "TWIN_UPSTREAM_ERROR";
+    const detail = errObj?.message ?? errObj?.details;
+    throw new Error(`TWIN_UPSTREAM:${code}:${typeof detail === "string" ? detail.slice(0, 300) : JSON.stringify(detail ?? {}).slice(0, 300)}`);
+  }
+
+  const twinBody = payload as {
+    documentId?: string;
+    jobId?: string;
+    status?: string;
+    factCount?: number;
+    traceId?: string;
+    modelVersion?: string;
+    skippedReason?: string;
+    errorDetail?: string;
+  };
+
+  return {
+    documentId: twinBody.documentId ?? document.id,
+    jobId: twinBody.jobId ?? "",
+    status: (twinBody.status as "succeeded" | "skipped" | "failed" | undefined) ?? "failed",
+    factCount: twinBody.factCount ?? 0,
+    traceId: twinBody.traceId ?? "",
+    modelVersion: twinBody.modelVersion ?? "unknown",
+    skippedReason: twinBody.skippedReason,
+    errorDetail: twinBody.errorDetail,
+  };
 }
 
 export async function reindexDocument(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult> {
