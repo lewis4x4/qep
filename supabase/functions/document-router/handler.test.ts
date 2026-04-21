@@ -88,6 +88,11 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       url: "https://example.com/signed",
       expiresAt: new Date(Date.now() + 30_000).toISOString(),
     })),
+    reindex: overrides.reindex ?? (async () => ({
+      documentId: "doc-1",
+      previousStatus: "ingest_failed",
+      nextStatus: "pending_review",
+    })),
   };
 }
 
@@ -200,6 +205,54 @@ Deno.test("document-router surfaces unmapped error messages as details for diagn
     typeof err.details === "string" && err.details.includes("get_my_workspace"),
     true,
   );
+});
+
+Deno.test("document-router reindex endpoint flips ingest_failed documents to pending_review", async () => {
+  const captured: { documentId: string | null } = { documentId: null };
+  const service = makeService({
+    reindex: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      return { documentId: input.documentId, previousStatus: "ingest_failed", nextStatus: "pending_review" };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/reindex", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-42" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.documentId, "doc-42");
+  assertEquals(payload.previousStatus, "ingest_failed");
+  assertEquals(payload.nextStatus, "pending_review");
+  assertEquals(captured.documentId, "doc-42");
+});
+
+Deno.test("document-router list accepts pending_review and ingest_failed views", async () => {
+  const captured: Array<string> = [];
+  const service = makeService({
+    list: async (_ctx, input) => {
+      captured.push(input.view);
+      return {
+        view: input.view,
+        currentFolder: null,
+        breadcrumbs: [],
+        folders: [],
+        folderTree: [],
+        documents: [],
+        nextCursor: null,
+      };
+    },
+  });
+
+  for (const view of ["pending_review", "ingest_failed"]) {
+    const req = new Request(`https://example.com/document-router/list?view=${view}`);
+    const res = await handleDocumentRouterRequest(req, service);
+    assertEquals(res.status, 200, `expected 200 for view=${view}`);
+  }
+  assertEquals(captured, ["pending_review", "ingest_failed"]);
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

@@ -1,4 +1,4 @@
-import { GripVertical, Link2, MoreHorizontal, MoveRight } from "lucide-react";
+import { GripVertical, Link2, MoreHorizontal, MoveRight, RefreshCw } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 
 import type { DocumentCenterListItem } from "@/features/documents/router";
@@ -28,6 +28,7 @@ export interface FileListProps {
   onMove: (documentId: string) => void;
   onDuplicateLink: (documentId: string) => void;
   onCopyDownloadUrl: (documentId: string) => void;
+  onReindex: (documentId: string) => void;
 }
 
 function formatAudienceLabel(audience: string): string {
@@ -41,6 +42,7 @@ export function FileList({
   onMove,
   onDuplicateLink,
   onCopyDownloadUrl,
+  onReindex,
 }: FileListProps) {
   if (documents.length === 0) {
     return (
@@ -77,6 +79,7 @@ export function FileList({
               onMove={onMove}
               onDuplicateLink={onDuplicateLink}
               onCopyDownloadUrl={onCopyDownloadUrl}
+              onReindex={onReindex}
             />
           ))}
         </TableBody>
@@ -92,6 +95,7 @@ interface FileRowProps {
   onMove: (documentId: string) => void;
   onDuplicateLink: (documentId: string) => void;
   onCopyDownloadUrl: (documentId: string) => void;
+  onReindex: (documentId: string) => void;
 }
 
 function FileRow({
@@ -101,6 +105,7 @@ function FileRow({
   onMove,
   onDuplicateLink,
   onCopyDownloadUrl,
+  onReindex,
 }: FileRowProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `doc:${doc.id}`,
@@ -150,6 +155,18 @@ function FileRow({
         {new Date(doc.updatedAt).toLocaleString()}
       </TableCell>
       <TableCell className="text-right">
+        {doc.status === "ingest_failed" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onReindex(doc.id)}
+            className="mr-1"
+          >
+            <RefreshCw className="mr-1 h-3 w-3" />
+            Retry
+          </Button>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" size="icon" variant="ghost" aria-label="Document actions">
@@ -170,6 +187,12 @@ function FileRow({
             <DropdownMenuItem onSelect={() => onCopyDownloadUrl(doc.id)}>
               Copy signed download URL
             </DropdownMenuItem>
+            {doc.status === "ingest_failed" ? (
+              <DropdownMenuItem onSelect={() => onReindex(doc.id)}>
+                <RefreshCw className="h-4 w-4" />
+                Retry ingest
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>

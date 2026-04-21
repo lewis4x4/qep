@@ -1,6 +1,13 @@
 import { supabase } from "@/lib/supabase";
 
-export type DocumentCenterView = "all" | "recent" | "pinned" | "unfiled" | "folder";
+export type DocumentCenterView =
+  | "all"
+  | "recent"
+  | "pinned"
+  | "unfiled"
+  | "folder"
+  | "pending_review"
+  | "ingest_failed";
 
 export interface DocumentCenterFolder {
   id: string;
@@ -227,6 +234,19 @@ export async function duplicateLinkViaRouter(input: {
 
 export async function createDownloadUrlViaRouter(documentId: string): Promise<DocumentCenterDownloadResponse> {
   return await documentRouterFetch<DocumentCenterDownloadResponse>("/download-url", {
+    method: "POST",
+    body: { documentId },
+  });
+}
+
+export interface DocumentReindexResponse {
+  documentId: string;
+  previousStatus: string;
+  nextStatus: string;
+}
+
+export async function reindexDocumentViaRouter(documentId: string): Promise<DocumentReindexResponse> {
+  return await documentRouterFetch<DocumentReindexResponse>("/reindex", {
     method: "POST",
     body: { documentId },
   });

@@ -25,6 +25,7 @@ import {
   listDocumentsViaRouter,
   moveDocumentViaRouter,
   moveFolderViaRouter,
+  reindexDocumentViaRouter,
   type DocumentCenterFolder,
   type DocumentCenterGetResponse,
   type DocumentCenterListItem,
@@ -39,11 +40,13 @@ import { OmniSearch } from "./OmniSearch";
 import { FolderCreateDialog, type DocumentAudience } from "./FolderCreateDialog";
 import { FolderPickerDialog } from "./FolderPickerDialog";
 
-const SYNTHETIC_VIEWS: Array<{ id: DocumentCenterView; label: string }> = [
-  { id: "all", label: "All Files" },
-  { id: "recent", label: "Recents" },
-  { id: "pinned", label: "Pinned" },
-  { id: "unfiled", label: "Unfiled" },
+const SYNTHETIC_VIEWS: Array<{ id: DocumentCenterView; label: string; section: "browse" | "review" }> = [
+  { id: "all", label: "All Files", section: "browse" },
+  { id: "recent", label: "Recents", section: "browse" },
+  { id: "pinned", label: "Pinned", section: "browse" },
+  { id: "unfiled", label: "Unfiled", section: "browse" },
+  { id: "pending_review", label: "Pending Review", section: "review" },
+  { id: "ingest_failed", label: "Ingest Failures", section: "review" },
 ];
 
 type DocumentMoveTarget =
@@ -254,6 +257,23 @@ function DocumentCenterPageInner() {
     }
   }
 
+  async function handleReindexDocument(documentId: string) {
+    try {
+      const payload = await reindexDocumentViaRouter(documentId);
+      toast({
+        title: "Reindex requested",
+        description: `Status ${payload.previousStatus} → ${payload.nextStatus}`,
+      });
+      await loadList();
+    } catch (error) {
+      toast({
+        title: "Reindex failed",
+        description: error instanceof Error ? error.message : "Could not requeue document",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function handleCopyDownloadUrl(documentId: string) {
     try {
       const payload = await createDownloadUrlViaRouter(documentId);
@@ -379,7 +399,7 @@ function DocumentCenterPageInner() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
-                {SYNTHETIC_VIEWS.map((entry) => {
+                {SYNTHETIC_VIEWS.filter((entry) => entry.section === "browse").map((entry) => {
                   const active = view === entry.id && (entry.id !== "folder" || !folderId);
                   return (
                     <button
@@ -395,6 +415,30 @@ function DocumentCenterPageInner() {
                     </button>
                   );
                 })}
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Review
+                </p>
+                <div className="space-y-1">
+                  {SYNTHETIC_VIEWS.filter((entry) => entry.section === "review").map((entry) => {
+                    const active = view === entry.id;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => handleSelectView(entry.id)}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
+                          active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <span>{entry.label}</span>
+                        {active && <Badge variant="secondary">Active</Badge>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
@@ -470,6 +514,7 @@ function DocumentCenterPageInner() {
                   }
                   onDuplicateLink={(documentId) => setDocumentMoveTarget({ kind: "duplicate-link", documentId })}
                   onCopyDownloadUrl={(documentId) => void handleCopyDownloadUrl(documentId)}
+                  onReindex={(documentId) => void handleReindexDocument(documentId)}
                 />
                 {listState?.nextCursor && (
                   <div className="flex justify-center">

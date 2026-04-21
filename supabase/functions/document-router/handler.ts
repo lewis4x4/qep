@@ -17,6 +17,8 @@ import type {
   MoveFolderInput,
   FolderSummary,
   DownloadUrlResult,
+  ReindexInput,
+  ReindexResult,
 } from "./service.ts";
 import {
   createDocumentRouterContext,
@@ -27,6 +29,7 @@ import {
   listDocuments,
   moveDocument,
   moveFolder,
+  reindexDocument,
   requireDocumentCenterAccess,
 } from "./service.ts";
 
@@ -39,6 +42,7 @@ export interface DocumentRouterService {
   moveDocument(ctx: DocumentRouterContext, input: MoveDocumentInput): Promise<void>;
   duplicateLink(ctx: DocumentRouterContext, input: DuplicateLinkInput): Promise<void>;
   downloadUrl(ctx: DocumentRouterContext, input: DownloadUrlInput): Promise<DownloadUrlResult>;
+  reindex(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -132,6 +136,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "REINDEX_NOT_APPLICABLE") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "REINDEX_NOT_APPLICABLE",
+      message: "Reindex is only available for documents in the Ingest Failed state.",
+    });
+  }
+
   if (message === "NOT_FOUND" || message.includes("not found")) {
     return crmFail({
       origin,
@@ -160,6 +173,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     moveDocument,
     duplicateLink,
     downloadUrl: createDownloadUrl,
+    reindex: reindexDocument,
   };
 }
 
@@ -180,7 +194,15 @@ export async function handleDocumentRouterRequest(
 
     if (req.method === "GET" && path === "/list") {
       const view = safeText(url.searchParams.get("view")) ?? "all";
-      if (view !== "all" && view !== "recent" && view !== "pinned" && view !== "unfiled" && view !== "folder") {
+      if (
+        view !== "all" &&
+        view !== "recent" &&
+        view !== "pinned" &&
+        view !== "unfiled" &&
+        view !== "folder" &&
+        view !== "pending_review" &&
+        view !== "ingest_failed"
+      ) {
         throw new Error("VALIDATION_ERROR");
       }
 
@@ -246,6 +268,15 @@ export async function handleDocumentRouterRequest(
       const body = await readJsonBody<DownloadUrlInput>(req);
       if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
       const payload = await service.downloadUrl(ctx, {
+        documentId: body.documentId,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/reindex") {
+      const body = await readJsonBody<ReindexInput>(req);
+      if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.reindex(ctx, {
         documentId: body.documentId,
       });
       return crmOk(payload, { origin });

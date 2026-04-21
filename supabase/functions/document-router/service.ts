@@ -7,7 +7,14 @@ import {
 } from "../_shared/dge-auth.ts";
 import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
 
-export type DocumentCenterView = "all" | "recent" | "pinned" | "unfiled" | "folder";
+export type DocumentCenterView =
+  | "all"
+  | "recent"
+  | "pinned"
+  | "unfiled"
+  | "folder"
+  | "pending_review"
+  | "ingest_failed";
 
 export interface DocumentRouterContext {
   admin: SupabaseClient;
@@ -116,6 +123,16 @@ export interface DuplicateLinkInput {
 
 export interface DownloadUrlInput {
   documentId: string;
+}
+
+export interface ReindexInput {
+  documentId: string;
+}
+
+export interface ReindexResult {
+  documentId: string;
+  previousStatus: string;
+  nextStatus: string;
 }
 
 export interface ListDocumentsResult {
@@ -855,5 +872,40 @@ export async function createDownloadUrl(ctx: DocumentRouterContext, input: Downl
   return {
     url: data.signedUrl,
     expiresAt,
+  };
+}
+
+export async function reindexDocument(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult> {
+  const document = await loadDocumentForMutation(ctx, input.documentId);
+  const previousStatus = document.status;
+  if (previousStatus !== "ingest_failed") {
+    throw new Error("REINDEX_NOT_APPLICABLE");
+  }
+
+  // Flip back to pending_review so the row exits the Ingest Failures bucket
+  // and the ingest pipeline / reviewer can pick it up. The caller's audit
+  // footprint lives on document_audit_events.
+  const { error } = await ctx.admin
+    .from("documents")
+    .update({ status: "pending_review", updated_at: new Date().toISOString() })
+    .eq("id", document.id);
+  if (error) throw new Error(error.message);
+
+  await logAuditEvent(ctx.admin, {
+    documentId: document.id,
+    documentTitleSnapshot: document.title,
+    eventType: "document_reindex_requested",
+    actorUserId: ctx.caller.userId,
+    metadata: {
+      previous_status: previousStatus,
+      next_status: "pending_review",
+      workspace_id: ctx.workspaceId,
+    },
+  });
+
+  return {
+    documentId: document.id,
+    previousStatus,
+    nextStatus: "pending_review",
   };
 }
