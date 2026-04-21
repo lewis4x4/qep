@@ -46,6 +46,8 @@ import type { PreflightChecklist } from "./proposal-preflight-checklist";
 import { describeReadinessPill } from "./proposal-preflight-checklist";
 import type { ProposalDiff } from "./proposal-diff";
 import { describeProposalDiffPill } from "./proposal-diff";
+import type { ProposalConsolidationReport } from "./proposal-consolidation";
+import { describeConsolidationPill } from "./proposal-consolidation";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -100,6 +102,16 @@ export interface ProposalMarkdownContext {
    *  stable (empty + unchanged > 0) the section renders a single
    *  "Proposal stable since last session" line. */
   diff: ProposalDiff | null;
+  /** 20ae — N-session consolidation / Lindy streak report. For every
+   *  actionable change in the current proposal, how many consecutive
+   *  sessions it has been consistent. Bands: consolidated (streak ≥ 4),
+   *  consistent (2-3), new (1). Null when caller doesn't compute;
+   *  empty report is handled — section omitted cleanly when there's
+   *  no actionable history to speak of. The consolidation report
+   *  complements the pairwise diff (20ad): 20ad answers "did it drift
+   *  THIS session?" while 20ae answers "has it been consistent across
+   *  the last N sessions?" */
+  consolidation: ProposalConsolidationReport | null;
 }
 
 /**
@@ -159,6 +171,30 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
           `    - \`${c.label}\` · ${c.previousAction} → ${c.currentAction}`,
         );
       }
+    }
+  }
+
+  // Proposal consolidation (20ae) — the N-session Lindy streak view.
+  // Pairs naturally with 20ad above: the diff tells the reader what
+  // moved this session, the consolidation report tells them which
+  // specific calls have been consistent over the rolling window.
+  // `flip Trade in hand — 4 sessions` reads very different than
+  // `flip Trade in hand — new this session`, even when both have the
+  // same per-session evidence. Omitted when report is null, empty,
+  // or has no headline. We list entries compactly (streak count +
+  // band glyph) rather than repeating every (label, action) pair —
+  // the diff block immediately above already shows what moved.
+  if (ctx.consolidation && !ctx.consolidation.empty && ctx.consolidation.headline) {
+    const pill = describeConsolidationPill(ctx.consolidation);
+    lines.push(
+      `**Consolidation**: ${pill.label} — ${ctx.consolidation.headline}`,
+    );
+    for (const e of ctx.consolidation.entries) {
+      const glyph =
+        e.band === "consolidated" ? "◆" : e.band === "consistent" ? "≡" : "✦";
+      lines.push(
+        `  - ${glyph} \`${e.label}\` · ${e.action} · ${e.streak} session${e.streak === 1 ? "" : "s"}`,
+      );
     }
   }
 

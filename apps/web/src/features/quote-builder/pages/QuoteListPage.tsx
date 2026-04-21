@@ -114,6 +114,11 @@ import {
   describeProposalDiffPill,
   type ProposalDiff,
 } from "../lib/proposal-diff";
+import {
+  computeProposalConsolidation,
+  describeConsolidationPill,
+  type ProposalConsolidationReport,
+} from "../lib/proposal-consolidation";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -624,6 +629,72 @@ export function QuoteListPage() {
     return computeProposalDiff(previousProposal, scorerProposal);
   }, [previousProposal, scorerProposal]);
 
+  /**
+   * Slice 20ae — rolling N-session history for consolidation / Lindy
+   * streaks. Sits alongside the pairwise-diff snapshot above rather
+   * than replacing it: 20ad wants exactly one prior snapshot pinned
+   * at mount; 20ae wants a list of the last N (most recent first).
+   *
+   * We keep the two storage keys separate so each slice stays
+   * independently debuggable — an operator clearing one doesn't
+   * secretly break the other. Both no-op safely when localStorage
+   * is unavailable; quota-exceeded degrades silently.
+   *
+   * Window size of 5 is deliberate: 4 is the "consolidated" threshold,
+   * so storing 5 gives one session of headroom — a call that has
+   * appeared in 4 of 5 slots reads as consolidated; 5 of 5 reinforces
+   * the rating without changing it. Larger windows would dilute
+   * "consolidated" into "appeared once in a distant past" which is
+   * exactly the false-signal the band is built to avoid.
+   */
+  const HISTORY_STORAGE_KEY = "qep.quote-builder.proposal-history";
+  const HISTORY_WINDOW = 5;
+  const proposalHistory = useMemo<ScorerProposal[]>(() => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return [];
+      const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as ScorerProposal[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (p): p is ScorerProposal => !!p && Array.isArray(p.changes),
+      );
+    } catch {
+      return [];
+    }
+    // Pin at mount — same rationale as `previousProposal`: the
+    // consolidation report must not collapse when we write the new
+    // snapshot to the rolling buffer below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      if (!scorerProposal) return;
+      // Prepend the new snapshot and keep only the last N entries.
+      // Reading from localStorage fresh (not the mount-time value)
+      // ensures cross-tab sessions don't clobber each other's
+      // history by writing stale state.
+      const rawExisting = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+      const existing: ScorerProposal[] = rawExisting
+        ? (JSON.parse(rawExisting) as ScorerProposal[]).filter(
+            (p): p is ScorerProposal => !!p && Array.isArray(p.changes),
+          )
+        : [];
+      const next = [scorerProposal, ...existing].slice(0, HISTORY_WINDOW);
+      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // quota / private-browsing — degrade silently, the consolidation
+      // row will just read `windowSize=0` on the next mount.
+    }
+  }, [scorerProposal]);
+
+  const proposalConsolidation = useMemo<ProposalConsolidationReport | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalConsolidation(proposalHistory, scorerProposal);
+  }, [proposalHistory, scorerProposal]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -725,6 +796,7 @@ export function QuoteListPage() {
           rollback={proposalRollback}
           preflight={proposalPreflight}
           diff={proposalDiff}
+          consolidation={proposalConsolidation}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1803,6 +1875,7 @@ function ScorerProposalCard({
   rollback,
   preflight,
   diff,
+  consolidation,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1876,6 +1949,15 @@ function ScorerProposalCard({
    *  previous snapshot doesn't exist yet or the proposals are
    *  content-identical (though `headline` still signals stability). */
   diff: ProposalDiff | null;
+  /** Slice 20ae — N-session consolidation / Lindy streak. For every
+   *  actionable change in the current proposal, how many consecutive
+   *  sessions it has been consistent. 20ad answers "did this move
+   *  since last session?"; 20ae answers "has this been stable for N
+   *  sessions running?" A reviewer sees both — a call that's been
+   *  consistent for 4+ sessions earns Lindy weight, a brand-new call
+   *  is flagged as fresh evidence. Null when no proposal; empty when
+   *  the proposal has no actionable changes. */
+  consolidation: ProposalConsolidationReport | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1921,6 +2003,7 @@ function ScorerProposalCard({
         rollback,
         preflight,
         diff,
+        consolidation,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -2088,6 +2171,36 @@ function ScorerProposalCard({
                   </span>
                 );
               })()}
+              {/* Slice 20ae — consolidation / Lindy streak pill. Sits
+                  next to the diff pill because the two form a pair:
+                  diff is the pairwise time-series (did it move since
+                  last session?), consolidation is the N-session view
+                  (has it been consistent for many?). Emerald
+                  CONSOLIDATED means most calls have streak ≥ 4 — the
+                  proposal is Lindy-weighted; sky CONSISTENT means most
+                  are 2-3; amber FRESH means majority are brand-new;
+                  muted "— no history" means this is the first-ever
+                  mount. Hidden when empty (no actionable changes). */}
+              {consolidation && !consolidation.empty && (() => {
+                const pill = describeConsolidationPill(consolidation);
+                const cls =
+                  pill.tone === "emerald"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : pill.tone === "sky"
+                      ? "bg-sky-500/15 text-sky-300"
+                      : pill.tone === "amber"
+                        ? "bg-amber-500/15 text-amber-300"
+                        : "bg-muted/30 text-muted-foreground";
+                return (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
+                    aria-label={`Consolidation: ${pill.label} — ${consolidation.headline ?? "no prior history"}`}
+                    title={consolidation.headline ?? "No prior sessions to consolidate against."}
+                  >
+                    {pill.label}
+                  </span>
+                );
+              })()}
               <span
                 className="text-[10px] text-muted-foreground tabular-nums"
                 aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
@@ -2243,6 +2356,17 @@ function ScorerProposalCard({
                   copy) so we don't render a dead box. */}
               {diff && diff.headline && (
                 <ScorerProposalDiffRow diff={diff} />
+              )}
+              {/* Slice 20ae — consolidation / Lindy streak row. Directly
+                  under the diff because the pair answers two questions
+                  about the same time axis: 20ad reports pairwise drift
+                  ("what moved this session"), 20ae reports N-session
+                  consolidation ("which specific calls have been consistent
+                  across the window"). A reader on a consolidated row
+                  gives the call Lindy weight; on a fresh row, they know
+                  to wait for more sessions before acting strongly. */}
+              {consolidation && !consolidation.empty && consolidation.headline && (
+                <ScorerProposalConsolidationRow consolidation={consolidation} />
               )}
               {/* Slice 20ac — pre-apply checklist. Pinned directly
                   under the verdict because it IS the audit trail that
@@ -2804,6 +2928,108 @@ function ScorerProposalDiffRow({
               </span>
             </li>
           ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Slice 20ae — consolidation / Lindy streak row inside the
+ * ScorerProposalCard.
+ *
+ * Companion to the 20ad diff row above. While 20ad answers the
+ * pairwise question ("did anything move since last session?"), 20ae
+ * answers the N-session version: "which calls have been consistent
+ * for many sessions running?" A call consolidated across 4 sessions
+ * has earned Lindy weight — the longer it stays consistent, the
+ * more trust the reviewer can place in it independent of any
+ * single session's evidence.
+ *
+ * Glyph + tone grammar mirrors the pill:
+ *   ◆ emerald — consolidated (streak ≥ 4)
+ *   ≡ sky     — consistent (streak 2–3)
+ *   ✦ amber   — new (streak = 1)
+ *
+ * The "new" band is intentionally amber rather than rose: a new call
+ * is not bad, it's just untested by time. The reviewer should weigh
+ * it against the cross-sectional evidence (stability, confidence)
+ * without the extra Lindy boost a consolidated call would earn.
+ *
+ * Entries are pre-sorted by the lib (consolidated first, then
+ * consistent, then new) so the UI renders the most-trusted calls at
+ * the top of the list.
+ */
+function ScorerProposalConsolidationRow({
+  consolidation,
+}: {
+  consolidation: ProposalConsolidationReport;
+}) {
+  const pill = describeConsolidationPill(consolidation);
+  const borderCls =
+    pill.tone === "emerald"
+      ? "border-emerald-500/20 bg-emerald-500/5"
+      : pill.tone === "sky"
+        ? "border-sky-500/20 bg-sky-500/5"
+        : pill.tone === "amber"
+          ? "border-amber-500/20 bg-amber-500/5"
+          : "border-muted/30 bg-muted/5";
+  const headerCls =
+    pill.tone === "emerald"
+      ? "text-emerald-400"
+      : pill.tone === "sky"
+        ? "text-sky-400"
+        : pill.tone === "amber"
+          ? "text-amber-400"
+          : "text-muted-foreground";
+  return (
+    <div
+      className={`rounded border p-2 ${borderCls}`}
+      role="region"
+      aria-label={`Consolidation across last ${consolidation.windowSize} sessions (${pill.label})`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className={`text-[10px] font-semibold uppercase tracking-wide ${headerCls}`}>
+          Consolidation · last {consolidation.windowSize} session
+          {consolidation.windowSize === 1 ? "" : "s"}
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {pill.label}
+        </div>
+      </div>
+      {consolidation.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">
+          {consolidation.headline}
+        </p>
+      )}
+      {consolidation.entries.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {consolidation.entries.map((e) => {
+            const glyph =
+              e.band === "consolidated"
+                ? { char: "◆", color: "text-emerald-400" }
+                : e.band === "consistent"
+                  ? { char: "≡", color: "text-sky-400" }
+                  : { char: "✦", color: "text-amber-400" };
+            return (
+              <li
+                key={`${e.label}-${e.action}`}
+                className="flex items-start gap-2 text-[10px]"
+                aria-label={`${e.label} · ${e.action} · ${e.streak} session${e.streak === 1 ? "" : "s"} · ${e.band}`}
+              >
+                <span
+                  className={`shrink-0 font-semibold ${glyph.color}`}
+                  aria-hidden
+                >
+                  {glyph.char}
+                </span>
+                <span className="shrink-0 text-foreground">{e.label}</span>
+                <span className="flex-1 text-muted-foreground">
+                  — {e.action} · {e.streak} session{e.streak === 1 ? "" : "s"}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

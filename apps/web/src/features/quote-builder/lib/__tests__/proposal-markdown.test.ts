@@ -27,6 +27,7 @@ import type { ProposalStabilityReport } from "../proposal-stability";
 import type { ProposalRollbackPlan } from "../proposal-rollback";
 import type { PreflightChecklist } from "../proposal-preflight-checklist";
 import type { ProposalDiff } from "../proposal-diff";
+import type { ProposalConsolidationReport } from "../proposal-consolidation";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -82,6 +83,7 @@ function nullCtx(): ProposalMarkdownContext {
     rollback: null,
     preflight: null,
     diff: null,
+    consolidation: null,
   };
 }
 
@@ -1704,5 +1706,146 @@ describe("diff section (20ad)", () => {
     const idxUrgency = md.indexOf("**Urgency**");
     expect(idxDiff).toBeGreaterThan(-1);
     expect(idxUrgency).toBeGreaterThan(idxDiff);
+  });
+});
+
+describe("consolidation section (20ae)", () => {
+  test("null consolidation → no '**Consolidation**' line rendered", () => {
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      consolidation: null,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Consolidation**");
+  });
+
+  test("empty consolidation (no actionable calls) → no section rendered", () => {
+    const consolidation: ProposalConsolidationReport = {
+      entries: [],
+      consolidatedCount: 0,
+      newCount: 0,
+      averageStreak: null,
+      windowSize: 2,
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), consolidation };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Consolidation**");
+  });
+
+  test("consolidated report renders ◆ glyph + streak count", () => {
+    const consolidation: ProposalConsolidationReport = {
+      entries: [
+        { label: "Trade in hand", action: "flip", streak: 4, band: "consolidated" },
+      ],
+      consolidatedCount: 1,
+      newCount: 0,
+      averageStreak: 4,
+      windowSize: 5,
+      headline: "Across the last 5 sessions: 1 consolidated call.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), consolidation };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Consolidation**: ◆ CONSOLIDATED");
+    expect(md).toContain("Across the last 5 sessions: 1 consolidated call.");
+    expect(md).toContain("◆ `Trade in hand` · flip · 4 sessions");
+  });
+
+  test("mixed report renders all three glyphs in sorted order", () => {
+    const consolidation: ProposalConsolidationReport = {
+      entries: [
+        { label: "Old", action: "flip", streak: 5, band: "consolidated" },
+        { label: "Middle", action: "strengthen", streak: 3, band: "consistent" },
+        { label: "Fresh", action: "drop", streak: 1, band: "new" },
+      ],
+      consolidatedCount: 1,
+      newCount: 1,
+      averageStreak: 3,
+      windowSize: 5,
+      headline: "Across the last 5 sessions: 1 consolidated call, 1 consistent, 1 new.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), consolidation };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("◆ `Old` · flip · 5 sessions");
+    expect(md).toContain("≡ `Middle` · strengthen · 3 sessions");
+    expect(md).toContain("✦ `Fresh` · drop · 1 session");
+    // Sorted order: consolidated before consistent before new
+    const idxOld = md.indexOf("◆ `Old`");
+    const idxMiddle = md.indexOf("≡ `Middle`");
+    const idxFresh = md.indexOf("✦ `Fresh`");
+    expect(idxOld).toBeGreaterThan(-1);
+    expect(idxMiddle).toBeGreaterThan(idxOld);
+    expect(idxFresh).toBeGreaterThan(idxMiddle);
+  });
+
+  test("consolidation renders between diff and preflight", () => {
+    const consolidation: ProposalConsolidationReport = {
+      entries: [
+        { label: "A", action: "flip", streak: 2, band: "consistent" },
+      ],
+      consolidatedCount: 0,
+      newCount: 0,
+      averageStreak: 2,
+      windowSize: 3,
+      headline: "Across the last 3 sessions: 1 consistent.",
+      empty: false,
+    };
+    const diff: ProposalDiff = {
+      addedFactors: [],
+      removedFactors: [],
+      changedActions: [
+        { label: "Edge", previousAction: "flip", currentAction: "strengthen" },
+      ],
+      unchangedCount: 0,
+      headline: "Since last session: 1 action moved.",
+      empty: false,
+    };
+    const preflight: PreflightChecklist = {
+      items: [
+        {
+          id: "sample",
+          label: "Sample adequate",
+          status: "pass",
+          evidence: "12 deals",
+        },
+      ],
+      readiness: "ready",
+      headline: "Ready to apply — 1 passed, 0 skipped.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      diff,
+      consolidation,
+      preflight,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxDiff = md.indexOf("**Proposal diff**");
+    const idxCons = md.indexOf("**Consolidation**");
+    const idxPre = md.indexOf("**Pre-flight**");
+    expect(idxDiff).toBeGreaterThan(-1);
+    expect(idxCons).toBeGreaterThan(idxDiff);
+    expect(idxPre).toBeGreaterThan(idxCons);
+  });
+
+  test("FRESH tone renders amber glyph label in pill", () => {
+    const consolidation: ProposalConsolidationReport = {
+      entries: [
+        { label: "A", action: "flip", streak: 1, band: "new" },
+        { label: "B", action: "drop", streak: 1, band: "new" },
+      ],
+      consolidatedCount: 0,
+      newCount: 2,
+      averageStreak: 1,
+      windowSize: 2,
+      headline: "Across the last 2 sessions: 2 new.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), consolidation };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Consolidation**: ✦ FRESH");
   });
 });
