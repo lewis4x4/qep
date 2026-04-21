@@ -451,6 +451,9 @@ const ROLE_SUBTITLES: Record<UserRole, string> = {
   manager: "Manage team knowledge and documents.",
   admin: "Manage knowledge base documents.",
   rep: "",
+  // Stakeholders don't land on the internal admin surface (audience gate
+  // routes them to /brief); this entry exists to satisfy Record<UserRole>.
+  client_stakeholder: "",
 };
 
 function getFileExtension(filename: string): string {

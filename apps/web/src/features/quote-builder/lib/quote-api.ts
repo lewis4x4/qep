@@ -126,6 +126,142 @@ export async function listQuotePackages(params?: {
   return res.json();
 }
 
+/**
+ * Slice 20f — fetch the raw (score, outcome) observations the edge
+ * function joined from quote_packages × qb_quote_outcomes. The pure
+ * calibration math is done client-side by `computeCalibrationReport`
+ * so the report can be re-derived without another round trip if the
+ * component needs to re-render with different filters later.
+ *
+ * 403 means the user isn't manager/owner — callers should render the
+ * card as hidden rather than an error. We surface the role-gated error
+ * as a distinct typed return so the component doesn't have to parse
+ * the message.
+ */
+export async function getScorerCalibrationObservations(): Promise<
+  | { ok: true; observations: Array<{ score: number; outcome: "won" | "lost" | "expired" }> }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/scorer-calibration`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    observations?: Array<{ score: number; outcome: "won" | "lost" | "expired" }>;
+  };
+  return { ok: true, observations: Array.isArray(body.observations) ? body.observations : [] };
+}
+
+/**
+ * Slice 20g — fetch deal-grouped factor observations for attribution
+ * analysis. Same discriminated-union shape as the calibration helper
+ * so the card can render a distinct empty / forbidden / error state.
+ *
+ * The edge function does the version-gate filter + malformed-row
+ * filter; this helper just shuttles the list.
+ */
+export async function getFactorAttributionDeals(): Promise<
+  | { ok: true; deals: Array<{ factors: Array<{ label: string; weight: number }>; outcome: "won" | "lost" | "expired" }> }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/factor-attribution`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    deals?: Array<{ factors: Array<{ label: string; weight: number }>; outcome: "won" | "lost" | "expired" }>;
+  };
+  return { ok: true, deals: Array.isArray(body.deals) ? body.deals : [] };
+}
+
+/**
+ * Slice 20i — fetch label → verdict map for the live WinProbabilityStrip.
+ * Rep-accessible endpoint — no role gate. Returns only the ternary
+ * verdict per factor label ("proven" | "suspect" | "unknown"), never
+ * the underlying win rates or counts.
+ *
+ * On error we return an empty map rather than a discriminated union —
+ * the live strip must not be blocked by an instrumentation failure,
+ * and reps don't need to see an error message for a nice-to-have
+ * badge. Silent-fail is the right call here; a bug would be visible
+ * via the list page's factor breakdown card instead.
+ */
+export async function getFactorVerdicts(): Promise<
+  Map<string, "proven" | "suspect" | "unknown">
+> {
+  try {
+    const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/factor-verdicts`);
+    if (!res.ok) return new Map();
+    const body = (await res.json()) as {
+      verdicts?: Array<{ label: string; verdict: "proven" | "suspect" | "unknown" }>;
+    };
+    const out = new Map<string, "proven" | "suspect" | "unknown">();
+    if (!Array.isArray(body.verdicts)) return out;
+    for (const row of body.verdicts) {
+      if (!row || typeof row.label !== "string" || row.label.length === 0) continue;
+      if (row.verdict !== "proven" && row.verdict !== "suspect" && row.verdict !== "unknown") {
+        continue;
+      }
+      out.set(row.label, row.verdict);
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Slice 20h — fetch closed-deal audit rows. Discriminated union so the
+ * card can distinguish forbidden (hide) / error (warn) / empty (hint)
+ * states without string-parsing the message.
+ *
+ * The edge function version-gates on weightsVersion="v1" and filters
+ * malformed rows; this helper just shuttles the list.
+ */
+export async function getClosedDealsAudit(): Promise<
+  | {
+      ok: true;
+      audits: Array<{
+        packageId: string;
+        score: number;
+        outcome: "won" | "lost" | "expired";
+        factors: Array<{ label: string; weight: number }>;
+        capturedAt: string | null;
+      }>;
+    }
+  | { ok: false; reason: "forbidden" | "error"; message: string }
+> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/closed-deals-audit`);
+  if (res.status === 403) {
+    return { ok: false, reason: "forbidden", message: "Requires manager or owner role" };
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    return { ok: false, reason: "error", message: detail };
+  }
+  const body = (await res.json()) as {
+    audits?: Array<{
+      packageId: string;
+      score: number;
+      outcome: "won" | "lost" | "expired";
+      factors: Array<{ label: string; weight: number }>;
+      capturedAt: string | null;
+    }>;
+  };
+  return { ok: true, audits: Array.isArray(body.audits) ? body.audits : [] };
+}
+
 export async function getCompetitorListings(make: string, model?: string): Promise<{ listings: CompetitorListing[] }> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/competitors`, {
     method: "POST",
@@ -146,8 +282,22 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
     method: "POST",
     body: JSON.stringify({ job_description: jobDescription }),
   });
-  if (!res.ok) throw new Error("AI recommendation failed");
-  return res.json();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string; message?: string }).error
+      ?? (body as { message?: string }).message
+      ?? "";
+    if (res.status === 401) {
+      throw new Error(
+        detail
+          ? `Session expired: ${detail}. Sign out and sign in again.`
+          : "Session expired. Sign out and sign in again to continue.",
+      );
+    }
+    throw new Error(detail.trim() || `AI recommendation failed (HTTP ${res.status})`);
+  }
+  const json = await res.json();
+  return (json?.recommendation ?? json) as QuoteRecommendation;
 }
 
 export async function calculateFinancing(
@@ -282,6 +432,11 @@ export function buildQuoteSavePayload(
     marginAmount: number;
     marginPct: number;
   },
+  /** Slice 20e: win-probability snapshot captured at save time. Passed
+   *  opaquely to the edge function where it's validated + persisted to
+   *  quote_packages.win_probability_snapshot. Optional so legacy
+   *  callers keep working. */
+  winProbabilitySnapshot?: Record<string, unknown> | null,
 ): Record<string, unknown> {
   return {
     deal_id: draft.dealId,
@@ -320,6 +475,7 @@ export function buildQuoteSavePayload(
     customer_phone: draft.customerPhone || null,
     customer_email: draft.customerEmail || null,
     originating_log_id: draft.originatingLogId ?? null,
+    win_probability_snapshot: winProbabilitySnapshot ?? null,
   };
 }
 

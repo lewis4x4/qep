@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
 
         let query = supabase
           .from("quote_packages")
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at")
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, win_probability_score")
           .order("created_at", { ascending: false })
           .limit(50);
 
@@ -429,6 +429,14 @@ Deno.serve(async (req) => {
             .map((e: Record<string, unknown>) => [e.make, e.model].filter(Boolean).join(" "))
             .filter(Boolean)
             .join(", ") || "No equipment";
+          // Slice 20e: surface the denormalized win-probability score so
+          // QuoteListPage can render a band pill without pulling the full
+          // jsonb snapshot. Null for quotes saved before the snapshot
+          // column existed — the UI renders "—" for those rows.
+          const rawScore = row.win_probability_score;
+          const winScore = typeof rawScore === "number" && Number.isFinite(rawScore)
+            ? Math.max(0, Math.min(100, Math.round(rawScore)))
+            : null;
           return {
             id: row.id,
             quote_number: row.quote_number ?? null,
@@ -439,6 +447,7 @@ Deno.serve(async (req) => {
             equipment_summary: summary,
             entry_mode: row.entry_mode ?? null,
             created_at: row.created_at,
+            win_probability_score: winScore,
           };
         });
 
@@ -498,6 +507,324 @@ Deno.serve(async (req) => {
         }, origin);
       }
 
+      // ── GET /factor-attribution (Slice 20g) ─────────────────────────
+      // Manager/owner-only: returns per-deal (factors[] × outcome)
+      // tuples so the client-side pure-function attribution calculator
+      // can compute which factors actually predict wins.
+      //
+      // Why we return deal-grouped rows rather than flattened factor
+      // rows: "absent" means "factor didn't appear in this deal's
+      // snapshot", which requires knowing the full factor list per
+      // deal. Flattening server-side loses that structure.
+      //
+      // Version gate: we filter by weightsVersion="v1" to avoid mixing
+      // rows from different scorer generations. When the scorer bumps
+      // to v2, downstream callers will explicitly request the version
+      // they want to audit.
+      if (action === "factor-attribution") {
+        if (!canPublish) {
+          return safeJsonError("Factor attribution requires manager or owner role", 403, origin);
+        }
+
+        // PostgREST semantics: `!inner` combined with a filter on the
+        // embedded resource column (`quote_packages.win_probability_snapshot`)
+        // drops the parent outcome row when the embedded match is null —
+        // so this is truly a parent-filtering query, not a payload shaper.
+        // The flatMap below is a belt-and-suspenders guard, not load-bearing.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_packages!inner(win_probability_snapshot)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("factor-attribution query error:", error);
+          return safeJsonError("Failed to load factor attribution data", 500, origin);
+        }
+
+        // Flatten to DealFactorObservation[] shape. Defensive: validate
+        // snapshot shape, factor shape, and version gate per row so a
+        // malformed row can't poison the aggregate.
+        const deals = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const snapshot = (pkg as { win_probability_snapshot?: unknown } | null)?.win_probability_snapshot;
+          const outcome = row.outcome;
+          if (
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          // Version gate — only v1 rows for now. Unversioned rows from
+          // pre-slice-20e saves don't exist (the snapshot column itself
+          // didn't exist then), but be defensive.
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((f: unknown) => {
+            if (!f || typeof f !== "object") return [];
+            const rec = f as { label?: unknown; weight?: unknown };
+            if (typeof rec.label !== "string" || typeof rec.weight !== "number" || !Number.isFinite(rec.weight)) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [{ factors, outcome }];
+        });
+
+        return safeJsonOk({ deals }, origin);
+      }
+
+      // ── GET /factor-verdicts (Slice 20i) ─────────────────────────────
+      // REP-ACCESSIBLE. Unlike /factor-attribution which ships the full
+      // numeric report (manager-only), this endpoint ships only a
+      // label → verdict ternary ("proven" | "suspect" | "unknown").
+      // That's safe for reps because verdicts reveal no win-rate data
+      // beyond what the scorer already exposes — only whether each
+      // factor's historical lift agrees with its signed weight.
+      //
+      // The verdict math mirrors factor-verdict.ts (client lib) so the
+      // two stay in lockstep; keeping it inline here avoids crossing
+      // the edge/Bun module boundary.
+      if (action === "factor-verdicts") {
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_packages!inner(win_probability_snapshot)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("factor-verdicts query error:", error);
+          return safeJsonError("Failed to load factor verdicts", 500, origin);
+        }
+
+        // Step 1: flatten to deal-grouped observations (same shape as
+        // factor-attribution).
+        const deals = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const snapshot = (pkg as { win_probability_snapshot?: unknown } | null)
+            ?.win_probability_snapshot;
+          const outcome = row.outcome;
+          if (
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((fa: unknown) => {
+            if (!fa || typeof fa !== "object") return [];
+            const rec = fa as { label?: unknown; weight?: unknown };
+            if (
+              typeof rec.label !== "string" ||
+              typeof rec.weight !== "number" ||
+              !Number.isFinite(rec.weight)
+            ) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [{ factors, outcome: outcome as "won" | "lost" | "expired" }];
+        });
+
+        // Step 2: for each distinct label, compute the signal needed to
+        // decide verdict. Mirrors computeFactorAttribution but
+        // short-circuits to the ternary — no win rates leave the
+        // server.
+        const MIN_PER_SIDE = 3;
+        const labels = new Set<string>();
+        for (const d of deals) for (const f of d.factors) labels.add(f.label);
+
+        const verdicts: Array<{ label: string; verdict: "proven" | "suspect" | "unknown" }> = [];
+        for (const label of labels) {
+          let present = 0;
+          let presentWins = 0;
+          let absent = 0;
+          let absentWins = 0;
+          let weightSum = 0;
+          for (const d of deals) {
+            const hit = d.factors.find((f) => f.label === label);
+            const won = d.outcome === "won";
+            if (hit) {
+              present += 1;
+              if (won) presentWins += 1;
+              if (Number.isFinite(hit.weight)) weightSum += hit.weight;
+            } else {
+              absent += 1;
+              if (won) absentWins += 1;
+            }
+          }
+          const lowConfidence = present < MIN_PER_SIDE || absent < MIN_PER_SIDE;
+          if (lowConfidence || present === 0 || absent === 0) {
+            verdicts.push({ label, verdict: "unknown" });
+            continue;
+          }
+          const winRateWhenPresent = presentWins / present;
+          const winRateWhenAbsent = absentWins / absent;
+          const lift = winRateWhenPresent - winRateWhenAbsent;
+          const avgWeight = weightSum / present;
+          // isFactorSurprising: |weight| >= 1 and lift disagrees in sign.
+          const surprising =
+            (avgWeight >= 1 && lift < 0) || (avgWeight <= -1 && lift > 0);
+          verdicts.push({ label, verdict: surprising ? "suspect" : "proven" });
+        }
+
+        return safeJsonOk({ verdicts }, origin);
+      }
+
+      // ── GET /closed-deals-audit (Slice 20h) ─────────────────────────
+      // Manager/owner-only triage queue: the last N closed deals with
+      // stored snapshots, flattened to { packageId, score, outcome,
+      // factors, capturedAt }. The client lib computes |delta| and
+      // surfaces the worst misses so managers can click in and read
+      // the factor list that led to a bad call. Same version gate as
+      // /factor-attribution — snapshots carry weightsVersion and we
+      // only emit v1 rows to keep the triage list from mixing scorer
+      // generations.
+      if (action === "closed-deals-audit") {
+        if (!canPublish) {
+          return safeJsonError("Closed deals audit requires manager or owner role", 403, origin);
+        }
+
+        // Same `!inner` + embedded-column filter pattern as the other
+        // two instrumentation endpoints: parent outcome rows are
+        // dropped when the snapshot is null, so the limit budget is
+        // populated with real observations.
+        //
+        // limit(100) vs. 500 on calibration/attribution: the audit UI
+        // only surfaces the top 5 by |delta|, so 100 rows is enough
+        // headroom to guarantee the worst misses aren't off-screen
+        // while keeping the payload lean. The other two endpoints
+        // feed aggregate statistics that benefit from more samples.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select(
+            "outcome, captured_at, quote_package_id, quote_packages!inner(win_probability_score, win_probability_snapshot)",
+          )
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_snapshot", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(100);
+
+        if (error) {
+          console.error("closed-deals-audit query error:", error);
+          return safeJsonError("Failed to load closed deals audit", 500, origin);
+        }
+
+        // Defensive flatMap — validate every field before emitting.
+        const audits = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const pkgObj = pkg as
+            | { win_probability_score?: unknown; win_probability_snapshot?: unknown }
+            | null;
+          const score = pkgObj?.win_probability_score;
+          const snapshot = pkgObj?.win_probability_snapshot;
+          const outcome = row.outcome;
+          const packageId = row.quote_package_id;
+          const capturedAt = row.captured_at;
+          if (
+            typeof packageId !== "string" ||
+            packageId.length === 0 ||
+            typeof score !== "number" ||
+            !Number.isFinite(score) ||
+            !snapshot ||
+            typeof snapshot !== "object" ||
+            Array.isArray(snapshot) ||
+            (outcome !== "won" && outcome !== "lost" && outcome !== "expired")
+          ) {
+            return [];
+          }
+          const snap = snapshot as { factors?: unknown; weightsVersion?: unknown };
+          if (snap.weightsVersion !== "v1") return [];
+          if (!Array.isArray(snap.factors)) return [];
+          const factors = snap.factors.flatMap((f: unknown) => {
+            if (!f || typeof f !== "object") return [];
+            const rec = f as { label?: unknown; weight?: unknown };
+            if (
+              typeof rec.label !== "string" ||
+              typeof rec.weight !== "number" ||
+              !Number.isFinite(rec.weight)
+            ) {
+              return [];
+            }
+            return [{ label: rec.label, weight: rec.weight }];
+          });
+          return [
+            {
+              packageId,
+              score,
+              outcome,
+              factors,
+              capturedAt: typeof capturedAt === "string" ? capturedAt : null,
+            },
+          ];
+        });
+
+        return safeJsonOk({ audits }, origin);
+      }
+
+      // ── GET /scorer-calibration (Slice 20f) ─────────────────────────
+      // Manager/owner-only aggregate of (win_probability_score) ×
+      // (qb_quote_outcomes.outcome) pairs. Returns raw observations so
+      // the pure calibration math lives in the client lib; the edge
+      // function just handles auth + JOIN + shape.
+      //
+      // This is the baseline the counterfactual ML model must beat.
+      if (action === "scorer-calibration") {
+        if (!canPublish) {
+          return safeJsonError("Scorer calibration requires manager or owner role", 403, origin);
+        }
+
+        // Pull only the columns we need. Limit 500 for now — enough to
+        // power a dashboard on QB's current volume, and well below the
+        // per-request payload budget. A future slice can paginate or
+        // roll up server-side if dealer volume outgrows this.
+        // Same PostgREST `!inner` + embedded-column filter pattern as
+        // /factor-attribution below — the null-score join row is dropped
+        // at the parent level, so `limit(500)` is populated with real
+        // observations, not padded with null joins.
+        const { data, error } = await supabase
+          .from("qb_quote_outcomes")
+          .select("outcome, quote_package_id, quote_packages!inner(win_probability_score)")
+          .in("outcome", ["won", "lost", "expired"])
+          .not("quote_packages.win_probability_score", "is", null)
+          .order("captured_at", { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error("scorer-calibration query error:", error);
+          return safeJsonError("Failed to load calibration data", 500, origin);
+        }
+
+        // Shape to CalibrationObservation[] — the client lib takes it
+        // verbatim. Defensive: skip rows where the join produced null.
+        const observations = (data ?? []).flatMap((row: Record<string, unknown>) => {
+          const pkg = Array.isArray(row.quote_packages) ? row.quote_packages[0] : row.quote_packages;
+          const score = (pkg as { win_probability_score?: unknown } | null)?.win_probability_score;
+          const outcome = row.outcome;
+          if (
+            typeof score === "number" &&
+            Number.isFinite(score) &&
+            (outcome === "won" || outcome === "lost" || outcome === "expired")
+          ) {
+            return [{ score, outcome }];
+          }
+          return [];
+        });
+
+        return safeJsonOk({ observations }, origin);
+      }
+
       const dealId = url.searchParams.get("deal_id");
       if (!dealId) return safeJsonError("deal_id required", 400, origin);
 
@@ -525,20 +852,45 @@ Deno.serve(async (req) => {
         return safeJsonError("job_description required", 400, origin);
       }
 
-      // Fetch available catalog — yard stock first (inventory-first logic)
-      const { data: catalog } = await supabase
-        .from("catalog_entries")
-        .select("id, make, model, year, category, list_price, dealer_cost, cost_to_qep, source_location, is_yard_stock, attachments")
-        .eq("is_available", true)
-        .order("is_yard_stock", { ascending: false, nullsFirst: false })
+      // Pull real inventory from the QB catalog (qb_equipment_models is the
+      // seeded source of truth; legacy catalog_entries is intentionally
+      // empty pending IntelliDealer sync). Shape the rows to match what
+      // aiEquipmentRecommendation() expects so the model sees "Make Model
+      // (Year) - Category - $Price" per line.
+      const { data: models } = await supabase
+        .from("qb_equipment_models")
+        .select(
+          `id, model_code, family, series, name_display, model_year, list_price_cents,
+           brand:qb_brands!brand_id ( id, code, name, category )`,
+        )
+        .eq("active", true)
+        .is("deleted_at", null)
+        .order("name_display", { ascending: true })
         .limit(50);
+
+      const catalog = (models ?? []).map((row: Record<string, unknown>) => {
+        const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
+        const brandName = (brand as { name?: string } | null)?.name ?? "";
+        return {
+          id: row.id,
+          make: brandName,
+          model: row.model_code ?? "",
+          year: row.model_year ?? null,
+          category: row.family ?? (brand as { category?: string } | null)?.category ?? null,
+          list_price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : null,
+        };
+      });
 
       const recommendation = await aiEquipmentRecommendation(
         body.job_description,
-        catalog ?? [],
+        catalog,
       );
 
-      return safeJsonOk({ recommendation }, origin);
+      // Return the recommendation flat — the frontend contract (see
+      // getAiEquipmentRecommendation in quote-api.ts) expects the shape
+      // { machine, attachments, reasoning, alternative?, jobConsiderations? }
+      // at the top level, not wrapped.
+      return safeJsonOk(recommendation, origin);
     }
 
     // ── POST /competitors: Nearby competitor listings (manager/owner) ────
@@ -962,6 +1314,33 @@ Deno.serve(async (req) => {
       const rawLogId = typeof body.originating_log_id === "string" ? body.originating_log_id : null;
       const originatingLogId = rawLogId && UUID_RE.test(rawLogId) ? rawLogId : null;
 
+      // Slice 20e: win-probability snapshot. We store the client-computed
+      // rule-based scorer result alongside the quote. Defensive validation:
+      // accept only a JSON object with an integer `score` in [0,100] and a
+      // known `band`; malformed snapshots are ignored.
+      //
+      // CRITICAL — only build the upsert patch when we have a valid snapshot.
+      // Otherwise we skip the two snapshot columns entirely so a resave
+      // that lacks a snapshot (portal revision path, retry, transient
+      // scorer failure) preserves the previously-persisted values rather
+      // than wiping them to null.
+      const rawSnap = body.win_probability_snapshot;
+      let winProbabilityPatch: { win_probability_snapshot: Record<string, unknown>; win_probability_score: number } | null = null;
+      if (rawSnap && typeof rawSnap === "object" && !Array.isArray(rawSnap)) {
+        const s = (rawSnap as { score?: unknown }).score;
+        const b = (rawSnap as { band?: unknown }).band;
+        const validBand = typeof b === "string" && ["strong", "healthy", "mixed", "at_risk"].includes(b);
+        // Integer-only score to match the client contract + the smallint
+        // column. Floats are rejected rather than silently rounded so a
+        // buggy scorer doesn't corrupt the training set.
+        if (typeof s === "number" && Number.isInteger(s) && s >= 0 && s <= 100 && validBand) {
+          winProbabilityPatch = {
+            win_probability_snapshot: rawSnap as Record<string, unknown>,
+            win_probability_score: s,
+          };
+        }
+      }
+
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
@@ -988,6 +1367,10 @@ Deno.serve(async (req) => {
           customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null,
           customer_email: typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null,
           originating_log_id: originatingLogId,
+          // Only include snapshot keys when the client supplied a valid
+          // one — omitting them lets the upsert preserve the prior values
+          // on update instead of nulling them.
+          ...(winProbabilityPatch ?? {}),
         }, { onConflict: "deal_id" })
         .select()
         .single();

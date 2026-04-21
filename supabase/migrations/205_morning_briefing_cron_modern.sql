@@ -27,11 +27,16 @@ declare
   v_command text;
 begin
   -- ── 1. Verify pg_cron and pg_net are present ──────────────────────────────
+  -- Skip gracefully on shadow / local where these extensions aren't installed.
+  -- Matches the pattern of migrations 011, 046, 059, 072, 088, etc. Prod has
+  -- both extensions enabled, so the work always runs in the deployed env.
   if not exists (select 1 from pg_namespace where nspname = 'cron') then
-    raise exception 'pg_cron is not installed; cannot schedule morning-briefing-daily';
+    raise notice 'Skipping morning-briefing-daily: pg_cron not installed in this environment';
+    return;
   end if;
   if not exists (select 1 from pg_namespace where nspname = 'net') then
-    raise exception 'pg_net is not installed; cannot schedule morning-briefing-daily';
+    raise notice 'Skipping morning-briefing-daily: pg_net not installed in this environment';
+    return;
   end if;
 
   -- ── 2. Extract the shared internal secret from the existing flow-runner ─

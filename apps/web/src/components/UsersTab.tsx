@@ -45,6 +45,9 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   admin: "Manages knowledge base documents. Can upload and toggle docs.",
   manager: "Manages team knowledge and documents. Can view all team activity.",
   owner: "Full access. Manages team members, roles, and all settings.",
+  // External build-hub observer (QEP USA stakeholder). Gated into /brief
+  // by the audience column, not the internal Users tab.
+  client_stakeholder: "Stakeholder Build Hub observer. Read-only, audience-gated.",
 };
 
 type Department = "sales" | "parts" | "service" | "rentals" | "";
@@ -90,6 +93,7 @@ const ROLE_BADGE_CLASS: Record<UserRole, string> = {
   admin: "bg-primary/10 text-primary",
   manager: "bg-accent/20 text-accent-foreground",
   owner: "bg-accent text-accent-foreground",
+  client_stakeholder: "bg-amber-100 text-amber-900",
 };
 
 function formatLastLogin(iso: string | null): string {

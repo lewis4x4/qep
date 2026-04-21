@@ -6,4 +6,7 @@
 # cwd-relative — not bunfig-relative — so we need one entry per cwd.)
 
 [test]
-preload = ["./test-setup/happy-dom.ts"]
+preload = [
+  "./test-setup/env-vars.ts",
+  "./test-setup/happy-dom.ts",
+]

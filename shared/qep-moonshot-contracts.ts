@@ -95,6 +95,19 @@ export interface QuoteWorkspaceDraft {
   customerCompany?: string;
   customerPhone?: string;
   customerEmail?: string;
+  /** Slice 20a: signals snapshot captured when the rep picks a CRM
+   *  customer (open deals, past quote count, last-contact age, warmth).
+   *  Rendered by the Customer step's intel panel without an extra fetch,
+   *  and later consumed by Deal Coach / win-probability models. Kept as
+   *  opaque-shaped to avoid leaking feature internals into the contract. */
+  customerSignals?: {
+    openDeals: number;
+    openDealValueCents: number;
+    lastContactDaysAgo: number | null;
+    pastQuoteCount: number;
+    pastQuoteValueCents: number;
+  } | null;
+  customerWarmth?: "warm" | "cool" | "dormant" | "new" | null;
   /** Slice 09: when a draft was seeded by an AI-scenario stream, the
    *  qb_ai_request_log.id that generated it. Threaded through the save
    *  flow so the AI Request Log can show real time-to-quote numbers. */
@@ -111,6 +124,13 @@ export interface QuoteListItem {
   equipment_summary: string;
   entry_mode: string | null;
   created_at: string;
+  /**
+   * Slice 20e: denormalized win-probability score (0..100) captured at
+   * save time by the rule-based scorer. Null for quotes saved before
+   * the snapshot column existed. QuoteListPage renders a colored band
+   * pill from this without pulling the full jsonb snapshot.
+   */
+  win_probability_score: number | null;
 }
 
 export interface PortalQuoteRevisionCompare {

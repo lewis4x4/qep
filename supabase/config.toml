@@ -76,6 +76,14 @@ verify_jwt = false
 [functions.crm-auth-audit]
 verify_jwt = false
 
+# Quote Builder V2 validates JWT directly against GoTrue's /auth/v1/user endpoint
+# because the project signs with ES256 and supabase-js v2's local verifier rejects
+# ES256 ("Unsupported JWT algorithm"). Gateway verify_jwt MUST be false — otherwise
+# the gateway rejects every legit user token with UNAUTHORIZED_INVALID_JWT_FORMAT
+# before the function ever runs. Function does its own full auth internally.
+[functions.quote-builder-v2]
+verify_jwt = false
+
 # DGE routes validate JWT + roles in _shared/dge-auth.ts (resolveCallerContext).
 # Gateway verify_jwt is off so local/CLI tests can reach the function when the Edge
 # gateway JWT check disagrees with supabase-js session tokens (401 Invalid JWT).
@@ -174,4 +182,40 @@ verify_jwt = false
 # the auth header itself via resolveCallerContext; requireCaller() inside
 # rejects anonymous traffic with 401.
 [functions.qrm-ask-iron]
+verify_jwt = false
+
+# Stakeholder Build Hub (migrations 310-315 on main). Gateway verify_jwt off;
+# each function authenticates via _shared/hub-auth.ts (requireHubUser).
+# Stakeholder JWTs are ES256 like everyone else — same reason as the
+# service-auth block above.
+[functions.hub-feedback-intake]
+verify_jwt = false
+
+[functions.hub-feedback-draft-fix]
+verify_jwt = false
+
+[functions.hub-merge-pr]
+verify_jwt = false
+
+# Cron-invoked via x-internal-service-secret; also accepts user-JWT for the
+# "Regenerate my brief" button on /brief. hub-auth.ts + isServiceRoleCaller
+# gate inside the function.
+[functions.stakeholder-morning-brief]
+verify_jwt = false
+
+# Cron-invoked every 15 min. Scans main for [QEP-*] commits and feedback-id
+# markers, synthesizes plain-voice changelog rows via Claude.
+[functions.hub-changelog-from-commit]
+verify_jwt = false
+
+# Cron-invoked every 4h. Mirrors hub_changelog/decisions/build_items into
+# hub_knowledge_source + embedded chunks; best-effort pushes markdown to the
+# Drive folder NotebookLM watches. cron-auth gate inside the fn.
+[functions.hub-knowledge-sync]
+verify_jwt = false
+
+# Retrieval + synthesis endpoint for "Ask the Project Brain". Any user in
+# HUB_ALLOWED_ROLES may call it (stakeholders + internal); hub-auth.ts gates
+# inside the fn.
+[functions.hub-ask-brain]
 verify_jwt = false

@@ -343,6 +343,9 @@ const CommandCenterPage = lazy(() =>
 const OwnerDashboardPage = lazy(() =>
   import("./features/owner/pages/OwnerDashboardPage").then((m) => ({ default: m.OwnerDashboardPage }))
 );
+const BriefRoutes = lazy(() =>
+  import("./features/brief/BriefRoutes").then((m) => ({ default: m.BriefRoutes }))
+);
 const OwnerBriefingPage = lazy(() =>
   import("./features/exec/pages/OwnerBriefingPage").then((m) => ({ default: m.OwnerBriefingPage }))
 );
@@ -861,7 +864,7 @@ function App() {
     await supabase.auth.signOut();
   }
 
-  const homeRoute = resolveHomeRoute(profile.role, profile.iron_role);
+  const homeRoute = resolveHomeRoute(profile.role, profile.iron_role, profile.audience);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -1576,6 +1579,22 @@ function App() {
                 element={
                   profile.role === "owner" ? (
                     <OwnerDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/brief/*"
+                element={
+                  profile.audience === "stakeholder" ||
+                  ["admin", "owner"].includes(profile.role) ? (
+                    <BriefRoutes
+                      userId={profile.id}
+                      stakeholderName={profile.full_name}
+                      subrole={profile.stakeholder_subrole}
+                      canAdminister={["admin", "owner"].includes(profile.role)}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

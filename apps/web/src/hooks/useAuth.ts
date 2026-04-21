@@ -22,6 +22,20 @@ interface Profile {
    *  before passing it to workspace-scoped writes (see M4 in the Slice
    *  07 audit). */
   active_workspace_id: string | null;
+  /** Audience classification for the Stakeholder Build Hub (migration 310).
+   *  "internal" = QEP USA operator, "stakeholder" = external QEP OS build
+   *  observer (Ryan/Rylee/Juan/Angela). Null for legacy rows — treated as
+   *  internal. */
+  audience: "internal" | "stakeholder" | null;
+  /** Subrole within audience=stakeholder. Drives briefing personalization
+   *  (owner=executive framing, primary_contact=UX, technical=integration,
+   *  admin=ops). Null for internal audience. */
+  stakeholder_subrole:
+    | "owner"
+    | "primary_contact"
+    | "technical"
+    | "admin"
+    | null;
 }
 
 interface AuthState {
@@ -293,9 +307,15 @@ async function fetchProfile(userId: string): Promise<{ profile: Profile | null; 
       () => Promise.resolve(
         supabase
           .from("profiles")
-          .select("id, full_name, email, role, iron_role, iron_role_display, is_support, active_workspace_id")
+          .select(
+            "id, full_name, email, role, iron_role, iron_role_display, is_support, active_workspace_id, audience, stakeholder_subrole"
+          )
           .eq("id", userId)
           .single()
+          .then(({ data, error }) => ({
+            data: normalizeProfileRow(data),
+            error,
+          }))
       ),
       PROFILE_REQUEST_TIMEOUT_MS,
       "Profile load timed out",
@@ -388,4 +408,30 @@ async function validateSessionToken(): Promise<SessionValidationResult> {
 
 function isAuthValidationFailure(message: string): boolean {
   return /auth|jwt|token|session|expired|refresh token|invalid/i.test(message);
+}
+
+function normalizeProfileRow(row: unknown): Profile | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  const audience = r.audience === "stakeholder" ? "stakeholder"
+    : r.audience === "internal" ? "internal"
+    : null;
+  const subrole = r.stakeholder_subrole;
+  const normalizedSubrole =
+    subrole === "owner" || subrole === "primary_contact"
+      || subrole === "technical" || subrole === "admin"
+      ? subrole
+      : null;
+  return {
+    id: r.id as string,
+    full_name: (r.full_name as string | null) ?? null,
+    email: (r.email as string | null) ?? null,
+    role: r.role as UserRole,
+    iron_role: (r.iron_role as string | null) ?? null,
+    iron_role_display: (r.iron_role_display as string | null) ?? null,
+    is_support: Boolean(r.is_support),
+    active_workspace_id: (r.active_workspace_id as string | null) ?? null,
+    audience,
+    stakeholder_subrole: normalizedSubrole,
+  };
 }
