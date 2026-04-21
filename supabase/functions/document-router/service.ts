@@ -135,6 +135,30 @@ export interface ReindexResult {
   nextStatus: string;
 }
 
+export interface SearchInput {
+  query: string;
+  matchCount?: number;
+}
+
+export interface SearchResultItem {
+  documentId: string;
+  chunkId: string | null;
+  title: string;
+  excerpt: string;
+  confidence: number;
+  accessClass: string;
+  chunkKind: string;
+  sectionTitle: string | null;
+  pageNumber: number | null;
+  sourceType: string;
+}
+
+export interface SearchResult {
+  query: string;
+  traceId: string;
+  results: SearchResultItem[];
+}
+
 export interface ListDocumentsResult {
   view: DocumentCenterView;
   currentFolder: FolderSummary | null;
@@ -873,6 +897,128 @@ export async function createDownloadUrl(ctx: DocumentRouterContext, input: Downl
     url: data.signedUrl,
     expiresAt,
   };
+}
+
+interface FullEvidenceRow {
+  source_type: string;
+  source_id: string;
+  source_title: string | null;
+  excerpt: string | null;
+  confidence: number | null;
+  access_class: string | null;
+  chunk_kind: string | null;
+  parent_chunk_id: string | null;
+  section_title: string | null;
+  page_number: number | null;
+  context_excerpt: string | null;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function searchDocuments(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult> {
+  const query = input.query.trim();
+  if (!query) throw new Error("VALIDATION_ERROR");
+  const matchCount = Math.min(Math.max(input.matchCount ?? 8, 1), 25);
+
+  let queryEmbedding: string | null = null;
+  try {
+    queryEmbedding = formatVectorLiteral(await embedText(query));
+  } catch {
+    // Fall back to keyword-only retrieval if the embedding service fails.
+    queryEmbedding = null;
+  }
+
+  const { data, error } = await ctx.callerDb.rpc("retrieve_document_evidence", {
+    query_embedding: queryEmbedding,
+    keyword_query: query,
+    user_role: ctx.caller.role ?? "owner",
+    match_count: matchCount,
+    semantic_match_threshold: 0.45,
+    p_workspace_id: ctx.workspaceId,
+  });
+  if (error) throw new Error(error.message);
+
+  const results: SearchResultItem[] = ((data ?? []) as FullEvidenceRow[])
+    .filter((row) => row.source_type === "document")
+    .map((row) => ({
+      documentId: row.source_id,
+      chunkId: row.parent_chunk_id,
+      title: row.source_title ?? "(untitled)",
+      excerpt: row.excerpt ?? row.context_excerpt ?? "",
+      confidence: row.confidence ?? 0,
+      accessClass: row.access_class ?? "unknown",
+      chunkKind: row.chunk_kind ?? "paragraph",
+      sectionTitle: row.section_title,
+      pageNumber: row.page_number,
+      sourceType: row.source_type,
+    }));
+
+  const traceId = crypto.randomUUID();
+
+  // Fire-and-forget prediction ledger write. A failure here must not break
+  // the user-facing search response, so every error is swallowed after a
+  // single console.warn. The row is keyed by the trace_id so a downstream
+  // click-through event can correlate.
+  void (async () => {
+    try {
+      const rationale = [
+        `query: ${query}`,
+        `workspace: ${ctx.workspaceId}`,
+        `role: ${ctx.caller.role ?? "owner"}`,
+        `top_results: ${results.slice(0, 3).map((r) => r.title).join(" | ") || "(none)"}`,
+      ];
+      const inputsCanonical = JSON.stringify({
+        q: query,
+        workspace: ctx.workspaceId,
+        role: ctx.caller.role ?? "owner",
+        match_count: matchCount,
+      });
+      const signalsCanonical = JSON.stringify({
+        embedding_fallback: queryEmbedding === null,
+        result_count: results.length,
+      });
+      const rationaleCanonical = JSON.stringify(rationale);
+      const [rationaleHash, inputsHash, signalsHash] = await Promise.all([
+        sha256Hex(rationaleCanonical),
+        sha256Hex(inputsCanonical),
+        sha256Hex(signalsCanonical),
+      ]);
+      const { error: ledgerError } = await ctx.admin.from("qrm_predictions").insert({
+        workspace_id: ctx.workspaceId,
+        subject_type: "document_search",
+        subject_id: traceId,
+        prediction_kind: "document_search",
+        score: results[0]?.confidence ?? 0,
+        rationale,
+        rationale_hash: rationaleHash,
+        inputs_hash: inputsHash,
+        signals_hash: signalsHash,
+        model_source: "rules",
+        trace_id: traceId,
+        trace_steps: results.slice(0, 10).map((r, idx) => ({
+          rank: idx + 1,
+          document_id: r.documentId,
+          chunk_id: r.chunkId,
+          confidence: Number(r.confidence.toFixed(4)),
+          access_class: r.accessClass,
+        })),
+        role_blend: [{ role: ctx.caller.role ?? "owner", weight: 1 }],
+      });
+      if (ledgerError) {
+        console.warn("[document-router] prediction ledger write failed", ledgerError.message);
+      }
+    } catch (err) {
+      console.warn("[document-router] prediction ledger fire-and-forget failed", err);
+    }
+  })();
+
+  return { query, traceId, results };
 }
 
 export async function reindexDocument(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult> {

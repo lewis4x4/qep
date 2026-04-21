@@ -251,3 +251,32 @@ export async function reindexDocumentViaRouter(documentId: string): Promise<Docu
     body: { documentId },
   });
 }
+
+export interface DocumentSearchResultItem {
+  documentId: string;
+  chunkId: string | null;
+  title: string;
+  excerpt: string;
+  confidence: number;
+  accessClass: string;
+  chunkKind: string;
+  sectionTitle: string | null;
+  pageNumber: number | null;
+  sourceType: string;
+}
+
+export interface DocumentSearchResponse {
+  query: string;
+  traceId: string;
+  results: DocumentSearchResultItem[];
+}
+
+export async function searchDocumentsViaRouter(input: {
+  query: string;
+  matchCount?: number;
+}): Promise<DocumentSearchResponse> {
+  return await documentRouterFetch<DocumentSearchResponse>("/search", {
+    method: "POST",
+    body: { query: input.query, matchCount: input.matchCount ?? 8 },
+  });
+}

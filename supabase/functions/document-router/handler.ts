@@ -19,6 +19,8 @@ import type {
   DownloadUrlResult,
   ReindexInput,
   ReindexResult,
+  SearchInput,
+  SearchResult,
 } from "./service.ts";
 import {
   createDocumentRouterContext,
@@ -31,6 +33,7 @@ import {
   moveFolder,
   reindexDocument,
   requireDocumentCenterAccess,
+  searchDocuments,
 } from "./service.ts";
 
 export interface DocumentRouterService {
@@ -43,6 +46,7 @@ export interface DocumentRouterService {
   duplicateLink(ctx: DocumentRouterContext, input: DuplicateLinkInput): Promise<void>;
   downloadUrl(ctx: DocumentRouterContext, input: DownloadUrlInput): Promise<DownloadUrlResult>;
   reindex(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult>;
+  search(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -174,6 +178,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     duplicateLink,
     downloadUrl: createDownloadUrl,
     reindex: reindexDocument,
+    search: searchDocuments,
   };
 }
 
@@ -279,6 +284,18 @@ export async function handleDocumentRouterRequest(
       const payload = await service.reindex(ctx, {
         documentId: body.documentId,
       });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/search") {
+      const body = await readJsonBody<SearchInput>(req);
+      const query = safeText(body.query);
+      if (!query) throw new Error("VALIDATION_ERROR");
+      const matchCount =
+        typeof body.matchCount === "number" && Number.isFinite(body.matchCount)
+          ? Math.trunc(body.matchCount)
+          : undefined;
+      const payload = await service.search(ctx, { query, matchCount });
       return crmOk(payload, { origin });
     }
 

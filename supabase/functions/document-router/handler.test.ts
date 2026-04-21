@@ -93,6 +93,11 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       previousStatus: "ingest_failed",
       nextStatus: "pending_review",
     })),
+    search: overrides.search ?? (async () => ({
+      query: "test",
+      traceId: "00000000-0000-0000-0000-000000000000",
+      results: [],
+    })),
   };
 }
 
@@ -253,6 +258,53 @@ Deno.test("document-router list accepts pending_review and ingest_failed views",
     assertEquals(res.status, 200, `expected 200 for view=${view}`);
   }
   assertEquals(captured, ["pending_review", "ingest_failed"]);
+});
+
+Deno.test("document-router search endpoint rejects empty queries and normalizes results", async () => {
+  const captured: { query: string | null } = { query: null };
+  const service = makeService({
+    search: async (_ctx, input) => {
+      captured.query = input.query;
+      return {
+        query: input.query,
+        traceId: "11111111-1111-1111-1111-111111111111",
+        results: [
+          {
+            documentId: "doc-9",
+            chunkId: "chunk-1",
+            title: "Rental Agreement #482",
+            excerpt: "The lessee shall…",
+            confidence: 0.87,
+            accessClass: "company_wide",
+            chunkKind: "paragraph",
+            sectionTitle: "§7 Return Conditions",
+            pageNumber: 4,
+            sourceType: "document",
+          },
+        ],
+      };
+    },
+  });
+
+  const badReq = new Request("https://example.com/document-router/search", {
+    method: "POST",
+    body: JSON.stringify({ query: "   " }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const badRes = await handleDocumentRouterRequest(badReq, service);
+  assertEquals(badRes.status, 400);
+
+  const okReq = new Request("https://example.com/document-router/search", {
+    method: "POST",
+    body: JSON.stringify({ query: "return inspection" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const okRes = await handleDocumentRouterRequest(okReq, service);
+  assertEquals(okRes.status, 200);
+  const payload = await parseJson(okRes);
+  assertEquals(captured.query, "return inspection");
+  assertEquals(payload.query, "return inspection");
+  assertEquals((payload.results as unknown[]).length, 1);
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {
