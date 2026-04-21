@@ -134,33 +134,32 @@ function DocumentCenterPageInner() {
     void loadList();
   }, [loadList]);
 
+  const loadDetail = useCallback(
+    async (documentId: string) => {
+      setLoadingDetail(true);
+      try {
+        const payload = await getDocumentViaRouter(documentId);
+        setSelectedDetail(payload);
+      } catch (error) {
+        toast({
+          title: "Could not load document context",
+          description: error instanceof Error ? error.message : "Document context failed",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingDetail(false);
+      }
+    },
+    [toast],
+  );
+
   useEffect(() => {
     if (!selectedDocumentId) {
       setSelectedDetail(null);
       return;
     }
-    let cancelled = false;
-    setLoadingDetail(true);
-    void getDocumentViaRouter(selectedDocumentId)
-      .then((payload) => {
-        if (!cancelled) setSelectedDetail(payload);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          toast({
-            title: "Could not load document context",
-            description: error instanceof Error ? error.message : "Document context failed",
-            variant: "destructive",
-          });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDetail(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDocumentId, toast]);
+    void loadDetail(selectedDocumentId);
+  }, [selectedDocumentId, loadDetail]);
 
   const documents: DocumentCenterListItem[] = listState?.documents ?? [];
   const folderTree = listState?.folderTree ?? [];
@@ -537,6 +536,9 @@ function DocumentCenterPageInner() {
             detail={selectedDetail}
             loading={loadingDetail}
             onDownload={() => void handleDownloadSelected()}
+            onReloadDetail={() => {
+              if (selectedDocumentId) void loadDetail(selectedDocumentId);
+            }}
             downloading={downloading}
           />
         </div>

@@ -59,6 +59,20 @@ export interface DocumentCenterAuditEvent {
   metadata: Record<string, unknown>;
 }
 
+export interface DocumentCenterFact {
+  id: string;
+  chunkId: string | null;
+  factType: string;
+  value: Record<string, unknown>;
+  confidence: number;
+  audience: string;
+  extractedByModel: string;
+  extractedAt: string;
+  traceId: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
 export interface DocumentCenterDocument {
   id: string;
   title: string;
@@ -92,6 +106,45 @@ export interface DocumentCenterGetResponse {
   memberships: DocumentCenterMembership[];
   auditEvents: DocumentCenterAuditEvent[];
   breadcrumbs: DocumentCenterBreadcrumb[];
+  facts: DocumentCenterFact[];
+}
+
+export interface DocumentCenterNeighbor {
+  id: string;
+  direction: "inbound" | "outbound";
+  edgeType: string;
+  status: string;
+  validFrom: string | null;
+  validUntil: string | null;
+  toDocumentId: string | null;
+  toEntityType: string | null;
+  toEntityId: string | null;
+  toEntityLabel: string | null;
+  fromDocumentId: string | null;
+  confidence: number;
+  sourceFactIds: string[];
+}
+
+export interface DocumentCenterNeighborsResponse {
+  documentId: string;
+  neighbors: DocumentCenterNeighbor[];
+}
+
+export interface DocumentAskCitation {
+  chunkId: string;
+  chunkIndex: number | null;
+  excerpt: string;
+  sectionTitle: string | null;
+  pageNumber: number | null;
+  confidence: number;
+}
+
+export interface DocumentAskResponse {
+  documentId: string;
+  traceId: string;
+  question: string;
+  answer: string;
+  citations: DocumentAskCitation[];
 }
 
 export interface DocumentCenterDownloadResponse {
@@ -278,5 +331,37 @@ export async function searchDocumentsViaRouter(input: {
   return await documentRouterFetch<DocumentSearchResponse>("/search", {
     method: "POST",
     body: { query: input.query, matchCount: input.matchCount ?? 8 },
+  });
+}
+
+export async function getDocumentNeighborsViaRouter(documentId: string): Promise<DocumentCenterNeighborsResponse> {
+  return await documentRouterFetch<DocumentCenterNeighborsResponse>("/neighbors", {
+    query: { document_id: documentId },
+  });
+}
+
+export async function askDocumentViaRouter(input: {
+  documentId: string;
+  question: string;
+}): Promise<DocumentAskResponse> {
+  return await documentRouterFetch<DocumentAskResponse>("/ask", {
+    method: "POST",
+    body: { documentId: input.documentId, question: input.question },
+  });
+}
+
+export async function rerunTwinViaRouter(input: {
+  documentId: string;
+  force?: boolean;
+}): Promise<{ documentId: string; jobId: string; status: string; factCount: number; traceId: string }> {
+  return await documentRouterFetch<{
+    documentId: string;
+    jobId: string;
+    status: string;
+    factCount: number;
+    traceId: string;
+  }>("/twin-rerun", {
+    method: "POST",
+    body: { documentId: input.documentId, force: input.force === true },
   });
 }

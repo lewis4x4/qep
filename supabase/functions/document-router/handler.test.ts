@@ -61,6 +61,7 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       memberships: [],
       auditEvents: [],
       breadcrumbs: [],
+      facts: [],
     })),
     createFolder: overrides.createFolder ?? (async (): Promise<FolderSummary> => ({
       id: "folder-1",
@@ -109,6 +110,13 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
     neighbors: overrides.neighbors ?? (async () => ({
       documentId: "doc-1",
       neighbors: [],
+    })),
+    ask: overrides.ask ?? (async () => ({
+      documentId: "doc-1",
+      traceId: "44444444-4444-4444-4444-444444444444",
+      question: "test",
+      answer: "",
+      citations: [],
     })),
   };
 }
@@ -385,6 +393,38 @@ Deno.test("document-router neighbors endpoint returns outbound + inbound edges",
   const payload = await parseJson(res);
   assertEquals(captured.documentId, "doc-graph");
   assertEquals((payload.neighbors as unknown[]).length, 1);
+});
+
+Deno.test("document-router ask endpoint forwards question and returns citations", async () => {
+  const service = makeService({
+    ask: async (_ctx, input) => ({
+      documentId: input.documentId,
+      traceId: "55555555-5555-5555-5555-555555555555",
+      question: input.question,
+      answer: "Section 7.2 requires a return inspection with no more than 200 hours added.",
+      citations: [
+        {
+          chunkId: "chunk-7",
+          chunkIndex: 7,
+          excerpt: "The lessee shall return the equipment with no more than 200 hours added",
+          sectionTitle: "§7.2 Return Conditions",
+          pageNumber: 4,
+          confidence: 0.93,
+        },
+      ],
+    }),
+  });
+
+  const req = new Request("https://example.com/document-router/ask", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-ask", question: "What does §7 require?" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.documentId, "doc-ask");
+  assertEquals((payload.citations as unknown[]).length, 1);
 });
 
 Deno.test("document-router fails closed when caller has no userId", async () => {

@@ -25,8 +25,11 @@ import type {
   TwinRerunResult,
   NeighborsInput,
   NeighborsResult,
+  AskInput,
+  AskResult,
 } from "./service.ts";
 import {
+  askDocument,
   createDocumentRouterContext,
   createDownloadUrl,
   createFolder,
@@ -55,6 +58,7 @@ export interface DocumentRouterService {
   search(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult>;
   twinRerun(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult>;
   neighbors(ctx: DocumentRouterContext, input: NeighborsInput): Promise<NeighborsResult>;
+  ask(ctx: DocumentRouterContext, input: AskInput): Promise<AskResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -166,6 +170,15 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "OPENAI_UNCONFIGURED") {
+    return crmFail({
+      origin,
+      status: 503,
+      code: "OPENAI_UNCONFIGURED",
+      message: "OPENAI_API_KEY is not configured for the document-router.",
+    });
+  }
+
   if (message.startsWith("TWIN_UPSTREAM:")) {
     const parts = message.split(":");
     const upstreamCode = parts[1] ?? "TWIN_UPSTREAM_ERROR";
@@ -211,6 +224,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     search: searchDocuments,
     twinRerun: rerunTwin,
     neighbors: getDocumentNeighbors,
+    ask: askDocument,
   };
 }
 
@@ -345,6 +359,15 @@ export async function handleDocumentRouterRequest(
       const documentId = safeText(url.searchParams.get("document_id"));
       if (!documentId) throw new Error("VALIDATION_ERROR");
       const payload = await service.neighbors(ctx, { documentId });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/ask") {
+      const body = await readJsonBody<AskInput>(req);
+      const documentId = safeText(body.documentId);
+      const question = safeText(body.question);
+      if (!documentId || !question) throw new Error("VALIDATION_ERROR");
+      const payload = await service.ask(ctx, { documentId, question });
       return crmOk(payload, { origin });
     }
 
