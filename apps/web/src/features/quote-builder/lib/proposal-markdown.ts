@@ -44,6 +44,8 @@ import { describeStabilityPill } from "./proposal-stability";
 import type { ProposalRollbackPlan } from "./proposal-rollback";
 import type { PreflightChecklist } from "./proposal-preflight-checklist";
 import { describeReadinessPill } from "./proposal-preflight-checklist";
+import type { ProposalDiff } from "./proposal-diff";
+import { describeProposalDiffPill } from "./proposal-diff";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -89,6 +91,15 @@ export interface ProposalMarkdownContext {
    *  `empty=true` is handled — section omitted cleanly when there's no
    *  proposal to pre-flight. */
   preflight: PreflightChecklist | null;
+  /** 20ad — proposal diff vs. the previous session's proposal. Time-
+   *  series view on top of every cross-sectional slice above — tells
+   *  the manager whether the scorer is converging or thrashing. Null
+   *  when caller doesn't have a previous proposal source wired yet;
+   *  `empty=true` is handled — section omitted when the proposals are
+   *  identical or there's no prior snapshot. When the proposals are
+   *  stable (empty + unchanged > 0) the section renders a single
+   *  "Proposal stable since last session" line. */
+  diff: ProposalDiff | null;
 }
 
 /**
@@ -114,6 +125,39 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
         const icon =
           r.polarity === "positive" ? "✓" : r.polarity === "negative" ? "⚠" : "·";
         lines.push(`  - ${icon} ${r.rationale}`);
+      }
+    }
+  }
+
+  // Proposal diff (20ad) — time-series stability check. Sits just
+  // under the verdict because it colors how a reader should weight
+  // the verdict itself: "apply" backed by three sessions of the same
+  // call reads different than "apply" on a proposal that was
+  // flipping the opposite way last week. The empty-with-unchanged
+  // case still renders a "Proposal stable since last session" line
+  // so the reader explicitly sees the absence of drift. Omitted
+  // cleanly when there's no previous proposal to diff against.
+  if (ctx.diff && ctx.diff.headline) {
+    const pill = describeProposalDiffPill(ctx.diff);
+    lines.push(`**Proposal diff**: ${pill.label} — ${ctx.diff.headline}`);
+    if (ctx.diff.addedFactors.length > 0) {
+      lines.push(`  - ➕ New call${ctx.diff.addedFactors.length === 1 ? "" : "s"}:`);
+      for (const label of ctx.diff.addedFactors) {
+        lines.push(`    - \`${label}\``);
+      }
+    }
+    if (ctx.diff.removedFactors.length > 0) {
+      lines.push(`  - ➖ Dropped from proposal:`);
+      for (const label of ctx.diff.removedFactors) {
+        lines.push(`    - \`${label}\``);
+      }
+    }
+    if (ctx.diff.changedActions.length > 0) {
+      lines.push(`  - ↻ Action${ctx.diff.changedActions.length === 1 ? "" : "s"} moved:`);
+      for (const c of ctx.diff.changedActions) {
+        lines.push(
+          `    - \`${c.label}\` · ${c.previousAction} → ${c.currentAction}`,
+        );
       }
     }
   }

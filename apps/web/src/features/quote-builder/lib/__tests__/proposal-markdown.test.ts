@@ -26,6 +26,7 @@ import type { ProposalWatchlist } from "../proposal-watchlist";
 import type { ProposalStabilityReport } from "../proposal-stability";
 import type { ProposalRollbackPlan } from "../proposal-rollback";
 import type { PreflightChecklist } from "../proposal-preflight-checklist";
+import type { ProposalDiff } from "../proposal-diff";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -80,6 +81,7 @@ function nullCtx(): ProposalMarkdownContext {
     stability: null,
     rollback: null,
     preflight: null,
+    diff: null,
   };
 }
 
@@ -1585,5 +1587,122 @@ describe("preflight checklist section (20ac)", () => {
     const idxPreflight = md.indexOf("**Pre-flight**");
     expect(idxVerdict).toBeGreaterThan(-1);
     expect(idxPreflight).toBeGreaterThan(idxVerdict);
+  });
+});
+
+describe("diff section (20ad)", () => {
+  test("null diff → no '**Proposal diff**' line rendered", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff: null };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Proposal diff**");
+  });
+
+  test("empty diff with no unchanged → no section rendered", () => {
+    const diff: ProposalDiff = {
+      addedFactors: [],
+      removedFactors: [],
+      changedActions: [],
+      unchangedCount: 0,
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Proposal diff**");
+  });
+
+  test("stable (empty + unchanged>0) still renders the stability line", () => {
+    const diff: ProposalDiff = {
+      addedFactors: [],
+      removedFactors: [],
+      changedActions: [],
+      unchangedCount: 2,
+      headline: "Proposal stable since last session — 2 unchanged calls.",
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain(
+      "**Proposal diff**: ◆ STABLE — Proposal stable since last session — 2 unchanged calls.",
+    );
+  });
+
+  test("evolving diff (2 drift rows) renders added + moved sub-bullets", () => {
+    const diff: ProposalDiff = {
+      addedFactors: ["New-A"],
+      removedFactors: [],
+      changedActions: [
+        {
+          label: "Edge",
+          previousAction: "flip",
+          currentAction: "strengthen",
+        },
+      ],
+      unchangedCount: 1,
+      headline:
+        "Since last session: 1 new call, 1 action moved · 1 unchanged call.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Proposal diff**: ↻ EVOLVING");
+    expect(md).toContain("➕ New call:");
+    expect(md).toContain("`New-A`");
+    expect(md).toContain("↻ Action moved:");
+    expect(md).toContain("`Edge` · flip → strengthen");
+  });
+
+  test("diff with removedFactors renders dropped sub-bullet", () => {
+    const diff: ProposalDiff = {
+      addedFactors: [],
+      removedFactors: ["Dropped-B"],
+      changedActions: [],
+      unchangedCount: 1,
+      headline: "Since last session: 1 dropped · 1 unchanged call.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("➖ Dropped from proposal:");
+    expect(md).toContain("`Dropped-B`");
+  });
+
+  test("thrashing diff (3+ rows) surfaces ↯ THRASHING pill", () => {
+    const diff: ProposalDiff = {
+      addedFactors: ["A", "B"],
+      removedFactors: [],
+      changedActions: [
+        { label: "C", previousAction: "flip", currentAction: "strengthen" },
+      ],
+      unchangedCount: 0,
+      headline: "Since last session: 2 new calls, 1 action moved.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Proposal diff**: ↯ THRASHING");
+  });
+
+  test("diff renders above preflight + urgency in ordering", () => {
+    const diff: ProposalDiff = {
+      addedFactors: [],
+      removedFactors: [],
+      changedActions: [
+        { label: "Edge", previousAction: "flip", currentAction: "strengthen" },
+      ],
+      unchangedCount: 0,
+      headline: "Since last session: 1 action moved.",
+      empty: false,
+    };
+    const urgency: ProposalUrgencyResult = {
+      urgency: "high",
+      rationale: "Scorer is dulling.",
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), diff, urgency };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxDiff = md.indexOf("**Proposal diff**");
+    const idxUrgency = md.indexOf("**Urgency**");
+    expect(idxDiff).toBeGreaterThan(-1);
+    expect(idxUrgency).toBeGreaterThan(idxDiff);
   });
 });

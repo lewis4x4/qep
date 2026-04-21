@@ -109,6 +109,11 @@ import {
   describeReadinessPill,
   type PreflightChecklist,
 } from "../lib/proposal-preflight-checklist";
+import {
+  computeProposalDiff,
+  describeProposalDiffPill,
+  type ProposalDiff,
+} from "../lib/proposal-diff";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -567,6 +572,58 @@ export function QuoteListPage() {
     attributionReport,
   ]);
 
+  /**
+   * Slice 20ad — proposal diff vs. the previous session's proposal.
+   *
+   * Persistence strategy: localStorage keyed by a workspace-neutral
+   * key. The snapshot we read is the one captured at MOUNT (not the
+   * one we just wrote), so `previousProposal` stays stable for the
+   * duration of the session — a reviewer reading the diff doesn't
+   * see it collapse to empty a second after it renders.
+   *
+   * On every proposal update we write the latest snapshot, so the
+   * NEXT session reads it as "previous". First-ever mount sees null
+   * and the diff renders as "no prior" (muted); subsequent mounts
+   * see the real diff.
+   *
+   * No-ops safely in SSR / test environments without localStorage.
+   */
+  const STORAGE_KEY = "qep.quote-builder.proposal-last-snapshot";
+  const previousProposal = useMemo<ScorerProposal | null>(() => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return null;
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as ScorerProposal;
+      // Basic shape guard — if stored schema drifted, drop it quietly
+      // rather than crash the page.
+      if (!parsed || !Array.isArray(parsed.changes)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+    // Intentionally run once at mount — `previousProposal` must stay
+    // pinned to the mount-time snapshot so the diff doesn't collapse
+    // when we write the new snapshot below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      if (!scorerProposal) return;
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(scorerProposal));
+    } catch {
+      // localStorage can throw on quota exceeded / private-browsing;
+      // the diff degrades silently rather than blocking the page.
+    }
+  }, [scorerProposal]);
+
+  const proposalDiff = useMemo<ProposalDiff | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalDiff(previousProposal, scorerProposal);
+  }, [previousProposal, scorerProposal]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -667,6 +724,7 @@ export function QuoteListPage() {
           stability={proposalStability}
           rollback={proposalRollback}
           preflight={proposalPreflight}
+          diff={proposalDiff}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1744,6 +1802,7 @@ function ScorerProposalCard({
   stability,
   rollback,
   preflight,
+  diff,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1807,6 +1866,16 @@ function ScorerProposalCard({
    *  Null when no proposal; empty when the proposal has no actionable
    *  changes. */
   preflight: PreflightChecklist | null;
+  /** Slice 20ad — proposal diff vs. the previous session's proposal.
+   *  The time-series view on top of every cross-sectional slice: "is
+   *  this call the same as last time, a drifting one, or a thrashing
+   *  one?" Rendered as a header pill next to readiness and as an
+   *  explicit added/removed/changed row list in the expanded panel so
+   *  a reviewer can distinguish "consistent finding earning trust"
+   *  from "noisy knee-jerk." Null when no proposal; empty when the
+   *  previous snapshot doesn't exist yet or the proposals are
+   *  content-identical (though `headline` still signals stability). */
+  diff: ProposalDiff | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1851,6 +1920,7 @@ function ScorerProposalCard({
         stability,
         rollback,
         preflight,
+        diff,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -1984,6 +2054,35 @@ function ScorerProposalCard({
                     className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
                     aria-label={`Pre-flight readiness: ${preflight.readiness} — ${preflight.headline ?? ""}`}
                     title={preflight.headline ?? ""}
+                  >
+                    {pill.label}
+                  </span>
+                );
+              })()}
+              {/* Slice 20ad — proposal-diff pill. Answers the "is the
+                  scorer thrashing?" question at a glance. Emerald STABLE
+                  means "same call as last session, trust earned", amber
+                  EVOLVING means "small drift, kick the tires", rose
+                  THRASHING means "3+ rows changed, do NOT act on this
+                  like you'd act on a stable finding", muted "— no prior"
+                  means first-ever mount with nothing to compare against.
+                  Hidden when diff is null (no proposal) so we don't
+                  stack an always-muted pill on every reader. */}
+              {diff && (() => {
+                const pill = describeProposalDiffPill(diff);
+                const cls =
+                  pill.tone === "emerald"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : pill.tone === "amber"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : pill.tone === "rose"
+                        ? "bg-rose-500/15 text-rose-300"
+                        : "bg-muted/30 text-muted-foreground";
+                return (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
+                    aria-label={`Proposal drift: ${pill.label} — ${diff.headline ?? "no prior session"}`}
+                    title={diff.headline ?? "No prior session to compare against."}
                   >
                     {pill.label}
                   </span>
@@ -2130,6 +2229,20 @@ function ScorerProposalCard({
                     </ul>
                   )}
                 </div>
+              )}
+              {/* Slice 20ad — proposal diff row. Sits between the
+                  verdict and the pre-apply checklist to match the
+                  markdown order: after the cross-sectional "what the
+                  scorer recommends right now", before the audit trail
+                  that justifies it, comes the time-series question "and
+                  is this the same recommendation it made last session?"
+                  A reviewer sees drift context BEFORE they assess the
+                  gates, because drift changes how much weight to put on
+                  the gates themselves. Hidden when the diff has no
+                  headline (no prior snapshot + no stable-with-unchanged
+                  copy) so we don't render a dead box. */}
+              {diff && diff.headline && (
+                <ScorerProposalDiffRow diff={diff} />
               )}
               {/* Slice 20ac — pre-apply checklist. Pinned directly
                   under the verdict because it IS the audit trail that
@@ -2575,6 +2688,124 @@ function ScorerProposalPreflightRow({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Slice 20ad — proposal-diff row inside the ScorerProposalCard.
+ *
+ * Time-series complement to every cross-sectional row above. The
+ * upstream slices (confidence, verdict, stability, preflight) all
+ * answer "what is the scorer saying, and how much should we trust
+ * it right now?". This row answers "is the scorer saying the SAME
+ * thing it said last session, or is it oscillating?" — a consistent
+ * finding across sessions earns trust differently than a knee-jerk.
+ *
+ *   • STABLE (emerald) — no drift. The "Proposal stable since last
+ *     session — N unchanged calls." case, which is itself a signal
+ *     worth seeing explicitly, not just absence of noise.
+ *   • EVOLVING (amber) — 1-2 rows drifted. Worth a second look but
+ *     not alarming; the rows list tells the reviewer which specific
+ *     calls moved.
+ *   • THRASHING (rose) — 3+ rows drifted. The scorer is not stable
+ *     enough to act on with the same confidence as a consistent
+ *     call; the header pill and this row force the reviewer to
+ *     slow down.
+ *   • muted "no prior" — first-ever mount with nothing to compare
+ *     against. Explicit rather than silent so a reader doesn't
+ *     mistake "no prior" for "stable".
+ *
+ * Categories render in the fixed order added / removed / changed
+ * (matches the markdown + the natural "what's new / gone / moved"
+ * skim order).
+ */
+function ScorerProposalDiffRow({
+  diff,
+}: {
+  diff: ProposalDiff;
+}) {
+  const pill = describeProposalDiffPill(diff);
+  const borderCls =
+    pill.tone === "emerald"
+      ? "border-emerald-500/20 bg-emerald-500/5"
+      : pill.tone === "amber"
+        ? "border-amber-500/20 bg-amber-500/5"
+        : pill.tone === "rose"
+          ? "border-rose-500/20 bg-rose-500/5"
+          : "border-muted/30 bg-muted/5";
+  const headerCls =
+    pill.tone === "emerald"
+      ? "text-emerald-400"
+      : pill.tone === "amber"
+        ? "text-amber-400"
+        : pill.tone === "rose"
+          ? "text-rose-400"
+          : "text-muted-foreground";
+  return (
+    <div
+      className={`rounded border p-2 ${borderCls}`}
+      role="region"
+      aria-label={`Proposal drift vs last session (${pill.label})`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className={`text-[10px] font-semibold uppercase tracking-wide ${headerCls}`}>
+          Proposal diff vs last session
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {pill.label}
+        </div>
+      </div>
+      {diff.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">{diff.headline}</p>
+      )}
+      {(diff.addedFactors.length > 0 ||
+        diff.removedFactors.length > 0 ||
+        diff.changedActions.length > 0) && (
+        <ul className="mt-1.5 space-y-0.5">
+          {diff.addedFactors.map((label) => (
+            <li
+              key={`added-${label}`}
+              className="flex items-start gap-2 text-[10px]"
+              aria-label={`New call: ${label}`}
+            >
+              <span className="shrink-0 font-semibold text-emerald-400" aria-hidden>
+                ➕
+              </span>
+              <span className="shrink-0 text-foreground">New call</span>
+              <span className="flex-1 text-muted-foreground">— {label}</span>
+            </li>
+          ))}
+          {diff.removedFactors.map((label) => (
+            <li
+              key={`removed-${label}`}
+              className="flex items-start gap-2 text-[10px]"
+              aria-label={`Dropped from proposal: ${label}`}
+            >
+              <span className="shrink-0 font-semibold text-rose-400" aria-hidden>
+                ➖
+              </span>
+              <span className="shrink-0 text-foreground">Dropped</span>
+              <span className="flex-1 text-muted-foreground">— {label}</span>
+            </li>
+          ))}
+          {diff.changedActions.map((c) => (
+            <li
+              key={`changed-${c.label}`}
+              className="flex items-start gap-2 text-[10px]"
+              aria-label={`Action moved on ${c.label}: ${c.previousAction} to ${c.currentAction}`}
+            >
+              <span className="shrink-0 font-semibold text-amber-400" aria-hidden>
+                ↻
+              </span>
+              <span className="shrink-0 text-foreground">Action moved</span>
+              <span className="flex-1 text-muted-foreground">
+                — {c.label} · {c.previousAction} → {c.currentAction}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
