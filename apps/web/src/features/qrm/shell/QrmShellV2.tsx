@@ -10,6 +10,7 @@ import {
   resolveSurface,
   type SurfaceId,
 } from "./shellMap";
+import { useShellSignals } from "./useShellSignals";
 
 /**
  * QrmShellV2 — four-surface operator command deck.
@@ -42,18 +43,6 @@ const SURFACE_HINT: Record<SurfaceId, string> = {
   ask: "A",
 };
 
-/**
- * Live pulse counts per surface. These are placeholders wired to the shell
- * today; subsequent slices will subscribe to the actual signal counts from
- * the activity / pulse / inventory streams.
- */
-const SURFACE_SIGNAL: Record<SurfaceId, { count: number; tone: "active" | "live" | "hot" | "cool" }> = {
-  today: { count: 7, tone: "active" },
-  graph: { count: 0, tone: "cool" },
-  pulse: { count: 12, tone: "hot" },
-  ask: { count: 0, tone: "live" },
-};
-
 function useClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -67,6 +56,7 @@ export function QrmShellV2() {
   const { pathname } = useLocation();
   const { surface: activeSurface, lens: activeLens } = resolveSurface(pathname);
   const lenses = SURFACE_LENSES[activeSurface];
+  const signals = useShellSignals();
   const now = useClock();
   const clock = now.toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -103,7 +93,7 @@ export function QrmShellV2() {
         {SURFACE_ORDER.map((surfaceId) => {
           const def = SURFACES[surfaceId];
           const Icon = SURFACE_ICONS[surfaceId];
-          const signal = SURFACE_SIGNAL[surfaceId];
+          const signal = signals[surfaceId];
           const active = surfaceId === activeSurface;
           return (
             <NavLink
@@ -135,11 +125,13 @@ export function QrmShellV2() {
                     "ml-1 inline-flex min-w-[1.25rem] items-center justify-center rounded-sm px-1 font-mono text-[10px] font-semibold tabular-nums",
                     signal.tone === "hot"
                       ? "bg-qep-hot/15 text-qep-hot"
-                      : signal.tone === "live"
-                        ? "bg-qep-live/15 text-qep-live"
-                        : signal.tone === "active"
-                          ? "bg-qep-orange/15 text-qep-orange"
-                          : "bg-muted text-muted-foreground",
+                      : signal.tone === "warm"
+                        ? "bg-qep-warm/15 text-qep-warm"
+                        : signal.tone === "live"
+                          ? "bg-qep-live/15 text-qep-live"
+                          : signal.tone === "active"
+                            ? "bg-qep-orange/15 text-qep-orange"
+                            : "bg-muted text-muted-foreground",
                   )}
                 >
                   {signal.count}

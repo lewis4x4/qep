@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
 import { MapWithSidebar, MapLibreCanvas, type MapMarker, type MapOverlay } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight, Map as MapIcon } from "lucide-react";
@@ -12,6 +11,7 @@ import { buildAccountCommandHref } from "../lib/account-command";
 import { buildOpportunityMapBoard } from "../lib/opportunity-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 
 const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "open_revenue", label: "Open revenue", enabled: true },
@@ -19,6 +19,12 @@ const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "rentals", label: "Active rentals", enabled: true },
   { key: "trades", label: "Trade signals", enabled: true },
 ];
+
+function fmtMoney(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
+  return `$${Math.round(v)}`;
+}
 
 export function OpportunityMapPage() {
   const navigate = useNavigate();
@@ -128,39 +134,71 @@ export function OpportunityMapPage() {
     },
   })), [navigate, visibleRows]);
 
+  const summary = boardQuery.data?.summary;
+  const mapped = summary?.mappedAccounts ?? 0;
+  const openRev = summary?.openRevenue ?? 0;
+  const visits = summary?.visitTargets ?? 0;
+  const trades = summary?.tradeSignals ?? 0;
+  const rentals = summary?.activeRentals ?? 0;
+
+  // Iron briefing — route the operator to the sharpest geographic lever.
+  const mapIronHeadline = boardQuery.isLoading
+    ? "Fusing open revenue, visit targets, rentals, and trade signal coordinates…"
+    : boardQuery.isError
+      ? "Opportunity map offline — one of the feeders failed. Check the console."
+      : mapped === 0
+        ? "No mapped accounts yet — equipment needs usable coordinates in metadata before the map lights up."
+        : visits > 0
+          ? `${visits} visit target${visits === 1 ? "" : "s"} on the map today — route them before the rest of the week compounds. ${fmtMoney(openRev)} open revenue · ${trades} trade signal${trades === 1 ? "" : "s"}.`
+          : trades > 0
+            ? `${trades} trade signal${trades === 1 ? "" : "s"} across ${mapped} mapped accounts — plan the upgrade touch before a competitor does. ${fmtMoney(openRev)} open revenue on the canvas.`
+            : openRev > 0
+              ? `${fmtMoney(openRev)} open revenue across ${mapped} mapped account${mapped === 1 ? "" : "s"}. Use the overlays to route today's motion.`
+              : `${mapped} mapped account${mapped === 1 ? "" : "s"}, ${rentals} active rental${rentals === 1 ? "" : "s"} on the canvas. No urgent geographic pressure.`;
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-2 pt-2 sm:px-6 lg:px-8">
       <QrmPageHeader
         title="Opportunity Map"
-        subtitle="Geographic overlay of open revenue, visit targets, rentals, and trade signals."
+        subtitle="Open revenue, visit targets, rentals, and trade signals on one geographic canvas."
+        crumb={{ surface: "GRAPH", lens: "MAP", count: mapped }}
+        metrics={[
+          { label: "Mapped", value: mapped.toLocaleString() },
+          { label: "Open rev", value: fmtMoney(openRev), tone: openRev > 0 ? "active" : undefined },
+          { label: "Visit targets", value: visits, tone: visits > 0 ? "ok" : undefined },
+          { label: "Trade signals", value: trades, tone: trades > 0 ? "live" : undefined },
+          { label: "Rentals", value: rentals, tone: "active" },
+        ]}
+        ironBriefing={{
+          headline: mapIronHeadline,
+          actions: [{ label: "Seasonal map →", href: "/qrm/seasonal-opportunity-map" }],
+        }}
       />
       <QrmSubNav />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Mapped Accounts" value={String(boardQuery.data?.summary.mappedAccounts ?? 0)} detail="Customer-owned equipment with usable coordinates." />
-        <SummaryCard label="Open Revenue" value={formatCurrency(boardQuery.data?.summary.openRevenue ?? 0)} detail="Pipeline value currently represented on the map." />
-        <SummaryCard label="Visit Targets" value={String(boardQuery.data?.summary.visitTargets ?? 0)} detail="Today’s predictive visit targets with map anchors." />
-        <SummaryCard label="Trade Signals" value={String(boardQuery.data?.summary.tradeSignals ?? 0)} detail={`${boardQuery.data?.summary.activeRentals ?? 0} active rental markers also available`} />
-      </div>
-
       <MapWithSidebar
         sidebarHeader={
-          <div className="text-[10px] text-muted-foreground">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {boardQuery.isLoading ? "Loading…" : `${visibleRows.length} mapped signals`}
           </div>
         }
         sidebar={
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-qep-deck-rule/40">
             {visibleRows.map((row) => (
-              <div key={row.id} className="p-2">
-                <p className="text-xs font-medium text-foreground">{row.label}</p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <div key={row.id} className="p-2.5">
+                <p className="truncate text-[13px] font-medium text-foreground">{row.label}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                   {row.kind === "rental"
                     ? "Active rental marker"
-                    : `${formatCurrency(row.openRevenue)} open revenue · ${row.visitTargetCount} visit target${row.visitTargetCount === 1 ? "" : "s"} · ${row.tradeSignalCount} trade signal${row.tradeSignalCount === 1 ? "" : "s"}`}
+                    : `${formatCurrency(row.openRevenue)} open · ${row.visitTargetCount} visit · ${row.tradeSignalCount} trade`}
                 </p>
                 <div className="mt-1">
-                  <Button asChild size="sm" variant="ghost" className="h-7 px-0 text-[10px]">
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-0 font-mono text-[10px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80"
+                  >
                     <Link to={row.kind === "rental" ? "/qrm/rentals" : buildAccountCommandHref(row.companyId ?? "")}>
                       Open <ArrowUpRight className="ml-1 h-3 w-3" />
                     </Link>
@@ -169,9 +207,9 @@ export function OpportunityMapPage() {
               </div>
             ))}
             {!boardQuery.isLoading && visibleRows.length === 0 && (
-              <Card className="m-2 p-3">
+              <DeckSurface className="m-2 p-3">
                 <p className="text-xs text-muted-foreground">No mapped opportunity signals yet.</p>
-              </Card>
+              </DeckSurface>
             )}
           </div>
         }
@@ -195,32 +233,6 @@ export function OpportunityMapPage() {
         overlays={overlays}
         onOverlayToggle={(key, enabled) => setOverlays((current) => current.map((overlay) => overlay.key === key ? { ...overlay, enabled } : overlay))}
       />
-
-      <Card className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Open Seasonal Opportunity Map to route time-of-year demand shifts and budget-cycle timing into account action.
-            </p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link to="/qrm/seasonal-opportunity-map">
-              Seasonal map <ArrowUpRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-        </div>
-      </Card>
     </div>
-  );
-}
-
-function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }
