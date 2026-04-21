@@ -13,7 +13,7 @@
 create table public.crm_company_ship_to_addresses (
   id uuid primary key default gen_random_uuid(),
   workspace_id text not null default 'default',
-  company_id uuid not null references public.crm_companies(id) on delete cascade,
+  company_id uuid not null references public.qrm_companies(id) on delete cascade,
   name text not null,
   contact_name text,
   phone text,
