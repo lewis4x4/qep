@@ -24,7 +24,11 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { mergeActivityTemplates } from "../lib/activity-templates";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { QrmSubNav } from "../components/QrmSubNav";
+import {
+  DeckSurface,
+  SignalChip,
+  StatusDot,
+} from "../components/command-deck";
 import { archiveCrmActivity, deliverCrmActivity, listCrmActivityFeed, listCrmActivityTemplates, patchCrmActivity, patchCrmActivityTask } from "../lib/qrm-api";
 import type { QrmActivityFeedItem, QrmActivityItem, QrmActivityTemplate, QrmActivityType, QrmTaskMetadata } from "../lib/types";
 
@@ -1199,9 +1203,8 @@ export function QrmActivitiesPage() {
           actions: [{ label: "Templates →", href: "/qrm/activities/templates" }],
         }}
       />
-      <QrmSubNav />
 
-      <Card className="space-y-4 p-3 sm:p-4">
+      <DeckSurface className="space-y-4 p-3 sm:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1374,7 +1377,7 @@ export function QrmActivitiesPage() {
         )}
 
         {operationIssues.length > 0 && (
-          <Card className="rounded-2xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
+          <DeckSurface className="rounded-2xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">Queue issues still need attention</p>
@@ -1412,28 +1415,30 @@ export function QrmActivitiesPage() {
                 </div>
               ))}
             </div>
-          </Card>
+          </DeckSurface>
         )}
-      </Card>
+      </DeckSurface>
 
       {activitiesQuery.isLoading && (
-        <div className="space-y-3" role="status" aria-label="Loading activities">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
-          ))}
-        </div>
+        <DeckSurface className="p-4">
+          <div className="space-y-3" role="status" aria-label="Loading activities">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-28 animate-pulse rounded-sm border border-qep-deck-rule/40 bg-qep-deck-elevated/30" />
+            ))}
+          </div>
+        </DeckSurface>
       )}
 
       {activitiesQuery.isError && (
-        <Card className="p-6 text-center">
+        <DeckSurface className="p-6 text-center">
           <p className="text-sm text-muted-foreground">Failed to load the QRM activity feed. Refresh and try again.</p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length === 0 && (
-        <Card className="p-6 text-center">
+        <DeckSurface className="p-6 text-center">
           <p className="text-sm text-muted-foreground">No activity matches the current filters.</p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!activitiesQuery.isLoading && !activitiesQuery.isError && filteredActivities.length > 0 && (
@@ -1451,7 +1456,10 @@ export function QrmActivitiesPage() {
             const deliveryPending = isPending(pendingDeliveryIds, activity.id);
 
             return (
-              <Card key={activity.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div
+                key={activity.id}
+                className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30 p-3 shadow-sm"
+              >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1630,13 +1638,13 @@ export function QrmActivitiesPage() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
       )}
 
-      <Card className="rounded-2xl border border-border bg-muted/30 p-4">
+      <DeckSurface className="rounded-2xl border-qep-deck-rule/60 bg-muted/30 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-foreground">Next communication-hub closeout</p>
@@ -1649,7 +1657,7 @@ export function QrmActivitiesPage() {
             Unified inbox slice active
           </span>
         </div>
-      </Card>
+      </DeckSurface>
 
       <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
@@ -1662,13 +1670,13 @@ export function QrmActivitiesPage() {
 
           <div className="space-y-3">
             {selectedCommunications.length === 0 && (
-              <Card className="rounded-xl border border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
+              <DeckSurface className="rounded-xl border-dashed border-input bg-muted/30 p-5 text-sm text-muted-foreground">
                 No communications selected.
-              </Card>
+              </DeckSurface>
             )}
 
             {selectedCommunications.length > 0 && (
-              <Card className="rounded-xl border border-border bg-muted/30 p-4 shadow-sm">
+              <DeckSurface className="rounded-xl border-qep-deck-rule/60 bg-muted/30 p-4 shadow-sm">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -1698,20 +1706,20 @@ export function QrmActivitiesPage() {
                   )}
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                    <DeckSurface className="rounded-xl border-qep-deck-rule/60 bg-card p-3 shadow-none">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Selected</p>
                       <p className="mt-2 text-2xl font-bold text-foreground">{selectedCommunications.length}</p>
-                    </Card>
-                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                    </DeckSurface>
+                    <DeckSurface className="rounded-xl border-qep-deck-rule/60 bg-card p-3 shadow-none">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Approved</p>
                       <p className="mt-2 text-2xl font-bold text-emerald-700">{approvedSelectedCommunications.length}</p>
-                    </Card>
-                    <Card className="rounded-xl border border-border bg-card p-3 shadow-none">
+                    </DeckSurface>
+                    <DeckSurface className="rounded-xl border-qep-deck-rule/60 bg-card p-3 shadow-none">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Still reviewing</p>
                       <p className="mt-2 text-2xl font-bold text-primary">
                         {Math.max(selectedCommunications.length - approvedSelectedCommunications.length, 0)}
                       </p>
-                    </Card>
+                    </DeckSurface>
                   </div>
 
                   {reviewTemplateGroups.length > 0 && (
@@ -1762,7 +1770,7 @@ export function QrmActivitiesPage() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </DeckSurface>
             )}
 
             {selectedCommunications.map((activity) => {
@@ -1778,7 +1786,7 @@ export function QrmActivitiesPage() {
                 body: readDraftBody(activity),
               });
               return (
-                <Card key={activity.id} className="rounded-xl border border-border p-4 shadow-sm">
+                <DeckSurface key={activity.id} className="rounded-xl border-qep-deck-rule/60 p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1903,13 +1911,13 @@ export function QrmActivitiesPage() {
                       </Button>
                     </div>
                   )}
-                </Card>
+                </DeckSurface>
               );
             })}
           </div>
 
           {selectedCommunicationIssues.length > 0 && (
-            <Card className="mt-4 rounded-xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
+            <DeckSurface className="mt-4 rounded-xl border border-rose-300/60 bg-rose-500/10 dark:border-rose-500/35 p-4 shadow-none">
               <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">Selected message issues</p>
               <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
                 These items failed during review, delivery, or archive handling. Fix them here before sending again.
@@ -1922,7 +1930,7 @@ export function QrmActivitiesPage() {
                   </div>
                 ))}
               </div>
-            </Card>
+            </DeckSurface>
           )}
 
           <div className="mt-6 flex items-center justify-end gap-2">

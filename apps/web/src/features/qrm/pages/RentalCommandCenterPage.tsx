@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { rentalOpsApi } from "../lib/rental-ops-api";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 import {
   buildRentalCommandCenter,
   type RentalFleetUnit,
@@ -284,15 +284,15 @@ export function RentalCommandCenterPage() {
       <QrmPageHeader
         title="Rental Command Center"
         subtitle="Dedicated rental operations across utilization, returns, work recovery, and movement risk."
+        crumb={{ surface: "GRAPH", lens: "RENTALS" }}
       />
-      <QrmSubNav />
 
       {commandQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading rental command…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading rental command…</DeckSurface>
       ) : commandQuery.isError || !center ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           {commandQuery.error instanceof Error ? commandQuery.error.message : "Rental command is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-5">
@@ -312,7 +312,7 @@ export function RentalCommandCenterPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <h2 className="text-sm font-semibold text-foreground">Pending booking approvals</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 Approve customer booking requests, assign units for category-first requests, and trigger deposit checkout.
@@ -408,9 +408,9 @@ export function RentalCommandCenterPage() {
                   );
                 })}
               </div>
-            </Card>
+            </DeckSurface>
 
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <h2 className="text-sm font-semibold text-foreground">Pending extension approvals</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 Approve or decline extension requests and collect any additional extension charge when needed.
@@ -469,7 +469,7 @@ export function RentalCommandCenterPage() {
                   </div>
                 ))}
               </div>
-            </Card>
+            </DeckSurface>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-3">
@@ -494,7 +494,7 @@ export function RentalCommandCenterPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">Return queue</h2>
@@ -531,9 +531,9 @@ export function RentalCommandCenterPage() {
                   ))
                 )}
               </div>
-            </Card>
+            </DeckSurface>
 
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-foreground">Rental movement</h2>
@@ -571,7 +571,7 @@ export function RentalCommandCenterPage() {
                   ))
                 )}
               </div>
-            </Card>
+            </DeckSurface>
           </div>
         </>
       )}

@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
 import { QrmDealEditorSheet } from "../components/QrmDealEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 import { PipelineAnalyticsOverlay } from "../components/PipelineAnalyticsOverlay";
 import { PipelineDealsTableView } from "../components/PipelineDealsTableView";
 import { PipelineFiltersBar } from "../components/PipelineFiltersBar";
@@ -208,22 +208,22 @@ export function QrmPipelinePage({ userRole }: QrmPipelinePageProps) {
       <QrmPageHeader
         title="QRM Pipeline"
         subtitle="21-step deal pipeline with SLA enforcement, drag-and-drop stage transitions, and real-time follow-up tracking."
+        crumb={{ surface: "GRAPH", lens: "DEALS", count: filteredDeals.length }}
       />
-      <QrmSubNav />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">What matters now</p>
           <p className="mt-2 text-sm text-foreground">{pipelineWhatMattersNow}</p>
-        </Card>
-        <Card className="p-4">
+        </DeckSurface>
+        <DeckSurface className="p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next move</p>
           <p className="mt-2 text-sm text-foreground">{pipelineNextMove}</p>
-        </Card>
-        <Card className="p-4">
+        </DeckSurface>
+        <DeckSurface className="p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Risk if ignored</p>
           <p className="mt-2 text-sm text-foreground">{pipelineRiskIfIgnored}</p>
-        </Card>
+        </DeckSurface>
       </div>
 
       <div className="flex justify-end gap-2">
