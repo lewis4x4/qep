@@ -48,6 +48,8 @@ import type { ProposalDiff } from "./proposal-diff";
 import { describeProposalDiffPill } from "./proposal-diff";
 import type { ProposalConsolidationReport } from "./proposal-consolidation";
 import { describeConsolidationPill } from "./proposal-consolidation";
+import type { ProposalStreakBreakReport } from "./proposal-streak-breaks";
+import { describeStreakBreaksPill } from "./proposal-streak-breaks";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -112,6 +114,15 @@ export interface ProposalMarkdownContext {
    *  THIS session?" while 20ae answers "has it been consistent across
    *  the last N sessions?" */
   consolidation: ProposalConsolidationReport | null;
+  /** 20af — streak-break alerts. Cross-references the pairwise diff
+   *  (20ad) with the rolling history (20ae) to surface calls that
+   *  were previously consolidated or consistent and just broke. A
+   *  distinct tier-1 alert above the generic diff because a
+   *  consolidated call breaking is a materially louder signal than
+   *  a fresh call moving. Null when caller doesn't compute; empty
+   *  report is handled — section omitted cleanly when no streaks
+   *  broke this session. */
+  streakBreaks: ProposalStreakBreakReport | null;
 }
 
 /**
@@ -138,6 +149,28 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
           r.polarity === "positive" ? "✓" : r.polarity === "negative" ? "⚠" : "·";
         lines.push(`  - ${icon} ${r.rationale}`);
       }
+    }
+  }
+
+  // Streak breaks (20af) — tier-1 alert. Rendered ABOVE the
+  // generic diff because a consolidated call breaking is a
+  // materially louder signal than generic drift: the scorer just
+  // re-thought a time-tested finding, and the reviewer needs to
+  // see that before they scan the rest of the diff. Omitted when
+  // the report is null or empty (no previously-consolidated or
+  // consistent calls broke this session).
+  if (ctx.streakBreaks && !ctx.streakBreaks.empty && ctx.streakBreaks.headline) {
+    const pill = describeStreakBreaksPill(ctx.streakBreaks);
+    lines.push(
+      `**Streak breaks**: ${pill.label} — ${ctx.streakBreaks.headline}`,
+    );
+    for (const e of ctx.streakBreaks.entries) {
+      const glyph = e.kind === "consolidated-break" ? "⚡" : "↯";
+      const to =
+        e.currentAction === null ? "removed" : `→ ${e.currentAction}`;
+      lines.push(
+        `  - ${glyph} \`${e.label}\` · ${e.previousAction} ${to} · was consistent for ${e.priorStreak} session${e.priorStreak === 1 ? "" : "s"}`,
+      );
     }
   }
 

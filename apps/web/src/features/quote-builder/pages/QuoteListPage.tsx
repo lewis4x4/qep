@@ -119,6 +119,11 @@ import {
   describeConsolidationPill,
   type ProposalConsolidationReport,
 } from "../lib/proposal-consolidation";
+import {
+  computeProposalStreakBreaks,
+  describeStreakBreaksPill,
+  type ProposalStreakBreakReport,
+} from "../lib/proposal-streak-breaks";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -695,6 +700,22 @@ export function QuoteListPage() {
     return computeProposalConsolidation(proposalHistory, scorerProposal);
   }, [proposalHistory, scorerProposal]);
 
+  /**
+   * Slice 20af — streak breaks. Cross-references the pairwise diff
+   * (20ad) with the rolling history (20ae) to surface calls that
+   * were previously consolidated or consistent and just broke. A
+   * tier-1 alert: a consolidated call flipping is materially louder
+   * than a fresh call moving.
+   *
+   * Reuses the same `proposalHistory` snapshot pinned at mount, so
+   * this report is consistent with the consolidation row above it.
+   * Null when no proposal; empty when nothing broke.
+   */
+  const proposalStreakBreaks = useMemo<ProposalStreakBreakReport | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalStreakBreaks(proposalHistory, scorerProposal);
+  }, [proposalHistory, scorerProposal]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -797,6 +818,7 @@ export function QuoteListPage() {
           preflight={proposalPreflight}
           diff={proposalDiff}
           consolidation={proposalConsolidation}
+          streakBreaks={proposalStreakBreaks}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1876,6 +1898,7 @@ function ScorerProposalCard({
   preflight,
   diff,
   consolidation,
+  streakBreaks,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1958,6 +1981,13 @@ function ScorerProposalCard({
    *  is flagged as fresh evidence. Null when no proposal; empty when
    *  the proposal has no actionable changes. */
   consolidation: ProposalConsolidationReport | null;
+  /** Slice 20af — streak-break alert. Cross-references the pairwise
+   *  diff (20ad) with the rolling history (20ae) to surface
+   *  previously-consolidated or consistent calls that just broke.
+   *  A distinct tier-1 alert because a 4-session Lindy call flipping
+   *  is materially louder than a fresh call moving. Null when no
+   *  proposal; empty when nothing broke. */
+  streakBreaks: ProposalStreakBreakReport | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -2004,6 +2034,7 @@ function ScorerProposalCard({
         preflight,
         diff,
         consolidation,
+        streakBreaks,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -2151,6 +2182,30 @@ function ScorerProposalCard({
                   means first-ever mount with nothing to compare against.
                   Hidden when diff is null (no proposal) so we don't
                   stack an always-muted pill on every reader. */}
+              {/* Slice 20af — streak-break pill. Rendered immediately
+                  before the diff pill because it's the tier-1 version
+                  of the same "what moved?" question: "what moved that
+                  was previously CONSOLIDATED or CONSISTENT?" Hidden
+                  when empty — we don't want a muted chip stacked every
+                  session for the 90% of sessions where nothing broke. */}
+              {streakBreaks && !streakBreaks.empty && (() => {
+                const pill = describeStreakBreaksPill(streakBreaks);
+                const cls =
+                  pill.tone === "rose"
+                    ? "bg-rose-500/15 text-rose-300"
+                    : pill.tone === "amber"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : "bg-muted/30 text-muted-foreground";
+                return (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
+                    aria-label={`Streak breaks: ${pill.label} — ${streakBreaks.headline ?? ""}`}
+                    title={streakBreaks.headline ?? ""}
+                  >
+                    {pill.label}
+                  </span>
+                );
+              })()}
               {diff && (() => {
                 const pill = describeProposalDiffPill(diff);
                 const cls =
@@ -2342,6 +2397,13 @@ function ScorerProposalCard({
                     </ul>
                   )}
                 </div>
+              )}
+              {/* Slice 20af — streak-break row. Tier-1 alert directly
+                  above the diff: a consolidated call breaking is
+                  materially louder than generic drift. Hidden when
+                  empty (nothing broke this session). */}
+              {streakBreaks && !streakBreaks.empty && (
+                <ScorerProposalStreakBreaksRow streakBreaks={streakBreaks} />
               )}
               {/* Slice 20ad — proposal diff row. Sits between the
                   verdict and the pre-apply checklist to match the
@@ -2812,6 +2874,101 @@ function ScorerProposalPreflightRow({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Slice 20af — streak-breaks row inside the ScorerProposalCard.
+ *
+ * Tier-1 alert. Cross-references the pairwise diff (20ad) with the
+ * rolling history (20ae) and surfaces calls that were previously
+ * consolidated (streak ≥ 4) or consistent (2-3) and just broke.
+ *
+ *   ⚡ rose  — consolidated break (was Lindy, now moved)
+ *   ↯ amber — consistent break (was 2-3 sessions, now moved)
+ *
+ * The row exists specifically to distinguish "the scorer just
+ * re-thought a time-tested finding" from "a fresh recommendation
+ * moved" — both show up in the 20ad diff but deserve different
+ * weight from the reviewer. The `was consistent for N sessions`
+ * evidence tail surfaces the streak length so the magnitude is
+ * explicit, not implied.
+ *
+ * Entries are pre-sorted by the lib (longest streak first, label
+ * alpha tie-break), so the biggest broken Lindy call renders at
+ * the top — exactly where the manager's eye should go.
+ */
+function ScorerProposalStreakBreaksRow({
+  streakBreaks,
+}: {
+  streakBreaks: ProposalStreakBreakReport;
+}) {
+  const pill = describeStreakBreaksPill(streakBreaks);
+  const borderCls =
+    pill.tone === "rose"
+      ? "border-rose-500/30 bg-rose-500/10"
+      : pill.tone === "amber"
+        ? "border-amber-500/30 bg-amber-500/10"
+        : "border-muted/30 bg-muted/5";
+  const headerCls =
+    pill.tone === "rose"
+      ? "text-rose-400"
+      : pill.tone === "amber"
+        ? "text-amber-400"
+        : "text-muted-foreground";
+  return (
+    <div
+      className={`rounded border p-2 ${borderCls}`}
+      role="region"
+      aria-label={`Streak breaks (${pill.label})`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className={`text-[10px] font-semibold uppercase tracking-wide ${headerCls}`}>
+          Streak breaks
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {pill.label}
+        </div>
+      </div>
+      {streakBreaks.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">
+          {streakBreaks.headline}
+        </p>
+      )}
+      {streakBreaks.entries.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5">
+          {streakBreaks.entries.map((e) => {
+            const glyph =
+              e.kind === "consolidated-break"
+                ? { char: "⚡", color: "text-rose-400" }
+                : { char: "↯", color: "text-amber-400" };
+            const arrow =
+              e.currentAction === null
+                ? "removed"
+                : `→ ${e.currentAction}`;
+            return (
+              <li
+                key={`${e.label}-${e.previousAction}`}
+                className="flex items-start gap-2 text-[10px]"
+                aria-label={`${e.label} · ${e.previousAction} ${arrow} · was consistent for ${e.priorStreak} sessions`}
+              >
+                <span
+                  className={`shrink-0 font-semibold ${glyph.color}`}
+                  aria-hidden
+                >
+                  {glyph.char}
+                </span>
+                <span className="shrink-0 text-foreground">{e.label}</span>
+                <span className="flex-1 text-muted-foreground">
+                  — {e.previousAction} {arrow} · was consistent for{" "}
+                  {e.priorStreak} session{e.priorStreak === 1 ? "" : "s"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

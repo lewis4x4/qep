@@ -28,6 +28,7 @@ import type { ProposalRollbackPlan } from "../proposal-rollback";
 import type { PreflightChecklist } from "../proposal-preflight-checklist";
 import type { ProposalDiff } from "../proposal-diff";
 import type { ProposalConsolidationReport } from "../proposal-consolidation";
+import type { ProposalStreakBreakReport } from "../proposal-streak-breaks";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -84,6 +85,7 @@ function nullCtx(): ProposalMarkdownContext {
     preflight: null,
     diff: null,
     consolidation: null,
+    streakBreaks: null,
   };
 }
 
@@ -1847,5 +1849,116 @@ describe("consolidation section (20ae)", () => {
     const ctx: ProposalMarkdownContext = { ...nullCtx(), consolidation };
     const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
     expect(md).toContain("**Consolidation**: ✦ FRESH");
+  });
+});
+
+describe("streak breaks section (20af)", () => {
+  test("null streakBreaks → no '**Streak breaks**' line rendered", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), streakBreaks: null };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Streak breaks**");
+  });
+
+  test("empty streakBreaks → no section rendered", () => {
+    const streakBreaks: ProposalStreakBreakReport = {
+      entries: [],
+      consolidatedBreakCount: 0,
+      consistentBreakCount: 0,
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), streakBreaks };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Streak breaks**");
+  });
+
+  test("consolidated break renders ⚡ BROKEN pill + 'removed' when action is null", () => {
+    const streakBreaks: ProposalStreakBreakReport = {
+      entries: [
+        {
+          label: "Trade in hand",
+          priorStreak: 5,
+          previousAction: "flip",
+          currentAction: null,
+          kind: "consolidated-break",
+        },
+      ],
+      consolidatedBreakCount: 1,
+      consistentBreakCount: 0,
+      headline: "Streak breaks since last session: 1 consolidated call broken.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), streakBreaks };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Streak breaks**: ⚡ BROKEN");
+    expect(md).toContain(
+      "⚡ `Trade in hand` · flip removed · was consistent for 5 sessions",
+    );
+  });
+
+  test("consistent break renders ↯ EVOLVING pill + action arrow", () => {
+    const streakBreaks: ProposalStreakBreakReport = {
+      entries: [
+        {
+          label: "Edge",
+          priorStreak: 3,
+          previousAction: "flip",
+          currentAction: "strengthen",
+          kind: "consistent-break",
+        },
+      ],
+      consolidatedBreakCount: 0,
+      consistentBreakCount: 1,
+      headline: "Streak breaks since last session: 1 consistent call moved.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), streakBreaks };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Streak breaks**: ↯ EVOLVING");
+    expect(md).toContain(
+      "↯ `Edge` · flip → strengthen · was consistent for 3 sessions",
+    );
+  });
+
+  test("streak breaks render ABOVE the diff section (tier-1 alert ordering)", () => {
+    const streakBreaks: ProposalStreakBreakReport = {
+      entries: [
+        {
+          label: "Trade in hand",
+          priorStreak: 4,
+          previousAction: "flip",
+          currentAction: "strengthen",
+          kind: "consolidated-break",
+        },
+      ],
+      consolidatedBreakCount: 1,
+      consistentBreakCount: 0,
+      headline: "Streak breaks since last session: 1 consolidated call broken.",
+      empty: false,
+    };
+    const diff = {
+      addedFactors: [],
+      removedFactors: [],
+      changedActions: [
+        {
+          label: "Trade in hand",
+          previousAction: "flip" as const,
+          currentAction: "strengthen" as const,
+        },
+      ],
+      unchangedCount: 0,
+      headline: "Since last session: 1 action moved.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      streakBreaks,
+      diff,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxBreaks = md.indexOf("**Streak breaks**");
+    const idxDiff = md.indexOf("**Proposal diff**");
+    expect(idxBreaks).toBeGreaterThan(-1);
+    expect(idxDiff).toBeGreaterThan(idxBreaks);
   });
 });
