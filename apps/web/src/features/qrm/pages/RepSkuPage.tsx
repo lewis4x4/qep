@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 import { buildRepSkuBoard } from "../lib/rep-sku";
 import type { PipelineDealRow, DealStageRow, RepProfileRow } from "@/features/dashboards/lib/pipeline-health";
 import type { TimeBankRow } from "../lib/time-bank";
@@ -135,15 +135,15 @@ export function RepSkuPage() {
       <QrmPageHeader
         title="Rep as SKU"
         subtitle="Every rep modeled as a packaged offering from live pipeline, prospecting, cadence, and field-signal evidence."
+        crumb={{ surface: "PULSE", lens: "REP SKU" }}
       />
-      <QrmSubNav />
 
       {boardQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading rep packages…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading rep packages…</DeckSurface>
       ) : boardQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           {boardQuery.error instanceof Error ? boardQuery.error.message : "Rep packaging is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
@@ -153,7 +153,7 @@ export function RepSkuPage() {
             <SummaryCard icon={Mic2} label="Field Signal Reps" value={String(board.summary.fieldSignalReps)} />
           </div>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Rep packages</h2>
@@ -208,7 +208,7 @@ export function RepSkuPage() {
                 ))
               )}
             </div>
-          </Card>
+          </DeckSurface>
         </>
       )}
     </div>

@@ -168,7 +168,7 @@ export function SopFolkWorkflowPage() {
       <QrmSubNav />
 
       {isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading SOP + folk workflow…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading SOP + folk workflow…</DeckSurface>
       ) : isError ? (
         <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           SOP + folk workflow is unavailable right now.
