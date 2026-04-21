@@ -16,4 +16,12 @@ root = "apps"
 # Slice 08 CP6: happy-dom preload for .integration.test.tsx files.
 # Unit .test.ts files are unaffected — the registrator only installs
 # document/window globals when they're not already defined.
-preload = ["./apps/web/test-setup/happy-dom.ts"]
+#
+# env-vars preload sets VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY on
+# process.env so `apps/web/src/lib/supabase.ts` doesn't throw on module
+# load. Must run BEFORE happy-dom in case a happy-dom consumer imports
+# supabase during registration. See test-setup/env-vars.ts for rationale.
+preload = [
+  "./apps/web/test-setup/env-vars.ts",
+  "./apps/web/test-setup/happy-dom.ts",
+]

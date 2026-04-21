@@ -13,6 +13,55 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
  */
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
+// @/lib/supabase: must be mocked because the page's `loadWatchdogPending`
+// helper queries supabase directly on mount, and a rejection breaks the
+// page's `Promise.all` → infinite loading state → test failure.
+//
+// Signature parity with price-sheets-api.test.ts's mock: same
+// `makeChain`-style terminal object with `.single()`, `.maybeSingle()`,
+// and thenable `.then/.catch`, so if this mock wins Bun's module-registry
+// race at suite level, the api test's assertions still find the methods
+// they expect. See price-sheets-api.test.ts for the canonical shape.
+mock.module("@/lib/supabase", () => {
+  function makeChain(result: { data: unknown; error: null | { message: string } } = { data: [], error: null }) {
+    const resolved = Promise.resolve(result);
+    const singleResult = {
+      data: Array.isArray(result.data) ? ((result.data as unknown[])[0] ?? null) : result.data,
+      error: result.error,
+    };
+    const chain: Record<string, unknown> = {};
+    const METHODS = ["select", "insert", "update", "delete", "upsert", "eq", "neq", "in", "order", "gte", "lte", "limit", "filter", "match", "is", "not"] as const;
+    for (const m of METHODS) chain[m] = () => chain;
+    chain.single = () => Promise.resolve(singleResult);
+    chain.maybeSingle = () => Promise.resolve(singleResult);
+    chain.then = resolved.then.bind(resolved);
+    chain.catch = resolved.catch.bind(resolved);
+    return chain;
+  }
+  return {
+    supabase: {
+      from: (_table: string) => makeChain(),
+      storage: {
+        from: () => ({
+          upload: () => Promise.resolve({ data: { path: "" }, error: null }),
+          remove: () => Promise.resolve({ data: [], error: null }),
+        }),
+      },
+      functions: { invoke: () => Promise.resolve({ data: null, error: null }) },
+      channel: () => ({
+        on: () => ({ subscribe: () => ({}) }),
+        subscribe: () => ({}),
+        unsubscribe: () => Promise.resolve("ok"),
+      }),
+      removeChannel: () => Promise.resolve("ok"),
+      auth: {
+        getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      },
+    },
+  };
+});
+
 // useAuth: always return an admin profile + not-loading so RequireAdmin
 // passes through to the inner component immediately.
 mock.module("@/hooks/useAuth", () => ({
@@ -51,8 +100,25 @@ const mockRows = [
   },
 ];
 
+// Stub EVERY export of price-sheets-api — Bun's `mock.module` registers
+// globally by absolute path, so an under-specified stub here collides with
+// `price-sheets-api.test.ts` and makes the api test's destructured functions
+// come back as `undefined`. Keep this list in sync with the module's exports.
 mock.module("../../lib/price-sheets-api", () => ({
   getBrandSheetStatus: () => Promise.resolve(mockRows),
+  getFreightZones: () => Promise.resolve([]),
+  upsertFreightZone: () => Promise.resolve({ ok: true as const, zone: null }),
+  deleteFreightZone: () => Promise.resolve({ ok: true as const }),
+  uploadAndExtractSheet: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
+  retryExtract: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
+  retryPublish: () => Promise.resolve({ ok: true as const, priceSheetId: "stub", itemsWritten: 0, programsWritten: 0 }),
+  analyzeFreightCoverage: () => ({ covered: [], uncovered: [] }),
+  parseDollarInput: (raw: string) => {
+    const n = Number(raw.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? Math.round(n * 100) : null;
+  },
+  formatCentsAsDollars: (cents: number | null | undefined) =>
+    cents == null ? "—" : `$${(cents / 100).toFixed(2)}`,
 }));
 
 // Drawers: replace with stubs so we can assert they were asked to open.
