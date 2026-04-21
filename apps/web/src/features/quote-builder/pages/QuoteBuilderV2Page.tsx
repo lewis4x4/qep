@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,16 @@ import {
 import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
 import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
+import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
+import { PointShootTradeCard } from "../components/PointShootTradeCard";
+import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
+import { getMarginBaseline } from "../lib/coach-api";
+import { computeWinProbability } from "../lib/win-probability-scorer";
+import {
+  computeRetrospectiveShadows,
+  computeShadowAgreementSummary,
+} from "../lib/retrospective-shadow";
+import { hydrateCustomerById } from "../lib/customer-search-api";
 import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
@@ -40,6 +50,8 @@ import {
   buildQuoteSavePayload,
   calculateFinancing,
   getAiEquipmentRecommendation,
+  getClosedDealsAudit,
+  getFactorVerdicts,
   getPortalRevision,
   publishPortalRevision,
   returnPortalRevisionToDraft,
@@ -76,7 +88,13 @@ import type {
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
-type Step = "entry" | "equipment" | "financing" | "review";
+// Slice 20a: customer is its own step between intake and equipment. Before
+// this change the CustomerSection lived on the entry screen alongside the
+// intake-mode picker, and AI/Voice mutations auto-advanced straight to
+// equipment — so reps submitting via AI chat were jumping past customer
+// selection entirely. Splitting the step makes "who is this quote for?"
+// explicit and is the anchor for the Customer Digital Twin intel panel.
+type Step = "entry" | "customer" | "equipment" | "financing" | "review";
 
 interface CatalogEntryMatch {
   id?: string;
@@ -84,6 +102,47 @@ interface CatalogEntryMatch {
   model: string;
   year: number | null;
   list_price?: number;
+}
+
+/**
+ * Heuristic: is `next` likely a typo-fix / case-variation of `prev`,
+ * not a material rewrite to a different company?
+ *
+ * Returns true when the edit is safe to preserve the Digital Twin
+ * snapshot through (e.g. "acme landscaping" → "Acme Landscaping",
+ * "Acme Ldsc" → "Acme Landscaping", trailing whitespace trims).
+ * Returns false for genuine re-targeting ("Acme" → "Smith Excavation").
+ *
+ * We require either: (a) case-insensitive prefix match in either
+ * direction, or (b) small edit distance relative to the shorter
+ * string (≤20% of length). Not perfect — but correct on the demo
+ * axes and safe: the worst false-positive preserves a signal that
+ * the rep can still clear manually; the worst false-negative just
+ * triggers a CustomerIntelPanel re-fetch.
+ */
+function isTypoLikeRewrite(prev: string, next: string): boolean {
+  const a = prev.trim().toLowerCase();
+  const b = next.trim().toLowerCase();
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  // Bounded Levenshtein — bail if length gap alone exceeds threshold.
+  const shorter = Math.min(a.length, b.length);
+  const threshold = Math.max(2, Math.floor(shorter * 0.2));
+  if (Math.abs(a.length - b.length) > threshold) return false;
+  // Small-string Levenshtein; O(a*b) but both are ≤ a few dozen chars.
+  const dp: number[] = Array(b.length + 1).fill(0).map((_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prevDiag = dp[0]!;
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j]!;
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[j] = Math.min(dp[j]! + 1, dp[j - 1]! + 1, prevDiag + cost);
+      prevDiag = tmp;
+    }
+  }
+  return (dp[b.length] ?? Infinity) <= threshold;
 }
 
 function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
@@ -96,6 +155,28 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
     year: entry.year,
     quantity: 1,
     unitPrice: entry.list_price ?? 0,
+  };
+}
+
+// When the catalog search misses (AI recommended a Make+Model we don't
+// carry, or the match was fuzzy and the sanitized ilike returned 0 rows),
+// seed the workspace with the AI's textual pick so the rep sees something
+// concrete to refine — never land on an empty Equipment step after a
+// successful AI intake.
+function buildEquipmentLineFromRecommendation(
+  machine: string | null | undefined,
+): QuoteLineItemDraft | null {
+  const text = (machine ?? "").trim();
+  if (!text) return null;
+  const [firstToken, ...rest] = text.split(/\s+/);
+  return {
+    kind: "equipment",
+    title: text,
+    make: firstToken ?? text,
+    model: rest.join(" "),
+    year: null,
+    quantity: 1,
+    unitPrice: 0,
   };
 }
 
@@ -119,6 +200,8 @@ export function QuoteBuilderV2Page() {
     customerCompany: "",
     customerPhone: "",
     customerEmail: "",
+    customerSignals: null,
+    customerWarmth: null,
   });
   const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -160,9 +243,125 @@ export function QuoteBuilderV2Page() {
     staleTime: 60_000,
   });
 
+  // Slice 20c: margin baseline powers the win-probability strip's "margin
+  // discipline" factor. Same data source DealCoachSidebar uses; we fetch it
+  // here once so every step can render the strip without each surface
+  // refetching. `enabled` gates on profile.id because the query hits
+  // quote_packages.created_by — firing pre-auth would always come back empty.
+  const marginBaselineQuery = useQuery({
+    queryKey: ["quote-builder", "margin-baseline", profile?.id ?? ""],
+    queryFn: () => (profile?.id ? getMarginBaseline(profile.id) : Promise.resolve(null)),
+    enabled: !!profile?.id,
+    staleTime: 5 * 60_000,
+  });
+  // Memoized so the strip's `useMemo([draft, context])` scorer can actually
+  // hit — a fresh object literal on every render would invalidate it.
+  const marginBaselineMedianPct = marginBaselineQuery.data?.medianPct ?? null;
+
+  // Slice 20i: factor verdicts — historical "proven / suspect / unknown"
+  // labels for each scorer factor, used by WinProbabilityStrip to annotate
+  // the live factor chips. Rep-accessible endpoint; on failure it returns
+  // an empty map and the strip silently renders without badges.
+  // Gated on `profile?.id` to avoid firing a pre-auth fetch that'd be
+  // silently discarded; 5-minute stale time because the verdict
+  // aggregate changes on closed-deal timescale, not quote-editing
+  // timescale.
+  const factorVerdictsQuery = useQuery({
+    queryKey: ["quote-builder", "factor-verdicts"],
+    queryFn: getFactorVerdicts,
+    enabled: !!profile?.id,
+    staleTime: 5 * 60_000,
+  });
+  const factorVerdicts = factorVerdictsQuery.data ?? null;
+
+  // Slice 20j: closed-deals history feeds the K-nearest-neighbor
+  // shadow score. The endpoint is manager/owner-only; on reps it
+  // returns `{ok:false, reason:"forbidden"}` and we silently render
+  // the strip without a shadow chip. Same 5-minute stale time as the
+  // verdicts query for the same reason — history updates on
+  // closed-deal timescale, not keystroke timescale.
+  //
+  // Role-gated so we don't round-trip a guaranteed-403 request every
+  // 5 minutes on rep sessions. `userRoleQuery.data` can momentarily
+  // be undefined; we wait for it to resolve before firing.
+  const canLoadShadowHistory =
+    !!profile?.id
+    && (userRoleQuery.data === "manager" || userRoleQuery.data === "owner");
+  const closedDealsAuditQuery = useQuery({
+    queryKey: ["quote-builder", "closed-deals-audit"],
+    queryFn: getClosedDealsAudit,
+    enabled: canLoadShadowHistory,
+    staleTime: 5 * 60_000,
+  });
+  const shadowHistory = useMemo(() => {
+    const result = closedDealsAuditQuery.data;
+    if (!result || !result.ok) return null;
+    return result.audits.map((a) => ({
+      packageId: a.packageId,
+      factors: a.factors,
+      outcome: a.outcome,
+    }));
+  }, [closedDealsAuditQuery.data]);
+  // Slice 20l: calibrated disagreement callout. Derive the aggregate
+  // shadow-vs-rule agreement summary from the same closed-deals
+  // payload so the strip can modulate its tone by measured evidence.
+  // Computed once here (not on every strip render) so three mounted
+  // strips share the work.
+  const shadowCalibration = useMemo(() => {
+    const result = closedDealsAuditQuery.data;
+    if (!result || !result.ok) return null;
+    if (result.audits.length === 0) return null;
+    const retros = computeRetrospectiveShadows(result.audits);
+    return computeShadowAgreementSummary(retros);
+  }, [closedDealsAuditQuery.data]);
+  const winProbContext = useMemo(
+    () => ({ marginPct, marginBaselineMedianPct }),
+    [marginPct, marginBaselineMedianPct],
+  );
+
   useEffect(() => {
     setFinanceScenarios([]);
   }, [draft.equipment, draft.attachments, draft.tradeAllowance]);
+
+  // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
+  // ?deal_id=, hydrate the customer from CRM so the Customer step renders
+  // a real name/company + intel panel on arrival instead of an empty form.
+  // Intentionally one-shot: only fires if no customer is already set (avoids
+  // clobbering what the AI/Voice intake or rep typed).
+  useEffect(() => {
+    const hasCustomer = Boolean(
+      draft.customerName?.trim() || draft.customerCompany?.trim(),
+    );
+    if (hasCustomer) return;
+    if (!contactId && !dealId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const hydrated = await hydrateCustomerById({
+          contactId: contactId || null,
+          dealId:    dealId || null,
+        });
+        if (!hydrated || cancelled) return;
+        setDraft((current) => ({
+          ...current,
+          contactId:       hydrated.contactId ?? current.contactId,
+          companyId:       hydrated.companyId ?? current.companyId,
+          customerName:    hydrated.customerName,
+          customerCompany: hydrated.customerCompany,
+          customerPhone:   hydrated.customerPhone,
+          customerEmail:   hydrated.customerEmail,
+          customerSignals: hydrated.signals,
+          customerWarmth:  hydrated.warmth,
+        }));
+      } catch {
+        // Non-fatal — rep can still search/pick manually.
+      }
+    })();
+    return () => { cancelled = true; };
+    // Intentionally one-shot on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Slice 14: pick up a pending voice-quote handoff on mount. The VoiceQuotePage
   // stashes the selected scenario in sessionStorage; we read + clear it here
@@ -190,17 +389,32 @@ export function QuoteBuilderV2Page() {
   }, []);
 
   const saveMutation = useMutation({
-    mutationFn: (): Promise<QuotePackageSaveResponse> =>
-      saveQuotePackage(
-        buildQuoteSavePayload(draft, {
-          equipmentTotal,
-          attachmentTotal,
-          subtotal,
-          netTotal,
-          marginAmount,
-          marginPct,
-        }),
-      ),
+    mutationFn: (): Promise<QuotePackageSaveResponse> => {
+      // Slice 20e: capture the rule-based win-probability result at save
+      // time so we can show it on list views + build the learning loop
+      // later. We compute it here (not from the live strip state) to
+      // make sure the persisted snapshot is consistent with the exact
+      // draft + context we send to the edge function. Weights are
+      // versioned so future scorer rewrites stay diffable against old
+      // snapshots.
+      const wp = computeWinProbability(draft, winProbContext);
+      const snapshot = {
+        score: wp.score,
+        band: wp.band,
+        rawScore: wp.rawScore,
+        factors: wp.factors,
+        marginBaselineMedianPct: winProbContext.marginBaselineMedianPct ?? null,
+        weightsVersion: "v1",
+        savedAt: new Date().toISOString(),
+      };
+      return saveQuotePackage(
+        buildQuoteSavePayload(
+          draft,
+          { equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct },
+          snapshot,
+        ),
+      );
+    },
   });
 
   // Slice 15: margin-floor gate state. The gate blocks the save action
@@ -287,15 +501,24 @@ export function QuoteBuilderV2Page() {
       return { voiceResult, recommendation, catalogMatches };
     },
     onSuccess: ({ voiceResult, recommendation, catalogMatches }) => {
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: voiceResult.transcript,
-        equipment: catalogMatches.length > 0
+      setDraft((current) => {
+        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
+        const seededEquipment = catalogMatches.length > 0
           ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : current.equipment,
-      }));
-      setStep("equipment");
+          : fallback
+            ? [fallback]
+            : current.equipment;
+        return {
+          ...current,
+          recommendation,
+          voiceSummary: voiceResult.transcript,
+          equipment: seededEquipment,
+        };
+      });
+      // Slice 20a: land on the Customer step instead of Equipment. The AI
+      // has picked a machine, but we still don't know who the quote is
+      // for — rep confirms/picks customer next.
+      setStep("customer");
     },
   });
 
@@ -306,15 +529,21 @@ export function QuoteBuilderV2Page() {
       return { recommendation, catalogMatches, prompt };
     },
     onSuccess: ({ recommendation, catalogMatches, prompt }) => {
-      setDraft((current) => ({
-        ...current,
-        recommendation,
-        voiceSummary: prompt,
-        equipment: catalogMatches.length > 0
+      setDraft((current) => {
+        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
+        const seededEquipment = catalogMatches.length > 0
           ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : current.equipment,
-      }));
-      setStep("equipment");
+          : fallback
+            ? [fallback]
+            : current.equipment;
+        return {
+          ...current,
+          recommendation,
+          voiceSummary: prompt,
+          equipment: seededEquipment,
+        };
+      });
+      setStep("customer");
     },
   });
 
@@ -427,11 +656,23 @@ export function QuoteBuilderV2Page() {
         : {}),
     }));
 
-    setStep("equipment");
+    // Slice 20a: land on the Customer step first so the rep picks who the
+    // quote is for before confirming the AI-matched equipment.
+    setStep("customer");
   };
 
   const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
   const firstEquipment = draft.equipment[0];
+
+  // Gate for advancing off the Customer step — any of name, company,
+  // or a resolved CRM id is enough. Kept as one derived flag so the
+  // Next-button disabled state and the inline helper text can't drift.
+  const hasCustomer = Boolean(
+    draft.customerName?.trim() ||
+    draft.customerCompany?.trim() ||
+    draft.contactId ||
+    draft.companyId,
+  );
 
   const intelligencePanel = (
     <IntelligencePanel
@@ -527,7 +768,7 @@ export function QuoteBuilderV2Page() {
         </Card>
 
       <div className="flex gap-2">
-        {(["entry", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
+        {(["entry", "customer", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
           <button
             key={currentStep}
             onClick={() => setStep(currentStep)}
@@ -560,29 +801,6 @@ export function QuoteBuilderV2Page() {
             </div>
           )}
 
-          <CustomerSection
-            draft={draft}
-            onPick={(picked) => setDraft((cur) => ({
-              ...cur,
-              contactId:       picked.contactId ?? undefined,
-              companyId:       picked.companyId ?? undefined,
-              customerName:    picked.customerName,
-              customerCompany: picked.customerCompany,
-              customerPhone:   picked.customerPhone,
-              customerEmail:   picked.customerEmail,
-            }))}
-            onManualChange={(field, value) => setDraft((cur) => ({ ...cur, [field]: value }))}
-            onClear={() => setDraft((cur) => ({
-              ...cur,
-              contactId:       undefined,
-              companyId:       undefined,
-              customerName:    "",
-              customerCompany: "",
-              customerPhone:   "",
-              customerEmail:   "",
-            }))}
-          />
-
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {([
@@ -594,8 +812,11 @@ export function QuoteBuilderV2Page() {
                 key={mode}
                 onClick={() => {
                   setDraft((current) => ({ ...current, entryMode: mode }));
+                  // Slice 20a: manual mode now advances to the Customer
+                  // step (not equipment) so "who is this for?" happens
+                  // before the rep builds line items.
                   if (mode === "manual") {
-                    setStep("equipment");
+                    setStep("customer");
                   }
                 }}
                 className={`rounded-xl border p-4 text-left transition hover:border-qep-orange/50 ${
@@ -672,9 +893,144 @@ export function QuoteBuilderV2Page() {
         </div>
       )}
 
+      {step === "customer" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Who is this quote for?</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Pick an existing customer for Digital Twin signals, or add a brand-new one. Quotes for walk-in prospects can use a placeholder name.
+            </p>
+          </div>
+
+          {/* Slice 20c: always-on win-probability strip. Rule-based today;
+              becomes the rule-baseline for Move 2's counterfactual engine. */}
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+
+          <CustomerSection
+            draft={draft}
+            onPick={(picked) => setDraft((cur) => ({
+              ...cur,
+              contactId:       picked.contactId ?? undefined,
+              companyId:       picked.companyId ?? undefined,
+              customerName:    picked.customerName,
+              customerCompany: picked.customerCompany,
+              customerPhone:   picked.customerPhone,
+              customerEmail:   picked.customerEmail,
+              customerSignals: picked.signals ?? null,
+              customerWarmth:  picked.warmth ?? null,
+            }))}
+            onManualChange={(field, value) => setDraft((cur) => {
+              // Preserve signals on typo fixes (phone, email, name punctuation)
+              // but *clear* them when the company name is materially rewritten —
+              // keeping Acme's open-deal count attached to "Smith Excavation"
+              // would poison the intel panel and the saved quote. Heuristic:
+              // clear when the field is customerCompany, a snapshot exists,
+              // and the new value is clearly a different company (not a
+              // prefix / not a case variation of the old).
+              const next = { ...cur, [field]: value };
+              if (
+                field === "customerCompany" &&
+                cur.customerSignals &&
+                cur.customerCompany &&
+                !isTypoLikeRewrite(cur.customerCompany, value)
+              ) {
+                next.customerSignals = null;
+                next.customerWarmth  = null;
+                // The companyId/contactId referred to the prior customer;
+                // drop them so downstream reads don't cross-attribute.
+                next.companyId = undefined;
+                next.contactId = undefined;
+              }
+              return next;
+            })}
+            onClear={() => setDraft((cur) => ({
+              ...cur,
+              contactId:       undefined,
+              companyId:       undefined,
+              customerName:    "",
+              customerCompany: "",
+              customerPhone:   "",
+              customerEmail:   "",
+              customerSignals: null,
+              customerWarmth:  null,
+            }))}
+          />
+
+          <CustomerIntelPanel
+            customerCompany={draft.customerCompany ?? ""}
+            companyId={draft.companyId ?? null}
+            signals={draft.customerSignals ?? null}
+            warmth={draft.customerWarmth ?? null}
+          />
+
+          {/* Slice 20b: Point, Shoot, Trade — inline trade-in capture once
+              a customer is selected. Rep snaps a photo on their phone; we
+              identify the machine, fetch a multi-source book-value range,
+              and drop a trade credit into the draft without leaving the
+              wizard. Gated on hasCustomer so the flow is: pick customer →
+              see intel → capture their trade → pick their new machine. */}
+          {hasCustomer && (
+            <PointShootTradeCard
+              dealId={draft.dealId ?? null}
+              appliedAllowanceDollars={draft.tradeAllowance || null}
+              onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
+                ...cur,
+                tradeAllowance: allowanceDollars,
+                tradeValuationId: valuationId,
+              }))}
+              onClear={() => setDraft((cur) => ({
+                ...cur,
+                tradeAllowance: 0,
+                tradeValuationId: null,
+              }))}
+            />
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" onClick={() => setStep("entry")}>
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back
+            </Button>
+            <div className="flex items-center gap-2">
+              {/* "Quote for prospect" escape hatch — seeds a placeholder
+                  so reps can build a spec quote for a walk-in without a
+                  real CRM match. Rep can edit the name later on this
+                  step; the save path stores it as a normal quote. */}
+              {!hasCustomer && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDraft((cur) => ({
+                      ...cur,
+                      customerName:    cur.customerName    || "Walk-in prospect",
+                      customerCompany: cur.customerCompany || "Walk-in prospect",
+                      customerSignals: null,
+                      customerWarmth:  null,
+                    }));
+                    setStep("equipment");
+                  }}
+                >
+                  Quote for prospect
+                </Button>
+              )}
+              <Button onClick={() => setStep("equipment")} disabled={!hasCustomer}>
+                Equipment <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          {!hasCustomer && (
+            <p className="text-right text-[11px] text-muted-foreground">
+              Select or add a customer, or use "Quote for prospect" for a walk-in.
+            </p>
+          )}
+        </div>
+      )}
+
       {step === "equipment" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Commercial workspace</h2>
+
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
           <EquipmentSelector
             onSelect={(entry) => {
@@ -745,7 +1101,7 @@ export function QuoteBuilderV2Page() {
           </Card>
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("entry")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("customer")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button
               onClick={() => {
                 financingMutation.mutate();
@@ -818,6 +1174,8 @@ export function QuoteBuilderV2Page() {
       {step === "review" && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-foreground">Review Quote</h2>
+
+          <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
 
           <MarginCheckBanner
             marginPct={marginPct}

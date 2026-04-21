@@ -76,6 +76,14 @@ verify_jwt = false
 [functions.crm-auth-audit]
 verify_jwt = false
 
+# Quote Builder V2 validates JWT directly against GoTrue's /auth/v1/user endpoint
+# because the project signs with ES256 and supabase-js v2's local verifier rejects
+# ES256 ("Unsupported JWT algorithm"). Gateway verify_jwt MUST be false — otherwise
+# the gateway rejects every legit user token with UNAUTHORIZED_INVALID_JWT_FORMAT
+# before the function ever runs. Function does its own full auth internally.
+[functions.quote-builder-v2]
+verify_jwt = false
+
 # DGE routes validate JWT + roles in _shared/dge-auth.ts (resolveCallerContext).
 # Gateway verify_jwt is off so local/CLI tests can reach the function when the Edge
 # gateway JWT check disagrees with supabase-js session tokens (401 Invalid JWT).

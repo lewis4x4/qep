@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import {
   searchCustomers,
   MIN_QUERY_CHARS,
+  EMPTY_SIGNALS,
   type CustomerSearchResult,
   type CustomerSearchContact,
   type CustomerSearchCompany,
@@ -41,6 +42,11 @@ export interface PickedCustomer {
   customerCompany: string;
   customerPhone: string;
   customerEmail: string;
+  /** Slice 20a: signals from the picker row are threaded through so the
+   *  Customer step can render the Digital Twin intel panel without a
+   *  second fetch. Null for manually-entered ("+ New customer") picks. */
+  signals:       CompanySignals | null;
+  warmth:        CustomerWarmth | null;
 }
 
 export interface CustomerPickerProps {
@@ -167,6 +173,8 @@ export function CustomerPicker({
         customerCompany: row.companyName ?? "",
         customerPhone:   row.contactPhone ?? "",
         customerEmail:   row.contactEmail ?? "",
+        signals:         row.signals ?? EMPTY_SIGNALS,
+        warmth:          row.warmth,
       });
     } else if (row.kind === "company") {
       onPick({
@@ -176,6 +184,8 @@ export function CustomerPicker({
         customerCompany: row.companyName,
         customerPhone:   row.companyPhone ?? "",
         customerEmail:   "",
+        signals:         row.signals ?? EMPTY_SIGNALS,
+        warmth:          row.warmth,
       });
     }
     setOpen(false);
