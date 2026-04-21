@@ -44,6 +44,7 @@ import {
 import {
   createActivity,
   createCompany,
+  createCompanyShipTo,
   createContact,
   deliverActivity,
   patchActivity,
@@ -56,6 +57,7 @@ import {
   getCommunicationTarget,
   getRecordCustomFields,
   listCustomFieldDefinitions,
+  listCompanyShipTos,
   listDuplicateCandidates,
   listEquipment,
   listEquipmentForCompanySubtree,
@@ -65,12 +67,14 @@ import {
   patchContact,
   patchDeal,
   patchCompanyParent,
+  patchCompanyShipTo,
   patchCustomFieldDefinition,
   patchEquipment,
   upsertRecordCustomFields,
   type ActivityDeliverPayload,
   type ActivityPayload,
   type ActivityPatchPayload,
+  type CompanyShipToPayload,
   type CompanyUpsertPayload,
   type CommunicationTargetPayload,
   type ContactUpsertPayload,
@@ -462,6 +466,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
       }
       return crmOk(hierarchy, { origin });
+    }
+
+    if (
+      req.method === "GET" &&
+      segments[1] === "companies" &&
+      segments[2] &&
+      segments[3] === "ship-tos" &&
+      segments.length === 4
+    ) {
+      requireCaller(ctx);
+      const shipTos = await listCompanyShipTos(ctx, segments[2]);
+      return crmOk({ shipTos }, { origin });
+    }
+
+    if (
+      req.method === "POST" &&
+      segments[1] === "companies" &&
+      segments[2] &&
+      segments[3] === "ship-tos" &&
+      segments.length === 4
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<CompanyShipToPayload>(req);
+      const shipTo = await createCompanyShipTo(ctx, segments[2], body);
+      return crmOk({ shipTo }, { origin, status: 201 });
+    }
+
+    if (
+      req.method === "PATCH" &&
+      segments[1] === "companies" &&
+      segments[2] &&
+      segments[3] === "ship-tos" &&
+      segments[4] &&
+      segments.length === 5
+    ) {
+      requireCaller(ctx);
+      const body = await readJsonBody<CompanyShipToPayload>(req);
+      const shipTo = await patchCompanyShipTo(ctx, segments[2], segments[4], body);
+      return crmOk({ shipTo }, { origin });
     }
 
     if (segments[1] === "activities" && req.method === "POST" && segments.length === 2) {

@@ -5,6 +5,8 @@ import type {
   QrmActivityTaskPatchInput,
   QrmActivityItem,
   QrmCompanySummary,
+  QrmCompanyShipToAddress,
+  QrmCompanyShipToInput,
   QrmCompanyHierarchy,
   QrmCompanyUpsertInput,
   QrmContactSummary,
@@ -227,6 +229,44 @@ export async function updateCompanyParent(
     body: { parentCompanyId },
   });
   return payload.company;
+}
+
+export async function fetchCompanyShipTos(
+  companyId: string,
+): Promise<QrmCompanyShipToAddress[]> {
+  const payload = await requestRouter<{ shipTos: QrmCompanyShipToAddress[] }>(
+    `/qrm/companies/${companyId}/ship-tos`,
+  );
+  return payload.shipTos;
+}
+
+export async function createCompanyShipTo(
+  companyId: string,
+  input: QrmCompanyShipToInput,
+): Promise<QrmCompanyShipToAddress> {
+  const payload = await requestRouter<{ shipTo: QrmCompanyShipToAddress }>(
+    `/qrm/companies/${companyId}/ship-tos`,
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+  return payload.shipTo;
+}
+
+export async function patchCompanyShipTo(
+  companyId: string,
+  shipToId: string,
+  input: QrmCompanyShipToInput,
+): Promise<QrmCompanyShipToAddress | { id: string; archived: true }> {
+  const payload = await requestRouter<{ shipTo: QrmCompanyShipToAddress | { id: string; archived: true } }>(
+    `/qrm/companies/${companyId}/ship-tos/${shipToId}`,
+    {
+      method: "PATCH",
+      body: input,
+    },
+  );
+  return payload.shipTo;
 }
 
 export async function fetchCompanyEquipment(companyId: string): Promise<QrmEquipment[]> {

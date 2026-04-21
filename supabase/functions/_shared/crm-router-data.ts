@@ -168,6 +168,22 @@ export interface CompanyUpsertPayload {
   archive?: boolean;
 }
 
+export interface CompanyShipToPayload {
+  name?: string;
+  contactName?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  instructions?: string | null;
+  isPrimary?: boolean;
+  sortOrder?: number | null;
+  archive?: boolean;
+}
+
 export interface DealCreatePayload {
   name?: string;
   stageId?: string;
@@ -183,6 +199,12 @@ function cleanText(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function cleanInteger(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value)) return null;
+  return Math.trunc(value);
 }
 
 function toCommunicationMergeFields(contact: CommunicationContact): Record<string, string> {
@@ -1191,6 +1213,264 @@ export async function patchCompany(
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
+}
+
+function mapCompanyShipToRow(row: {
+  id: string;
+  workspace_id: string;
+  company_id: string;
+  name: string;
+  contact_name: string | null;
+  phone: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  instructions: string | null;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}): Record<string, unknown> {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    companyId: row.company_id,
+    name: row.name,
+    contactName: row.contact_name,
+    phone: row.phone,
+    addressLine1: row.address_line_1,
+    addressLine2: row.address_line_2,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postal_code,
+    country: row.country,
+    instructions: row.instructions,
+    isPrimary: row.is_primary,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function ensureCompanyShipToVisible(
+  ctx: RouterCtx,
+  companyId: string,
+  shipToId: string,
+): Promise<{
+  id: string;
+  workspace_id: string;
+  company_id: string;
+  name: string;
+  contact_name: string | null;
+  phone: string | null;
+  address_line_1: string | null;
+  address_line_2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  instructions: string | null;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+} | null> {
+  const { data, error } = await ctx.callerDb
+    .from("crm_company_ship_to_addresses")
+    .select(
+      "id, workspace_id, company_id, name, contact_name, phone, address_line_1, address_line_2, city, state, postal_code, country, instructions, is_primary, sort_order, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", companyId)
+    .eq("id", shipToId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function listCompanyShipTos(
+  ctx: RouterCtx,
+  companyId: string,
+): Promise<unknown[]> {
+  await ensureRecordVisible(ctx, "company", companyId);
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_company_ship_to_addresses")
+    .select(
+      "id, workspace_id, company_id, name, contact_name, phone, address_line_1, address_line_2, city, state, postal_code, country, instructions, is_primary, sort_order, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .order("is_primary", { ascending: false })
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(mapCompanyShipToRow);
+}
+
+export async function createCompanyShipTo(
+  ctx: RouterCtx,
+  companyId: string,
+  payload: CompanyShipToPayload,
+): Promise<unknown> {
+  await ensureRecordVisible(ctx, "company", companyId);
+
+  const name = cleanText(payload.name);
+  if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+
+  const { count, error: countError } = await ctx.callerDb
+    .from("crm_company_ship_to_addresses")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", companyId)
+    .is("deleted_at", null);
+
+  if (countError) throw countError;
+
+  const shouldBePrimary = payload.isPrimary === true || (count ?? 0) === 0;
+  if (shouldBePrimary) {
+    const { error: demoteError } = await ctx.callerDb
+      .from("crm_company_ship_to_addresses")
+      .update({ is_primary: false })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("company_id", companyId)
+      .eq("is_primary", true)
+      .is("deleted_at", null);
+    if (demoteError) throw demoteError;
+  }
+
+  const sortOrder = cleanInteger(payload.sortOrder ?? null) ?? (count ?? 0);
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_company_ship_to_addresses")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      company_id: companyId,
+      name,
+      contact_name: cleanText(payload.contactName ?? null),
+      phone: cleanText(payload.phone ?? null),
+      address_line_1: cleanText(payload.addressLine1 ?? null),
+      address_line_2: cleanText(payload.addressLine2 ?? null),
+      city: cleanText(payload.city ?? null),
+      state: cleanText(payload.state ?? null),
+      postal_code: cleanText(payload.postalCode ?? null),
+      country: cleanText(payload.country ?? null),
+      instructions: cleanText(payload.instructions ?? null),
+      is_primary: shouldBePrimary,
+      sort_order: sortOrder,
+    })
+    .select(
+      "id, workspace_id, company_id, name, contact_name, phone, address_line_1, address_line_2, city, state, postal_code, country, instructions, is_primary, sort_order, created_at, updated_at",
+    )
+    .single();
+
+  if (error) throw error;
+  return mapCompanyShipToRow(data);
+}
+
+export async function patchCompanyShipTo(
+  ctx: RouterCtx,
+  companyId: string,
+  shipToId: string,
+  payload: CompanyShipToPayload,
+): Promise<unknown> {
+  await ensureRecordVisible(ctx, "company", companyId);
+
+  const current = await ensureCompanyShipToVisible(ctx, companyId, shipToId);
+  if (!current) throw new Error("NOT_FOUND");
+
+  if (payload.archive === true) {
+    const { error } = await ctx.callerDb
+      .from("crm_company_ship_to_addresses")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("company_id", companyId)
+      .eq("id", shipToId)
+      .is("deleted_at", null);
+    if (error) throw error;
+    return { id: shipToId, archived: true };
+  }
+
+  const updates: Record<string, unknown> = {};
+
+  if (payload.name !== undefined) {
+    const name = cleanText(payload.name);
+    if (!name) throw new Error("VALIDATION_NAME_REQUIRED");
+    updates.name = name;
+  }
+  if (payload.contactName !== undefined) {
+    updates.contact_name = cleanText(payload.contactName ?? null);
+  }
+  if (payload.phone !== undefined) {
+    updates.phone = cleanText(payload.phone ?? null);
+  }
+  if (payload.addressLine1 !== undefined) {
+    updates.address_line_1 = cleanText(payload.addressLine1 ?? null);
+  }
+  if (payload.addressLine2 !== undefined) {
+    updates.address_line_2 = cleanText(payload.addressLine2 ?? null);
+  }
+  if (payload.city !== undefined) {
+    updates.city = cleanText(payload.city ?? null);
+  }
+  if (payload.state !== undefined) {
+    updates.state = cleanText(payload.state ?? null);
+  }
+  if (payload.postalCode !== undefined) {
+    updates.postal_code = cleanText(payload.postalCode ?? null);
+  }
+  if (payload.country !== undefined) {
+    updates.country = cleanText(payload.country ?? null);
+  }
+  if (payload.instructions !== undefined) {
+    updates.instructions = cleanText(payload.instructions ?? null);
+  }
+  if (payload.sortOrder !== undefined) {
+    const sortOrder = cleanInteger(payload.sortOrder);
+    if (sortOrder === null) throw new Error("VALIDATION_INVALID_SORT_ORDER");
+    updates.sort_order = sortOrder;
+  }
+  if (payload.isPrimary !== undefined) {
+    updates.is_primary = payload.isPrimary;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("VALIDATION_EMPTY_PATCH");
+  }
+
+  if (payload.isPrimary === true && !current.is_primary) {
+    const { error: demoteError } = await ctx.callerDb
+      .from("crm_company_ship_to_addresses")
+      .update({ is_primary: false })
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("company_id", companyId)
+      .eq("is_primary", true)
+      .is("deleted_at", null);
+    if (demoteError) throw demoteError;
+  }
+
+  const { data, error } = await ctx.callerDb
+    .from("crm_company_ship_to_addresses")
+    .update(updates)
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", companyId)
+    .eq("id", shipToId)
+    .is("deleted_at", null)
+    .select(
+      "id, workspace_id, company_id, name, contact_name, phone, address_line_1, address_line_2, city, state, postal_code, country, instructions, is_primary, sort_order, created_at, updated_at",
+    )
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("NOT_FOUND");
+  return mapCompanyShipToRow(data);
 }
 
 export async function createDeal(

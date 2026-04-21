@@ -3,17 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarDays, GitMerge, Loader2, Plus } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { QrmActivityComposer } from "../components/QrmActivityComposer";
 import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmCompanyEquipmentSection } from "../components/QrmCompanyEquipmentSection";
 import { QrmCompanyHierarchyCard } from "../components/QrmCompanyHierarchyCard";
+import { QrmCompanyShipToSection } from "../components/QrmCompanyShipToSection";
 import { QrmCompanySubtreeEquipmentSection } from "../components/QrmCompanySubtreeEquipmentSection";
 import { QrmCustomFieldsCard } from "../components/QrmCustomFieldsCard";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { AskIronAdvisorButton } from "@/components/primitives";
+import { DeckSurface } from "../components/command-deck";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { buildAccountCommandHref, buildAccountTimelineHref } from "../lib/account-command";
 import {
@@ -320,23 +321,23 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
       </div>
 
       {companyQuery.isLoading && (
-        <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+        <DeckSurface className="h-28 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       )}
 
       {companyQuery.isError && (
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             Unable to load this company. Refresh the page or go back to your companies list.
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!companyQuery.isLoading && !companyQuery.isError && !companyQuery.data && (
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             This company isn&apos;t available. It may have been removed or you might not have access.
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {companyQuery.data && (
@@ -371,37 +372,39 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
 
           {/* Account 360 tabs */}
           {account360Query.data && (
-            <div>
-              <div role="tablist" className="flex flex-wrap gap-1 border-b border-border">
-                {[
-                  { key: "commercial", label: "Commercial" },
-                  { key: "fleet",     label: `Fleet (${account360Query.data.fleet.length})` },
-                  { key: "quotes",    label: `Open Quotes (${account360Query.data.open_quotes.length})` },
-                  { key: "service",   label: `Service (${account360Query.data.service.length})` },
-                  { key: "parts",     label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
-                  { key: "ar",        label: `Invoices / AR (${account360Query.data.invoices.length})` },
-                  { key: "lifecycle", label: "Lifecycle" },
-                ].map((t) => {
-                  const isActive = t.key === account360Tab;
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setAccount360Tab(t.key as typeof account360Tab)}
-                      className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-                        isActive
-                          ? "border-qep-orange text-qep-orange"
-                          : "border-transparent text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
+            <DeckSurface>
+              <div className="border-b border-qep-deck-rule/60 pb-2">
+                <div role="tablist" className="flex flex-wrap gap-1">
+                  {[
+                    { key: "commercial", label: "Commercial" },
+                    { key: "fleet",     label: `Fleet (${account360Query.data.fleet.length})` },
+                    { key: "quotes",    label: `Open Quotes (${account360Query.data.open_quotes.length})` },
+                    { key: "service",   label: `Service (${account360Query.data.service.length})` },
+                    { key: "parts",     label: `Parts ($${(account360Query.data.parts.lifetime_total ?? 0).toLocaleString()})` },
+                    { key: "ar",        label: `Invoices / AR (${account360Query.data.invoices.length})` },
+                    { key: "lifecycle", label: "Lifecycle" },
+                  ].map((t) => {
+                    const isActive = t.key === account360Tab;
+                    return (
+                      <button
+                        key={t.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setAccount360Tab(t.key as typeof account360Tab)}
+                        className={`rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                          isActive
+                            ? "bg-qep-orange/10 text-qep-orange"
+                            : "text-muted-foreground hover:bg-qep-deck-elevated/30 hover:text-foreground"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="mt-3">
+              <div className="mt-4">
                 {account360Tab === "commercial" && <AccountCommercialTab data={account360Query.data} companyId={companyId!} />}
                 {account360Tab === "fleet"   && <AccountFleetTab fleet={account360Query.data.fleet} companyId={companyId!} />}
                 {account360Tab === "quotes"  && <AccountQuotesTab quotes={account360Query.data.open_quotes} />}
@@ -409,10 +412,10 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                 {account360Tab === "parts"   && <AccountPartsTab parts={account360Query.data.parts} />}
                 {account360Tab === "ar"      && <AccountARTab invoices={account360Query.data.invoices} arBlock={account360Query.data.ar_block} />}
                 {account360Tab === "lifecycle" && (
-                  <Card className="p-4">
+                  <DeckSurface className="border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-bold text-foreground">Customer lifecycle</h3>
+                        <h3 className="text-sm font-semibold text-foreground">Customer lifecycle</h3>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Multi-year customer arc — first contact → first quote → first purchase → first service, plus any NPS / churn / won-back milestones.
                         </p>
@@ -423,10 +426,10 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                         </Link>
                       </Button>
                     </div>
-                  </Card>
+                  </DeckSurface>
                 )}
               </div>
-            </div>
+            </DeckSurface>
           )}
 
           <HealthScoreDrawer
@@ -435,7 +438,7 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
             onOpenChange={setHealthDrawerOpen}
           />
 
-          <Card className="border-border bg-card p-4 sm:p-5">
+          <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">Assigned rep</dt>
@@ -455,17 +458,17 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                 </dd>
               </div>
             </dl>
-          </Card>
+          </DeckSurface>
 
           {hierarchyQuery.isLoading && (
-            <div className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
+            <DeckSurface className="h-28 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
           )}
           {!hierarchyQuery.isLoading && hierarchyQuery.data && (
             <div className="space-y-3">
               <QrmCompanyHierarchyCard hierarchy={hierarchyQuery.data} companyId={companyId} />
 
               {canManageHierarchy && (
-                <Card className="space-y-3 border-border bg-card p-4 sm:p-5">
+                <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">Hierarchy controls</h3>
@@ -584,12 +587,13 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
                       </div>
                     </div>
                   )}
-                </Card>
+                </DeckSurface>
               )}
             </div>
           )}
 
           <QrmCompanySubtreeEquipmentSection companyId={companyId} />
+          <QrmCompanyShipToSection companyId={companyId} />
           <QrmCompanyEquipmentSection companyId={companyId} />
           <QrmCustomFieldsCard
             recordType="company"
@@ -599,50 +603,59 @@ export function QrmCompanyDetailPage({ userId, userRole }: QrmCompanyDetailPageP
 
           <CustomerPartsIntelCard companyId={companyId} />
 
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
+          <DeckSurface>
+            <div className="flex items-start justify-between gap-3 border-b border-qep-deck-rule/60 pb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Activity Timeline</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The last touches tied to this account across calls, notes, meetings, and messages.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="ghost">
+                <Link to={buildAccountCommandHref(companyId)}>Open command center</Link>
+              </Button>
             </div>
 
             {activitiesQuery.isLoading ? (
-              <div className="space-y-3" role="status" aria-label="Loading activities">
+              <div className="space-y-3 mt-4" role="status" aria-label="Loading activities">
                 {Array.from({ length: 3 }).map((_, index) => (
                   <div
                     key={index}
-                    className="h-24 animate-pulse rounded-xl border border-border bg-muted/40"
+                    className="h-24 animate-pulse rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/40"
                   />
                 ))}
               </div>
             ) : activitiesQuery.isError ? (
-              <Card className="border-border bg-card p-4 text-sm text-muted-foreground">
+              <div className="border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4 text-sm text-muted-foreground mt-4 rounded-sm">
                 Couldn&apos;t load activities. Try refreshing the page.
-              </Card>
+              </div>
             ) : (
-              <QrmActivityTimeline
-                activities={activitiesQuery.data ?? []}
-                onLogActivity={() => setComposerOpen(true)}
-                entityLabel={companyName}
-                showEntityLabel={false}
-                pendingBodyId={pendingBodyId}
-                pendingOccurredAtId={pendingOccurredAtId}
-                pendingTaskId={pendingTaskId}
-                pendingDeliveryId={pendingDeliveryId}
-                onPatchBody={async (activity, body, updatedAt) => {
-                  await patchBody({ activityId: activity.id, body, updatedAt });
-                }}
-                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
-                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
-                }}
-                onPatchTask={async (activity, task, updatedAt) => {
-                  await patchTask({ activityId: activity.id, task, updatedAt });
-                }}
-                onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
-                }}
-              />
+              <div className="mt-4">
+                <QrmActivityTimeline
+                  activities={activitiesQuery.data ?? []}
+                  onLogActivity={() => setComposerOpen(true)}
+                  entityLabel={companyName}
+                  showEntityLabel={false}
+                  pendingBodyId={pendingBodyId}
+                  pendingOccurredAtId={pendingOccurredAtId}
+                  pendingTaskId={pendingTaskId}
+                  pendingDeliveryId={pendingDeliveryId}
+                  onPatchBody={async (activity, body, updatedAt) => {
+                    await patchBody({ activityId: activity.id, body, updatedAt });
+                  }}
+                  onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                    await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
+                  }}
+                  onPatchTask={async (activity, task, updatedAt) => {
+                    await patchTask({ activityId: activity.id, task, updatedAt });
+                  }}
+                  onDeliverCommunication={async (activity) => {
+                    await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
+                  }}
+                />
+              </div>
             )}
-          </section>
+          </DeckSurface>
         </>
       )}
 

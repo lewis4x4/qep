@@ -56,6 +56,42 @@ export interface QrmCompanySummary {
   updatedAt: string;
 }
 
+export interface QrmCompanyShipToAddress {
+  id: string;
+  workspaceId: string;
+  companyId: string;
+  name: string;
+  contactName: string | null;
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  instructions: string | null;
+  isPrimary: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QrmCompanyShipToInput {
+  name?: string;
+  contactName?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  instructions?: string | null;
+  isPrimary?: boolean;
+  sortOrder?: number | null;
+  archive?: boolean;
+}
+
 export interface QrmActivityItem {
   id: string;
   workspaceId: string;
