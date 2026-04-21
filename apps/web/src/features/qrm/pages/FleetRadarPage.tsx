@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import {
   ArrowLeft, Radar, AlertTriangle, DollarSign, TrendingUp, Clock, Wrench, Loader2,
 } from "lucide-react";
@@ -10,6 +11,7 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchFleetRadar, type FleetRadarLensItem, type FleetRadarResponse } from "../lib/account-360-api";
 import { accountCommandUrl } from "../lib/account-links";
 import { supabase } from "@/lib/supabase";
+import { DeckSurface } from "../components/command-deck";
 
 type LensKey = "aging" | "expensive" | "trade_up" | "underutilized" | "attachment_upsell";
 
