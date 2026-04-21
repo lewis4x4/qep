@@ -182,3 +182,43 @@ Deno.test("document-router enforces admin+ access", async () => {
   const payload = await parseJson(res);
   assertEquals((payload.error as { code?: string }).code, "FORBIDDEN");
 });
+
+Deno.test("document-router surfaces unmapped error messages as details for diagnosis", async () => {
+  const service = makeService({
+    list: async () => {
+      throw new Error("function get_my_workspace() does not exist");
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/list?view=all");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 500);
+  const payload = await parseJson(res);
+  const err = payload.error as { code?: string; message?: string; details?: string };
+  assertEquals(err.code, "INTERNAL_ERROR");
+  assertEquals(
+    typeof err.details === "string" && err.details.includes("get_my_workspace"),
+    true,
+  );
+});
+
+Deno.test("document-router fails closed when caller has no userId", async () => {
+  const service = makeService({
+    createContext: async () => ({
+      ...baseContext,
+      caller: {
+        authHeader: null,
+        userId: null,
+        role: null,
+        isServiceRole: false,
+        workspaceId: null,
+      },
+    }),
+  });
+
+  const req = new Request("https://example.com/document-router/list?view=all");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 401);
+  const payload = await parseJson(res);
+  assertEquals((payload.error as { code?: string }).code, "UNAUTHORIZED");
+});

@@ -122,12 +122,25 @@ async function documentRouterFetch<T>(path: string, options: {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      (payload as { error?: { message?: string } | string }).error &&
-      typeof (payload as { error?: { message?: string } | string }).error === "object"
-        ? ((payload as { error?: { message?: string } }).error?.message ?? "Document Center request failed")
-        : ((payload as { error?: string }).error ?? "Document Center request failed");
-    throw new Error(message);
+    const errorField = (payload as { error?: unknown }).error;
+    let code: string | null = null;
+    let message = "Document Center request failed";
+    let details: string | null = null;
+    if (errorField && typeof errorField === "object") {
+      const errObj = errorField as { code?: unknown; message?: unknown; details?: unknown };
+      if (typeof errObj.code === "string") code = errObj.code;
+      if (typeof errObj.message === "string" && errObj.message.length > 0) message = errObj.message;
+      if (typeof errObj.details === "string" && errObj.details.length > 0) details = errObj.details;
+    } else if (typeof errorField === "string") {
+      message = errorField;
+    }
+    const parts = [
+      `${response.status}`,
+      code,
+      message,
+      details && details !== message ? details : null,
+    ].filter((part): part is string => Boolean(part));
+    throw new Error(parts.join(" · "));
   }
   return payload as T;
 }

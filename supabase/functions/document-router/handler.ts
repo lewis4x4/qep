@@ -146,6 +146,7 @@ function mapError(origin: string | null, error: unknown): Response {
     status: 500,
     code: "INTERNAL_ERROR",
     message: "Document router request failed.",
+    details: message.length > 0 ? message.slice(0, 500) : undefined,
   });
 }
 
