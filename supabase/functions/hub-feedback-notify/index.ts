@@ -291,16 +291,35 @@ async function loadFeedback(
   supabase: SupabaseClient,
   id: string,
 ): Promise<FeedbackRow | null> {
-  const { data, error } = await supabase
+  const withPreviewColumns =
+    "id, submitted_by, feedback_type, body, ai_summary, ai_suggested_action, claude_pr_url, claude_branch_name, claude_preview_url";
+  const legacyColumns =
+    "id, submitted_by, feedback_type, body, ai_summary, ai_suggested_action, claude_pr_url, claude_branch_name";
+
+  const withPreview = await supabase
     .from("hub_feedback")
-    .select(
-      "id, submitted_by, feedback_type, body, ai_summary, ai_suggested_action, claude_pr_url, claude_branch_name, claude_preview_url",
-    )
+    .select(withPreviewColumns)
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
-  if (error) throw new Error(`feedback load: ${error.message}`);
-  return (data as FeedbackRow | null) ?? null;
+  if (!withPreview.error) {
+    return (withPreview.data as FeedbackRow | null) ?? null;
+  }
+
+  if (!isMissingPreviewColumnError(withPreview.error)) {
+    throw new Error(`feedback load: ${withPreview.error.message}`);
+  }
+
+  const legacy = await supabase
+    .from("hub_feedback")
+    .select(legacyColumns)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (legacy.error) throw new Error(`feedback load: ${legacy.error.message}`);
+  const row = legacy.data as Omit<FeedbackRow, "claude_preview_url"> | null;
+  if (!row) return null;
+  return { ...row, claude_preview_url: null };
 }
 
 async function loadSubmitter(
@@ -502,4 +521,8 @@ async function composeMeaningLine(params: {
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
+}
+
+function isMissingPreviewColumnError(error: { code?: string; message?: string }): boolean {
+  return error.code === "42703" && /claude_preview_url/i.test(error.message ?? "");
 }

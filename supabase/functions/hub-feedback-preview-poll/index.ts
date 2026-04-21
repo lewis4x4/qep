@@ -104,7 +104,20 @@ Deno.serve(async (req) => {
       .order("claude_preview_checked_at", { ascending: true, nullsFirst: true })
       .limit(MAX_ROWS_PER_RUN);
 
-    if (error) throw new Error(`candidate scan: ${error.message}`);
+    if (error) {
+      if (isMissingPreviewSchemaError(error)) {
+        return safeJsonOk(
+          {
+            polled: 0,
+            outcomes: [],
+            skipped_legacy_schema: true,
+            elapsed_ms: Date.now() - startMs,
+          },
+          origin,
+        );
+      }
+      throw new Error(`candidate scan: ${error.message}`);
+    }
 
     const candidates = (rows ?? []) as CandidateRow[];
     if (candidates.length === 0) {
@@ -301,4 +314,9 @@ function findNetlifyPreview(statuses: GithubStatusEntry[]): GithubStatusEntry | 
   const pool = successWithUrl.length > 0 ? successWithUrl : candidates;
   pool.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   return pool[0] ?? null;
+}
+
+function isMissingPreviewSchemaError(error: { code?: string; message?: string }): boolean {
+  if (error.code !== "42703") return false;
+  return /claude_preview_(url|ready_at|checked_at)/i.test(error.message ?? "");
 }

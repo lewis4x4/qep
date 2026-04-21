@@ -554,6 +554,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Admin",
   },
   {
+    label: "Documents",
+    href: "/admin/documents",
+    icon: FileText,
+    roles: ["admin", "manager", "owner"],
+    utility: true,
+    sectionLabel: "Admin",
+  },
+  {
     label: "Price Sheets",
     href: "/admin/price-sheets",
     icon: FileSpreadsheet,

@@ -58,6 +58,7 @@ import {
 } from "./templates";
 import { AssistantResponseRenderer } from "@/components/assistant/AssistantResponseRenderer";
 import { pushPresence } from "./presence";
+import { supabase } from "@/lib/supabase";
 
 interface SendOptions {
   /** "voice" auto-narrates the response. */
@@ -168,7 +169,6 @@ export function IronBar() {
     let cancelled = false;
     void (async () => {
       try {
-        const { supabase } = await import("@/lib/supabase");
         const { data } = await supabase.auth.getUser();
         const userId = data.user?.id;
         if (!userId) return;

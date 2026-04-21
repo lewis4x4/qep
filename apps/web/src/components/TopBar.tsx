@@ -113,6 +113,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/admin/templates": "Templates",
   "/admin/duplicates": "Duplicates",
   "/admin/integrations": "Integrations",
+  "/admin/documents": "Document Center",
 };
 
 const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> = {
@@ -161,6 +162,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/admin/templates": null,
   "/admin/duplicates": null,
   "/admin/integrations": null,
+  "/admin/documents": null,
 };
 
 type QrmBellRow = {

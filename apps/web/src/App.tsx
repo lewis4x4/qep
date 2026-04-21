@@ -2,18 +2,9 @@ import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuth } from "./hooks/useAuth";
-import { LoginPage } from "./components/LoginPage";
-import { AppLayout, type AppLayoutProps } from "./components/AppLayout";
-import { DashboardPage } from "./components/DashboardPage";
-import { OfflineBanner } from "./components/OfflineBanner";
-import { SessionExpiredModal } from "./components/SessionExpiredModal";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import { NotFoundPage } from "./components/NotFoundPage";
-import { NoProfileShell } from "./components/NoProfileShell";
+import type { AppLayoutProps } from "./components/AppLayout";
 import { Toaster } from "@/components/ui/toaster";
-import { FlareProvider } from "@/lib/flare/FlareProvider";
-import { IronShell } from "@/lib/iron/IronShell";
-import { IronStoreProvider } from "@/lib/iron/store";
 import { supabase } from "./lib/supabase";
 import {
   hasStoredSupabaseAuthToken,
@@ -22,7 +13,6 @@ import {
 import { hasCachedAuthProfile } from "./lib/auth-recovery";
 import { resolveHomeRoute } from "./lib/home-route";
 import { portalRouteElements } from "./features/portal/PortalRoutes";
-import { PortalLoginPage } from "./features/portal/pages/PortalLoginPage";
 
 const SalesRoutes = lazy(() =>
   import("./features/sales/SalesRoutes").then((m) => ({ default: m.SalesRoutes }))
@@ -32,11 +22,48 @@ const PartsCompanionRoutes = lazy(() =>
   import("./features/parts-companion/PartsCompanionRoutes").then((m) => ({ default: m.PartsCompanionRoutes }))
 );
 
+const LoginPage = lazy(() =>
+  import("./components/LoginPage").then((m) => ({ default: m.LoginPage }))
+);
+const PortalLoginPage = lazy(() =>
+  import("./features/portal/pages/PortalLoginPage").then((m) => ({ default: m.PortalLoginPage }))
+);
+const AppLayout = lazy(() =>
+  import("./components/AppLayout").then((m) => ({ default: m.AppLayout }))
+);
+const DashboardPage = lazy(() =>
+  import("./components/DashboardPage").then((m) => ({ default: m.DashboardPage }))
+);
+const OfflineBanner = lazy(() =>
+  import("./components/OfflineBanner").then((m) => ({ default: m.OfflineBanner }))
+);
+const SessionExpiredModal = lazy(() =>
+  import("./components/SessionExpiredModal").then((m) => ({ default: m.SessionExpiredModal }))
+);
+const NotFoundPage = lazy(() =>
+  import("./components/NotFoundPage").then((m) => ({ default: m.NotFoundPage }))
+);
+const NoProfileShell = lazy(() =>
+  import("./components/NoProfileShell").then((m) => ({ default: m.NoProfileShell }))
+);
+const FlareProvider = lazy(() =>
+  import("@/lib/flare/FlareProvider").then((m) => ({ default: m.FlareProvider }))
+);
+const IronShell = lazy(() =>
+  import("@/lib/iron/IronShell").then((m) => ({ default: m.IronShell }))
+);
+const IronStoreProvider = lazy(() =>
+  import("@/lib/iron/store").then((m) => ({ default: m.IronStoreProvider }))
+);
+
 const ChatPage = lazy(() =>
   import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
 );
 const AdminPage = lazy(() =>
   import("./components/AdminPage").then((m) => ({ default: m.AdminPage }))
+);
+const DocumentCenterPage = lazy(() =>
+  import("./routes/admin/documents/DocumentCenter").then((m) => ({ default: m.DocumentCenterPage }))
 );
 const VoiceCapturePage = lazy(() =>
   import("./components/VoiceCapturePage").then((m) => ({ default: m.VoiceCapturePage }))
@@ -788,13 +815,15 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <OfflineBanner />
-          <SessionExpiredModal
-            open={showSessionExpiredModal}
-            onSignIn={() => {
-              setSessionExpired(false);
-            }}
-          />
+          <Suspense fallback={null}>
+            <OfflineBanner />
+            <SessionExpiredModal
+              open={showSessionExpiredModal}
+              onSignIn={() => {
+                setSessionExpired(false);
+              }}
+            />
+          </Suspense>
           <div className="min-h-screen bg-background flex items-center justify-center px-6">
             <div className="text-center max-w-md" role="status" aria-live="polite">
               <div
@@ -817,7 +846,9 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <OfflineBanner />
+          <Suspense fallback={null}>
+            <OfflineBanner />
+          </Suspense>
           <Suspense
             fallback={
               <div className="min-h-screen bg-background flex items-center justify-center">
@@ -832,10 +863,12 @@ function App() {
               <Route path="*" element={<LoginPage authError={error} />} />
             </Routes>
           </Suspense>
-          <SessionExpiredModal
-            open={showSessionExpiredModal}
-            onSignIn={() => setSessionExpired(false)}
-          />
+          <Suspense fallback={null}>
+            <SessionExpiredModal
+              open={showSessionExpiredModal}
+              onSignIn={() => setSessionExpired(false)}
+            />
+          </Suspense>
           <Toaster />
         </BrowserRouter>
       </QueryClientProvider>
@@ -846,14 +879,16 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <SessionExpiredModal
-            open={showSessionExpiredModal}
-            onSignIn={() => {
-              setSessionExpired(false);
-              void supabase.auth.signOut();
-            }}
-          />
-          <NoProfileShell authError={error} />
+          <Suspense fallback={<RouteFallback />}>
+            <SessionExpiredModal
+              open={showSessionExpiredModal}
+              onSignIn={() => {
+                setSessionExpired(false);
+                void supabase.auth.signOut();
+              }}
+            />
+            <NoProfileShell authError={error} />
+          </Suspense>
         </BrowserRouter>
       </QueryClientProvider>
     );
@@ -869,24 +904,25 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppErrorBoundary>
-          <IronStoreProvider>
-            <FlareProvider>
-            <OfflineBanner />
-            <SessionExpiredModal
-              open={showSessionExpiredModal}
-              onSignIn={() => {
-                setSessionExpired(false);
-                void supabase.auth.signOut();
-              }}
-            />
-            <SalesOrAppLayout
-              profile={profile}
-              onLogout={handleLogout}
-              quoteBuilderEnabled={quoteBuilderAccess.connected}
-              quoteBuilderLoading={quoteBuilderAccess.loading}
-            >
-            <AnimatedRoutes>
+        <Suspense fallback={<RouteFallback />}>
+          <AppErrorBoundary>
+            <IronStoreProvider>
+              <FlareProvider>
+                <OfflineBanner />
+                <SessionExpiredModal
+                  open={showSessionExpiredModal}
+                  onSignIn={() => {
+                    setSessionExpired(false);
+                    void supabase.auth.signOut();
+                  }}
+                />
+                <SalesOrAppLayout
+                  profile={profile}
+                  onLogout={handleLogout}
+                  quoteBuilderEnabled={quoteBuilderAccess.connected}
+                  quoteBuilderLoading={quoteBuilderAccess.loading}
+                >
+                  <AnimatedRoutes>
               <Route path="/" element={<Navigate to={homeRoute} replace />} />
               <Route
                 path="/dashboard"
@@ -920,6 +956,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <AdminPage userRole={profile.role} userId={profile.id} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/documents"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <DocumentCenterPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2472,13 +2518,14 @@ function App() {
                   <PartsCompanionRoutes />
                 </Suspense>
               } />
-              <Route path="*" element={<NotFoundPage />} />
-              </AnimatedRoutes>
-            </SalesOrAppLayout>
-            <IronShell />
-            </FlareProvider>
-          </IronStoreProvider>
-        </AppErrorBoundary>
+                    <Route path="*" element={<NotFoundPage />} />
+                  </AnimatedRoutes>
+                </SalesOrAppLayout>
+                <IronShell />
+              </FlareProvider>
+            </IronStoreProvider>
+          </AppErrorBoundary>
+        </Suspense>
         <Toaster />
       </BrowserRouter>
     </QueryClientProvider>

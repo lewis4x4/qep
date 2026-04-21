@@ -961,6 +961,27 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground mb-1">
+                        Document Center
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Open the new folder-first document workflow with workspace-scoped navigation and context pane actions.
+                      </p>
+                    </div>
+                    <Button size="sm" asChild>
+                      <a href="/admin/documents">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Open Document Center
+                      </a>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground mb-1">
                         Integration Hub
                       </h3>
                       <p className="text-sm text-muted-foreground">

@@ -139,11 +139,15 @@ Deno.serve(async (req) => {
 
     const { data: document, error: documentError } = await adminClient
       .from("documents")
-      .select("id, title, audience, status, review_owner_user_id, review_due_at, metadata")
+      .select("id, title, audience, status, review_owner_user_id, review_due_at, metadata, workspace_id")
       .eq("id", body.documentId)
       .single();
 
     if (documentError || !document) {
+      return jsonResponse({ error: "Document not found" }, 404, ch);
+    }
+
+    if (!caller.isServiceRole && caller.workspaceId && document.workspace_id !== caller.workspaceId) {
       return jsonResponse({ error: "Document not found" }, 404, ch);
     }
 

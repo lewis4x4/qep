@@ -330,7 +330,7 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role")
+      .select("role, active_workspace_id")
       .eq("id", user.id)
       .single();
 
@@ -356,6 +356,10 @@ Deno.serve(async (req) => {
         // Managers can upload, but governance is always forced to company-wide pending review.
         console.info("[ingest] Manager upload governance overridden to company_wide/pending_review");
       }
+
+      const workspaceId = typeof profile.active_workspace_id === "string" && profile.active_workspace_id.trim().length > 0
+        ? profile.active_workspace_id.trim()
+        : "default";
 
       const governance = resolveUploadGovernance(
         profile.role as UserRole,
@@ -513,6 +517,7 @@ Deno.serve(async (req) => {
       const { data: doc, error: docError } = await supabaseAdmin
         .from("documents")
         .insert({
+          workspace_id: workspaceId,
           title,
           source: getDocumentSourceForUploadKind(uploadKind),
           source_id: file.name,
@@ -698,6 +703,17 @@ Deno.serve(async (req) => {
       }
       const delta = await deltaRes.json();
 
+      const { data: syncProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("active_workspace_id")
+        .eq("id", syncState.user_id)
+        .maybeSingle();
+
+      const syncWorkspaceId =
+        typeof syncProfile?.active_workspace_id === "string" && syncProfile.active_workspace_id.trim().length > 0
+          ? syncProfile.active_workspace_id.trim()
+          : "default";
+
       const processed = [];
       for (const item of (delta.value || [])) {
         if (item.deleted || item.folder) continue;
@@ -748,6 +764,7 @@ Deno.serve(async (req) => {
         const { data: doc } = await supabaseAdmin
           .from("documents")
           .upsert({
+            workspace_id: syncWorkspaceId,
             title: item.name,
             source: "onedrive",
             source_id: item.id,

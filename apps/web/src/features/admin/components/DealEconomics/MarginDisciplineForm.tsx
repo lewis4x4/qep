@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 import {
   listThresholds,
   upsertThreshold,
@@ -57,7 +58,6 @@ export function MarginDisciplineForm() {
     // Brands list — one-time pull for the per-brand dropdown
     let cancelled = false;
     (async () => {
-      const { supabase } = await import("@/lib/supabase");
       const { data } = await supabase
         .from("qb_brands")
         .select("id, name, code")

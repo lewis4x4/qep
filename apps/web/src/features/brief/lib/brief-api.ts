@@ -398,22 +398,46 @@ export async function refreshStakeholderBrief(): Promise<StakeholderBriefing | n
 
 export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedbackRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
-  let q = supabase
-    .from("hub_feedback")
-    .select(
-      "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, claude_preview_url, claude_preview_ready_at, created_at, updated_at, resolved_at, last_seen_events_at",
-    )
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const selectWithPreview =
+    "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, claude_preview_url, claude_preview_ready_at, created_at, updated_at, resolved_at, last_seen_events_at";
+  const selectLegacy =
+    "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, created_at, updated_at, resolved_at, last_seen_events_at";
 
-  if (opts.scope === "mine" && opts.userId) {
-    q = q.eq("submitted_by", opts.userId);
+  const buildQuery = (columns: string) => {
+    let q = supabase
+      .from("hub_feedback")
+      .select(columns)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (opts.scope === "mine" && opts.userId) {
+      q = q.eq("submitted_by", opts.userId);
+    }
+    return q;
+  };
+
+  const withPreview = await buildQuery(selectWithPreview);
+  if (!withPreview.error) {
+    return (withPreview.data ?? []) as unknown as HubFeedbackRow[];
   }
 
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as HubFeedbackRow[];
+  const missingPreviewColumns =
+    withPreview.error.code === "42703" &&
+    /claude_preview_(url|ready_at)/i.test(withPreview.error.message);
+  if (!missingPreviewColumns) {
+    throw new Error(withPreview.error.message);
+  }
+
+  const legacy = await buildQuery(selectLegacy);
+  if (legacy.error) throw new Error(legacy.error.message);
+  return ((legacy.data ?? []) as unknown as Omit<
+    HubFeedbackRow,
+    "claude_preview_url" | "claude_preview_ready_at"
+  >[]).map((row) => ({
+    ...row,
+    claude_preview_url: null,
+    claude_preview_ready_at: null,
+  }));
 }
 
 // ── V2.4 dedup links ────────────────────────────────────────────────────────
