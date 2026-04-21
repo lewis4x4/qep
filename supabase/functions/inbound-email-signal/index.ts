@@ -111,12 +111,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const isServiceRole = isServiceRoleCaller(req);
   let callerUserId: string | null = null;
+  let callerWorkspaceId: string | null = null;
   if (!isServiceRole) {
     const caller = await resolveCallerContext(req, admin);
     if (!caller.role || !["admin", "manager", "owner"].includes(caller.role)) {
       return bad(403, "FORBIDDEN", "Elevated role required.", ch);
     }
     callerUserId = caller.userId ?? null;
+    callerWorkspaceId = caller.workspaceId ?? null;
   }
 
   let raw: unknown;
@@ -132,6 +134,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "validation";
     return bad(400, "VALIDATION_ERROR", msg, ch);
+  }
+
+  // Workspace isolation: an elevated (admin/manager/owner) caller can only
+  // inject signals into their own workspace. Service-role callers (cron,
+  // inbound mail gateways) keep the explicit workspaceId from the payload
+  // because they legitimately target any tenant. Without this guard, an
+  // admin in tenant A could POST {workspaceId: "B", ...} and cross-inject
+  // into tenant B. CLAUDE.md § Non-Negotiables requires workspace
+  // enforcement in both API logic and DB policy — RLS would not stop this
+  // because the caller holds a valid JWT for their own tenant.
+  if (!isServiceRole) {
+    if (!callerWorkspaceId) {
+      return bad(
+        403,
+        "FORBIDDEN",
+        "Caller has no resolvable workspace.",
+        ch,
+      );
+    }
+    if (payload.workspaceId !== callerWorkspaceId) {
+      return bad(
+        403,
+        "WORKSPACE_MISMATCH",
+        "workspaceId in payload does not match caller.",
+        ch,
+      );
+    }
   }
 
   try {
