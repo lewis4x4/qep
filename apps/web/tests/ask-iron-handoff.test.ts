@@ -39,6 +39,26 @@ describe("isAskIronSeedState", () => {
     ).toBe(true);
   });
 
+  it("accepts source:'graph' (Slice 9 handoff contract)", () => {
+    expect(
+      isAskIronSeedState({
+        askIronSeed: {
+          question: "Brief me on this deal",
+          source: "graph",
+          sourceId: "d-42",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts source:'today' (future handoff contract)", () => {
+    expect(
+      isAskIronSeedState({
+        askIronSeed: { question: "explain this move", source: "today" },
+      }),
+    ).toBe(true);
+  });
+
   it("returns false for an empty object (typical after refresh)", () => {
     expect(isAskIronSeedState({})).toBe(false);
   });

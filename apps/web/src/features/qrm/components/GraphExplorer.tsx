@@ -24,6 +24,7 @@ import {
   Briefcase,
   Building2,
   Search,
+  Sparkles,
   Tractor,
   Truck,
   UserRound,
@@ -33,6 +34,8 @@ import { Input } from "@/components/ui/input";
 import { searchQrmGraph } from "../lib/qrm-router-api";
 import type { QrmSearchEntityType, QrmSearchItem } from "../lib/types";
 import { hrefForGraphResult } from "./graphExplorerRoutes";
+import { ASK_IRON_PATH, type AskIronSeedState } from "./askIronHandoff";
+import { formatIronGraphPrompt } from "./graphExplorerHelpers";
 
 interface LensDefinition {
   id: "all" | QrmSearchEntityType;
@@ -101,6 +104,23 @@ export function GraphExplorer({
     const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), 180);
     return () => window.clearTimeout(handle);
   }, [query]);
+
+  // Slice 9 — mirror of Pulse → Iron. Compose an entity-specific brief and
+  // navigate to Ask Iron with the question in router state. AskIronSurface
+  // consumes the seed via isAskIronSeedState and auto-sends once. Clicking
+  // Ask Iron does NOT navigate to the entity detail — the two affordances
+  // are distinct (detail = "inspect", Iron = "interpret").
+  const handleAskIron = (item: QrmSearchItem) => {
+    const question = formatIronGraphPrompt(item);
+    const state: AskIronSeedState = {
+      askIronSeed: {
+        question,
+        source: "graph",
+        sourceId: item.id,
+      },
+    };
+    navigate(ASK_IRON_PATH, { state });
+  };
 
   // Keep the input focused on mount so the surface feels like a command bar.
   useEffect(() => {
@@ -244,39 +264,64 @@ export function GraphExplorer({
         {results.map((item) => {
           const Icon = RESULT_ICON[item.type];
           return (
-            <button
+            <div
               key={`${item.type}-${item.id}`}
-              type="button"
-              onClick={() => navigate(hrefForGraphResult(item))}
-              className="group flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
+              className="group flex w-full items-center gap-1 transition hover:bg-accent/40"
             >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                  RESULT_BG[item.type],
-                )}
+              <button
+                type="button"
+                onClick={() => navigate(hrefForGraphResult(item))}
+                className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left focus-visible:bg-accent/40 focus-visible:outline-none"
               >
-                <Icon className={cn("h-4 w-4", RESULT_INTENT[item.type])} />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{item.title}</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                      RESULT_BG[item.type],
-                      RESULT_INTENT[item.type],
-                    )}
-                  >
-                    {item.type}
-                  </span>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                    RESULT_BG[item.type],
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4", RESULT_INTENT[item.type])} />
                 </span>
-                {item.subtitle && (
-                  <span className="truncate text-xs text-muted-foreground">{item.subtitle}</span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{item.title}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        RESULT_BG[item.type],
+                        RESULT_INTENT[item.type],
+                      )}
+                    >
+                      {item.type}
+                    </span>
+                  </span>
+                  {item.subtitle && (
+                    <span className="truncate text-xs text-muted-foreground">{item.subtitle}</span>
+                  )}
+                </span>
+              </button>
+              {/*
+                Slice 9 — "Ask Iron" sibling. Mirrors the Pulse pattern
+                (orange chip, Sparkles icon) so operators build one muscle
+                memory across surfaces. Kept as a sibling button rather
+                than nested inside the navigate button because <button>
+                inside <button> is invalid HTML and breaks Tab order.
+              */}
+              <button
+                type="button"
+                onClick={() => handleAskIron(item)}
+                className={cn(
+                  "mr-3 inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2.5 py-1 text-[11px] font-medium text-qep-orange",
+                  "transition-colors hover:border-qep-orange/60 hover:bg-qep-orange/10",
+                  "focus:outline-none focus:ring-2 focus:ring-qep-orange/40",
                 )}
-              </span>
-            </button>
+                aria-label={`Ask Iron about ${item.title}`}
+                title="Hand this entity to Ask Iron"
+              >
+                <Sparkles className="h-3 w-3" aria-hidden />
+                Ask Iron
+              </button>
+            </div>
           );
         })}
       </section>
