@@ -36,6 +36,8 @@ import {
   describeCallFlipsHeadline,
   formatFlipRow,
 } from "./proposal-call-flips";
+import type { ProposalApplyVerdict } from "./proposal-apply-verdict";
+import { describeProposalVerdictPill } from "./proposal-apply-verdict";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -52,6 +54,10 @@ export interface ProposalMarkdownContext {
   /** 20w — per-deal call-flip evidence. Null when no what-if to derive
    *  flips from, or when the proposal is all-keep. */
   callFlips: ProposalCallFlipReport | null;
+  /** 20y — composed apply/review/hold/defer recommendation + ranked
+   *  reasons. Null when the caller didn't compute one (UI that wants
+   *  the receipts without the verdict). */
+  verdict: ProposalApplyVerdict | null;
 }
 
 /**
@@ -61,6 +67,25 @@ export interface ProposalMarkdownContext {
  */
 function renderContextSection(ctx: ProposalMarkdownContext): string {
   const lines: string[] = [];
+
+  // Verdict (20y) — pinned above everything else so a skimmer reads
+  // the recommendation FIRST and the receipts below it. The verdict
+  // line is "✓ APPLY — confidence 82/100, 3 corroborating flips…"
+  // plus a bulleted reasons list with polarity icons so a reviewer
+  // can sanity-check the verdict against the evidence in one glance.
+  // `defer` with no reasons is elided — there's nothing to say beyond
+  // the headline and the proposal body speaks for itself.
+  if (ctx.verdict) {
+    const pill = describeProposalVerdictPill(ctx.verdict.verdict);
+    lines.push(`**Verdict**: ${pill} — ${ctx.verdict.headline}`);
+    if (ctx.verdict.reasons.length > 0) {
+      for (const r of ctx.verdict.reasons) {
+        const icon =
+          r.polarity === "positive" ? "✓" : r.polarity === "negative" ? "⚠" : "·";
+        lines.push(`  - ${icon} ${r.rationale}`);
+      }
+    }
+  }
 
   // Urgency headline — one line only. We intentionally pin it above
   // the drift numbers so a skimmer reads "why" before "what".

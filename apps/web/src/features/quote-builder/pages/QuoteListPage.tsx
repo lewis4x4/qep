@@ -86,6 +86,11 @@ import {
   type ProposalCallFlipReport,
   type CallFlip,
 } from "../lib/proposal-call-flips";
+import {
+  computeProposalApplyVerdict,
+  describeProposalVerdictPill,
+  type ProposalApplyVerdict,
+} from "../lib/proposal-apply-verdict";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -435,6 +440,31 @@ export function QuoteListPage() {
     return report;
   }, [scorerWhatIf]);
 
+  /**
+   * Slice 20y — the composed apply/review/hold/defer verdict. Rides on
+   * top of every upstream evidence module (confidence, flips, what-if,
+   * urgency) to deliver a single busy-manager decision. Computed even
+   * when signals are partial so the caller can still render a 'review
+   * — can't verify' state rather than a silent nothing. Null only when
+   * there's literally no proposal.
+   */
+  const proposalVerdict = useMemo<ProposalApplyVerdict | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalApplyVerdict({
+      proposal: scorerProposal,
+      confidence: proposalConfidence,
+      callFlips: proposalCallFlips,
+      whatIf: scorerWhatIf,
+      urgency: proposalUrgency,
+    });
+  }, [
+    scorerProposal,
+    proposalConfidence,
+    proposalCallFlips,
+    scorerWhatIf,
+    proposalUrgency,
+  ]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -530,6 +560,7 @@ export function QuoteListPage() {
           urgency={proposalUrgency}
           confidence={proposalConfidence}
           callFlips={proposalCallFlips}
+          verdict={proposalVerdict}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1602,6 +1633,7 @@ function ScorerProposalCard({
   urgency,
   confidence,
   callFlips,
+  verdict,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1629,6 +1661,12 @@ function ScorerProposalCard({
    *  before approving. Null when what-if is unavailable or the
    *  proposal has no actionable changes. */
   callFlips: ProposalCallFlipReport | null;
+  /** Slice 20y — composed apply/review/hold/defer verdict. The busy-
+   *  manager summary that sits on top of the evidence chain: the card
+   *  renders the pill + headline + ranked reasons so a reviewer can
+   *  read the recommendation first and the receipts below it. Null
+   *  when no proposal exists at all. */
+  verdict: ProposalApplyVerdict | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1653,12 +1691,13 @@ function ScorerProposalCard({
 
   async function handleCopy() {
     try {
-      // Slice 20u/20x — the clipboard carries the full evidence chain:
-      // urgency, calibration drift, factor drift, what-if, per-deal call
-      // flips (20w), and the composed confidence score (20v) alongside
-      // the proposal body. The context renderer falls through to the
-      // bare 20m output when every section is silent, so nothing bloats
-      // the ticket without earning it.
+      // Slice 20u/20x/20y — the clipboard carries the full evidence
+      // chain: the 20y verdict on top (apply/review/hold/defer + ranked
+      // reasons), then urgency, calibration drift, factor drift,
+      // what-if, per-deal call flips (20w), confidence (20v), and
+      // finally the proposal body. The context renderer falls through
+      // to the bare 20m output when every section is silent, so nothing
+      // bloats the ticket without earning it.
       const markdown = renderProposalMarkdownWithContext(proposal, {
         calibrationDrift,
         factorDrift,
@@ -1666,6 +1705,7 @@ function ScorerProposalCard({
         whatIf,
         confidence,
         callFlips,
+        verdict,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -1729,6 +1769,28 @@ function ScorerProposalCard({
               >
                 {confidence.confidence} · {describeProposalConfidencePill(confidence.band)}
               </span>
+              {/* Slice 20y — apply verdict pill. The busy-manager
+                  decision on top of urgency + confidence. Apply=emerald,
+                  review=amber, hold=rose, defer=muted. Tooltip carries
+                  the ranked headline so hovering reveals the one-line
+                  reason without the reader having to expand the card. */}
+              {verdict && (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${
+                    verdict.verdict === "apply"
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : verdict.verdict === "review"
+                        ? "bg-amber-500/15 text-amber-300"
+                        : verdict.verdict === "hold"
+                          ? "bg-rose-500/15 text-rose-300"
+                          : "bg-muted/30 text-muted-foreground"
+                  }`}
+                  aria-label={`Apply verdict: ${verdict.verdict} — ${verdict.headline}`}
+                  title={verdict.headline}
+                >
+                  {describeProposalVerdictPill(verdict.verdict)}
+                </span>
+              )}
               <span
                 className="text-[10px] text-muted-foreground tabular-nums"
                 aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
@@ -1800,6 +1862,77 @@ function ScorerProposalCard({
 
           {expanded && (
             <div id="scorer-proposal-body" className="mt-2 space-y-2">
+              {/* Slice 20y — apply verdict + ranked reasons. Rendered FIRST
+                  in the expanded body because the verdict is the busy-
+                  manager summary of everything below; the evidence cards
+                  justify WHY, not WHAT. Polarity icon colors match the
+                  card's accent grammar: emerald=positive, rose=negative,
+                  muted=neutral. Hidden when verdict is null (no proposal
+                  at all) — defer with an empty reasons list still renders
+                  the headline so the manager sees "nothing to apply." */}
+              {verdict && (
+                <div
+                  className={`rounded border p-2 ${
+                    verdict.verdict === "apply"
+                      ? "border-emerald-500/20 bg-emerald-500/5"
+                      : verdict.verdict === "review"
+                        ? "border-amber-500/20 bg-amber-500/5"
+                        : verdict.verdict === "hold"
+                          ? "border-rose-500/20 bg-rose-500/5"
+                          : "border-muted/30 bg-muted/5"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div
+                      className={`text-[10px] font-semibold uppercase tracking-wide ${
+                        verdict.verdict === "apply"
+                          ? "text-emerald-400"
+                          : verdict.verdict === "review"
+                            ? "text-amber-400"
+                            : verdict.verdict === "hold"
+                              ? "text-rose-400"
+                              : "text-muted-foreground"
+                      }`}
+                    >
+                      Apply verdict
+                    </div>
+                    <div className="text-[10px] tabular-nums text-muted-foreground">
+                      {describeProposalVerdictPill(verdict.verdict)}
+                    </div>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-foreground">
+                    {verdict.headline}
+                  </p>
+                  {verdict.reasons.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {verdict.reasons.map((r, i) => (
+                        <li
+                          key={`${r.kind}-${i}`}
+                          className="flex items-start gap-2 text-[10px] text-muted-foreground"
+                        >
+                          <span
+                            className={`shrink-0 font-semibold ${
+                              r.polarity === "positive"
+                                ? "text-emerald-400"
+                                : r.polarity === "negative"
+                                  ? "text-rose-400"
+                                  : "text-muted-foreground"
+                            }`}
+                            aria-label={`polarity ${r.polarity}`}
+                          >
+                            {r.polarity === "positive"
+                              ? "✓"
+                              : r.polarity === "negative"
+                                ? "⚠"
+                                : "·"}
+                          </span>
+                          <span className="flex-1">{r.rationale}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {/* Slice 20v — confidence rationale + per-driver breakdown.
                   Rendered first in the expanded body because the manager's
                   next decision is "do I trust this?" before "what would

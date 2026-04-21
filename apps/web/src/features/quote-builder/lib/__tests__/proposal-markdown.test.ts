@@ -21,6 +21,7 @@ import type { ProposalUrgencyResult } from "../proposal-urgency";
 import type { ScorerWhatIfResult } from "../scorer-what-if";
 import type { ProposalConfidenceResult } from "../proposal-confidence";
 import type { ProposalCallFlipReport } from "../proposal-call-flips";
+import type { ProposalApplyVerdict } from "../proposal-apply-verdict";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -70,6 +71,7 @@ function nullCtx(): ProposalMarkdownContext {
     whatIf: null,
     confidence: null,
     callFlips: null,
+    verdict: null,
   };
 }
 
@@ -97,10 +99,9 @@ describe("renderProposalMarkdownWithContext — degradation to 20m baseline", ()
 
   test("medium urgency + silent rationale + empty drift → no Context block emitted", () => {
     const ctx: ProposalMarkdownContext = {
-      calibrationDrift: null,
+      ...nullCtx(),
       factorDrift: { referenceDate: "2026-01-01T00:00:00.000Z", windowDays: 90, recentN: 0, priorN: 0, drifts: [], lowConfidence: true },
       urgency: { urgency: "medium", rationale: null },
-      whatIf: null,
     };
     const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
     expect(md.startsWith("## Scorer Evolution Proposal")).toBe(true);
@@ -356,6 +357,7 @@ describe("renderProposalMarkdownWithContext — what-if preview", () => {
 describe("renderProposalMarkdownWithContext — composed output", () => {
   test("full context produces a canonical ticket body", () => {
     const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
       urgency: {
         urgency: "high",
         rationale: "Scorer dulled -12pp over the last 90 days — open a scorer PR this week.",
@@ -681,6 +683,7 @@ describe("renderProposalMarkdownWithContext — full ordering with 20v + 20w", (
       noActionableChanges: false,
     };
     const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
       urgency: {
         urgency: "high",
         rationale: "Scorer dulled -10pp over the last 90 days — open a scorer PR this week.",
@@ -751,5 +754,151 @@ describe("renderProposalMarkdownWithContext — full ordering with 20v + 20w", (
     expect(idxCallFlips).toBeGreaterThan(idxWhatIf);
     expect(idxConfidence).toBeGreaterThan(idxCallFlips);
     expect(idxProposal).toBeGreaterThan(idxConfidence);
+  });
+});
+
+// ── Slice 20y additions — apply verdict in the markdown ──────────────
+
+describe("renderProposalMarkdownWithContext — verdict section (20y)", () => {
+  test("apply verdict renders pill + headline + positive-first reasons", () => {
+    const verdict: ProposalApplyVerdict = {
+      verdict: "apply",
+      headline:
+        "Apply — evidence is aligned (confidence 82/100, 3 corroborating flips, Brier −0.040).",
+      reasons: [
+        {
+          kind: "confidence",
+          polarity: "positive",
+          rationale: "Meta-confidence is 82/100 (HIGH band) — signals align.",
+        },
+        {
+          kind: "flips",
+          polarity: "positive",
+          rationale:
+            "3 calls would flip toward the right answer, none in the wrong direction.",
+        },
+        {
+          kind: "what_if",
+          polarity: "positive",
+          rationale: "Simulated Brier improves by 0.040 on 30 closed deals.",
+        },
+      ],
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), verdict };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain(
+      "**Verdict**: ✓ APPLY — Apply — evidence is aligned (confidence 82/100, 3 corroborating flips, Brier −0.040).",
+    );
+    expect(md).toContain(
+      "  - ✓ Meta-confidence is 82/100 (HIGH band) — signals align.",
+    );
+    expect(md).toContain(
+      "  - ✓ 3 calls would flip toward the right answer, none in the wrong direction.",
+    );
+  });
+
+  test("hold verdict renders ✗ pill and ⚠ icons for negative reasons", () => {
+    const verdict: ProposalApplyVerdict = {
+      verdict: "hold",
+      headline: "Hold — meta-confidence is 30/100 (low band) — signals don't yet support applying.",
+      reasons: [
+        {
+          kind: "confidence",
+          polarity: "negative",
+          rationale:
+            "Meta-confidence is 30/100 (LOW band) — signals don't yet support applying.",
+        },
+      ],
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), verdict };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Verdict**: ✗ HOLD — Hold —");
+    expect(md).toContain("  - ⚠ Meta-confidence is 30/100 (LOW band)");
+  });
+
+  test("review verdict renders ⚠ pill and negative reasons first", () => {
+    const verdict: ProposalApplyVerdict = {
+      verdict: "review",
+      headline: "Review before applying — 1 deal would regress.",
+      reasons: [
+        {
+          kind: "flips",
+          polarity: "negative",
+          rationale:
+            "1 deal would regress — review the specific flips before applying.",
+        },
+        {
+          kind: "confidence",
+          polarity: "positive",
+          rationale: "Meta-confidence is 78/100 (HIGH band) — signals align.",
+        },
+      ],
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), verdict };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Verdict**: ⚠ REVIEW");
+    expect(md).toContain("  - ⚠ 1 deal would regress");
+    expect(md).toContain("  - ✓ Meta-confidence is 78/100");
+  });
+
+  test("defer verdict renders — pill with headline only (no reasons bullets)", () => {
+    const verdict: ProposalApplyVerdict = {
+      verdict: "defer",
+      headline: "No proposal available.",
+      reasons: [],
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), verdict };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Verdict**: — DEFER — No proposal available.");
+    // No bullets should be rendered when reasons is empty.
+    expect(md).not.toMatch(/Verdict[\s\S]{0,50}\n {2}-/);
+  });
+
+  test("verdict section sits above everything else — top of the Context block", () => {
+    const verdict: ProposalApplyVerdict = {
+      verdict: "apply",
+      headline: "Apply — evidence is aligned.",
+      reasons: [
+        {
+          kind: "confidence",
+          polarity: "positive",
+          rationale: "Signals align.",
+        },
+      ],
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      verdict,
+      urgency: {
+        urgency: "high",
+        rationale: "Some high-urgency reason.",
+      },
+      confidence: {
+        confidence: 82,
+        band: "high",
+        drivers: [],
+        rationale: "High.",
+        dampenedByThinSample: false,
+      },
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxVerdict = md.indexOf("**Verdict**");
+    const idxUrgency = md.indexOf("**Urgency**");
+    const idxConfidence = md.indexOf("**Confidence**");
+    const idxProposal = md.indexOf("## Scorer Evolution Proposal");
+    expect(idxVerdict).toBeGreaterThan(0);
+    expect(idxUrgency).toBeGreaterThan(idxVerdict);
+    expect(idxConfidence).toBeGreaterThan(idxUrgency);
+    expect(idxProposal).toBeGreaterThan(idxConfidence);
+  });
+
+  test("null verdict → no '**Verdict**' line rendered (back-compat)", () => {
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      urgency: { urgency: "medium", rationale: "Some rationale." },
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Verdict**");
+    expect(md).toContain("**Urgency**");
   });
 });
