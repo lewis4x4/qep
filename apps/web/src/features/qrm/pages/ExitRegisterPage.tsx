@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowUpRight, DoorClosed, RotateCcw, Skull } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import type { ComponentType } from "react";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -98,7 +99,9 @@ export function ExitRegisterPage() {
 
   const headline = useMemo(() => {
     if (!board) return "End-of-relationship events across the book.";
-    if (board.summary.lost > 0) return "Accounts that are lost, drifting toward exit, or have already been won back.";
+    if (board.summary.lost > 0) {
+      return "Accounts that are lost, drifting toward exit, or have already been won back.";
+    }
     return "No active exit markers are visible right now.";
   }, [board]);
 
@@ -111,21 +114,35 @@ export function ExitRegisterPage() {
       <QrmSubNav />
 
       {boardQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading death and exit register…</Card>
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">
+          Loading death and exit register…
+        </DeckSurface>
       ) : boardQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {boardQuery.error instanceof Error ? boardQuery.error.message : "Death and exit register is unavailable right now."}
-        </Card>
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+          {boardQuery.error instanceof Error
+            ? boardQuery.error.message
+            : "Death and exit register is unavailable right now."}
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
             <SummaryCard icon={DoorClosed} label="Accounts" value={String(board.summary.accounts)} />
-            <SummaryCard icon={AlertTriangle} label="Churn Risk" value={String(board.summary.churnRisk)} tone={board.summary.churnRisk > 0 ? "warn" : "default"} />
-            <SummaryCard icon={Skull} label="Lost" value={String(board.summary.lost)} tone={board.summary.lost > 0 ? "warn" : "default"} />
+            <SummaryCard
+              icon={AlertTriangle}
+              label="Churn Risk"
+              value={String(board.summary.churnRisk)}
+              tone={board.summary.churnRisk > 0 ? "warn" : "default"}
+            />
+            <SummaryCard
+              icon={Skull}
+              label="Lost"
+              value={String(board.summary.lost)}
+              tone={board.summary.lost > 0 ? "warn" : "default"}
+            />
             <SummaryCard icon={RotateCcw} label="Won Back" value={String(board.summary.wonBack)} />
           </div>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Exit rows</h2>
@@ -142,7 +159,9 @@ export function ExitRegisterPage() {
 
             <div className="mt-4 space-y-3">
               {board.rows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No end-of-relationship markers are active right now.</p>
+                <p className="text-sm text-muted-foreground">
+                  No end-of-relationship markers are active right now.
+                </p>
               ) : (
                 board.rows.map((row) => (
                   <div key={row.companyId} className="rounded-xl border border-border/60 bg-muted/10 p-4">
@@ -182,7 +201,7 @@ export function ExitRegisterPage() {
                 ))
               )}
             </div>
-          </Card>
+          </DeckSurface>
         </>
       )}
     </div>
@@ -195,18 +214,20 @@ function SummaryCard({
   value,
   tone = "default",
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   tone?: "default" | "warn";
 }) {
   return (
-    <Card className="p-4">
+    <DeckSurface className="p-4">
       <div className="flex items-center gap-2">
         <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {label}
+        </p>
       </div>
       <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
+    </DeckSurface>
   );
 }

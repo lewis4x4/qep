@@ -3,8 +3,8 @@ import { useQueries } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowUpRight, Building2, Sparkles } from "lucide-react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useBranchBySlug } from "@/hooks/useBranches";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import {
@@ -130,8 +130,8 @@ export function BranchChiefPage() {
   if (branchQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -139,9 +139,9 @@ export function BranchChiefPage() {
   if (branchQuery.isError || !branchQuery.data || !summary || !board) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This branch chief surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -173,18 +173,42 @@ export function BranchChiefPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard icon={Sparkles} label="Recommendations" value={String(board.summary.recommendationCount)} />
-        <SummaryCard icon={AlertTriangle} label="Urgent" value={String(board.summary.urgentCount)} tone={board.summary.urgentCount > 0 ? "warn" : "default"} />
-        <SummaryCard icon={Building2} label="Readiness Risk" value={board.summary.readinessRisk ? "Yes" : "No"} tone={board.summary.readinessRisk ? "warn" : "default"} />
-        <SummaryCard icon={Building2} label="Revenue Leak" value={board.summary.revenueLeak ? "Yes" : "No"} tone={board.summary.revenueLeak ? "warn" : "default"} />
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Recommendations</p>
+          </div>
+          <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.recommendationCount)}</p>
+        </DeckSurface>
+        <DeckSurface className={`p-4 ${board.summary.urgentCount > 0 ? "border-qep-warm/40" : ""}`}>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className={`h-4 w-4 ${board.summary.urgentCount > 0 ? "text-qep-warm" : "text-qep-orange"}`} />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Urgent</p>
+          </div>
+          <p className={`mt-3 text-2xl font-semibold ${board.summary.urgentCount > 0 ? "text-qep-warm" : "text-foreground"}`}>{String(board.summary.urgentCount)}</p>
+        </DeckSurface>
+        <DeckSurface className={`p-4 ${board.summary.readinessRisk ? "border-qep-warm/40" : ""}`}>
+          <div className="flex items-center gap-2">
+            <Building2 className={`h-4 w-4 ${board.summary.readinessRisk ? "text-qep-warm" : "text-qep-orange"}`} />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Readiness Risk</p>
+          </div>
+          <p className={`mt-3 text-2xl font-semibold ${board.summary.readinessRisk ? "text-qep-warm" : "text-foreground"}`}>{board.summary.readinessRisk ? "Yes" : "No"}</p>
+        </DeckSurface>
+        <DeckSurface className={`p-4 ${board.summary.revenueLeak ? "border-qep-warm/40" : ""}`}>
+          <div className="flex items-center gap-2">
+            <Building2 className={`h-4 w-4 ${board.summary.revenueLeak ? "text-qep-warm" : "text-qep-orange"}`} />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Revenue Leak</p>
+          </div>
+          <p className={`mt-3 text-2xl font-semibold ${board.summary.revenueLeak ? "text-qep-warm" : "text-foreground"}`}>{board.summary.revenueLeak ? "Yes" : "No"}</p>
+        </DeckSurface>
       </div>
 
-      <Card className="p-4">
+      <DeckSurface className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Branch chief recommendations</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Branch-level guidance built from the current readiness, logistics, AR, service, and rental signals already present in the branch command stack.
+              Branch-level guidance built from current readiness, logistics, AR, service, and rental signals already present in branch command stack.
             </p>
           </div>
           <Button asChild size="sm" variant="outline">
@@ -195,7 +219,7 @@ export function BranchChiefPage() {
         </div>
         <div className="mt-4 space-y-3">
           {board.recommendations.map((item) => (
-            <div key={item.key} className="rounded-xl border border-border/60 bg-muted/10 p-4">
+            <div key={item.key} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -221,29 +245,7 @@ export function BranchChiefPage() {
             </div>
           ))}
         </div>
-      </Card>
+      </DeckSurface>
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: typeof Sparkles;
-  label: string;
-  value: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }

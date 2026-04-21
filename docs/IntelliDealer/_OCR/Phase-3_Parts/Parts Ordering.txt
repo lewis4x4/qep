@@ -1,0 +1,309 @@
+Parts Ordering                                                                             4/21/26, 3:33 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Parts Product Support > Parts Ordering
+
+
+          Parts Ordering
+          The Parts Ordering screen allows you to:
+                                                                               Data Source:
+                    view parts orders                                          PURORD
+
+                    add parts to a part order                                  Security: 821
+                                                                               Product
+                    create a stock order                                       Support -
+          For Accounts Payable, see Purchase Orders.                           Parts
+                                                                               Ordering
+          To open the Parts Ordering screen, navigate to Product
+          Support > Parts > Parts Ordering.                                    Revision:
+                                                                               2026.03
+
+                 Parts Ordering screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                                Page 1 of 7
+Parts Ordering                                                                       4/21/26, 3:33 PM
+
+
+
+
+          The sorting options on the Parts Ordering screen are:
+
+           Sort by
+           Field                   Description
+
+            Order                  Sort the search results by parts order number.
+            Number
+
+            Vendor                 Sort the search results by vendor number.
+
+            Date                   Sort the search results by date the part order
+            Released               was released.
+
+
+          The search fields on the Parts Ordering screen are:
+
+           Field               Description
+            Select             Search for a parts order by entering an order
+            Order              number.
+            Number
+
+            Select             Search for a parts order by entering a vendor
+            Vendor             number.
+            Number
+
+            Select             Search for a parts order by entering a branch
+            Location           location.
+
+            Select             Search for a parts order by selecting an order
+            Status             status from the drop down list (for example on
+                               order, back ordered, or changeable).
+
+            Select             Search for a parts order by entering a part number.
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                          Page 2 of 7
+Parts Ordering                                                                        4/21/26, 3:33 PM
+
+
+
+            Part
+            Number
+
+            Select  Search for a parts order by entering a description
+            Comment of the order.
+
+                               For CASE dealers, this field helps with searches for
+                               orders that only reference the PSO number or sales
+                               order number on the packing slip.
+
+                               For the Kubota Smart Supply interface, comments
+                               in this field follow the naming convention 'SS-
+                               Supplier Code-Warehouse' (SS-KTC-10101 for
+                               example).
+
+            Select             Search for a part order by selecting a type of order
+            Type               from the drop down list.
+
+            Select             Search for a part order by the person who created
+            Created            the order.
+            By
+
+
+          The fields on the Parts Ordering screen are:
+
+           Field               Description
+            Order              The parts order number.
+            Number
+
+            Vendor             The name of the part's vendor for this order.
+
+            Comment Any comments related to the parts order.
+
+            Type               The type of order.
+
+            Line               The number of line items on the selected part
+            Items              order.
+
+            Status             The status of the parts order:
+
+                                         On Order—the part order is currently on
+                                         order, no parts can be added to the order.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                           Page 3 of 7
+Parts Ordering                                                                         4/21/26, 3:33 PM
+
+
+
+
+                                         Back Ordered—parts on the order have been
+                                         back ordered.
+
+                                         Changeable—the parts order has not yet
+                                         been placed on order and parts can be added
+                                         to the order.
+
+            Date      The date the part order was released.
+            released.
+
+
+          The Type options are:
+
+           Type Options
+           Type Description
+            SO        Stock Order
+
+            Q1        First Quarterly Order
+
+            Q2        Second Quarterly Order
+
+            Q3        Third Quarterly Order
+
+            Q4        Fourth Quarterly Order
+
+            IS        Initial Stock Order
+
+            TS        Special Order Program
+
+                      TS orders DO NOT perform the reclass function.
+
+            MD        Machine Down
+
+            FI        Fill In
+
+            ST        Special Terms
+
+                      ST orders DO NOT perform the reclass function.
+
+
+          Click on an order number on the Order Number field to open
+          the Parts Order screen.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                            Page 4 of 7
+Parts Ordering                                                                               4/21/26, 3:33 PM
+
+
+
+
+          Click on a vendor name on the Vendor field to open the Vendor
+          Profilescreen.
+
+          Click on the Need to create a stock order? Click here to add
+          link to create a stock order.
+
+          Click on the View pending special/allocation link to view
+          pending special/allocation orders.
+
+          Click on the Create consolidated parts order link to create a
+          consolidated parts order.
+
+          Move the cursor over the Ordering Options link located at the
+          top right of the screen, and select one of these options from the
+          drop down list:
+
+           Ordering Options
+           Field                           Function
+            Parts Ordering                 Opens the Parts Ordering screen allowing
+                                           you to view parts orders, add parts to a part
+                                           order and create a stock order.
+
+            Order History                  Opens the PO History screen. The
+                                           information displayed depends on the
+                                           scenario:
+                                                     If the purchase order number
+                                                     corresponds to a receipted status
+                                                     purchase order from the purchase
+                                                     order system, receipt information is
+                                                     displayed.
+                                                     If the purchase order number does not
+                                                     correspond to a receipted status
+                                                     purchase order from the purchase
+                                                     order system, parts purchase order
+                                                     summary information is displayed.
+
+            Order                          Opens the Order Correction screen
+            Correction                     allowing you to correct errors on a part
+                                           order. Corrections can only be applied to
+                                           the order after it has been receipted,
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                                  Page 5 of 7
+Parts Ordering                                                                             4/21/26, 3:33 PM
+
+
+
+                                           updated, and moved into history.
+
+            Pending Order                  Opens the Pending Order Receipts screen
+            Receipts                       allowing you to search for and view pending
+                                           order receipts and gives you access to edit
+                                           a pending order receipt and create a new
+                                           receipt. This is driven by the wireless parts
+                                           inventory program.
+
+            DTF Parts                      Opens the DTF Parts Receipts screen
+            Receipts                       allowing you to display, delete, or post DTF
+                                           parts receipt details to parts purchase
+                                           orders.
+
+            OFC Reclass                    Opens the OFC Reclass screen allowing
+                                           you to view the reclass code for selected
+                                           vendors and also allows you to create a new
+                                           reclass code or automatically change OFC
+                                           reclass parameters.
+
+            Automatic                      Opens the Automatic Stock Orders
+            Stock Orders                   Parameters screen allowing you to view,
+                                           edit, and create stock order parameters.
+
+            Stock            Opens theParts Transfer tab used to set
+            Transfer/Central the parameters for stock transfers between
+            Inventory        branches and identify central inventory
+                             branches.
+
+            Create Stock                   Opens the Selection Criteria screen,
+            Order                          allowing you to create stock order
+                                           parameters and generate a series a reports.
+
+                                           See Create Stock Order Parameters.
+
+            Special Terms                  Opens the Special Terms - Programs tab
+                                           giving the user access to Special Terms
+                                           Programs and Orders.
+
+            CCN Web                        Opens the Order Status tab giving the user
+                                           access to the CCN Web application.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                                Page 6 of 7
+Parts Ordering                                                                                               4/21/26, 3:33 PM
+
+
+
+            CCN Direct Ship Opens the CCN Direct Ship Orders screen
+            Orders          allowing you to search for and view the
+                            CCN direct ship orders.
+
+            Download Smart Starts a Kubota Syncron Order Download
+            Supply Orders  batch job and queues it into the PDF viewer.
+
+                                           This option is only visible for users with
+                                           security switch Access Kubota Smart
+                                           Supply Order Download enabled. Requires
+                                           feature 6428.
+
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPO001.htm                                                  Page 7 of 7
+

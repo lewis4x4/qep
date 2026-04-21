@@ -1,0 +1,466 @@
+Work Order Quoting/Parts Quoting                                                           4/21/26, 3:33 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product
+          Support > Service Product Support > Work Order
+          Quoting: Listing
+
+
+          Work Order Quoting/Parts Quoting
+          The Work Order Quoting and Parts Quoting screens are for
+                                                                                Data Source:
+          managing quotes. You can add, view, edit or copy a quote, and
+                                                                                WOPQH
+          modify the parameters for printing them.
+                                                                                Security: 810
+          Work Order Quoting and Parts Quoting bypass reloading the
+                                                                                Product
+          price for a part if:
+                                                                                Support -
+                    the PARTMAST list is less than or equal to .02 cents        Work Order
+                                                                                Quoting, 822
+                    the part number is not changed                              Product
+                    the vendor on the part has Vendor GL regardless of tax      Support -
+                    flag changes. This affects the Parts tab and the Customer   Parts Quoting
+                    tab where tax/discount code can be changed.
+
+          Topics in this section are:
+
+                    Work Order Quoting Screen
+
+                    Parts Quoting Screen
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                                Page 1 of 10
+Work Order Quoting/Parts Quoting                                                                        4/21/26, 3:33 PM
+
+
+
+
+                    VESign Status Notes                                                     Learning
+                                                                                            Resources:
+          Work Order Quoting Screen                                                         How to
+                                                                                            Reactivate a
+                                                                                            Service
+          Use the Work Order Quoting screen to view, edit, copy or add a
+                                                                                            Quote;
+          parts quote and to modify printing parameters. Once a Work
+                                                                                            Reactivating a
+          Order Quote is accepted, the amounts from the quote are
+                                                                                            Parts Quote
+          automatically loaded to the Quote/Estimate tab. If you have the
+          security access, you can alter these amounts at any time.                         Revision:
+                                                                                            2026.04
+          See also John Deere Expert Services: Work Order Integration.
+
+          To open the Work Order Quoting screen navigate to Product
+          Support > Service > Work Order Quoting.
+
+          The sorting options on the Work Order Quoting screen are:
+
+           Sort by
+           Field                             Description
+
+            Reference                         Sort the search results by reference
+            Number                            number.
+
+            Customer                          Sort the search results by customer
+                                              number.
+
+            Expiry Date                       Sort the search results by expiration date.
+
+
+          The search fields on the Work Order Quoting screen are:
+
+           Field                    Description
+            Select                  Search for quotes by entering a reference
+            Reference               number.
+            Number
+
+            Select                  Search for quotes by entering a customer
+            Customer                number.
+            Number
+
+            Select Part             Search for quotes by entering a part number.
+            Number
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                                             Page 2 of 10
+Work Order Quoting/Parts Quoting                                                     4/21/26, 3:33 PM
+
+
+
+            Select                  Search for quote by entering a description.
+            Description
+
+            Include                 If selected, includes the master quotes within
+            Master                  the quote search. Master quotes are user-
+            Quotes                  created quote templates. Master quotes do not
+                                    have an expiration date.
+
+                                    See Master Quote.
+
+            Select                  Search for quotes by entering a location.
+            Location
+
+            Select                  Search for quotes by selecting a work order
+            Quote                   status from the drop down list (e.g. quoted,
+            Status                  expired, pending or accepted).
+
+            Select      Search for quotes by entering a salesperson.
+            Salesperson
+
+            Select      Search for quotes by entering a responsible
+            Responsible salesperson.
+            Salesperson
+
+
+          The fields on the Work Order Quoting screen are:
+
+           Field                    Description
+            Reference               The quote's reference number.
+            Number
+
+            Customer                The customer number associated with the
+                                    quote.
+
+            Salesperson The salesperson who created the quote.
+
+            Description             A brief description about the quote.
+
+            Location                The branch location where the quote was
+                                    created.
+
+            Expiry Date             The expiration date of the quote.
+
+            Quote                   The status of the quote.
+            Status
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                         Page 3 of 10
+Work Order Quoting/Parts Quoting                                                          4/21/26, 3:33 PM
+
+
+
+                                             Pending—the work order quote has been
+                                             created and is waiting to be accepted by
+                                             the customer.
+                                             Quoted—the quote has been printed for or
+                                             sent to the customer and is waiting to be
+                                             converted into a work order. The status is
+                                             changed to Quoted when the quote is
+                                             printed, emailed or generated and sent for
+                                             electronic signature because the system
+                                             assumes that once printed or emailed, the
+                                             customer has received the quote.
+                                             Accepted—the quote has been accepted
+                                             and a work order has been created. Both
+                                             the new work order number and the
+                                             original work order quote number are
+                                             shown.
+                                             Expired—the quote has exceeded the
+                                             allotted expiration date or, for VESign
+                                             documents, either the required signatures
+                                             have been declined or they were not
+                                             obtained prior to the quote expiration
+                                             date. If necessary, expired work order
+                                             quotes can be reactivated.
+
+            VESign                  The signing status of the VESign document.
+            Status                  Can be one of:
+                                             Awaiting Signature—all signatures are
+                                             pending.
+                                             Partially Signed—more than one
+                                             signature is pending.
+                                             Signed—all required signatures are
+                                             complete.
+                                             Canceled—signing has been canceled.
+                                             If no status is present, then the document
+                                             has not been sent for electronic signing.
+                                    IntelliDealer checks for a status update every 30
+                                    minutes.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                              Page 4 of 10
+Work Order Quoting/Parts Quoting                                                     4/21/26, 3:33 PM
+
+
+
+
+          Move the cursor over a Reference Number and select View to
+          open the Customer - Quote Header tab allowing you to view an
+          expired or accepted work order quote.
+
+          Move the cursor over a Reference Number and select Edit to
+          open the Customer - Quote Header tab allowing you to edit a
+          pending work order quote.
+
+          Move the cursor over a Reference Number and select Copy to
+          open the Segments to Copy screen to copy a work order quote
+          segment or create a quote using a master quote template.
+
+          Move the cursor over a Reference Number and select
+          Reactivate to reactivate a work order quote.
+
+          Click a customer name on the Customer field to open the
+          Customer Profile screen.
+
+          Click the Need to create a quote? Click here to add link to
+          create a quote.
+
+          Click the Modify default print parameters link to modify
+          default print parameters.
+
+          Click Close to complete your work on the Work Order Quoting
+          screen.
+
+
+          Parts Quoting Screen
+
+          Use the Parts Quoting screen to view, edit, copy or add a work
+          order quote and to modify printing parameters.
+
+          To open the Parts Quoting screen navigate to Product Support
+          > Parts > Parts Quoting.
+
+          The sorting options on the Parts Quoting screen are:
+
+           Sort by
+           Field                             Description
+            Reference                         Sort the search results by reference
+            Number                            number.
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                         Page 5 of 10
+Work Order Quoting/Parts Quoting                                                            4/21/26, 3:33 PM
+
+
+
+            Customer                          Sort the search results by customer
+                                              number.
+
+            Expiry Date                       Sort the search results by expiration date.
+
+
+          The search fields on the Parts Quoting screen are:
+
+           Field                    Description
+            Select                  Search for quotes by entering a reference
+            Reference               number.
+            Number
+
+            Select                  Search for quotes by entering a customer
+            Customer                number.
+            Number
+
+            Select Part             Search for quotes by entering a part number.
+            Number
+
+            Select                  Search for quote by entering a description.
+            Description
+
+            Include                 If selected, includes the master quotes within
+            Master                  the quote search. Master quotes are user-
+            Quotes                  created quote templates.
+
+                                    See Master Quote.
+
+            Select                  Search for quotes by entering a location.
+            Location
+
+            Select                  Search for quotes by selecting a work order
+            Quote                   status from the drop down list (e.g. quoted,
+            Status                  expired, pending or accepted).
+
+            Select      Search for quotes by entering a salesperson.
+            Salesperson
+
+            Select      Search for quotes by entering a responsible
+            Responsible salesperson.
+            Salesperson
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                                Page 6 of 10
+Work Order Quoting/Parts Quoting                                                           4/21/26, 3:33 PM
+
+
+
+
+          The fields on the Parts Quoting screen are:
+
+           Field                    Description
+            Reference               The quote's reference number.
+            Number
+
+            Customer                The customer number associated with the
+                                    quote.
+
+            Salesperson The salesperson who created the quote.
+
+            Description             A brief description about the quote.
+
+            Location                The branch location where the quote was
+                                    created.
+
+            Expiry Date             The expiration date of the quote.
+
+            Quote                   The status of the quote.
+            Status
+                                             Pending—the quote has been created and
+                                             is waiting to be presented to the customer.
+                                             Quoted—the quote has been sent to the
+                                             customer and is waiting to be accepted by
+                                             the customer. The status is changed to
+                                             Quoted when the quote is printed,
+                                             emailed or generated and sent for
+                                             electronic signature because the system
+                                             assumes that the customer has received
+                                             the quote.
+                                             Accepted—the quote has been accepted
+                                             and a parts order has been created. Both
+                                             the new parts order number and the
+                                             original parts order quote number appear.
+                                             Expired—the quote has exceeded the
+                                             allotted expiration date. Or, for VESign
+                                             documents, either the requried signatures
+                                             have been declined or they were not
+                                             obtained prior to the quote's expiration
+                                             date. If necessary, expired parts order
+                                             quotes can be reactivated.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                               Page 7 of 10
+Work Order Quoting/Parts Quoting                                                          4/21/26, 3:33 PM
+
+
+
+            VESign                  The signing status of the VESign document.
+            Status                  Can be one of:
+                                             Awaiting Signature—all signatures are
+                                             pending.
+                                             Partially Signed—more than one
+                                             signature is pending.
+                                             Signed—all required signatures are
+                                             complete.
+                                             Canceled—signing has been canceled.
+                                             If no status is present, then the document
+                                             has not been sent for electronic signing.
+                                    IntelliDealer checks for a status update every 30
+                                    minutes.
+
+
+          Move the cursor over a Reference Number and select View to
+          open the Customer - Quote Header tab allowing you to view an
+          expired or accepted part quote.
+
+          Move the cursor over a Reference Number and select Edit to
+          open the Customer - Quote Header tab allowing you to edit a
+          pending part quote.
+
+          Move the cursor over a Reference Number and select Copy to
+          open the Segments to Copy screen in order to copy a parts
+          quote segment or create a quote using a master quote template.
+
+          Move the cursor over a Reference Number and select
+          Reactivate to reactivate a part quote.
+
+          Click on a customer name on the Customer field to open the
+          Customer Profile screen.
+
+          Click on the Need to create a quote? Click here to add link to
+          create a quote.
+
+          Click on the Modify default print parameters link to modify
+          default print parameters.
+
+          Click Close to complete your work on the Parts Quoting screen.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                              Page 8 of 10
+Work Order Quoting/Parts Quoting                                                 4/21/26, 3:33 PM
+
+
+
+
+          VESign Status Notes
+
+          This section outlines what happens to the quote and its status
+          when using VESign.
+
+
+          Parts
+
+          Once the VESign quote status equals signed, the parts quote
+          status will change from Quoted to Accepted and the quote will
+          automatically convert to a parts invoice using the following
+          criteria:
+
+                    Only successfully signed segments are converted to an
+                    invoice.
+
+                    The invoice uses the customer's default A/R Agency. If no
+                    default A/R agency is selected it uses Cash Code 2 (Cash).
+
+                    Print Picpak defaults to off.
+
+          If the quote cannot be automatically converted to an invoice, the
+          dealer must review the quote as outlined in the dealer
+          notification email.
+
+          If either the required signatures have been declined or they were
+          not obtained prior to the quote expiration date, then the parts
+          quote status will change from Quoted to Expired.
+
+
+          Work Orders
+
+          Once the VESign quote status equals signed, the service work
+          order quote status will change from Pending to Quoted. Then
+          the user must open the quote and manually accept the quote to
+          complete the process. There is no automatic conversion process
+          for work orders.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                     Page 9 of 10
+Work Order Quoting/Parts Quoting                                                                             4/21/26, 3:33 PM
+
+
+
+
+                          Note: OneSpan imposes a 120-day limit on quotes.
+                          You can send quotes for signature that expire after
+                          this time, however, the VESign will expire at 120 days,
+                          even though the quote is still active.
+
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSQ001.htm                                                Page 10 of 10
+

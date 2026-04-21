@@ -1,0 +1,169 @@
+Labor Pricing                                                                               4/21/26, 3:32 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Product
+           Support > Service Product Support > Labor Pricing
+
+
+           Labor Pricing
+           Use the Labor Pricing screen to set up labor rates based on
+                                                                                Data Source:
+           location, customer, work order status, work order type, and so
+                                                                                PARTDISC
+           on. As transactions are posted, the total charges for the
+           corresponding work orders are automatically updated.                 Security: 818
+                                                                                - Product
+           To open the Labor Pricing screen, navigate to Product Support
+                                                                                Support -
+           > Service > Labor Pricing.
+                                                                                Labor Pricing
+
+                                                                                Revision:
+                          Note: Expired records are purged after at least 31
+                                                                                2026.01
+                          days depending on when you run your Accounts
+                          Receivable month end and subsequent full database
+                          reorganize.
+
+
+           The sorting options on the Labor Pricing screen are:
+
+            Sort by
+            Field                           Description
+            Customer/Group Sort the search results by customer name
+
+https://help.intellidealer.com/intellidealer/Content/PSLP001.htm                                 Page 1 of 4
+Labor Pricing                                                                               4/21/26, 3:32 PM
+
+
+
+                                            or group.
+
+            Location                        Sort the search results by branch location.
+
+            Type                            Sort the search results by type code.
+
+            Premium Code                    Sort the search results by premium code.
+
+            W/O Type                        Sort the search results by work order type.
+
+
+           The search fields on the Labor Pricing screen are:
+
+            Search by
+            Field                           Description
+
+            Select         Search for labor pricing by entering a
+            Customer/Group customer name or group.
+
+            Select Premium                  Search for labor pricing by entering a
+            Code                            premium code.
+
+            Select Type                     Search for labor pricing by entering a type
+                                            code.
+
+            Select Comment Search for labor pricing by entering a
+                           related comment.
+
+            Select Work                     Search for labor pricing by selecting a work
+            Order Status                    order status from the drop down list (e.g.
+                                            customer, warranty or internal).
+
+            Select Default                  Search for labor pricing by entering a
+            Premium Code                    default premium code.
+
+            Select Location                 Search for labor pricing by entering a
+                                            location.
+
+            Show Extended                   If selected, includes extended information
+            Information                     (% Price and Pricing fields) within the labor
+                                            pricing search results.
+
+
+           Fields on the Labor Pricing screen are:
+
+            Field                           Description
+
+
+https://help.intellidealer.com/intellidealer/Content/PSLP001.htm                                 Page 2 of 4
+Labor Pricing                                                                              4/21/26, 3:32 PM
+
+
+
+            Customer/Group The customer or group the labor pricing
+                           applies to.
+
+            Location                        The branch location of the labor pricing.
+
+            Type                            The type code for labor pricing, indicating
+                                            the type of labor performed.
+
+            Work Order                      The work order status (e.g. customer,
+            Status                          warranty or internal).
+
+            Premium Code                    A code that represents the chargeable
+                                            labor rate (e.g. overtime = 150%).
+
+            Default                         The premium code that defaults on
+            Premium Code                    transactions using this labor pricing entry.
+
+            Comment                         Any comments associated with the labor
+                                            pricing.
+
+
+           These fields appear if the Show Extended Information field is
+           selected:
+
+            Field         Description
+            %              The actual fixed labor price or the percentage
+            Price          increase or decrease from cost or list (based on the
+                           Pricing Code).
+
+            Pricing The labor pricing (fixed price, or based off list price,
+                    or cost). The pricing code goes with the labor pricing
+                    cost plus or minus a % (for example, cost minus a %,
+                    list plus %, list minus % or a fixed price).
+
+
+           Hover over a customer/group in the Customer/Group field to
+           display a popup menu with these options (see Adjusting Labor
+           Pricing):
+
+                    Edit—view or edit labor pricing.
+
+                    Copy—copy labor pricing.
+
+           Click the Need to create a new labor price? Click here to add
+           link to add labor pricing.
+
+https://help.intellidealer.com/intellidealer/Content/PSLP001.htm                                Page 3 of 4
+Labor Pricing                                                                                                4/21/26, 3:32 PM
+
+
+
+
+           Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSLP001.htm                                                  Page 4 of 4
+

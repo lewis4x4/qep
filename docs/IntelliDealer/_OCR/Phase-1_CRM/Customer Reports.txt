@@ -1,0 +1,93 @@
+Customer Reports                                                                                4/21/26, 3:30 PM
+
+
+
+
+                                                                   Search                           Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Financial
+          Management > Accounts Receivable > Customer
+          Reports
+
+
+          Customer Reports
+          The Customer Reports screen allows you to produce various
+                                                                                    Security
+          customer related reports. You can select customers based on
+                                                                                    Switch: 600 -
+          any information in the customer profile (such as all customers in
+                                                                                    Access
+          a certain discount pricing group).
+                                                                                    Customer
+          You can access the Customer Reports screen by navigating to               Reports
+          the Financial Management > Accounts Receivable
+                                                                                    Revision:
+          > Customer Reports.
+                                                                                    2023.11
+          The available Customer Reports are:
+
+           Report                       Description
+
+            Customer                    Running a Customer Master Summary report
+            Master                      creates a summary of the customer profile
+            Summary                     report.
+            (WCCCR02A)
+
+            Customer       Running a Master Listing report creates a
+            Master Listing less detailed version of the customer profile
+            (WCCCR02B) report.
+
+https://help.intellidealer.com/intellidealer/Content/WCCCR03.htm                                     Page 1 of 2
+Customer Reports                                                                                             4/21/26, 3:30 PM
+
+
+
+
+            Customer                    Running Customer Labels creates labels
+            Labels - 2                  used when mailing to your customer base or
+            Columns                     for labeling customer files.
+            (WCCCR02C)
+
+            Customer
+            Labels - 3
+            Columns
+            (WCCCR02C2)
+
+            Customer                    Running a Customer Profile report prints a
+            Profile                     detailed profile of your selected customer,
+            (WCCCR02D)                  showing the fields chosen on the Customer
+                                        Selection screen.
+
+
+          Use this button to complete your work on the Customer
+          Reports screen:
+
+           Button Function
+
+            Close Closes the Customer Reports screen and returns to
+                  the Financial Management Quick Links screen.
+
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WCCCR03.htm                                                  Page 2 of 2
+

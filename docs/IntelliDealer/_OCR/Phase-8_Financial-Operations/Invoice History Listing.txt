@@ -1,0 +1,210 @@
+Invoice History Listing                                                                                    4/21/26, 3:36 PM
+
+
+
+
+                                                                              Search                            Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Financial
+           Management > Accounts Receivable > Invoice
+           History
+
+
+           Invoice History Listing
+           The Invoice History listing screen allows you to search for and
+                                                                                                Data
+           view an invoice history in the billing history. The amount and kind
+                                                                                                Source: INVHH,
+           of invoice history displayed is determined by the retention
+                                                                                                INVHD
+           months specified in the Retention History configuration, with a
+           maximum retention period of 99 months.                                               Security
+                                                                                                Switch: 600
+           You can access the Invoice History screen from these
+                                                                                                Accounts
+           locations:
+                                                                                                Receivable -
+                    Financial Management > Accounts Receivable > Invoice                        Access
+                    History                                                                     Invoice
+                                                                                                History
+                    Product Support > Equipment > Invoice History
+                                                                                                Revision: 2025.09
+                    Product Support > Service > Invoice History
+
+                    Product Support > Parts > Invoice History
+
+                    Product Support > Rental > Invoice History
+
+
+                 Invoice History screen
+
+https://help.intellidealer.com/intellidealer/Content/invoiceHistory.invoiceHistoryListing.htm                   Page 1 of 5
+Invoice History Listing                                                                         4/21/26, 3:36 PM
+
+
+
+
+           Searching Invoice History
+
+                    If you enter an Invoice Number, executing a search also
+                    scans Integrated Rental Details for a matching
+                    invoiceNumber using a starts-with search.
+
+                    If you enter a Contract Number, executing a search also
+                    scans:
+
+                             Invoice History table for string constant $GB +
+                             contractNumber
+
+                             Integrated Rental Details table for matching
+                             contractNumber using a starts-with search
+
+                    If you enter your search into the Full Text Search,
+                    executing a search also scans Invoice History Details for
+                    matching lineDetails
+
+
+
+https://help.intellidealer.com/intellidealer/Content/invoiceHistory.invoiceHistoryListing.htm        Page 2 of 5
+Invoice History Listing                                                                         4/21/26, 3:36 PM
+
+
+
+
+           Screen Description
+
+           The fields you can searched on the Invoice History listing
+           screen are:
+
+            Field               Description
+            Invoice             Search for history by entering an invoice number.
+            Number
+                                If the invoice is outstanding the invoice number
+                                field is highlighted.
+
+            PO                  Search for history by entering a purchase order
+            Number              number.
+
+            Show                Search for history by selecting a date type:
+            Date
+                                          Invoice Date—date the invoice was printed
+                                          Billing Date—date keyed in during the billing
+                                          run that processed this invoice
+                                          Processed Date—actual date of the billing run
+
+            Date                Narrow the history search by selecting a specific
+            Range               date range.
+            From/To
+
+                                                 Note: The date range field is ignored if
+                                                 anything is entered in the Invoice
+                                                 Number, PO Number, Contract # or
+                                                 Sales Order # selection fields.
+
+
+
+            Customer Search for history by entering a customer number.
+            Number
+
+            Invoice             Search for history by selecting an invoice type
+            Type                from the drop down list.
+
+            Full Text           Search for an invoice by entering any string of data
+            Search              that might be stored in the corresponding INVHD
+                                file. For example, you may enter the customer
+                                number, name, stock number, a specific PO
+
+https://help.intellidealer.com/intellidealer/Content/invoiceHistory.invoiceHistoryListing.htm        Page 3 of 5
+Invoice History Listing                                                                         4/21/26, 3:36 PM
+
+
+
+                                number, or any specific data that is captured on
+                                the invoice can be searched for.
+
+            Location            Search for history by entering the branch the
+                                invoice was billed in.
+
+            Contract Search for history by entering a contract or sales
+            # or Sales order number.
+            Order #
+
+
+           The fields on the Invoice History listing screen are:
+
+            Field                Description
+
+            Invoice              The invoice number or system reference number.
+            Number
+                                 The first digit of an invoice indicates the system
+                                 from which the invoice was generated, as
+                                 specified in the General Invoice First Digit . The
+                                 Invoice 1st Digits are configured by location and
+                                 can include special characters, any number from
+                                 0-9 and any letter from A-Z, except for Q, L and R
+                                 which are reserved for sales order invoice values.
+
+            Location             The location where the invoice was processed.
+
+            Type                 The invoice type.
+
+            Customer The customer's name.
+            Name
+
+            Reference The invoice reference number.
+            Number
+
+            PO                   The purchase order number.
+            Number
+
+            Invoice              The date the transaction was invoiced.
+            Date
+
+            Invoice              The total charge for all billable items on the
+            Amount               invoice.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/invoiceHistory.invoiceHistoryListing.htm        Page 4 of 5
+Invoice History Listing                                                                                       4/21/26, 3:36 PM
+
+
+
+
+                                 This amount includes the Final Customer Charge
+                                 (FC), Final Warranty Charge (FW), and Final
+                                 Internal Charge (FI), if they are applicable. If these
+                                 additional charges are present a 'Info' tool tip
+                                 appears next to the invoice amount that breaks out
+                                 each charge as they are added to the invoice
+                                 amount.
+
+
+           Select the checkbox next to the desired Invoice Number(s) to
+           choose it for printing or e-mailing.
+
+           Click on an Invoice Number to preview the invoice details.
+
+
+
+           Did you find this helpful? Yes No
+
+             For help with IntelliDealer contact support at: 1-855-876-2586.
+             To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+             emphasys.com
+
+             © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/invoiceHistory.invoiceHistoryListing.htm                      Page 5 of 5
+

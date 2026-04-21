@@ -1,0 +1,158 @@
+Prospect Board                                                                             4/21/26, 3:31 PM
+
+
+
+
+                                                                   Search                      Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Equipment Product Support > Prospect Board
+
+
+          Prospect Board
+          Use the Prospect Board screen to add, edit and view
+                                                                               Data Source:
+          prospective sales opportunities. Or, if you have purchased the
+                                                                               CGISP
+          JD Quote II feature, use it for JD Quote II purchase
+          orders/quotes that are still in progress or have yet to be           Security: 807
+          accepted .                                                           - Product
+                                                                               Support -
+          To open the Prospect Board screen, navigate to Product
+                                                                               Prospect
+          Support > Equipment > Prospect Board.
+                                                                               Board
+
+                 Prospect Board screen                                         Revision:
+                                                                               2025.05
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPB001.htm                                Page 1 of 4
+Prospect Board                                                                          4/21/26, 3:31 PM
+
+
+
+
+          The sorting options on the Prospect Board screen are:
+
+           Sort by
+           Field                    Description
+            Status                  Sort the search results by status.
+
+            Date Added Sort the search results by the date the prospect
+                       was added
+
+            Salesperson Sort the search results by salesperson.
+
+            Date                    Sort the search results by the date they were
+            Modified                last modified
+
+
+          The search fields on the Prospect Board screen are:
+
+           Field                    Description
+            Select                  Search for a prospect by selecting a status radio
+            Status                  button
+
+            Select
+            Source
+
+https://help.intellidealer.com/intellidealer/Content/PSPB001.htm                            Page 2 of 4
+Prospect Board                                                                           4/21/26, 3:31 PM
+
+
+
+
+                                    Search for a prospect by selecting the source of
+                                    record; either Internal Entry, JDQuote, or All.
+
+                                    When JDQuote is selected in this field, rather
+                                    than displaying prospective customers, the
+                                    Prospect Board lists any quotes that have been
+                                    created but not yet accepted in the JD Quote II
+                                    system. See About JD Quote II.
+
+            Select      Search for a prospect by entering a salesperson
+            Salesperson
+
+            Select                  Search for a prospect by entering a selling unit
+            Selling
+
+            Select                  Search for a prospect by entering a trading unit
+            Trading
+
+            Select                  Search for a prospect by entering a customer
+            Customer                name
+
+
+          The fields on the Prospect Board screen:
+
+           Field                            Description
+            Salesperson                     The name of the salesperson associated
+                                            with the prospect.
+
+            Customer/Status The customer name and status of the
+                            sale/prospect.
+
+            Selling/Trading                 The unit being sold to the customer and
+                                            any units being traded in by the customer.
+
+            Added/Modified                  The date the prospect was created, added
+                                            or modified.
+
+            Source                          The source that the prospect originates
+                                            from.
+
+
+          Comments added in the Comments field on the Prospect
+          screen appear on a second line under the Customer/Status
+          field.
+
+https://help.intellidealer.com/intellidealer/Content/PSPB001.htm                             Page 3 of 4
+Prospect Board                                                                                               4/21/26, 3:31 PM
+
+
+
+
+          Click the Need to create a new prospect? Click here to add
+          link to add a prospect.
+
+          Click the John Deere Quote Upload link to upload a JD Quote II
+          quote/ potential purchase order using the John Deere Quote
+          Upload screen. The John Deere Quote Upload link only
+          appears if your dealership has been licensed to use the
+          JD Quote II interface and the Access JDQuote Upload switch is
+          activated on the Authorization List for Product Support -
+          Prospect Board screen. See About JD Quote II.
+
+          To edit an existing prospect, click a Salesperson name to open
+          the Prospect screen.
+
+          Click a customer name in the Customer/Status field to open the
+          Customer Profile screen.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSPB001.htm                                                 Page 4 of 4
+

@@ -1,0 +1,225 @@
+ID InspectionPlus                                                                                                                          4/21/26, 3:29 PM
+
+
+
+
+                                                                                                           Search                                   Print
+
+
+
+
+      Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+      You are here: IntelliDealer Menus > ID InspectionPlus
+
+
+      ID InspectionPlus
+      InspectionPlus Guides and Use Cases
+                                                                                                                        Security Switch: 923 - ID
+                                                                                                                        InspectionPlus
+      Inspections and How to Use Them
+                                                                                                                        Revision 2026.02
+
+      InspectionPlus can be used to create equipment inspections but can also be used in variety of situations
+      useful in the heavy equipment industry. This can include building and maintaining a task list for end-of-day
+      closing, preparing job site safety checks, or creating itemized lists for equipment demonstrations.
+
+      You can use the inspections feature to compose detailed inspection criteria that can be used both within a
+      dealership or in the field.
+
+      An inspection can be created to evaluate the general condition of a piece of equipment, the specification
+      range of both entire machines or individual parts, track and log maintenance concerns, and also for
+      determining potential rental check-ins/check-outs.
+
+      Topics in this section include:
+
+            Viewing All or My Inspections
+
+            On-Demand Forms
+
+            Templates
+
+            InspectionPlus Settings Screen
+
+
+      Viewing All or My Inspections
+
+      This screen displays the various statuses and progress indicators for all the inspection forms currently in use
+      or available for use in the system.
+
+      The dropdown list at the top left filters the displayed inspection forms as either All Inspections which lists
+      every inspection form there is a record currently. The My Inspections option displays inspection forms that
+      are created by you user ID.
+
+      The Active Inspections tab shows an overview of all in-progress inspection forms and their current status.
+
+      The History tab shows any completed and archived inspection forms.
+
+      These fields appear on the InspectionPlus main screen:
+
+       Field          Description
+
+       Actions        Depending on the status of the inspection form, you can either Start, Edit, or Review an
+                      inspection form.
+
+
+                          Example of Contextual Radio button
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/inspectionPlus.main.htm                                                                    Page 1 of 4
+ID InspectionPlus                                                                                                  4/21/26, 3:29 PM
+
+
+
+
+       Inspection Unique identifier used by the system to label the inspection.
+       Number
+                  Clicking a hyperlinked inspection number also opens a generated PDF of the inspection in a
+                  side panel on the right hand side of the screen.
+
+       Inspection Unique name of the user during the creation of the form.
+       Name
+
+       Form          Select this button to open a side window where general information or Assignees are
+       Details       displayed.
+
+       Stock         The stock number of the equipment unit (if any) listed in the inspection. A '?' can be used
+       Number        when there is no stock number.
+
+       Reference If an inspection is linked to a work order, the work order reference number is displayed here.
+       Number    For more information on linking an inspection to a work order, see Linked Inspections.
+
+       General
+       Customer
+       In
+
+       Form          The current status of the inspection/form. Forms with status Completed are also viewable
+       Status        from the History tab.
+
+       In Use By     If the inspection/form is currently being accessed, their user name appears in this field.
+
+       Assignee      An assignee for the inspection/form can be assigned here by using the dropdown list. See
+                     Assignees.
+
+       Approver      An approver for the inspection/form can be assigned here by using the dropdown list. See
+                     Approvers.
+
+
+      The Cancel Form button can cancel the inspection/form. Clicking the button opens a confirmation screen
+      where a cancellation reason can be entered. If the inspection/form is being accessed by another user, the
+      button is disabled and is labeled In Use.
+
+      Click the radio button under the Actions field to open the Inspection Form Details screen where the form
+      can be reviewed and edited.
+
+      These options are available on the Inspection Form Details screen:
+
+       Option       Description
+
+       Cancel       Returns you to the previous screen.
+
+       Complete Completes the form and sends the form to an assigned
+                    approver if there has been one assigned. See
+                    InspectionPlus Settings for information on approvers.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/inspectionPlus.main.htm                                            Page 2 of 4
+ID InspectionPlus                                                                                                    4/21/26, 3:29 PM
+
+
+
+                    Sending a form for approval does not make that
+                    approval required. The chosen approver has optional
+                    review and approval sign-off for the form.
+
+                    The Approve inspection option in Security Switch 923
+                    must be toggled on for this option to appear on an open
+                    inspection form.
+
+       Return To Returns the inspection to the original inspector or to
+       Inspector any assignee listed within the dropdown menu.
+
+       Save and Saves the current settings on the inspection form and
+       Close    closes it.
+
+       Save         Saves the current settings on the inspection without
+       Form         closing it.
+
+
+      Assign additional services to Completed Inspections by selecting the Open button under the Assign
+      Services column.
+
+      See also: Assign Service screen.
+
+      The Assigned Approver can be selected individually for each form. Assigning an approver is optional and
+      does not make an approval mandatory.
+
+      The My Inspections screen lists Inspection Forms that have been assigned to your user. You can control who
+      is the Assignee from the Assignee field in the Activity Log.
+
+
+      On-Demand Forms
+
+      On-Demand Forms in detail
+
+      On-Demand Forms are completed templates that can be utilized instantly within IntelliDealer.
+
+      On-Demand Forms can be linked to from Product Support/Service/Work Orders and selecting a Work
+      Order that has no other linked inspections.
+
+
+                Note: To ensure whomever performs the inspection has time tracked to the Work Order for
+                IntelliTech or MobileTech, a Work Order must be linked to from the Service/Work Order screen.
+
+
+      Templates
+
+      Templates in detail
+
+      The Templates screen displays a list of all the currently created Inspection Forms. Forms displayed here are
+      from inspections that have already been started and require additional inputs to Save or Complete.
+
+      Inspection Templates created from the Inspection Template Page are staged here to be Saved or Completed
+
+      Clicking the Settings button opens the Template Builder Settings screen.
+
+      See also: Approver Settings
+
+
+      InspectionPlus Settings Screen
+
+      InspectionPlus Settings in detail
+
+      The Inspection Settings Screen allows you to configure a default approver for each inspection.
+
+      Security Switch 000: Access must be active in order for the Default Approver drop down list to appear:
+
+
+
+      Did you find this helpful? Yes No
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/inspectionPlus.main.htm                                              Page 3 of 4
+ID InspectionPlus                                                                                                    4/21/26, 3:29 PM
+
+
+
+        For help with IntelliDealer contact support at: 1-855-876-2586.
+        To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-emphasys.com
+
+        © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/inspectionPlus.main.htm                                              Page 4 of 4
+

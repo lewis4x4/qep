@@ -3,8 +3,8 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUpRight, Building2, Clock3, Truck, Wrench } from "lucide-react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useBranchBySlug } from "@/hooks/useBranches";
+import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { summarizeBranchCommand, type BranchInvoiceRow, type BranchIntakeRow, type BranchOpenDealRow, type BranchServiceJobRow, type BranchTrafficRow } from "../lib/branch-command";
 import { supabase } from "@/lib/supabase";
@@ -130,8 +130,8 @@ export function BranchCommandCenterPage() {
   if (branchQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -139,9 +139,9 @@ export function BranchCommandCenterPage() {
   if (branchQuery.isError || !branchQuery.data || !summary) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This branch command surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -182,28 +182,75 @@ export function BranchCommandCenterPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-5">
-        <SummaryCard icon={Building2} label="Revenue" value={`$${Math.round(summary.branchRevenue).toLocaleString()}`} detail="Branch-linked invoices" />
-        <SummaryCard icon={Clock3} label="Readiness" value={`${summary.readinessBlocked}`} detail="Blocked intake units" tone="warn" />
-        <SummaryCard icon={Truck} label="Logistics" value={`${summary.logisticsOpen}`} detail="Open branch traffic moves" />
-        <SummaryCard icon={Truck} label="Rental moves" value={`${summary.rentalMoves}`} detail="Active rental/re-rent traffic" />
-        <SummaryCard icon={Wrench} label="Service-linked sales" value={`$${Math.round(summary.serviceLinkedSalesValue).toLocaleString()}`} detail={`${summary.serviceLinkedSalesCount} open deals tied to branch service customers`} />
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Revenue</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">${Math.round(summary.branchRevenue).toLocaleString()}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Branch-linked invoices</p>
+        </DeckSurface>
+        <DeckSurface className={`p-4 ${summary.readinessBlocked > 0 ? "border-qep-warm/40" : ""}`}>
+          <div className="flex items-center gap-2">
+            <Clock3 className={`h-4 w-4 ${summary.readinessBlocked > 0 ? "text-qep-warm" : "text-qep-orange"}`} />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Readiness</p>
+          </div>
+          <p className={`mt-3 text-3xl font-semibold ${summary.readinessBlocked > 0 ? "text-qep-warm" : "text-foreground"}`}>{summary.readinessBlocked}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Blocked intake units</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Truck className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Logistics</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{summary.logisticsOpen}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Open branch traffic moves</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Truck className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Rental moves</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{summary.rentalMoves}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Active rental/re-rent traffic</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Service-linked sales</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">${Math.round(summary.serviceLinkedSalesValue).toLocaleString()}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{summary.serviceLinkedSalesCount} open deals tied to branch service customers</p>
+        </DeckSurface>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Branch operating posture</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Uses branch-linked invoice, intake, logistics, and service tables that exist today. Sales pressure is limited to service-linked opportunities until sales deals carry a direct branch key.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <StatCard label="Open AR balance" value={`$${Math.round(summary.openArBalance).toLocaleString()}`} />
-            <StatCard label="Service invoice value" value={`$${Math.round(summary.serviceInvoiceValue).toLocaleString()}`} />
-            <StatCard label="Units in prep" value={`${summary.readinessInPrep}`} />
-            <StatCard label="Active service jobs" value={`${summary.activeServiceJobs}`} />
+            <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Open AR balance</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">${Math.round(summary.openArBalance).toLocaleString()}</p>
+            </div>
+            <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Service invoice value</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">${Math.round(summary.serviceInvoiceValue).toLocaleString()}</p>
+            </div>
+            <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Units in prep</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{summary.readinessInPrep}</p>
+            </div>
+            <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Active service jobs</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{summary.activeServiceJobs}</p>
+            </div>
           </div>
-        </Card>
+        </DeckSurface>
 
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Branch identity</h2>
           <div className="mt-3 space-y-2 text-sm">
             <p className="text-muted-foreground">{branch.address_line1 ?? "Address not configured"}</p>
@@ -213,11 +260,11 @@ export function BranchCommandCenterPage() {
               <p className="text-muted-foreground">Capabilities: {branch.capabilities.join(", ").replace(/_/g, " ")}</p>
             )}
           </div>
-        </Card>
+        </DeckSurface>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Branch logistics queue</h2>
           <div className="mt-4 space-y-2">
             {(trafficQuery.data ?? [])
@@ -225,7 +272,7 @@ export function BranchCommandCenterPage() {
               .filter((row) => row.from_location.toLowerCase().includes(branch.slug) || row.to_location.toLowerCase().includes(branch.slug) || row.from_location.toLowerCase().includes(branch.display_name.toLowerCase()) || row.to_location.toLowerCase().includes(branch.display_name.toLowerCase()))
               .slice(0, 8)
               .map((row) => (
-                <div key={row.id} className="rounded-lg border border-border/60 bg-muted/10 p-3 text-sm">
+                <div key={row.id} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3 text-sm">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-foreground">{row.ticket_type.replace(/_/g, " ")}</span>
                     <span className="text-xs text-muted-foreground">{row.status.replace(/_/g, " ")}</span>
@@ -237,16 +284,16 @@ export function BranchCommandCenterPage() {
               <p className="text-sm text-muted-foreground">No open branch logistics moves.</p>
             )}
           </div>
-        </Card>
+        </DeckSurface>
 
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Service-linked sales</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Customers with active jobs in this branch and open commercial deals.
           </p>
           <div className="mt-4 space-y-2">
             {activeServiceCompanies.map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div key={row.id} className="flex items-center justify-between gap-3 rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">
                     {companyMapQuery.data?.get(row.customer_id ?? "") ?? "Customer"}
@@ -266,42 +313,8 @@ export function BranchCommandCenterPage() {
               <p className="text-sm text-muted-foreground">No active service-linked sales opportunities for this branch yet.</p>
             )}
           </div>
-        </Card>
+        </DeckSurface>
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-3xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-xl font-semibold text-foreground">{value}</p>
     </div>
   );
 }

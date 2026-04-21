@@ -1,0 +1,265 @@
+Work in Process                                                                             4/21/26, 3:36 PM
+
+
+
+
+                                                                   Search                        Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support >
+          Service Product Support > Work in Process
+
+
+          Work in Process
+          Use the Work in Process tab to search for and view work in process.
+                                                                                Data Source:
+          Totals from signed off segments are also included.
+                                                                                SALDET,
+          To open the Work in Process tab, navigate to Product Support >        WOLAB
+          Service > Analysis Reports, then click the Work In Process tab.
+                                                                                Revision:
+          Or navigate toManagement Central > Service > Work In Process.         2026.01
+
+          Topics in this section are:
+
+                   Viewing Work in Process Details
+
+                   Creating a Work in Process Report
+
+                   Screen Description
+
+
+          Viewing Work in Process Details
+
+              1. Navigate to Product Support > Service > Analysis Reports
+
+
+                         The Billing Analysis tab appears.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                                 Page 1 of 8
+Work in Process                                                                        4/21/26, 3:36 PM
+
+
+
+
+              2. Click the Work in Process tab.
+
+
+                         The Work in Process tab appears.
+
+
+
+
+              3. Fill out the fields for the data you are interested in and click Go
+                 >>.
+
+
+                      The Work In Process tab refreshes listing the
+                   generated search results.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                            Page 2 of 8
+Work in Process                                                               4/21/26, 3:36 PM
+
+
+
+
+              4. Click a Total.
+
+
+                         The Open Work Orders screen appears.
+
+
+
+
+              5. Move your cursor over an a Order # and select Dollars from
+                 the pop-up menu.
+
+
+                         The pop-up menu
+
+
+
+
+                         The WIP Details screen appears.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                   Page 3 of 8
+Work in Process                                                                      4/21/26, 3:36 PM
+
+
+
+
+                   Use the WIP Details screen to drill further into the details of
+                   the selected work order.
+
+
+          Creating a Work in Process Report
+
+              1. Navigate to Product Support > Service > Analysis Reports.
+
+
+                         The Billing Analysis tab appears.
+
+
+
+
+              2. Click the Work in Process tab.
+
+
+                         The Work in Process tab appears.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                          Page 4 of 8
+Work in Process                                                                  4/21/26, 3:36 PM
+
+
+
+
+              3. Click Create a Work in Process Report.
+
+
+                         The Report Options screen appears.
+
+
+
+
+              4. Fill out the appropriate report parameters.
+
+              5. Click the Run Report button to generate the WIP report.
+
+                   These reports are produced according to the report
+                   parameters selected on the Additional Parameters section on
+                   the Report Options screen:
+
+                    WPSWIP2A Aged Work in Process
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                      Page 5 of 8
+Work in Process                                                                             4/21/26, 3:36 PM
+
+
+
+
+                    WPSWIP2B Work in Process - Summary
+
+                    WPSWIP2C WIP Balancing Report
+
+
+          Screen Description
+
+          Search fields on the Work in Process tab are:
+
+           Field                   Description
+           WIP Method               Select which method to use to analyze the WIP
+                                    data.
+                                            WIP Balancing—lists outstanding work orders
+                                            by the dollar amount that was posted to the
+                                            general ledger. When WIP Balancing is
+                                            selected, the system calculates the current
+                                            work in process based on the WIP code (S or
+                                            I) that is on the actual record in the SALDET
+                                            or WOLAB files.
+                                            List Price—lists outstanding work orders by
+                                            list price. When List Price is selected, the
+                                            system defaults the WIP code on each order
+                                            to S, so that the LLPRC and SDPRC values
+                                            are used to calculate the labor and parts
+                                            costs accordingly.
+                                            Estimated Cost—lists outstanding work
+                                            orders by cost. When Estimated Cost is
+                                            selected, the system defaults the WIP code
+                                            on each order to I, so that the price is
+                                            calculated using the average cost for parts
+                                            (SDAVN) and average cost for labor (LLAVN).
+
+           Select                   Search for work in process by entering a specific
+           Account                  WIP account number.
+
+           Select                   Search for work in process by selecting a status
+           Status                   from the drop down list (e.g. all, customer,
+                                    warranty, or internal).
+
+           Select                   Search for work in process by entering a location.
+           Location
+
+           Include                  Select the checkbox to include any transactions
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                                 Page 6 of 8
+Work in Process                                                                                              4/21/26, 3:36 PM
+
+
+
+           Unprocessed which have not yet been processed/billed.
+           Transactions
+
+
+          Fields on the Work In Process tab are:
+
+           Field         Description
+
+           Aging The aging period indicates the amount of days the work
+           Period order has been open or a work in process:
+
+                                  Current—the work order has a started date of 0 or
+                                  less than 30.
+                                  31-60—the work order has a started date between
+                                  31-60 days.
+                                  61-90—the work order has a started date between
+                                  61-90 days.
+                                  91-120—the work order has a started date between
+                                  91-120 days.
+                                  Over 120—the work order has a started date over
+                                  120 days.
+
+           Total         Totals up all of the open work orders current values for
+                         each aging period.
+
+           %             The percentage of work orders within each aging period.
+
+
+          A bar graph and pie chart gives a visual representation of the work in
+          process.
+
+          Click a Total to display further sales details in the Open Work
+          Orders screen.
+
+          Click the Create a Work in Process Report link to use this data to
+          build a work in process report.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm                                                  Page 7 of 8
+Work in Process                                                    4/21/26, 3:36 PM
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSWIP01.htm        Page 8 of 8
+

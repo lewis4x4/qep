@@ -1,0 +1,354 @@
+Equipment Listing                                                                                 4/21/26, 3:30 PM
+
+
+
+
+                                                                           Search                      Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Equipment Product Support > Equipment Profile:
+          Listing
+
+
+          Equipment Listing
+          Use the Equipment Listing screen to search for equipment, add
+                                                                                      Security: 800
+          equipment to an invoice and create a new equipment profile.
+                                                                                      - Product
+          To access the Equipment Listing screen, navigate to:                        Support -
+                                                                                      Equipment
+                    Product Support > Equipment > Equipment Profile - for             Profile
+                    read/write access.
+                                                                                      Data Source:
+                    Management Central > Equipment > Equipment Profile                CGIBASE
+                    - for read-only access.
+                                                                                      Revision:
+                 Equipment Profile Listing Screen                                     2026.04
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm                    Page 1 of 8
+Equipment Listing                                                                     4/21/26, 3:30 PM
+
+
+
+
+          Topics in this section include:
+
+                    Searching Equipment Profiles
+
+                    Screen Description
+
+
+          Searching Equipment Profiles
+
+                    Use the search bar to search keywords or if you know
+                    specific search terms such as a serial or stock number on
+                    an equipment unit.
+
+                    By default, the search bar finds your text wherever it
+                    appears—even in the middle of a word. You don’t need to
+                    type the full word.
+
+                    When you type multiple words separated by spaces in the
+                    search bar, the search finds results that contain any of
+                    those. Each one is matched wherever it appears—even in
+                    the middle of another word.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm        Page 2 of 8
+Equipment Listing                                                                     4/21/26, 3:30 PM
+
+
+
+
+                    You can search by equipment stock number, identifier,
+                    base, make, model, serial number, options, factory, group,
+                    customer number or fleet number, salesperson, or supplier
+                    invoice number. However, searching by location while using
+                    the search bar is not supported.
+
+                    When the Filter option is turned on (it is on by default),
+                    the search uses all of the filters together. Results must
+                    match every filter you enter—not just one.
+
+                    To keep specific search fields open or closed by default
+                    use the Sticky feature.
+
+                    If Options is selected, executing a search also scans
+                    Equipment Base & Options tab for a matching option.
+
+                    If Options is selected and the Or checkbox is selected, the
+                    IntelliDealer searches for any one of the options to match,
+                    otherwise it searches for all the options to match.
+
+
+          Screen Description
+
+          The status options for selecting equipment are:
+
+           Status
+           Field                  Description
+            All                    Search through all status options for the
+                                   selected unit.
+
+            Invoiced               Search Invoiced equipment status (the unit has
+                                   been invoiced to a customer) for the selected
+                                   unit.
+
+            Inventory              Search Inventory equipment status (the unit is
+                                   physically in stock) for the selected unit.
+
+            On Order               Search On Order equipment status (the unit is on
+                                   order with the supplier) for the selected unit.
+
+            Sold                   Search Sold equipment status (the unit is
+                                   physically in stock and has been tagged for a
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm        Page 3 of 8
+Equipment Listing                                                                     4/21/26, 3:30 PM
+
+
+
+                                   particular customer) for the selected unit.
+
+            Pre Sold               Search Pre Sold equipment status (the unit is on
+                                   order with the supplier for a specific customer)
+                                   for the selected unit.
+
+            Rental                 Search Rental equipment status (the unit is a
+                                   rental unit) for the selected unit.
+
+            Deleted                Search Deleted equipment status (the unit has
+                                   been removed) for the selected unit.
+
+            Quote                  Search Quote equipment status (the unit is being
+                                   priced for a customer) for the selected unit.
+
+            Transferred Search Transferred equipment status (the unit
+                        has been transferred to another dealer) for the
+                        selected unit.
+
+
+          The search fields on the Equipment Listing screen are:
+
+           Field                   Description
+            Stock                   Search for a stock number by entering a stock
+            Number                  number.
+
+            Make/Model Search for a stock number by entering a
+                       make/model code.
+
+            Customer                Search for a stock number by entering a
+            Number                  customer number.
+
+            Supplier                Search for a stock number by entering a
+            Invoice                 supplier invoice number.
+
+            Fleet                   Search for a stock number by entering a fleet
+            Number                  number.
+
+            Salesperson Search for a stock number by entering a
+                        salesperson.
+
+            Class                   Search for a stock number by entering a class
+                                    code.
+
+            Group                   Search for a stock number by entering a group
+                                    code.
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm        Page 4 of 8
+Equipment Listing                                                                        4/21/26, 3:30 PM
+
+
+
+
+            Location                Search for a stock number by entering a
+                                    location. The behavior of this search field is
+                                    affected by the Access Units in Other
+                                    Divisions switch. If the switch is enabled, the
+                                    dropdown is sorted by divisions. Otherwise, it is
+                                    sorted by regions.
+
+            From/To                 Search for a stock number by entering a serial
+            Serial                  number.
+            Numbers
+                                    To search for a stock number containing the
+                                    specified characters, use the From field alone.
+
+                                    To search for a stock number that starts with the
+                                    specified characters, use the From and To fields
+                                    together.
+
+                                    Either usage searches for all serial number
+                                    types: Machine, Engine, Transmission, and
+                                    Sound Guard.
+
+            Type                    Search for a stock number by selecting an
+                                    equipment type from the drop-down list. The
+                                    Traded Date is the date the unit was traded
+                                    from the customer. A Traded Date prevents the
+                                    unit from appearing on this screen unless you
+                                    choose Traded Date or All from the drop-down.
+
+                                    Options are:
+                                             New & Used (no Traded Date) - the default
+                                             selection.
+                                             New (no Traded Date)
+                                             Used (no Traded Date)
+                                             Traded Date (New & Used)
+                                             All
+
+            In/Out                  Search for a stock number by selecting either in
+                                    or out traffic status from the drop-down list.
+
+            Base                    Search for a stock number by entering a base
+            Number                  number.
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm           Page 5 of 8
+Equipment Listing                                                                         4/21/26, 3:30 PM
+
+
+
+
+            Equipment               Search for the unit's specific OEM (Original
+            Identifier              Equipment Manufacturer) number.
+
+            Options                 Search for a stock number by entering an
+                                    equipment option.
+
+
+                                                    Note: Option numbers that contain
+                                                    spaces cannot be filtered directly.
+
+
+
+
+          The Reset button clears all fields of their data for the form to be
+          refilled.
+
+          Opening the Equipment Listing screen from Management
+          Central or Product Support shows search results from across
+          all divisions.
+
+          The results fields on the Equipment Listing screen are:
+
+           Field                   Description
+            Stock                  The unit's stock number.
+            Number
+                                   A     marks the most recent Stock Number if
+                                   there are multiple instances of the same Model
+                                   or Serial number.
+
+            Description A brief description of the unit.
+
+            Location               The location where the unit is current located.
+
+            Type                   The unit's type code (e.g. New or Used).
+
+            Status                 The unit's current status
+
+            Group                  The unit's group code.
+
+            Make/Model The manufacturer of the unit.
+
+                                   The model number on the unit.
+
+            Base                   The unit's base number.
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm            Page 6 of 8
+Equipment Listing                                                                      4/21/26, 3:30 PM
+
+
+
+            Serial                 The unit's serial number.
+            Number
+
+            Fleet                  The unit's fleet number.
+            Number
+
+            Hours                  The amount of hours currently on the unit's hour
+                                   meter.
+
+            Net Book               Calculated as the current cost less any
+            Value                  writedowns credited to a writedown account
+                                   (most commonly used when reevaluating
+                                   inventory for year end or income tax purposes).
+
+                                   If the equipment unit was automatically costed
+                                   when invoiced, the Net Book Value appears in
+                                   red.
+
+
+          To display additional information fields, click the to open the
+          Context menu and select from these optional fields:
+
+           Extended Information
+           Field               Description
+
+            Customer The name of the customer who purchased or
+                     rented the unit last. When a unit is rented or
+                     invoiced the system automatically enters a name.
+
+            Yard               A designated physical place within the selected
+            Location           location.
+
+            Date Sold The date the unit was sold.
+
+            In/Out             Whether the unit is in the location(in) or not in the
+                               location(out). The Traffic Sub Code appears next
+                               to the In/Out field value.
+
+            Model              The model year of the unit.
+            Year
+
+            Hours 2            If available, the amount of hours currently on the
+                               second hour meter on the unit.
+
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm         Page 7 of 8
+Equipment Listing                                                                                            4/21/26, 3:30 PM
+
+
+
+
+          Click the Copy Equipment button to open the Copy Equipment
+          screen.
+
+          Click the Quick Add On Order Unit button to open the Add On
+          Order Units screen.
+
+          Click the Delete Quick Add Unit button to open the Delete
+          Quick Add Unit screen.
+
+          Click the Create button to open a new Equipment Profile
+          screen.
+
+          Click Close to complete your work on the Equipment Listing
+          screen and return to the previous screen.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/equipment.equipmentListing.htm                               Page 8 of 8
+

@@ -1,0 +1,287 @@
+Rental Counter                                                                                   4/21/26, 3:35 PM
+
+
+
+
+                                                                   Search                            Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product
+          Support > Rental Product Support > Rental Counter
+
+
+          Rental Counter
+          The Rental Counter screen allows you to view rental contracts,
+                                                                                     Data Source:
+          add rental contracts, add reservations or requests or modify
+                                                                                     RMCONT
+          print parameters.
+                                                                                     Security
+          To open the Rental Counter screen, from anywhere within
+                                                                                     Switch: 840 -
+          IntelliDealer, navigate to Product Support > Rental > Rental
+                                                                                     Product
+          Counter.
+                                                                                     Support -
+                                                                                     Rental
+                          Note: Field level-security assigned to your user           Counter
+                          profile (as defined on the Field - Work With Field
+                                                                                     Revision:
+                          Level Security screen) may change the appearance
+                                                                                     2026.02
+                          of or hide certain fields. For details, see Field - Work
+                          With Field Level Security.
+
+
+          The sorting options on the Rental Counter screen are:
+
+           Sort by
+           Field                            Description
+
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                                      Page 1 of 6
+Rental Counter                                                                           4/21/26, 3:35 PM
+
+
+
+            Contract                         Sort the search results by contract
+            Number                           number.
+
+            Date Out                         Sort the search results by date out.
+
+            Stock Number                     Sort the search results by stock number.
+
+            Salesperson                      Sort the search results by salesperson.
+
+            Type                             Sort the search results by contract type.
+
+
+          The search fields on the Rental Counter screen are:
+
+           Field                     Description
+
+            Include                  If selected, includes rental contract history
+            History                  within the rental contract search results.
+
+            Select                   Search for rental contracts by entering a
+            Contract                 contract number.
+            Number
+
+            Select                   Search for rental contracts by entering a
+            Customer                 customer number.
+            Number
+
+            Select Stock Search for rental contracts by entering a stock
+            Number       number.
+
+            Select      Search for rental contracts by entering a
+            Salesperson salesperson.
+
+            Select Job               Search for rental contracts by entering a job
+            Site                     site location.
+
+            Select                   Search for rental contracts by entering the
+            Category                 category of the unit(s) on the contract.
+
+            Select Class Search for rental contracts by entering the
+                         class of the unit(s) on the contract.
+
+            Select                   Search for rental contracts by entering the
+            Subclass                 subclass of the unit(s) on the contract.
+
+            Select Type              Search for rental contracts by selecting a
+                                     contract type from the drop down list.
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                              Page 2 of 6
+Rental Counter                                                                                 4/21/26, 3:35 PM
+
+
+
+            Select                   Search for rental contracts by entering the
+            Location                 branch location where the contract was
+                                     created.
+
+
+                          Note: Rental contracts that have overrides are
+                          highlighted.
+
+
+          The fields on the Rental Counter screen are:
+
+           Field                                      Description
+
+            Contract Number                            The rental contract number. Hover
+                                                       over the Contract number for the
+                                                       context menu to appear.
+
+                                                       Contract numbers with reverse
+                                                       highlighting indicate that the rental
+                                                       rates on the corresponding contract
+                                                       have been changed manually.
+
+            Customer/Salesperson The customer name or salesperson
+                                                       associated with the rental contract.
+
+                                                       If the contract was created for a
+                                                       miscellaneous customer, the name
+                                                       specified in the Ship To field on the
+                                                       Customer tab of the contract will
+                                                       appear.
+
+            Date Out/Date In                           The date the unit was rented.
+
+                                                       The date the unit is due to be back.
+
+            Stock Number /                             The rental unit stock number. Stock
+                                                       Numbers with reverse highlight
+            VESign Status
+                                                       indicate that the stock number's
+                                                       profile has memos attached to it.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                                    Page 3 of 6
+Rental Counter                                                                                         4/21/26, 3:35 PM
+
+
+
+
+                                                       The signing status of the VESign
+                                                       document. Can be one of:
+
+                                                                   Awaiting Signature—all
+                                                                   signatures are pending.
+
+                                                                   Partially Signed—more than
+                                                                   one signature is pending.
+
+                                                                   Signed—all required signatures
+                                                                   are complete.
+
+                                                                   Canceled—signing has been
+                                                                   canceled.
+
+                                                                   If no status is present, then the
+                                                                   document has not been sent
+                                                                   for electronic signing.
+
+
+                                                                       Note: OneSpan imposes
+                                                                       a 120-day limit on quotes.
+                                                                       You can send quotes for
+                                                                       signature that expire after
+                                                                       this time, however, the
+                                                                       VESign will expire at 120
+                                                                       days, even though the
+                                                                       quote is still active.
+
+
+
+            Category/Class/Job                         The rental unit's category and/or
+            Site                                       class.
+
+                                                       The rental unit's current job site
+                                                       location.
+
+            Return                                     Whether the unit has been returned
+                                                       before its scheduled return date.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                                            Page 4 of 6
+Rental Counter                                                                                   4/21/26, 3:35 PM
+
+
+
+
+                                                       If the rate has been set to hour
+                                                       usage, lines are set to Held (H), until
+                                                       the hours in is updated.
+
+                                                       Valid return codes include: R-
+                                                       Returned, O- Off Rent, E- Exchange,
+                                                       H- Hold Unit. An * beside a return
+                                                       code denotes that the unit is part of
+                                                       a multiple unit contract.
+
+            Type                                       The type of rental contract (e.g.
+                                                       rental, rent to purchase, reservation,
+                                                       request, demo rent, loaner or held).
+
+            Location                                   The branch location where the
+                                                       contract was originally created.
+
+
+          Move the cursor over a Contract Number and select one of
+          these options from the pop-up menu:
+
+                    Edit - to edit a rental contract.
+
+                    Print - to print a rental contract.
+
+                    Close - to hard-close a rental contract. Hard-closing a
+                    rental contract deletes the contract and any open invoices
+                    associated with the contract, regardless of whether there
+                    are pending invoices or unreturned units on the contract.
+
+
+                                   Note: You cannot hard-close a rental contract
+                                   currently in use by another user.
+
+
+                    Return - to return a rental contract using one of the rental
+                    return options Returned, Off Rent, Hold Unit,
+                    Exchanged, or Partial Return.
+
+          Click on a customer name from the Customer/Salesperson
+          field to open the Customer Profile screen.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                                      Page 5 of 6
+Rental Counter                                                                                               4/21/26, 3:35 PM
+
+
+
+
+          Click on a Stock Number to open the Equipment Profile
+          screen.
+
+          Click on the Need to create a new contract? Click here to add
+          link to create a new rental contract.
+
+          Click on the Need to create a new reservation/request? Click
+          here to add link to add a reservation or a request.
+
+          Click on the Modify default print parameters link to modify
+          default print parameters.
+
+          Click on the Reverse a Rental Invoice link to reverse a rental
+          invoice.
+
+          Click on the Tethr It Now link to open the Tethr It interface.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSRC001.htm                                                  Page 6 of 6
+

@@ -1,0 +1,242 @@
+Traffic Management                                                                          4/21/26, 3:32 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Product
+           Support > Equipment Product Support > Traffic -
+           Listing
+
+
+           Traffic Management - Listing
+           You can use the Traffic Management - Listing tab to view, edit
+                                                                                Data Source:
+           and add equipment, service, or rental traffic tickets, and to
+                                                                                CGIDR
+           perform a consolidated print.
+                                                                                Security: 804
+                                                                                - Product
+                          Note: Traffic Management is not available for
+                                                                                Support,
+                          divisions using Integrated Rental (IR). When IR is
+                                                                                Traffic
+                          active, Traffic options do not appear in the menu.
+                                                                                Revision:
+                                                                                2026.02
+           You can navigate to Traffic Management - Listing tab using
+           any of these paths:
+
+                     Product Support > Equipment > Traffic
+
+                     Product Support > Equipment > Service
+
+                     Product Support > Equipment > Rental
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSTF001.htm                                 Page 1 of 5
+Traffic Management                                                                          4/21/26, 3:32 PM
+
+
+
+
+           The sorting options available on the Traffic Management -
+           Listing tab are:
+
+            Sort by
+            Field                         Description
+            Date                          Sort by the date the traffic ticket was
+                                          received.
+
+            Receipt                       Sort by the receipt number.
+            Number
+
+            Type                          Sort by the traffic ticket type.
+
+
+           The search fields on the Traffic Management - Listing tab are:
+
+            Field                               Description
+
+            Include History                     If selected, includes historical traffic
+                                                movements within the search.
+
+            Select Receipt                      Search by receipt number.
+            Number
+
+            Select           Select one of these options from the
+            Inbound/Outbound drop down list:
+
+                                                         All—search for all types.
+                                                         Inbound—search for only inbound.
+                                                         Outbound—search for only
+                                                         outbound.
+                                                         Transfer—search for only
+                                                         transfers.
+
+            Select Type                         Search by selecting a receipt type from
+                                                the drop down list.
+
+            Select Date Range Narrow down search results by entering
+                              a date range.
+
+            Select Customer                     Search by customer number.
+            Number
+
+
+https://help.intellidealer.com/intellidealer/Content/PSTF001.htm                                 Page 2 of 5
+Traffic Management                                                                         4/21/26, 3:32 PM
+
+
+
+            Select Stock                        Search by stock number.
+            Number
+
+            Select Status                       Search by selecting a status from the
+                                                drop down list.
+
+            Select Location                     Search by location.
+
+
+           The Receipt Types are:
+
+            Receipt Types
+            Type                       Description
+            Demo                        If the unit is out on a sales demo.
+
+            Loaner                      If the unit is out as a loaner.
+
+            Rental                      If the unit is out as a rental.
+
+            Transfer                    If the unit is being transferred.
+
+            Sale                        If the unit is in the system because it was sold
+                                        and is being shipped to the customer.
+
+            Purchase                    If the unit has been purchased.
+
+            Service                     If the unit is being brought in for service
+                                        repairs.
+
+            Trade In                    If the unit is being brought in as a trade in.
+
+            Miscellaneous Any other miscellaneous unit type status.
+
+            Re-rent                     If the unit is being re-rented within the rental
+                                        system.
+
+            Customer                    If the unit is being transferred from one
+            Transfer                    customer location to another.
+
+            Job Site                    If the unit being transferred from one job site
+            Transfer                    to another.
+
+
+           The fields on the Traffic Management-Listing tab are:
+
+            Field                         Description
+
+
+https://help.intellidealer.com/intellidealer/Content/PSTF001.htm                                Page 3 of 5
+Traffic Management                                                                       4/21/26, 3:32 PM
+
+
+
+            Receipt                       The traffic ticket receipt number.
+            Number
+
+            In/Out                        Whether the traffic ticket is inbound or
+                                          outbound.
+
+            Type                          The traffic ticket type, see the Receipt
+                                          Types table for more information.
+
+            Subtype                       The user defined subtype code will be listed
+                                          in the row directly underneath the Type
+                                          field. The code is a subtype of the type of
+                                          receipt used on a traffic ticket (e.g. a
+                                          subtype of a demo receipt).
+
+            Status                        The status of the unit on the receipt.
+
+            Stock Number                  The unit's stock number.
+
+            Machine Hours The amount of hours on the unit's hour
+                          meter, listed in the row directly underneath
+                          the Stock Number field.
+
+            Description                   The physical description of the unit.
+
+            Make                          The manufacturer of the unit.
+
+            Model                         The model number of the unit.
+
+            From/ City                    The location shipping the unit.
+
+            To/ City                      The location receiving the unit.
+
+            Vendor/Trucker The name of the vendor/trucker shipping the
+                           unit.
+
+            Priority                      The shipment priority code, appears in the
+                                          row directly underneath the Vendor/Trucker
+                                          field.
+
+
+           Move the cursor over the Chevron and select either Save
+           Defaults or Reset Defaults from the drop down list to save or
+           reset search defaults.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSTF001.htm                              Page 4 of 5
+Traffic Management                                                                                           4/21/26, 3:32 PM
+
+
+
+
+           Click on a Receipt Number to open the Receipt Details screen.
+
+           Click on a Stock Number to open the Equipment
+           Profilescreen.
+
+           Click on a Customer Name next to the From/To field to open
+           theCustomer Profile screen.
+
+           Click on the Need to create a traffic ticket? Click here to add
+           link to create a traffic ticket.
+
+           Click the Mass Change/ Print link to change multiple traffic
+           tickets and print the associated delivery receipts on the Mass
+           Change/ Print screen.
+
+           Click the Receipts Completed This Month link to open the Run
+           Parameters screen and generate the Deliveries Completed
+           This Month report (CMPREP).
+
+
+
+           Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSTF001.htm                                                  Page 5 of 5
+

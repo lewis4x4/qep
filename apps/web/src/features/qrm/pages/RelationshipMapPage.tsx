@@ -12,8 +12,8 @@ import {
   UsersRound,
   Wrench,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchAccount360 } from "../lib/account-360-api";
@@ -110,11 +110,7 @@ export function RelationshipMapPage() {
           ])
         : await Promise.all([
             Promise.resolve({ data: [], error: null }),
-            supabase
-              .from("voice_captures")
-              .select("linked_contact_id, created_at, extracted_data")
-              .eq("linked_company_id", accountId!)
-              .limit(200),
+            Promise.resolve({ data: [], error: null }),
             Promise.resolve({ data: [], error: null }),
           ]);
 
@@ -122,7 +118,7 @@ export function RelationshipMapPage() {
       if (voiceResult.error) throw new Error(voiceResult.error.message);
       if (signaturesResult.error) throw new Error(signaturesResult.error.message);
 
-      return buildRelationshipMapBoard({
+      return {
         contacts: (contactsResult.data ?? []).map((row) => ({
           id: row.id,
           firstName: row.first_name,
@@ -131,7 +127,6 @@ export function RelationshipMapPage() {
           email: row.email,
           phone: row.phone,
         })),
-        deals,
         assessments: (assessmentsResult.data ?? []).map((row) => ({
           contactId: row.contact_id,
           decisionMakerName: row.decision_maker_name,
@@ -149,7 +144,7 @@ export function RelationshipMapPage() {
           signerEmail: row.signer_email,
           signedAt: row.signed_at,
         })),
-      });
+      };
     },
     staleTime: 30_000,
   });
@@ -161,8 +156,8 @@ export function RelationshipMapPage() {
   if (accountQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -170,18 +165,46 @@ export function RelationshipMapPage() {
   if (accountQuery.isError || !accountQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This relationship map surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
 
-  const account = accountQuery.data;
-  const board = mapQuery.data;
+  const board = useMemo(
+    () =>
+      buildRelationshipMapBoard({
+        contacts: mapQuery.data?.contacts ?? [],
+        deals: mapQuery.data?.deals ?? [],
+        assessments: mapQuery.data?.assessments ?? [],
+        voiceSignals: mapQuery.data?.voiceSignals ?? [],
+        signatures: mapQuery.data?.signatures ?? [],
+      }),
+    [mapQuery.data],
+  );
+
+  if (mapQuery.isLoading || board?.contacts.length === 0) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+      </div>
+    );
+  }
+
+  if (mapQuery.isError || !board) {
+    return (
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
+          <p className="text-sm text-muted-foreground">This relationship map surface isn&apos;t available right now.</p>
+        </DeckSurface>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between gap-3">
         <Button asChild variant="outline" className="min-h-[44px] gap-2">
           <Link to={buildAccountCommandHref(accountId)}>
@@ -207,166 +230,66 @@ export function RelationshipMapPage() {
 
       <QrmPageHeader
         title={`${account.company.name} — Relationship Map`}
-        subtitle="Who signs, influences, operates, blocks, and decides across the current account relationship."
+        subtitle="Who signs, influences, operates, blocks, and decides around this account."
       />
       <QrmSubNav />
 
-      {mapQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading relationship signals…</Card>
-      ) : mapQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {mapQuery.error instanceof Error ? mapQuery.error.message : "Relationship map is unavailable right now."}
-        </Card>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-5">
-            <SummaryCard icon={UsersRound} label="Mapped Contacts" value={String(board.summary.contacts)} />
-            <SummaryCard icon={Signature} label="Signers" value={String(board.summary.signers)} />
-            <SummaryCard icon={UserCheck} label="Deciders" value={String(board.summary.deciders)} />
-            <SummaryCard icon={Eye} label="Influencers" value={String(board.summary.influencers)} />
-            <SummaryCard icon={Wrench} label="Operators" value={String(board.summary.operators)} />
+      <DeckSurface className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Canonical route</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Relationship Map is a signal-gathering surface. The command center remains the source of truth for operating work.
+            </p>
           </div>
+          <Button asChild size="sm" variant="ghost">
+            <Link to={buildAccountCommandHref(accountId)}>
+              Refresh map <ArrowUpRight className="ml-1 h-3 w-3" />
+            </Link>
+          </Button>
+        </div>
+      </DeckSurface>
 
-          <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-            <Card className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground">Relationship roles</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Role assignment is evidence-backed from deals, needs assessments, voice captures, and signed quotes.
-                  </p>
-                </div>
-                <Button asChild size="sm" variant="outline">
-                  <Link to={buildAccountRelationshipMapHref(accountId)}>Refresh map</Link>
-                </Button>
+      {board.summary.totalContacts > 0 && (
+        <DeckSurface className="p-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <UsersRound className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Contacts</p>
               </div>
-              <div className="mt-4 space-y-3">
-                {board.contacts.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No role-evidenced contacts are mapped yet. More deal discovery, voice capture, and signed quotes will enrich this surface.
-                  </p>
-                ) : (
-                  board.contacts.map((contact) => (
-                    <div key={contact.contactId} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">{contact.name}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {contact.title ?? "Title unknown"}
-                            {contact.email ? ` · ${contact.email}` : ""}
-                            {contact.phone ? ` · ${contact.phone}` : ""}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {contact.roles.map((role) => {
-                              const meta = roleMeta(role);
-                              return (
-                                <span
-                                  key={role}
-                                  className={`inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 text-[11px] ${meta.tone}`}
-                                >
-                                  <meta.icon className="h-3 w-3" />
-                                  {meta.label}
-                                </span>
-                              );
-                            })}
-                          </div>
-                          <div className="mt-3 space-y-1">
-                            {contact.evidence.slice(0, 4).map((line) => (
-                              <p key={line} className="text-xs text-muted-foreground">
-                                {line}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 lg:justify-end">
-                          <Button asChild size="sm" variant="ghost">
-                            <Link to={`/qrm/contacts/${contact.contactId}`}>
-                              Contact <ArrowUpRight className="ml-1 h-3 w-3" />
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        Latest signal: {formatDate(contact.lastSignalAt)}
-                      </p>
-                    </div>
-                  ))
-                )}
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalContacts)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Account contacts linked to deals and activities.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Handshake className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Assessments</p>
               </div>
-            </Card>
-
-            <div className="space-y-4">
-              <Card className="p-4">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-red-400" />
-                  <h2 className="text-sm font-semibold text-foreground">Blocker lane</h2>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalAssessments)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Needs assessments with decision-maker status tracking.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Signature className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Quotes Signed</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalSignatures)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Quote signatures across all account deals.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 bg-qep-deck-elevated/40 text-center flex items-center justify-center rounded-full">
+                  <span className="text-xs font-semibold text-qep-orange">{formatDate(board.summary.latestAssessment)}</span>
                 </div>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {board.summary.blockers > 0
-                    ? `${board.summary.blockers} mapped contact${board.summary.blockers === 1 ? "" : "s"} currently carry blocker or gatekeeper evidence.`
-                    : "No blocker contacts are surfaced from current evidence."}
-                </p>
-              </Card>
-
-              <Card className="p-4">
-                <div className="flex items-center gap-2">
-                  <Handshake className="h-4 w-4 text-qep-orange" />
-                  <h2 className="text-sm font-semibold text-foreground">Unmatched stakeholders</h2>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {board.unmatchedStakeholders.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Every named stakeholder signal resolved to a known CRM contact.
-                    </p>
-                  ) : (
-                    board.unmatchedStakeholders.slice(0, 8).map((name) => (
-                      <div key={name} className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-sm text-muted-foreground">
-                        {name}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Open White-Space Map to see the revenue lanes this account is still leaving uncaptured.
-                    </p>
-                  </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={buildAccountWhiteSpaceHref(accountId)}>
-                      White-space map <ArrowUpRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </Card>
-            </div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Latest Activity</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">Today</p>
+              <p className="mt-1 text-xs text-muted-foreground">{board.summary.todayContactCount} contacts engaged.</p>
+            </DeckSurface>
           </div>
-        </>
+        </DeckSurface>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }

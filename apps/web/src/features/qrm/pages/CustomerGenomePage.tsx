@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Brain, CalendarDays, Dna, MapPinned } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CustomerInsightCard } from "@/features/dge/components/CustomerInsightCard";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
@@ -49,8 +48,8 @@ export function CustomerGenomePage() {
   if (accountQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -58,9 +57,9 @@ export function CustomerGenomePage() {
   if (accountQuery.isError || !accountQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This customer genome surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -111,56 +110,90 @@ export function CustomerGenomePage() {
           />
 
           {genome && (
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Dna className="h-4 w-4 text-qep-orange" />
                 <h2 className="text-sm font-semibold text-foreground">Genome facets</h2>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <GenomeStat icon={Dna} label="Industry" value={genome.industry ?? "Unknown"} />
-                <GenomeStat icon={MapPinned} label="Region" value={genome.region ?? "Unknown"} />
-                <GenomeStat
-                  icon={CalendarDays}
-                  label="Budget Cycle"
-                  value={monthLabel(genome.budget_cycle_month) ?? "Unknown"}
-                />
-                <GenomeStat
-                  icon={CalendarDays}
-                  label="Fiscal Year End"
-                  value={monthLabel(genome.fiscal_year_end_month) ?? "Unknown"}
-                />
+                <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <Dna className="h-4 w-4 text-qep-orange" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Industry</p>
+                  </div>
+                  <p className="mt-2 text-base font-medium text-foreground">{genome.industry ?? "Unknown"}</p>
+                </div>
+                <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <MapPinned className="h-4 w-4 text-qep-orange" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Region</p>
+                  </div>
+                  <p className="mt-2 text-base font-medium text-foreground">{genome.region ?? "Unknown"}</p>
+                </div>
+                <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-qep-orange" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Budget Cycle</p>
+                  </div>
+                  <p className="mt-2 text-base font-medium text-foreground">{monthLabel(genome.budget_cycle_month) ?? "Unknown"}</p>
+                </div>
+                <div className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-qep-orange" />
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fiscal Year End</p>
+                  </div>
+                  <p className="mt-2 text-base font-medium text-foreground">{monthLabel(genome.fiscal_year_end_month) ?? "Unknown"}</p>
+                </div>
               </div>
               {genome.budget_cycle_notes && (
                 <p className="mt-4 text-sm text-muted-foreground">{genome.budget_cycle_notes}</p>
               )}
-            </Card>
+            </DeckSurface>
           )}
         </div>
 
         <div className="space-y-4">
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4 text-qep-orange" />
               <h2 className="text-sm font-semibold text-foreground">Profile context</h2>
             </div>
             <div className="mt-4 space-y-3 text-sm">
-              <GenomeLine label="Account" value={account.company.name} />
-              <GenomeLine label="Health score" value={account.health?.current_score != null ? String(Math.round(account.health.current_score)) : "Not scored"} />
-              <GenomeLine label="Fleet" value={String(account.fleet.length)} />
-              <GenomeLine label="Open quotes" value={String(account.open_quotes.length)} />
-              <GenomeLine label="Service jobs" value={String(account.service.length)} />
-              <GenomeLine label="Parts orders" value={String(account.parts.order_count)} />
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Account</span>
+                <span className="font-medium text-foreground">{account.company.name}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Health score</span>
+                <span className="font-medium text-foreground">{account.health?.current_score != null ? String(Math.round(account.health.current_score)) : "Not scored"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Fleet</span>
+                <span className="font-medium text-foreground">{String(account.fleet.length)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Open quotes</span>
+                <span className="font-medium text-foreground">{String(account.open_quotes.length)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Service jobs</span>
+                <span className="font-medium text-foreground">{String(account.service.length)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Parts orders</span>
+                <span className="font-medium text-foreground">{String(account.parts.order_count)}</span>
+              </div>
             </div>
-          </Card>
+          </DeckSurface>
 
           {genome?.notes && (
-            <Card className="p-4">
+            <DeckSurface className="p-4">
               <h2 className="text-sm font-semibold text-foreground">Notes</h2>
               <p className="mt-3 text-sm text-muted-foreground">{genome.notes}</p>
-            </Card>
+            </DeckSurface>
           )}
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Next step</h2>
@@ -174,9 +207,9 @@ export function CustomerGenomePage() {
                 </Link>
               </Button>
             </div>
-          </Card>
+          </DeckSurface>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Canonical route</h2>
@@ -188,9 +221,9 @@ export function CustomerGenomePage() {
                 <Link to={buildAccountGenomeHref(accountId)}>Refresh genome</Link>
               </Button>
             </div>
-          </Card>
+          </DeckSurface>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
@@ -204,38 +237,9 @@ export function CustomerGenomePage() {
                 </Link>
               </Button>
             </div>
-          </Card>
+          </DeckSurface>
         </div>
       </div>
-    </div>
-  );
-}
-
-function GenomeStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-muted/10 p-3">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-2 text-base font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function GenomeLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
     </div>
   );
 }

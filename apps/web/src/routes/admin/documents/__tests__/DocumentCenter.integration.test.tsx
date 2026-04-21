@@ -85,6 +85,7 @@ const mockGetDocument = mock(() =>
     memberships: [],
     auditEvents: [],
     breadcrumbs: [],
+    facts: [],
   }),
 );
 
@@ -92,6 +93,41 @@ const mockCreateDownload = mock(() =>
   Promise.resolve({
     url: "https://example.com/signed",
     expiresAt: "2026-04-21T11:00:30Z",
+  }),
+);
+
+const mockAskDocument = mock(() =>
+  Promise.resolve({
+    documentId: "doc-1",
+    traceId: "trace-doc-1",
+    question: "What changed?",
+    answer: "No material changes.",
+    citations: [],
+  }),
+);
+
+const mockReindexDocument = mock(() =>
+  Promise.resolve({
+    documentId: "doc-1",
+    previousStatus: "published",
+    nextStatus: "pending_review",
+  }),
+);
+
+const mockGetDocumentNeighbors = mock(() =>
+  Promise.resolve({
+    documentId: "doc-1",
+    neighbors: [],
+  }),
+);
+
+const mockRerunTwin = mock(() =>
+  Promise.resolve({
+    documentId: "doc-1",
+    jobId: "job-doc-1",
+    status: "queued",
+    factCount: 0,
+    traceId: "trace-doc-1",
   }),
 );
 
@@ -103,6 +139,10 @@ mock.module("@/features/documents/router", () => ({
   moveDocumentViaRouter: mock(() => Promise.resolve({ success: true })),
   duplicateLinkViaRouter: mock(() => Promise.resolve({ success: true })),
   createDownloadUrlViaRouter: mockCreateDownload,
+  askDocumentViaRouter: mockAskDocument,
+  reindexDocumentViaRouter: mockReindexDocument,
+  getDocumentNeighborsViaRouter: mockGetDocumentNeighbors,
+  rerunTwinViaRouter: mockRerunTwin,
 }));
 
 const { DocumentCenterPage } = await import("../DocumentCenter");
@@ -121,6 +161,10 @@ describe("DocumentCenterPage (integration)", () => {
     mockListDocuments.mockClear();
     mockGetDocument.mockClear();
     mockCreateDownload.mockClear();
+    mockAskDocument.mockClear();
+    mockReindexDocument.mockClear();
+    mockGetDocumentNeighbors.mockClear();
+    mockRerunTwin.mockClear();
     toastSpy.mockClear();
   });
 

@@ -9,8 +9,8 @@ import {
   Compass,
   Sparkles,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
@@ -30,7 +30,6 @@ import {
 } from "../lib/customer-operating-profile";
 import { buildRelationshipMapBoard } from "../lib/relationship-map";
 import { buildRentalConversionBoard } from "../lib/rental-conversion";
-import { buildWhiteSpaceMapBoard } from "../lib/white-space-map";
 import { buildCustomerStrategistBoard, type StrategistPlan } from "../lib/customer-strategist";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -82,7 +81,7 @@ export function CustomerStrategistPage() {
     queryKey: ["customer-strategist", accountId, "signals"],
     enabled: Boolean(accountId),
     queryFn: async () => {
-      const [dealsResult, contactsResult, voiceResult, equipmentResult] = await Promise.all([
+      const [dealsResult, contactsResult, voiceResult, equipmentResult, listingsResult] = await Promise.all([
         supabase
           .from("crm_deals")
           .select("id, name, created_at, primary_contact_id")
@@ -97,7 +96,7 @@ export function CustomerStrategistPage() {
           .limit(200),
         supabase
           .from("voice_captures")
-          .select("linked_contact_id, created_at, extracted_data")
+          .select("linked_contact_id, created_at, extracted_data, competitor_mentions")
           .eq("linked_company_id", accountId!)
           .limit(200),
         supabase
@@ -107,12 +106,18 @@ export function CustomerStrategistPage() {
           .eq("ownership", "customer_owned")
           .is("deleted_at", null)
           .limit(500),
+        supabase
+          .from("competitor_listings")
+          .select("make, model, first_seen_at")
+          .eq("is_active", true)
+          .limit(1000),
       ]);
 
       if (dealsResult.error) throw new Error(dealsResult.error.message);
       if (contactsResult.error) throw new Error(contactsResult.error.message);
       if (voiceResult.error) throw new Error(voiceResult.error.message);
       if (equipmentResult.error) throw new Error(equipmentResult.error.message);
+      if (listingsResult.error) throw new Error(listingsResult.error.message);
 
       const deals = dealsResult.data ?? [];
       const dealIds = deals.map((deal) => deal.id);
@@ -155,6 +160,7 @@ export function CustomerStrategistPage() {
         signatures: signaturesResult.data ?? [],
         rentalLinks: rentalLinksResult.data ?? [],
         equipment: equipmentResult.data ?? [],
+        listings: listingsResult.data ?? [],
       };
     },
     staleTime: 30_000,
@@ -167,8 +173,8 @@ export function CustomerStrategistPage() {
   if (accountQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -176,9 +182,9 @@ export function CustomerStrategistPage() {
   if (accountQuery.isError || !accountQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This customer strategist surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -215,9 +221,13 @@ export function CustomerStrategistPage() {
       parts: account.parts,
       profile: profileQuery.data ?? null,
       predictions: profileQuery.data?.fleet ?? [],
-      equipmentSignals: signals.equipment.map((row) => {
-        const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
-        const attachments = Array.isArray(metadata.attachments) ? metadata.attachments.filter((item) => item != null) : [];
+      equipment: signals.equipment.map((row) => {
+        const metadata = (row.metadata && typeof row.metadata === "object"
+          ? row.metadata
+          : {}) as Record<string, unknown>;
+        const attachments = Array.isArray(metadata.attachments)
+          ? metadata.attachments.filter((item) => item != null)
+          : [];
         return {
           equipmentId: row.id,
           attachmentCount: attachments.length,
@@ -280,11 +290,6 @@ export function CustomerStrategistPage() {
           currentMarketValue: equipmentJoin.current_market_value,
         }];
       }),
-      voiceSignals: signals.voiceSignals.map((row) => ({
-        createdAt: row.created_at,
-        extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
-      })),
-      openQuoteCount: account.open_quotes.length,
     });
 
     return buildCustomerStrategistBoard({
@@ -307,16 +312,19 @@ export function CustomerStrategistPage() {
         </Button>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountRentalConversionHref(accountId)}>Rental Conversion</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountCrossDealerMirrorHref(accountId)}>Cross-Dealer Mirror</Link>
+            <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountWhiteSpaceHref(accountId)}>White-Space Map</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountStrategistHref(accountId)}>Refresh strategist</Link>
           </Button>
         </div>
       </div>
@@ -328,81 +336,56 @@ export function CustomerStrategistPage() {
       <QrmSubNav />
 
       {profileQuery.isLoading || strategistDataQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading customer strategist plan…</Card>
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading customer strategist plan…</DeckSurface>
       ) : profileQuery.isError || strategistDataQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {profileQuery.error instanceof Error
-            ? profileQuery.error.message
-            : strategistDataQuery.error instanceof Error
-              ? strategistDataQuery.error.message
-              : "Customer strategist is unavailable right now."}
-        </Card>
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
+          <p className="text-sm text-red-300">
+            {profileQuery.error instanceof Error
+              ? profileQuery.error.message
+              : strategistDataQuery.error instanceof Error
+                ? strategistDataQuery.error.message
+                  : "Customer strategist is unavailable right now."}
+          </p>
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={Sparkles} label="Total Plays" value={String(board.summary.totalPlays)} />
-            <SummaryCard icon={CalendarRange} label="30d" value={String(board.summary.immediatePlays)} />
-            <SummaryCard icon={Compass} label="60d" value={String(board.summary.expansionPlays)} />
-            <SummaryCard icon={CalendarRange} label="90d" value={String(board.summary.strategicPlays)} />
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total Plays</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalPlays)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <CalendarRange className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">30d</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.immediatePlays)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <CalendarRange className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">60d</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.expansionPlays)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Compass className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">90d</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.strategicPlays)}</p>
+            </DeckSurface>
           </div>
 
-          <div className="space-y-4">
-            {board.plans.map((plan) => (
-              <Card key={plan.horizon} className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${horizonTone(plan.horizon)}`}>{plan.horizon}</span>
-                      <span className={`text-[11px] font-medium ${confidenceTone(plan.confidence)}`}>
-                        {plan.confidence} confidence
-                      </span>
-                    </div>
-                    <h2 className="mt-1 text-lg font-semibold text-foreground">{plan.headline}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{plan.objective}</p>
-                  </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={buildAccountStrategistHref(accountId)}>Refresh plan</Link>
-                  </Button>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {plan.plays.map((play) => (
-                    <div key={play.key} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">{play.title}</p>
-                            <span className={`text-[11px] font-medium ${confidenceTone(play.confidence)}`}>
-                              {play.confidence} confidence
-                            </span>
-                          </div>
-                          <div className="mt-3 space-y-1">
-                            {play.trace.map((line) => (
-                              <p key={line} className="text-xs text-muted-foreground">
-                                {line}
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-                        <Button asChild size="sm" variant="outline">
-                          <Link to={play.href}>
-                            {play.actionLabel} <ArrowUpRight className="ml-1 h-3 w-3" />
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ))}
-          </div>
-
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Companion 7B surface</h2>
+                <h2 className="text-sm font-semibold text-foreground">Plan framing</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Cross-Dealer Mirror shows what this same account likely looks like inside a competitor CRM so the plan can be pressure-tested before field execution.
+                  Cross-Dealer Mirror shows what this same account likely looks like inside a competitor CRM so plan can be pressure-tested before field execution.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
@@ -411,29 +394,50 @@ export function CustomerStrategistPage() {
                 </Link>
               </Button>
             </div>
-          </Card>
+          </DeckSurface>
+
+          <div className="grid gap-4 xl:grid-cols-[repeat(1,minmax(0,1.02fr))]">
+            <DeckSurface className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Plan details</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    30/60/90 day window for this plan, broken into 30/60/90-day horizons with confidence-labeled recommendations.
+                  </p>
+                </div>
+                <Button asChild size="sm" variant="ghost">
+                  <Link to={buildAccountStrategistHref(accountId)}>
+                    Refresh strategist <ArrowUpRight className="ml-1 h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+            </DeckSurface>
+
+            <DeckSurface className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open AI Customer Strategist to turn whitespace, relationship, and conversion signals into a 30/60/90 account plan.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to={buildAccountStrategistHref(accountId)}>
+                  AI strategist <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+          </DeckSurface>
+
+          <DeckSurface className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Refresh strategist plan to incorporate any changes from account intelligence.
+                </p>
+              </div>
+            </DeckSurface>
+          </div>
         </>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }

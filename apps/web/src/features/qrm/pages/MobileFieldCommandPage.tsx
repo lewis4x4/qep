@@ -2,19 +2,13 @@ import { Link } from "react-router-dom";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { DeckSurface } from "../components/command-deck";
 import { Brain, Mic, Route, Building2, Timer, Map as MapIcon, AlertTriangle, Lock, DollarSign, Clock4 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIronRoleBlend } from "../lib/useIronRoleBlend";
 import { resolveIronRoleAndBlend } from "../lib/iron-roles";
 import { useCommandCenter } from "../command-center/hooks/useCommandCenter";
 import { buildMobileFieldPriorityFeed } from "../lib/mobile-field-command";
-
-function formatCompactCurrency(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
-  return `$${Math.round(amount)}`;
-}
 
 export function MobileFieldCommandPage() {
   const { profile } = useAuth();
@@ -34,19 +28,19 @@ export function MobileFieldCommandPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 pb-24 pt-3 sm:px-6">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-qep-orange">Field OS</p>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Mobile Field Command</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Mobile Field Command</h1>
           </div>
           <Badge variant="outline" className="text-[10px]">
             {role?.info.display ?? "Field"}
           </Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          Fast field priorities, voice capture, and command links designed for the road.
+          Fast field priorities, voice capture, and command links designed for road.
         </p>
       </div>
 
@@ -61,28 +55,82 @@ export function MobileFieldCommandPage() {
       </div>
 
       {commandQuery.isLoading ? (
-        <Card className="p-4 text-sm text-muted-foreground">Loading field command…</Card>
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       ) : commandQuery.isError || !commandQuery.data ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
-          {commandQuery.error instanceof Error ? commandQuery.error.message : "Field command unavailable."}
-        </Card>
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
+          <p className="text-sm text-muted-foreground">Field command unavailable.</p>
+        </DeckSurface>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard icon={DollarSign} label="Closable 7d" value={formatCompactCurrency(commandQuery.data.commandStrip.closableRevenue7d)} />
-            <MetricCard icon={AlertTriangle} label="At risk" value={formatCompactCurrency(commandQuery.data.commandStrip.atRiskRevenue)} tone="warn" />
-            <MetricCard icon={Lock} label="Blocked" value={String(commandQuery.data.commandStrip.blockedDeals)} tone={commandQuery.data.commandStrip.blockedDeals > 0 ? "warn" : "default"} />
-            <MetricCard icon={Clock4} label="Follow-ups" value={String(commandQuery.data.commandStrip.overdueFollowUps)} tone={commandQuery.data.commandStrip.overdueFollowUps > 0 ? "warn" : "default"} />
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Closable 7d</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                {formatCompactCurrency(commandQuery.data.commandStrip.closableRevenue7d)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Revenue from deals that could close in next 7 days.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-qep-warm" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">At Risk</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                {formatCompactCurrency(commandQuery.data.commandStrip.atRiskRevenue)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Revenue from deals flagged as high churn risk.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-qep-warm" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Blocked</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                {String(commandQuery.data.commandStrip.blockedDeals)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Deals waiting on blocker resolution before close.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Clock4 className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Follow-ups</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
+                {String(commandQuery.data.commandStrip.overdueFollowUps)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Deals with overdue next touch scheduled.</p>
+            </DeckSurface>
           </div>
 
-          <Card className="p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Today&apos;s field priorities</p>
-            <div className="mt-3 space-y-3">
-              {priorities.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No mobile-priority items right now.</p>
-              ) : (
-                priorities.map((item) => (
-                  <div key={item.recommendationKey} className="rounded-xl border border-border/60 bg-muted/10 p-3">
+          <DeckSurface className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Today&apos;s field priorities</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Rep-specific priorities for fast field closes and voice capture.
+                </p>
+              </div>
+            </div>
+          </DeckSurface>
+
+          {priorities.length === 0 ? (
+            <DeckSurface className="border-dashed p-8 text-center">
+              <p className="text-sm text-muted-foreground">No mobile-priority items right now.</p>
+            </DeckSurface>
+          ) : (
+            <div className="space-y-3">
+              {priorities.map((item) => {
+                const laneClass = {
+                  blockers: "border-red-500/30 text-red-400",
+                  revenue_at_risk: "border-amber-500/30 text-amber-400",
+                  default: "border-border bg-card",
+                }[item.lane] || "border-border bg-card";
+
+                return (
+                  <DeckSurface className="p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -92,89 +140,72 @@ export function MobileFieldCommandPage() {
                               item.lane === "blockers"
                                 ? "border-red-500/30 text-red-400"
                                 : item.lane === "revenue_at_risk"
-                                ? "border-amber-500/30 text-amber-400"
-                                : "border-emerald-500/30 text-emerald-400"
+                                  ? "border-amber-500/30 text-amber-400"
+                                  : "border-border bg-card"
                             }`}
                           >
                             {item.lane.replace(/_/g, " ")}
                           </Badge>
-                          {item.stageName && <span className="text-[10px] text-muted-foreground">{item.stageName}</span>}
+                          {item.stageName && (
+                            <span className="text-xs text-muted-foreground ml-2">{item.stageName}</span>
+                          )}
                         </div>
-                        <p className="mt-2 text-sm font-medium text-foreground">{item.headline}</p>
-                        {(item.companyName || item.contactName) && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {[item.companyName, item.contactName].filter(Boolean).join(" · ")}
-                          </p>
+                        <p className="text-sm font-semibold text-foreground">{item.headline}</p>
+                      </div>
+                      <div className="mt-2 flex flex-col gap-2 items-start">
+                        {item.companyName && (
+                          <p className="text-xs text-muted-foreground">{item.companyName}</p>
                         )}
-                        {item.rationale[0] && (
-                          <p className="mt-2 text-xs text-muted-foreground">{item.rationale[0]}</p>
+                        {item.contactName && (
+                          <p className="text-xs text-muted-foreground">{item.contactName}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {item.rationale[0]}
+                        </p>
+                        {item.amount !== null && (
+                          <span className="text-sm font-semibold tracking-tight text-foreground">{formatCompactCurrency(item.amount)}</span>
                         )}
                       </div>
-                      {item.amount !== null && (
-                        <span className="text-sm font-semibold text-foreground">{formatCompactCurrency(item.amount)}</span>
-                      )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
                       {item.primaryAction.href ? (
                         <Button asChild size="sm" className="h-8">
-                          <Link to={item.primaryAction.href}>{item.primaryAction.label}</Link>
+                          <Link to={item.primaryAction.href}>
+                            {item.primaryAction.label} <ArrowUpRight className="ml-1 h-3 w-3" />
+                          </Link>
                         </Button>
                       ) : null}
                       {item.secondaryAction?.href ? (
                         <Button asChild size="sm" variant="outline" className="h-8">
-                          <Link to={item.secondaryAction.href}>{item.secondaryAction.label}</Link>
+                          <Link to={item.secondaryAction.href}>
+                            {item.secondaryAction.label}
+                          </Link>
                         </Button>
                       ) : null}
                     </div>
-                  </div>
-                ))
-              )}
+                  </DeckSurface>
+                );
+              })}
             </div>
-          </Card>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function QuickAction({
-  to,
-  icon: Icon,
-  label,
-}: {
-  to: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
+function QuickAction({ to, icon: Icon, label }: { to: string; icon: React.ComponentType<{ className?: string }>; label: string }) {
   return (
     <Link
       to={to}
-      className="flex min-h-[72px] flex-col justify-between rounded-xl border border-border bg-card px-4 py-3 transition hover:border-qep-orange/40 hover:bg-qep-orange/5"
+      className="flex min-h-[72px] flex-col justify-between rounded-xl border border-qep-deck-rule bg-qep-deck-elevated/40 px-4 py-3 transition hover:border-qep-orange/40 hover:bg-qep-orange/5"
     >
-      <Icon className="h-5 w-5 text-qep-orange" />
+      <Icon className="h-5 w-5 text-qep-orange" aria-hidden />
       <span className="text-sm font-medium text-foreground">{label}</span>
     </Link>
   );
 }
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
-  );
+function formatCompactCurrency(amount: number): string {
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}K`;
+  return `$${Math.round(amount)}`;
 }

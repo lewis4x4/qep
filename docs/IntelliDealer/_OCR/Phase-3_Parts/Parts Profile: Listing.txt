@@ -1,0 +1,201 @@
+Parts Profile: Listing                                                                              4/21/26, 3:33 PM
+
+
+
+
+                                                                              Search                     Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Product Support
+           > Parts Product Support > Parts Profile: Listing
+
+
+           Parts Profile: Listing
+           You can use the Parts Listing screen to search for parts within
+                                                                                       Data Source:
+           IntelliDealer. On this screen you can view, edit, copy, check part
+           availability, add a new part to the system, or search for parts.            PARTMAST
+
+           The Parts Listing screen can be accessed by navigating to                   Security: 820
+           Product Support > Parts > Parts Profile.                                    - Parts Profile
+
+           Topics in this section are:                                                 Revision:
+                                                                                       2025.09
+                     Searching Parts Listing
+
+                     Screen Description
+
+           See also: Listing Screens.
+
+
+           Searching Parts Listing
+
+           When searching for a parts profile and only one profile entry is
+           found, the system automatically opens the Parts Profile screen
+           displaying the corresponding profile.
+
+
+https://help.intellidealer.com/intellidealer/Content/parts.partsListing.htm                              Page 1 of 5
+Parts Profile: Listing                                                              4/21/26, 3:33 PM
+
+
+
+
+           If the Include Cross Reference Parts In Parts Search option is
+           selected on the System Settings: Location screen then:
+
+                     When searching by Part Number, any parts that have been
+                     cross-referenced to the part entered are also displayed in
+                     the search results to a maximum of 300. To see all available
+                     results, click the Export to CSV option and view the results
+                     in this format.
+
+                     The Description field includes an      icon for any parts
+                     that have a cross referenced part (as specified on the
+                     Cross Reference tab). The system searches for the part
+                     entered as a cross reference as well as on its own. For
+                     example, part RAFEP03 has a cross reference on part
+                     RAFEP03F. If you search for RAFEP03 you will see both
+                     RAFEP03F and DMKIT in the results.
+
+
+               Parts Listing screen showing results with cross
+           referenced parts
+
+
+
+
+           If From Bin or To Bin is selected, executing a search also scans
+           the Part Bin database table for a matching bin location.
+
+
+https://help.intellidealer.com/intellidealer/Content/parts.partsListing.htm              Page 2 of 5
+Parts Profile: Listing                                                                     4/21/26, 3:33 PM
+
+
+
+
+           If Description is selected, executing a search also scans the
+           Part Description database table for matching descriptions where
+           the status on the record is ACTIVE.
+
+
+           Screen Description
+
+                           Note: Information displayed in these fields can
+                           change depending on your Field Security settings.
+
+
+           The fields on the Parts Listing screen are:
+
+            Field                  Description
+             Part                   The part number assigned to the selected part.
+             Number
+                                    Hover over the Part Number on the search
+                                    results to display the options to View or Copy
+                                    the entry.
+
+             Description A brief description of the part.
+
+                                    If the part is cross-referenced, click the
+                                    indicator to display a full list of cross referenced
+                                    parts.
+
+             Search                 Search for parts by entering a search option. Use
+                                    this optional field to search using a key word.
+
+             Vendor                 The vendor number that supplies the part.
+
+             Source                 The part's source of supply code. This typically
+                                    represents the part's originating warehouse
+                                    location.
+
+                                    Valid source of supply codes are configured and
+                                    listed on the Source of Supply screen. Dealers
+                                    can use this field for their own purposes.
+
+             Class
+
+https://help.intellidealer.com/intellidealer/Content/parts.partsListing.htm                     Page 3 of 5
+Parts Profile: Listing                                                                   4/21/26, 3:33 PM
+
+
+
+
+                                    The class code of the selected part. In
+                                    conjunction with the Type code the class code is
+                                    typically used to group similar parts together.
+
+                                    Valid class codes are configured and listed on
+                                    the Classesscreen. Dealers can use this field for
+                                    their own purposes.
+
+             Type                   The type code for the selected part. In
+                                    conjunction with the Class code the type code is
+                                    typically used to group similar parts together.
+
+                                    Valid type codes are configured and listed on the
+                                    Types screen. Dealers can use this field for their
+                                    own purposes.
+
+             From                   The bin number indicates the part's physical
+             Bin/To Bin             location.
+
+                                    If this field appears highlighted, alternate bins
+                                    exist. Move the cursor over the Bin number to
+                                    view alternate Bin location numbers.
+
+             Select                 Toggle to display stocked items.
+             Stocked
+
+             OFC                    The order formula code for the part in the
+                                    corresponding branch location which determines
+                                    the amount of parts to order on the next stock
+                                    order shipment.
+
+                                    See Order Formula Codes Summary.
+
+             Location               The location that stocks the selected part.
+
+                                    You use multiple locations by selecting them
+                                    from the drop-down list.
+
+
+
+                  Searched items appear in a categorized list
+
+
+https://help.intellidealer.com/intellidealer/Content/parts.partsListing.htm                   Page 4 of 5
+Parts Profile: Listing                                                                                        4/21/26, 3:33 PM
+
+
+
+
+           The On Hand and On Order columns on search results list the
+           quantities currently held and how many are pending.
+
+           The Parts Availability, Mass Update, and Parts Inquiry
+           buttons open their respective windows in IntelliDealer.
+
+
+
+           Did you find this helpful? Yes No
+
+             For help with IntelliDealer contact support at: 1-855-876-2586.
+             To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+             emphasys.com
+
+             © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/parts.partsListing.htm                                        Page 5 of 5
+

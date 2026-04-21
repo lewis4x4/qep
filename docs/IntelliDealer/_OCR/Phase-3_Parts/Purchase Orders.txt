@@ -1,0 +1,489 @@
+Purchase Orders                                                                            4/21/26, 3:31 PM
+
+
+
+
+                                                                   Search                         Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Financial
+          Management > Accounts Payable > Purchase Orders
+
+
+          Purchase Orders
+          The Purchase Orders (PO) screen allows you to display purchase
+                                                                               Data
+          orders by status, edit preexisting purchase orders, and add new
+                                                                               Source: POHDR
+          purchase orders.
+                                                                               Security: 603 -
+          Purchase Orders relate to units (Equipment Profile) and other
+                                                                               PO System
+          items. When ordering parts, see Parts Ordering.
+                                                                               Learning
+          To open the Purchase Orders screen, navigate to Financial
+                                                                               Resources:
+          Management > Accounts Payable > Purchase Orders.
+                                                                               Creating a
+          -or-
+                                                                               Miscellaneous
+          navigate to Product Support > Equipment > Purchase Orders.
+                                                                               Purchase
+          Topics in this section are:                                          Order;
+                                                                               Creating an
+                  Creating a New Purchase Order                                Equipment
+                  Adding or Editing Base and Options from Within a Purchase    Purcahse
+                  Order                                                        Order
+
+                  Putting a Purchase Order on Order                            Revision:
+                                                                               2024.07
+                  Screen Description
+
+
+          Creating a New Purchase Order
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                                 Page 1 of 12
+Purchase Orders                                                                              4/21/26, 3:31 PM
+
+
+
+
+             1. Navigate to Financial Management > Accounts Payable >
+                Purchase Orders, then click the Click here to add a Purchase
+                Order link.
+
+                  The Create Purchase Order screen appears.
+
+
+                        The Create Purchase Order screen
+
+
+
+
+             2. Fill in the fields. Note that:
+
+                           Click the Search              icon to open the Vendor Selection
+                           screen.
+
+                           When selecting a Type, refer to Type.
+
+                           If the PO Number is left blank the system assigns a PO
+                           Number.
+
+             3. Click Save.
+
+                  The Purchase Order General tab appears.
+
+
+                        Purchase Order General tab
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                                 Page 2 of 12
+Purchase Orders                                                                       4/21/26, 3:31 PM
+
+
+
+
+             4. On each tab you can fill in additional information:
+
+                           Purchase Order General—add additional information
+                           regarding a new purchase order or edit information on a
+                           preexisting purchase order.
+
+                           Details—add items for order onto the purchase order.
+
+                           The Details tab allows you to import units onto a
+                           purchase order.
+
+                           For Miscellaneous type POs, you can distribute an item
+                           among several G/L accounts by selecting the add link
+                           from the Distribute field.
+
+                           Shipping—add shipping and delivery information and
+                           apply shipping charges to the purchase order.
+
+                           Terms & Conditions—add additional terms and
+                           conditions to a purchase order.
+
+                           Long Description—as the creator of the purchase order,
+                           add additional descriptions or comments. The description
+                           or comment can be used for internal purposes only or can
+                           be printed on the purchase order.
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                         Page 3 of 12
+Purchase Orders                                                                      4/21/26, 3:31 PM
+
+
+
+
+                           Call Tracking— track correspondence with a vendor
+                           regarding a purchase order.
+
+                           Printing Parameters— adjust printing parameters on the
+                           purchase order before printing and preview the purchase
+                           order before printing.
+
+                           Multimedia—add multimedia files such as photos to the
+                           purchase order.
+
+             5. When you are done, click one of:
+
+                           Save—save the PO in progress.
+
+                           Cancel—cancels the PO and provides an opportunity to
+                           leave a comment as to why.
+
+                           Close—close the PO window.
+
+
+          Adding or Editing Base and Options from
+          Within a Purchase Order
+
+             1. Navigate to Financial Management > Accounts Payable >
+                Purchase Orders.
+
+             2. Search for the desired PO then open it edit by moving the
+                cursor over a PO Number and selecting Edit from the pop-up
+                menu.
+
+             3. Click the Details tab, then click the Click here to add a unit
+                link.
+
+                  The Base Number Search screen appears.
+
+
+                        Base Number Search screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                        Page 4 of 12
+Purchase Orders                                                             4/21/26, 3:31 PM
+
+
+
+
+             4. Fill out the appropriate fields and click the Go >> link.
+                The Base Number Search screen refreshes listing the
+                generated search results.
+
+
+                        Base Number Search screen
+
+
+
+
+             5. Select a Base Number.
+
+                  The Options Search screen appears.
+
+
+                        Option Search screen
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                Page 5 of 12
+Purchase Orders                                                                 4/21/26, 3:31 PM
+
+
+
+
+             6. Select an option by clicking a checkbox.
+                - or -
+                Click Select All to select all listed options.
+
+
+                        Option Search screen
+
+
+
+
+             7. Click Save.
+
+                  The Receive/Cancel Unit screen appears listing the selected
+                  Base and Option codes.
+
+
+                        Receive/Cancel Unit screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                   Page 6 of 12
+Purchase Orders                                                                   4/21/26, 3:31 PM
+
+
+
+
+             8. Enter a Price, and search for or enter a Customer.
+
+             9. Click Save.
+
+                  The Details screen appears listing the added unit.
+
+
+                        Details tab
+
+
+
+
+           10. To edit a unit, move the cursor over the Base number and
+               select Edit from the pop-up menu.
+
+                  The Base & Options screen appears allowing you to edit any of
+                  the available fields.
+
+
+                        Details tab
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                      Page 7 of 12
+Purchase Orders                                                                      4/21/26, 3:31 PM
+
+
+
+
+          Putting a Purchase Order on Order
+
+          To put a Purchase Order on order, you must have the appropriate
+          security authorization for its status:
+
+                  PO Requested—you must have created the PO and be
+                  authorized to authorize or reject a purchase order.
+
+                  Waiting for Authorization—you must be allowed to authorize,
+                  reject, or order a purchase order but only if you did not create
+                  the purchase order.
+
+                  Authorized—you must have created the purchase order.
+
+             1. Navigate to Financial Management > Accounts Payable >
+                Purchase Orders.
+
+             2. Search for the desired PO then open it for edit by moving the
+                cursor over a PO Number and selecting Edit from the pop-up
+                menu.
+
+             3. To place the PO, click Order.
+
+                  The Order Comments screen appears.
+
+             4. Enter any comments related to the order of the selected
+                purchase order.
+
+             5. Click Save.
+
+                  The purchase order is placed on order and its status changes
+                  to On Order.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                        Page 8 of 12
+Purchase Orders                                                                        4/21/26, 3:31 PM
+
+
+
+
+             6. The Equipment Add/Edit screen appears. If desired, add an
+                Equipment Profile for the unit (if one does not exist) by clicking
+                the Add link or edit the unit on order.
+
+                  Adding a unit sets its status in the Equipment Profile to On
+                  Order, unless there is a Customer Number on the Purchase
+                  Order, in which case the status is set to Pre-Sold.
+
+             7. Click the Close button to return to the Purchase Order
+                General tab.
+
+
+          Screen Description
+
+          The sorting options on the Purchase Orders screen are:
+
+           Sort by
+           Field                Description
+
+           PO Number Sort the search results by PO number.
+
+           Type                 Sort the search results by PO type.
+
+           Status               Sort the search results by PO status.
+
+
+          The PO Statuses to search by are:
+
+           Status
+           Field                   Description
+           All                      Search through all status options.
+
+           PO Request               The PO has been created and saved, but has not
+                                    been submitted for Authorization.
+
+           Waiting for   The PO is waiting for the approval of the supervisor
+           Authorization (the PO system user with the proper authority).
+
+           Authorized               A supervisor has approved the PO, but it has not
+                                    been submitted to the vendor.
+
+           On Order                 The PO has been authorized and sent to the
+                                    vendor. On Order POs do not have any items
+                                    received or canceled.
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                          Page 9 of 12
+Purchase Orders                                                                           4/21/26, 3:31 PM
+
+
+
+
+           Canceled                 The PO has been canceled. Only the individual who
+                                    is creating the purchase order can cancel it before
+                                    it is placed On Order.
+
+           Back Order               Some of the items on the PO have been received or
+                                    canceled.
+
+           Completed                All items on the PO have been accounted for; either
+                                    they have been received or have been canceled.
+
+           Rejected                 The PO was Waiting for Authorization but was then
+                                    rejected by the supervisor. This purchase order
+                                    cannot be reactivated.
+
+
+          The search fields on the PO Orders screen are:
+
+           Field                Description
+
+           Select PO            A unique PO number.
+           Number
+
+           Select               A vendor number. Click the Search         icon to open
+           Vendor               the Vendor Selection screen.
+
+           Select               Select a PO type from the drop down list.
+           Type
+
+           Select               A location. Click the Search       icon to open the
+           Location             Location Selection screen.
+
+           Select      The description of the PO.
+           Description
+
+           Select     The ID of the user who created the PO. Click the
+           Created By Search icon to open the User Selection screen.
+
+           Select               The ID of the user who last changed the PO. Click the
+           Modified             Search icon to open the User Selection screen.
+           By
+
+           Select               The ID of the user who completed the PO takeover.
+           Takeover             Click the Search icon to open the User Selection
+           By                   screen.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                             Page 10 of 12
+Purchase Orders                                                                           4/21/26, 3:31 PM
+
+
+
+
+          The fields on the PO Orders screen are:
+
+           Field                Description
+
+           PO Number The purchase order number.
+
+           Type                 The type of purchase order. Can be one of:
+                                         All—all types of items.
+                                         Miscellaneous—items that must be ordered and
+                                         may be tied to a work order (optional). Some
+                                         examples include coffee, printer paper, and
+                                         sublet services.
+
+                                         Equipment—machines identified with stock
+                                         numbers (typically with serial numbers).
+
+                                         Fixed Assets—items for the dealership that
+                                         undergo scheduled depreciation. Possible
+                                         items include laptops or machines. Requires
+                                         Feature 502 - Fixed Assets.
+
+                                         Equipment Replenishment—used to suggest
+                                         machine stock orders for maintaining inventory
+                                         via minimum order levels.
+
+           Status               The current status of the purchase order.
+
+           Vendor               The name of the vendor the items are being ordered
+                                from.
+
+           Description A brief description of the purchase order.
+
+           Created By The user name of the user who created the purchase
+                      order.
+
+           Location             The branch location where the purchase order was
+                                created.
+
+
+          To save or reset search defaults, move the cursor over the
+          Bookmark and select either Save Defaults or Reset Defaults
+          from the drop down list.
+
+          Move the cursor over a PO Number and select one of:
+
+                  View—to view a completed or canceled purchase order.
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                             Page 11 of 12
+Purchase Orders                                                                                             4/21/26, 3:31 PM
+
+
+
+
+                  Edit—to edit a purchase order.
+
+                  Copy—to copy a purchase order.
+
+          Move the cursor over an Equipment Replenishment PO Number and
+          select Create PO From Replenishment from the pop-up menu to
+          create a PO from replenishment.
+
+          Click on a Vendor to open the Vendor Profile screen.
+
+          Select the Click here to add a purchase order link to add an
+          Equipment, Fixed Asset, or Miscellaneous purchase order. See
+          Creating a New Purchase Order.
+
+          Click on the Purchase Order Report link to run a Purchase Order
+          by Type or Equipment Replenishment report.
+
+          Click on the Modify default print parameters link to modify default
+          print parameters on the Printing Parameters screen.
+
+
+
+          Did you find this helpful? Yes No
+
+           For help with IntelliDealer contact support at: 1-855-876-2586.
+           To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+           emphasys.com
+
+           © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBPO01.htm                                               Page 12 of 12
+
