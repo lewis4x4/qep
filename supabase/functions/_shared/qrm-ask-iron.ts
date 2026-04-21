@@ -255,6 +255,56 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
     },
   },
   {
+    // Slice 13: the rep's own activity trail. Before this tool, Iron could
+    // see moves (recommender output) and signals (inbound events) but had
+    // zero visibility into what the rep actually did. "Did I call Acme this
+    // week?" forced Claude to fudge or apologize. list_my_touches pulls
+    // the crm_activities rows authored by the caller (rep pins to self;
+    // managers may query a specific rep_id), scoped by workspace and
+    // optionally by entity or activity_type.
+    //
+    // Distinct from list_recent_signals: that's the inbound event stream
+    // (emails coming in, telematics firing, etc.). list_my_touches is the
+    // outbound log — what the operator logged themselves.
+    name: "list_my_touches",
+    description:
+      "Recent activity trail for the caller — calls, emails, notes, follow-ups, meetings, tasks they've logged. Use for 'did I call <customer>', 'what did I do yesterday', 'any touches on <deal>', 'how many follow-ups this week'. Rep callers always see their own trail; admins/managers may pass rep_id to inspect another rep. Distinct from list_recent_signals: this is the operator's outbound log, not the inbound event stream.",
+    input_schema: {
+      type: "object",
+      properties: {
+        since_hours: {
+          type: "integer",
+          minimum: 1,
+          maximum: 168,
+          description:
+            "Only touches within the last N hours. Default 72 (covers a typical work-week).",
+        },
+        activity_types: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Filter to these activity types, e.g. ['call','follow_up','meeting']. Omit for all types.",
+        },
+        entity_type: {
+          type: "string",
+          enum: ["deal", "company", "contact"],
+          description:
+            "Narrow to touches tied to this entity. Requires entity_id.",
+        },
+        entity_id: {
+          type: "string",
+          description: "UUID for the entity scope. Pairs with entity_type.",
+        },
+        rep_id: {
+          type: "string",
+          description:
+            "UUID of a rep. Admins/managers use this to answer 'what has Jim done this week'. Reps are always scoped to themselves regardless of this field.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
     // Slice 11: account-centric mirror of summarize_deal. Equipment/parts
     // dealerships run on accounts (territories = companies, not deals), so
     // "what's going on at Acme?" is the single most common narrative
@@ -681,6 +731,100 @@ export function normalizeSummarizeCompanyInput(
   return { companyId, lookbackDays, sinceIso };
 }
 
+// ── list_my_touches normalization (Slice 13) ───────────────────────────────
+
+export interface NormalizedTouchFilters {
+  sinceIso: string;
+  limit: number;
+  activityTypes: string[];
+  entityType: "deal" | "company" | "contact" | null;
+  entityId: string | null;
+  /**
+   * When null, the executor returns touches authored by anyone in the
+   * workspace (elevated callers who omit rep_id). For rep callers this is
+   * always pinned to their own userId — the enforcement lives in the
+   * normalizer, not the executor, so the rule is auditable in one place.
+   */
+  repId: string | null;
+}
+
+export const LIST_MY_TOUCHES_DEFAULT_HOURS = 72;
+export const LIST_MY_TOUCHES_DEFAULT_LIMIT = 20;
+export const LIST_MY_TOUCHES_MAX_LIMIT = 50;
+/**
+ * Per-field body truncation for returned touches. Matches the
+ * summarize_deal cap so Claude's context budget is predictable when
+ * Iron bundles list_my_touches with a summarize_* tool.
+ */
+export const LIST_MY_TOUCHES_TEXT_CAP = 240;
+
+const ALLOWED_TOUCH_ENTITY_TYPES = new Set<"deal" | "company" | "contact">([
+  "deal",
+  "company",
+  "contact",
+]);
+
+/**
+ * Validate + normalize the LLM-supplied `list_my_touches` input. This is a
+ * read-only tool, so we prefer "silently widen" over "throw" for
+ * recoverable validation problems — a half-scoped entity filter becomes
+ * "no entity filter" rather than a hard error. The one enforcement that
+ * DOES bite is rep-pinning: rep callers always get `repId = caller.userId`
+ * regardless of what the model passed, same rule as list_my_moves.
+ */
+export function normalizeListMyTouchesInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+  nowMs: number = Date.now(),
+): NormalizedTouchFilters {
+  const hoursRaw = Number(input.since_hours ?? LIST_MY_TOUCHES_DEFAULT_HOURS);
+  const hours = Number.isFinite(hoursRaw)
+    ? Math.min(Math.max(Math.trunc(hoursRaw), 1), 168)
+    : LIST_MY_TOUCHES_DEFAULT_HOURS;
+  const sinceIso = new Date(nowMs - hours * 3_600_000).toISOString();
+
+  const limitRaw = Number(input.limit ?? LIST_MY_TOUCHES_DEFAULT_LIMIT);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), LIST_MY_TOUCHES_MAX_LIMIT)
+    : LIST_MY_TOUCHES_DEFAULT_LIMIT;
+
+  const rawTypes = Array.isArray(input.activity_types) ? input.activity_types : [];
+  const activityTypes = rawTypes
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .map((t) => t.trim());
+
+  // Entity scope: requires BOTH type and id. Unlike propose_move (which
+  // throws on partial scope because the write is destructive), a read with
+  // a half-scope is safely dropped: the LLM gets a wider answer and can
+  // narrow it on the next turn.
+  const rawEntityType = typeof input.entity_type === "string"
+    ? input.entity_type
+    : null;
+  const validEntityType = rawEntityType &&
+      ALLOWED_TOUCH_ENTITY_TYPES.has(
+        rawEntityType as "deal" | "company" | "contact",
+      )
+    ? (rawEntityType as "deal" | "company" | "contact")
+    : null;
+  const rawEntityId = typeof input.entity_id === "string"
+      && input.entity_id.trim().length > 0
+    ? input.entity_id.trim()
+    : null;
+  const entityType = validEntityType && rawEntityId ? validEntityType : null;
+  const entityId = validEntityType && rawEntityId ? rawEntityId : null;
+
+  // Rep pinning — identical rule to normalizeMoveFilters.
+  const requestedRepId =
+    typeof input.rep_id === "string" && input.rep_id.length > 0
+      ? input.rep_id
+      : null;
+  const repId = !ctx.caller.isServiceRole && ctx.caller.role === "rep"
+    ? ctx.caller.userId
+    : requestedRepId;
+
+  return { sinceIso, limit, activityTypes, entityType, entityId, repId };
+}
+
 // Shrink a potentially-long free-text field to keep the tool result small.
 // Single place to change the truncation rule so both activity.body and
 // signal.description cap identically.
@@ -747,6 +891,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeDeal(ctx, input) };
       case "summarize_company":
         return { ok: true, data: await toolSummarizeCompany(ctx, input) };
+      case "list_my_touches":
+        return { ok: true, data: await toolListMyTouches(ctx, input) };
       case "propose_move": {
         // Per-request cap. We return a structured error (not throw) so Claude
         // sees it in the tool result and can apologize to the operator
@@ -1224,6 +1370,89 @@ async function toolSummarizeCompany(
 }
 
 /**
+ * Slice 13 — the rep's own activity trail.
+ *
+ * Reads crm_activities filtered by workspace + soft-delete + caller's
+ * lookback window. Rep callers are pinned to their own userId upstream;
+ * elevated callers may scope to another rep via rep_id (with a workspace
+ * membership guard, same pattern as toolListMyMoves).
+ *
+ * The entity scope is optional. When provided, the normalizer has
+ * already validated that both type and id are present — we just map the
+ * type to the correct column and add an `eq`. If the caller leaves
+ * activity_types empty, we return every type that crm_activities carries
+ * (including system-generated rows like 'enrollment_created' or
+ * 'service_prompt'). Iron's system prompt nudges the LLM toward a
+ * canonical touches subset when the question is "what did I do".
+ */
+async function toolListMyTouches(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const f = normalizeListMyTouchesInput(input, ctx);
+
+  // Cross-tenant read guard. Elevated callers who targeted another rep id
+  // get a workspace-membership check before we pull their activity trail.
+  // Reps are already pinned to their own userId upstream, so this branch
+  // only runs for admin/manager/owner callers.
+  if (
+    f.repId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    f.repId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", f.repId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  let q = ctx.callerDb
+    .from("crm_activities")
+    .select(
+      "id, activity_type, body, occurred_at, created_by, deal_id, company_id, contact_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .gte("occurred_at", f.sinceIso);
+
+  if (f.repId) q = q.eq("created_by", f.repId);
+  if (f.activityTypes.length > 0) q = q.in("activity_type", f.activityTypes);
+  if (f.entityType && f.entityId) {
+    const column = f.entityType === "deal"
+      ? "deal_id"
+      : f.entityType === "company"
+      ? "company_id"
+      : "contact_id";
+    q = q.eq(column, f.entityId);
+  }
+
+  const { data, error } = await q
+    .order("occurred_at", { ascending: false })
+    .limit(f.limit);
+  if (error) throw error;
+
+  const touches = (data ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body, LIST_MY_TOUCHES_TEXT_CAP),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+    contact_id: row.contact_id,
+  }));
+
+  return { touches, count: touches.length };
+}
+
+/**
  * Create a move on behalf of the operator via the normal createMove path.
  * Provenance is stamped so the Today surface can badge this as "proposed by
  * Iron" (and a future recommender can weight or deduplicate against these).
@@ -1304,6 +1533,7 @@ Rules:
 - If the question names a customer or a contact, call search_entities first, then drill in.
 - For "what should I do", call list_my_moves.
 - For "what changed" or "anything new", call list_recent_signals.
+- For questions about the operator's own work — "did I call <customer>", "what did I do yesterday", "any touches on <deal> this week", "how many follow-ups" — call list_my_touches. This is the operator's outbound log; it is NOT the same as list_recent_signals (inbound events). For "what did I do" questions where system-generated activity rows would be noise, filter to the touch types operators actually log (activity_types: ['call','email','meeting','follow_up','note']).
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.

@@ -4,7 +4,12 @@ import {
   ASK_IRON_TOOLS,
   createAskIronSession,
   executeAskIronTool,
+  LIST_MY_TOUCHES_DEFAULT_HOURS,
+  LIST_MY_TOUCHES_DEFAULT_LIMIT,
+  LIST_MY_TOUCHES_MAX_LIMIT,
+  LIST_MY_TOUCHES_TEXT_CAP,
   MAX_PROPOSE_MOVES_PER_REQUEST,
+  normalizeListMyTouchesInput,
   normalizeMoveFilters,
   normalizeProposeMoveInput,
   normalizeSearchInput,
@@ -147,12 +152,13 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the eight tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the nine tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
     "get_deal_detail",
     "list_my_moves",
+    "list_my_touches",
     "list_recent_signals",
     "propose_move",
     "search_entities",
@@ -1588,5 +1594,357 @@ Deno.test(
     const res = await executeAskIronTool(ctx, "summarize_company", {});
     assertEquals(res.ok, false);
     assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);
+
+// ── normalizeListMyTouchesInput (Slice 13) ─────────────────────────────────
+
+Deno.test("normalizeListMyTouchesInput defaults since_hours to 72 (work-week)", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const fixedNow = Date.parse("2026-04-20T12:00:00Z");
+  const f = normalizeListMyTouchesInput({}, ctx, fixedNow);
+  const expected = new Date(
+    fixedNow - LIST_MY_TOUCHES_DEFAULT_HOURS * 3_600_000,
+  ).toISOString();
+  assertEquals(f.sinceIso, expected);
+  assertEquals(f.limit, LIST_MY_TOUCHES_DEFAULT_LIMIT);
+});
+
+Deno.test("normalizeListMyTouchesInput clamps since_hours above 168", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const fixedNow = Date.parse("2026-04-20T12:00:00Z");
+  const f = normalizeListMyTouchesInput({ since_hours: 500 }, ctx, fixedNow);
+  const expected = new Date(fixedNow - 168 * 3_600_000).toISOString();
+  assertEquals(f.sinceIso, expected);
+});
+
+Deno.test("normalizeListMyTouchesInput clamps since_hours below 1", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const fixedNow = Date.parse("2026-04-20T12:00:00Z");
+  const f = normalizeListMyTouchesInput({ since_hours: 0 }, ctx, fixedNow);
+  const expected = new Date(fixedNow - 1 * 3_600_000).toISOString();
+  assertEquals(f.sinceIso, expected);
+});
+
+Deno.test("normalizeListMyTouchesInput clamps limit to max 50", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput({ limit: 500 }, ctx);
+  assertEquals(f.limit, LIST_MY_TOUCHES_MAX_LIMIT);
+});
+
+Deno.test("normalizeListMyTouchesInput falls back to default limit when non-numeric", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput({ limit: "foo" }, ctx);
+  assertEquals(f.limit, LIST_MY_TOUCHES_DEFAULT_LIMIT);
+});
+
+Deno.test("normalizeListMyTouchesInput pins rep callers to self even if model passes another rep_id", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+  const f = normalizeListMyTouchesInput({ rep_id: "rep-other" }, ctx);
+  assertEquals(f.repId, "rep-me");
+});
+
+Deno.test("normalizeListMyTouchesInput lets managers target a specific rep_id", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "manager", userId: "mgr-1" });
+  const f = normalizeListMyTouchesInput({ rep_id: "rep-42" }, ctx);
+  assertEquals(f.repId, "rep-42");
+});
+
+Deno.test("normalizeListMyTouchesInput leaves repId null for elevated callers who omit rep_id", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "admin", userId: "admin-1" });
+  const f = normalizeListMyTouchesInput({}, ctx);
+  assertEquals(f.repId, null);
+});
+
+Deno.test("normalizeListMyTouchesInput accepts valid entity scope (deal + id)", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput(
+    { entity_type: "deal", entity_id: "d-1" },
+    ctx,
+  );
+  assertEquals(f.entityType, "deal");
+  assertEquals(f.entityId, "d-1");
+});
+
+Deno.test("normalizeListMyTouchesInput drops partial entity scope (type without id)", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput({ entity_type: "deal" }, ctx);
+  assertEquals(f.entityType, null);
+  assertEquals(f.entityId, null);
+});
+
+Deno.test("normalizeListMyTouchesInput drops partial entity scope (id without type)", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput({ entity_id: "d-1" }, ctx);
+  assertEquals(f.entityType, null);
+  assertEquals(f.entityId, null);
+});
+
+Deno.test("normalizeListMyTouchesInput rejects unknown entity_type", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput(
+    { entity_type: "equipment", entity_id: "e-1" },
+    ctx,
+  );
+  assertEquals(f.entityType, null);
+  assertEquals(f.entityId, null);
+});
+
+Deno.test("normalizeListMyTouchesInput filters non-string + empty activity_types", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const f = normalizeListMyTouchesInput(
+    { activity_types: ["call", "", 42, "  ", "email", null] as unknown[] },
+    ctx,
+  );
+  assertEquals(f.activityTypes, ["call", "email"]);
+});
+
+// ── executeAskIronTool list_my_touches ─────────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool list_my_touches scopes to workspace + soft-delete + since + caller",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    const res = await executeAskIronTool(ctx, "list_my_touches", {});
+    assertEquals(res.ok, true);
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(cap?.table, "crm_activities");
+    // workspace_id filter
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "workspace_id" && f.value === "ws-1",
+      ),
+      true,
+    );
+    // deleted_at is null
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "is" && f.column === "deleted_at" && f.value === null,
+      ),
+      true,
+    );
+    // since_hours -> gte on occurred_at
+    assertEquals(
+      cap?.filters.some((f) => f.op === "gte" && f.column === "occurred_at"),
+      true,
+    );
+    // rep pinning -> created_by = caller userId
+    assertEquals(
+      cap?.filters.some(
+        (f) =>
+          f.op === "eq" && f.column === "created_by" && f.value === "rep-me",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches skips created_by filter when elevated caller omits rep_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "admin", userId: "admin-1" });
+    await executeAskIronTool(ctx, "list_my_touches", {});
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "created_by",
+      ),
+      false,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches applies activity_types IN filter when provided",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "list_my_touches", {
+      activity_types: ["call", "follow_up"],
+    });
+    const cap = captures.find((c) => c.table === "crm_activities");
+    const inFilter = cap?.filters.find(
+      (f) => f.op === "in" && f.column === "activity_type",
+    );
+    assertEquals(inFilter?.value, ["call", "follow_up"]);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches maps entity_type=deal to deal_id column",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "list_my_touches", {
+      entity_type: "deal",
+      entity_id: "d-42",
+    });
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "deal_id" && f.value === "d-42",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches maps entity_type=company to company_id column",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "list_my_touches", {
+      entity_type: "company",
+      entity_id: "co-7",
+    });
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "company_id" && f.value === "co-7",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches maps entity_type=contact to contact_id column",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "list_my_touches", {
+      entity_type: "contact",
+      entity_id: "c-9",
+    });
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "contact_id" && f.value === "c-9",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches truncates long body fields at the text cap",
+  async () => {
+    const long = "x".repeat(LIST_MY_TOUCHES_TEXT_CAP * 2);
+    const { client } = makeStubClient({
+      crm_activities: {
+        data: [
+          {
+            id: "a-1",
+            activity_type: "note",
+            body: long,
+            occurred_at: "2026-04-20T10:00:00Z",
+            created_by: "rep-me",
+            deal_id: null,
+            company_id: null,
+            contact_id: null,
+          },
+        ],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    const res = await executeAskIronTool(ctx, "list_my_touches", {});
+    const payload = res.data as { touches: Array<{ body: string | null }>; count: number };
+    assertEquals(payload.touches.length, 1);
+    assertEquals(payload.touches[0].body!.length <= LIST_MY_TOUCHES_TEXT_CAP, true);
+    assertEquals(payload.touches[0].body!.endsWith("…"), true);
+    assertEquals(payload.count, 1);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches honors hard limit cap of 50",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "list_my_touches", { limit: 999 });
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(cap?.limit, LIST_MY_TOUCHES_MAX_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches blocks elevated cross-workspace rep targeting",
+  async () => {
+    const { client } = makeStubClient({
+      profiles: {
+        data: { id: "rep-other", workspace_id: "ws-OTHER" },
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, {
+      role: "manager",
+      userId: "mgr-1",
+      workspaceId: "ws-1",
+    });
+    const res = await executeAskIronTool(ctx, "list_my_touches", {
+      rep_id: "rep-other",
+    });
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("rep not in workspace"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool list_my_touches allows manager targeting a rep in the same workspace",
+  async () => {
+    const { client, captures } = makeStubClient({
+      profiles: {
+        data: { id: "rep-me", workspace_id: "ws-1" },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, {
+      role: "manager",
+      userId: "mgr-1",
+      workspaceId: "ws-1",
+    });
+    const res = await executeAskIronTool(ctx, "list_my_touches", {
+      rep_id: "rep-me",
+    });
+    assertEquals(res.ok, true);
+    const cap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      cap?.filters.some(
+        (f) => f.op === "eq" && f.column === "created_by" && f.value === "rep-me",
+      ),
+      true,
+    );
   },
 );
