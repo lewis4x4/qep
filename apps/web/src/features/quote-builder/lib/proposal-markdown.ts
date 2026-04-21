@@ -38,6 +38,7 @@ import {
 } from "./proposal-call-flips";
 import type { ProposalApplyVerdict } from "./proposal-apply-verdict";
 import { describeProposalVerdictPill } from "./proposal-apply-verdict";
+import type { ProposalWatchlist } from "./proposal-watchlist";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -58,6 +59,11 @@ export interface ProposalMarkdownContext {
    *  reasons. Null when the caller didn't compute one (UI that wants
    *  the receipts without the verdict). */
   verdict: ProposalApplyVerdict | null;
+  /** 20z — per-factor watchlist for post-apply monitoring. Null when
+   *  the caller didn't compute one; empty (`items: []`) is also
+   *  handled — section is omitted cleanly when no factors warrant
+   *  monitoring (e.g. an all-healthy strengthen proposal). */
+  watchlist: ProposalWatchlist | null;
 }
 
 /**
@@ -193,6 +199,29 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
         const sign = d.contribution > 0 ? "+" : "";
         lines.push(`  - \`${sign}${d.contribution}\` — ${d.rationale}`);
       }
+    }
+  }
+
+  // Watchlist (20z) — post-apply monitoring plan, surfaces last in
+  // the context block because it's relevant only AFTER the decision
+  // above has been made. A ticket reader skimming for "what do we
+  // watch?" finds it at the bottom of the context, just above the
+  // proposal body that it pertains to. Omitted cleanly when empty
+  // (no factors warrant monitoring) — the markdown doesn't emit a
+  // "Watchlist: none" line to avoid stub-placeholder noise.
+  if (ctx.watchlist && ctx.watchlist.items.length > 0) {
+    const headline = ctx.watchlist.headline ?? `${ctx.watchlist.items.length} factors to monitor after applying.`;
+    lines.push(`**Watchlist**: ${headline}`);
+    for (const item of ctx.watchlist.items) {
+      const priorityTag =
+        item.priority === "high"
+          ? "🔴 high"
+          : item.priority === "medium"
+            ? "🟡 medium"
+            : "⚪ low";
+      lines.push(`  - \`${item.label}\` · ${item.action} · ${priorityTag}`);
+      lines.push(`    - _Concern_: ${item.concern}`);
+      lines.push(`    - _Trigger_: ${item.trigger}`);
     }
   }
 

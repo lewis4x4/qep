@@ -91,6 +91,10 @@ import {
   describeProposalVerdictPill,
   type ProposalApplyVerdict,
 } from "../lib/proposal-apply-verdict";
+import {
+  computeProposalWatchlist,
+  type ProposalWatchlist,
+} from "../lib/proposal-watchlist";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -465,6 +469,19 @@ export function QuoteListPage() {
     proposalUrgency,
   ]);
 
+  /**
+   * Slice 20z — post-apply watchlist. For each actionable factor,
+   * emits a concern + reconsideration trigger + priority ranking so
+   * the manager has a concrete monitoring plan the moment they apply.
+   * Ranked high→medium→low inside the module. Empty / null when no
+   * factors warrant monitoring — the UI and markdown both drop the
+   * section cleanly rather than showing "0 watched."
+   */
+  const proposalWatchlist = useMemo<ProposalWatchlist | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalWatchlist(scorerProposal, factorDriftReport);
+  }, [scorerProposal, factorDriftReport]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -561,6 +578,7 @@ export function QuoteListPage() {
           confidence={proposalConfidence}
           callFlips={proposalCallFlips}
           verdict={proposalVerdict}
+          watchlist={proposalWatchlist}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1634,6 +1652,7 @@ function ScorerProposalCard({
   confidence,
   callFlips,
   verdict,
+  watchlist,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1667,6 +1686,12 @@ function ScorerProposalCard({
    *  read the recommendation first and the receipts below it. Null
    *  when no proposal exists at all. */
   verdict: ProposalApplyVerdict | null;
+  /** Slice 20z — post-apply watchlist. Per-factor monitoring plan
+   *  ranked by priority (high/medium/low) with concrete reconsider
+   *  triggers. Rendered in the expanded panel and woven into the
+   *  clipboard markdown so the ticket carries an actionable checklist
+   *  for the N days after the proposal lands. Null when no proposal. */
+  watchlist: ProposalWatchlist | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1691,13 +1716,14 @@ function ScorerProposalCard({
 
   async function handleCopy() {
     try {
-      // Slice 20u/20x/20y — the clipboard carries the full evidence
+      // Slice 20u/20x/20y/20z — the clipboard carries the full evidence
       // chain: the 20y verdict on top (apply/review/hold/defer + ranked
       // reasons), then urgency, calibration drift, factor drift,
-      // what-if, per-deal call flips (20w), confidence (20v), and
-      // finally the proposal body. The context renderer falls through
-      // to the bare 20m output when every section is silent, so nothing
-      // bloats the ticket without earning it.
+      // what-if, per-deal call flips (20w), confidence (20v), the
+      // post-apply watchlist (20z), and finally the proposal body.
+      // The context renderer falls through to the bare 20m output
+      // when every section is silent, so nothing bloats the ticket
+      // without earning it.
       const markdown = renderProposalMarkdownWithContext(proposal, {
         calibrationDrift,
         factorDrift,
@@ -1706,6 +1732,7 @@ function ScorerProposalCard({
         confidence,
         callFlips,
         verdict,
+        watchlist,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -1982,6 +2009,16 @@ function ScorerProposalCard({
                   changing any verdicts"), because that's still a fact
                   the manager wants to know before approving. */}
               {callFlips && <ScorerProposalCallFlipsRow report={callFlips} />}
+              {/* Slice 20z — post-apply watchlist. Rendered below the
+                  call-flips so a reviewer reads the decision signals
+                  first ("here's what the proposal does") and THEN the
+                  monitoring plan ("here's what to check after applying").
+                  Hidden when the watchlist has no items — a well-sampled
+                  strengthen proposal with stable drift doesn't need a
+                  post-apply todo list. */}
+              {watchlist && watchlist.items.length > 0 && (
+                <ScorerProposalWatchlistRow watchlist={watchlist} />
+              )}
               {actionable.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
@@ -2095,6 +2132,79 @@ function ScorerProposalCallFlipsRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Slice 20z — post-apply watchlist row inside the ScorerProposalCard.
+ *
+ * Lists each factor the manager should monitor after applying, with
+ * its action verb, priority badge (🔴/🟡/⚪ matching the markdown
+ * copy), concern, and reconsideration trigger. The reasoning behind
+ * "concern + trigger" rather than just "concern": the trigger tells
+ * the manager exactly what data point would change their mind, so
+ * when they come back in 30 days they know WHAT to look at, not
+ * just THAT something needs looking at.
+ *
+ * Visual design stays subdued — a neutral muted border, same tone
+ * as the call-flips row. Post-apply monitoring is important but
+ * it's not a change-the-color-of-the-card signal; the verdict
+ * already did that.
+ */
+function ScorerProposalWatchlistRow({
+  watchlist,
+}: {
+  watchlist: ProposalWatchlist;
+}) {
+  return (
+    <div
+      className="rounded border border-violet-500/15 bg-background/40 p-2"
+      role="region"
+      aria-label="Post-apply watchlist"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+          Post-apply watchlist
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {watchlist.items.length} to monitor
+        </div>
+      </div>
+      {watchlist.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">{watchlist.headline}</p>
+      )}
+      <ul className="mt-1.5 space-y-1.5">
+        {watchlist.items.map((item, i) => {
+          const priorityTone =
+            item.priority === "high"
+              ? { icon: "🔴", color: "text-rose-300" }
+              : item.priority === "medium"
+                ? { icon: "🟡", color: "text-amber-300" }
+                : { icon: "⚪", color: "text-muted-foreground" };
+          return (
+            <li
+              key={`${item.label}-${i}`}
+              className="border-l border-violet-500/20 pl-2"
+              aria-label={`Watch ${item.label}: ${item.action}, ${item.priority} priority`}
+            >
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className={priorityTone.color}>{priorityTone.icon}</span>
+                <span className="font-mono text-foreground truncate" title={item.label}>
+                  {item.label}
+                </span>
+                <span className="text-muted-foreground">· {item.action}</span>
+              </div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                <span className="text-foreground">Concern:</span> {item.concern}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                <span className="text-foreground">Trigger:</span> {item.trigger}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

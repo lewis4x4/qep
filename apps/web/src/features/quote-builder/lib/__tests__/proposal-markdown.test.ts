@@ -22,6 +22,7 @@ import type { ScorerWhatIfResult } from "../scorer-what-if";
 import type { ProposalConfidenceResult } from "../proposal-confidence";
 import type { ProposalCallFlipReport } from "../proposal-call-flips";
 import type { ProposalApplyVerdict } from "../proposal-apply-verdict";
+import type { ProposalWatchlist } from "../proposal-watchlist";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -72,6 +73,7 @@ function nullCtx(): ProposalMarkdownContext {
     confidence: null,
     callFlips: null,
     verdict: null,
+    watchlist: null,
   };
 }
 
@@ -900,5 +902,134 @@ describe("renderProposalMarkdownWithContext — verdict section (20y)", () => {
     const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
     expect(md).not.toContain("**Verdict**");
     expect(md).toContain("**Urgency**");
+  });
+});
+
+// ── Slice 20z additions — watchlist in the markdown ──────────────────
+
+describe("renderProposalMarkdownWithContext — watchlist section (20z)", () => {
+  test("non-empty watchlist renders headline + per-item priority + concern + trigger", () => {
+    const watchlist: ProposalWatchlist = {
+      items: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          concern: "Proposal flipped the sign of this factor — a sign reversal is the largest behavior change the scorer can make.",
+          trigger: "If hit-rate-when-present drifts back within ±5pp of hit-rate-when-absent over the next 20 closed deals, reconsider — the flip may be chasing noise.",
+          priority: "high",
+        },
+        {
+          label: "Ancient factor",
+          action: "drop",
+          concern: "Proposal drops this factor from the scorer — after applying, the scorer will no longer consider it at all.",
+          trigger: "If |lift| rises above ±10pp over the next 20 closed deals, reconsider — the signal may have come back.",
+          priority: "medium",
+        },
+      ],
+      headline: "2 factors to monitor after applying — 1 high-priority (sign reversals).",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), watchlist };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain(
+      "**Watchlist**: 2 factors to monitor after applying — 1 high-priority (sign reversals).",
+    );
+    expect(md).toContain("  - `Trade in hand` · flip · 🔴 high");
+    expect(md).toContain("    - _Concern_: Proposal flipped the sign of this factor");
+    expect(md).toContain("    - _Trigger_: If hit-rate-when-present drifts back");
+    expect(md).toContain("  - `Ancient factor` · drop · 🟡 medium");
+  });
+
+  test("empty watchlist (no items) → section omitted entirely", () => {
+    const watchlist: ProposalWatchlist = {
+      items: [],
+      headline: null,
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), watchlist };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Watchlist**");
+  });
+
+  test("null watchlist → section omitted entirely", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx() };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Watchlist**");
+  });
+
+  test("low-priority item renders ⚪ icon", () => {
+    const watchlist: ProposalWatchlist = {
+      items: [
+        {
+          label: "Volatile factor",
+          action: "weaken",
+          concern: "Proposal weakens this factor — the signal survives but at reduced magnitude.",
+          trigger: "If hit-rate-when-present recovers above its pre-weakening baseline, revisit.",
+          priority: "low",
+        },
+      ],
+      headline: "1 factor to monitor closely after applying.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), watchlist };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("  - `Volatile factor` · weaken · ⚪ low");
+  });
+
+  test("watchlist sits below confidence, above proposal body", () => {
+    const watchlist: ProposalWatchlist = {
+      items: [
+        {
+          label: "F",
+          action: "flip",
+          concern: "x",
+          trigger: "y",
+          priority: "high",
+        },
+      ],
+      headline: "1 factor to monitor closely after applying.",
+      empty: false,
+    };
+    const confidence: ProposalConfidenceResult = {
+      confidence: 70,
+      band: "high",
+      drivers: [],
+      rationale: "ok",
+      dampenedByThinSample: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), confidence, watchlist };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxConfidence = md.indexOf("**Confidence**");
+    const idxWatchlist = md.indexOf("**Watchlist**");
+    const idxProposal = md.indexOf("## Scorer Evolution Proposal");
+    expect(idxConfidence).toBeGreaterThanOrEqual(0);
+    expect(idxWatchlist).toBeGreaterThan(idxConfidence);
+    expect(idxProposal).toBeGreaterThan(idxWatchlist);
+  });
+
+  test("headline falls back to generic count when watchlist.headline is null", () => {
+    const watchlist: ProposalWatchlist = {
+      items: [
+        {
+          label: "F",
+          action: "flip",
+          concern: "x",
+          trigger: "y",
+          priority: "high",
+        },
+        {
+          label: "G",
+          action: "drop",
+          concern: "x",
+          trigger: "y",
+          priority: "medium",
+        },
+      ],
+      headline: null, // weird shape — item count > 0 but no headline
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), watchlist };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Watchlist**: 2 factors to monitor after applying.");
   });
 });
