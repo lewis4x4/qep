@@ -35,6 +35,8 @@ import type {
   PlaysRunResult,
   PlayDraftInput,
   PlayDraftResult,
+  KnowledgeGapsListInput,
+  KnowledgeGapsListResult,
 } from "./service.ts";
 import {
   actionDocumentPlay,
@@ -48,6 +50,7 @@ import {
   getDocumentNeighbors,
   listDocumentPlays,
   listDocuments,
+  listKnowledgeGaps,
   moveDocument,
   moveFolder,
   reindexDocument,
@@ -75,6 +78,7 @@ export interface DocumentRouterService {
   playAction(ctx: DocumentRouterContext, input: PlayActionInput): Promise<PlayActionResult>;
   playsRun(ctx: DocumentRouterContext, input: PlaysRunInput): Promise<PlaysRunResult>;
   playDraft(ctx: DocumentRouterContext, input: PlayDraftInput): Promise<PlayDraftResult>;
+  knowledgeGapsList(ctx: DocumentRouterContext, input: KnowledgeGapsListInput): Promise<KnowledgeGapsListResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -254,6 +258,7 @@ async function defaultService(): Promise<DocumentRouterService> {
     playAction: actionDocumentPlay,
     playsRun: runPlaysBatch,
     playDraft: draftFromPlay,
+    knowledgeGapsList: listKnowledgeGaps,
   };
 }
 
@@ -440,6 +445,17 @@ export async function handleDocumentRouterRequest(
       const payload = await service.playDraft(ctx, {
         playId: body.playId,
         flow: body.flow,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/knowledge-gaps") {
+      const documentIdFilter = safeText(url.searchParams.get("document_id")) ?? null;
+      const limitRaw = url.searchParams.get("limit");
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const payload = await service.knowledgeGapsList(ctx, {
+        documentId: documentIdFilter,
+        limit: Number.isFinite(limit) ? (limit as number) : undefined,
       });
       return crmOk(payload, { origin });
     }

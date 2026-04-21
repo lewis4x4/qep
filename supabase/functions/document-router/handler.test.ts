@@ -117,6 +117,7 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       question: "test",
       answer: "",
       citations: [],
+      gapCaptured: false,
     })),
     playsList: overrides.playsList ?? (async () => ({ plays: [] })),
     playAction: overrides.playAction ?? (async (_ctx, input) => ({
@@ -155,6 +156,7 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       playId: input.playId,
       elapsedMs: 42,
     })),
+    knowledgeGapsList: overrides.knowledgeGapsList ?? (async () => ({ gaps: [] })),
   };
 }
 
@@ -449,6 +451,7 @@ Deno.test("document-router ask endpoint forwards question and returns citations"
           confidence: 0.93,
         },
       ],
+      gapCaptured: false,
     }),
   });
 

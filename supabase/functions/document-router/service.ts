@@ -252,6 +252,30 @@ export interface AskResult {
   question: string;
   answer: string;
   citations: AskCitation[];
+  gapCaptured: boolean;
+}
+
+export interface KnowledgeGapsListInput {
+  documentId?: string | null;
+  limit?: number;
+}
+
+export interface KnowledgeGap {
+  id: string;
+  workspaceId: string;
+  documentId: string | null;
+  questionText: string;
+  askedAt: string;
+  topCitationConfidence: number | null;
+  userReaction: string | null;
+  answerPreview: string | null;
+  traceId: string | null;
+  clusterId: string | null;
+  promotedDocumentId: string | null;
+}
+
+export interface KnowledgeGapsListResult {
+  gaps: KnowledgeGap[];
 }
 
 export interface PlaysListInput {
@@ -923,6 +947,7 @@ export async function askDocument(ctx: DocumentRouterContext, input: AskInput): 
       question,
       answer: "This document has no extracted paragraph chunks yet, so I can't answer against it. Re-ingest the file to enable Ask.",
       citations: [],
+      gapCaptured: false,
     };
   }
 
@@ -1082,13 +1107,96 @@ ${bundled}
     }
   })();
 
+  const topConfidence = citations[0]?.confidence ?? 0;
+  const answerText = (parsed.answer ?? "").slice(0, 4000);
+  // Slice IX: capture knowledge gaps when confidence is low or when
+  // there were zero citations. Fire-and-forget; write failures are
+  // logged and dropped.
+  const gapThreshold = 0.5;
+  const gapTriggered = citations.length === 0 || topConfidence < gapThreshold;
+  if (gapTriggered) {
+    void (async () => {
+      try {
+        const encoder = new TextEncoder();
+        const qHashBuf = await crypto.subtle.digest(
+          "SHA-256",
+          encoder.encode(`${ctx.workspaceId}:${question.toLowerCase().replace(/\s+/g, " ").trim()}`),
+        );
+        const questionHash = Array.from(new Uint8Array(qHashBuf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        const evidenceHashBuf = await crypto.subtle.digest(
+          "SHA-256",
+          encoder.encode(citations.map((c) => c.chunkId).join("|") || "no_citations"),
+        );
+        const evidenceHash = Array.from(new Uint8Array(evidenceHashBuf))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
+        const { error: gapError } = await ctx.admin.from("document_knowledge_gaps").insert({
+          workspace_id: ctx.workspaceId,
+          document_id: document.id,
+          question_text: question.slice(0, 2000),
+          question_hash: questionHash,
+          asked_by: ctx.caller.userId,
+          retrieved_evidence_hash: evidenceHash,
+          user_reaction: citations.length === 0 ? "abandoned" : "low_confidence",
+          top_citation_confidence: topConfidence,
+          answer_preview: answerText.slice(0, 500),
+          trace_id: traceId,
+        });
+        if (gapError) {
+          console.warn("[document-router] knowledge_gap insert failed", gapError.message);
+        }
+      } catch (err) {
+        console.warn("[document-router] knowledge_gap insert threw", err);
+      }
+    })();
+  }
+
   return {
     documentId: document.id,
     traceId,
     question,
-    answer: (parsed.answer ?? "").slice(0, 4000),
+    answer: answerText,
     citations,
+    gapCaptured: gapTriggered,
   };
+}
+
+export async function listKnowledgeGaps(
+  ctx: DocumentRouterContext,
+  input: KnowledgeGapsListInput,
+): Promise<KnowledgeGapsListResult> {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  let query = ctx.callerDb
+    .from("document_knowledge_gaps")
+    .select(
+      "id, workspace_id, document_id, question_text, asked_at, top_citation_confidence, user_reaction, answer_preview, trace_id, cluster_id, promoted_document_id",
+    )
+    .is("deleted_at", null)
+    .order("asked_at", { ascending: false })
+    .limit(limit);
+  if (input.documentId) query = query.eq("document_id", input.documentId);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const gaps: KnowledgeGap[] = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id ?? ""),
+    workspaceId: String(row.workspace_id ?? ""),
+    documentId: row.document_id ? String(row.document_id) : null,
+    questionText: String(row.question_text ?? ""),
+    askedAt: String(row.asked_at ?? ""),
+    topCitationConfidence: typeof row.top_citation_confidence === "number" ? row.top_citation_confidence : null,
+    userReaction: row.user_reaction ? String(row.user_reaction) : null,
+    answerPreview: row.answer_preview ? String(row.answer_preview) : null,
+    traceId: row.trace_id ? String(row.trace_id) : null,
+    clusterId: row.cluster_id ? String(row.cluster_id) : null,
+    promotedDocumentId: row.promoted_document_id ? String(row.promoted_document_id) : null,
+  }));
+
+  return { gaps };
 }
 
 export async function createFolder(ctx: DocumentRouterContext, input: CreateFolderInput): Promise<FolderSummary> {
