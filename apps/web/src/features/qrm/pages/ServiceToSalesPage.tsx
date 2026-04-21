@@ -1,8 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, DollarSign, Loader2, TrendingUp, Wrench } from "lucide-react";
+import { ArrowUpRight, Loader2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { buildAccountCommandHref } from "../lib/account-command";
@@ -14,6 +13,7 @@ import {
 } from "../lib/service-to-sales";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface, SignalChip, StatusDot, type StatusTone } from "../components/command-deck";
 
 const DRAFT_EMAIL_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/draft-email`;
 
@@ -50,6 +50,18 @@ interface FleetSignalRow {
   outreach_status: string | null;
   outreach_deal_value: number | null;
   equipment_serial: string | null;
+}
+
+function fmtMoney(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
+  return `$${Math.round(v)}`;
+}
+
+function pressureTone(level: "high" | "medium" | "low"): StatusTone {
+  if (level === "high") return "hot";
+  if (level === "medium") return "warm";
+  return "cool";
 }
 
 export function ServiceToSalesPage() {
@@ -143,144 +155,131 @@ export function ServiceToSalesPage() {
   });
 
   const board = boardQuery.data;
+  const summary = board?.summary ?? {
+    totalCases: 0,
+    highPressureCases: 0,
+    openRevenueCandidates: 0,
+    overdueCases: 0,
+  };
+
+  // Cascading Iron briefing — route to the sharpest svc→sales lever.
+  const svcSalesIronHeadline = boardQuery.isLoading
+    ? "Fusing service jobs, fleet machines, and replacement signals…"
+    : boardQuery.isError
+      ? "Service-to-sales offline — one of the feeders failed. Check the console."
+      : summary.highPressureCases > 0
+        ? `${summary.highPressureCases} high-pressure case${summary.highPressureCases === 1 ? "" : "s"} — recurring service pain ready for a trade-up conversation. ${summary.overdueCases} overdue.`
+        : summary.overdueCases > 0
+          ? `${summary.overdueCases} case${summary.overdueCases === 1 ? "" : "s"} with overdue downtime — unblock the service work before the replacement talk.`
+          : summary.openRevenueCandidates > 0
+            ? `${summary.openRevenueCandidates} revenue candidate${summary.openRevenueCandidates === 1 ? "" : "s"} carrying outreach value — draft the trade-up before the window closes.`
+            : summary.totalCases > 0
+              ? `${summary.totalCases} case${summary.totalCases === 1 ? "" : "s"} tracked. No acute pressure — work the consultative motion.`
+              : "No service-to-sales motion right now. Keep an eye on fresh breakdowns.";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Service-to-Sales"
         subtitle="Recurring breakdowns and downtime risk translated into replacement and upgrade motion."
+        crumb={{ surface: "PULSE", lens: "SVC→SALES", count: summary.totalCases }}
+        metrics={[
+          { label: "Cases", value: summary.totalCases, tone: summary.totalCases > 0 ? "active" : undefined },
+          { label: "High press.", value: summary.highPressureCases, tone: summary.highPressureCases > 0 ? "hot" : undefined },
+          { label: "Revenue", value: summary.openRevenueCandidates, tone: summary.openRevenueCandidates > 0 ? "live" : undefined },
+          { label: "Overdue", value: summary.overdueCases, tone: summary.overdueCases > 0 ? "warm" : undefined },
+        ]}
+        ironBriefing={{
+          headline: svcSalesIronHeadline,
+          actions: [{ label: "Service board →", href: "/service" }],
+        }}
       />
       <QrmSubNav />
 
       {boardQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading service-to-sales motion…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading service-to-sales motion…</DeckSurface>
       ) : boardQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-qep-hot/40 bg-qep-hot/5 p-6 text-sm text-qep-hot">
           {boardQuery.error instanceof Error ? boardQuery.error.message : "Service-to-sales is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={Wrench} label="Cases" value={String(board.summary.totalCases)} detail="Machines with recurring service pain and upgrade pressure." />
-            <SummaryCard icon={TrendingUp} label="High pressure" value={String(board.summary.highPressureCases)} detail="Immediate replacement or upgrade conversations." tone="warn" />
-            <SummaryCard icon={DollarSign} label="Revenue candidates" value={String(board.summary.openRevenueCandidates)} detail="Cases already carrying outreach deal value." />
-            <SummaryCard icon={Wrench} label="Overdue downtime" value={String(board.summary.overdueCases)} detail="Cases with overdue open service work." tone={board.summary.overdueCases > 0 ? "warn" : "default"} />
+        <DeckSurface className="p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">Replacement motion queue</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Customer-owned machines only. Ranked by recurring service pain, downtime exposure, and replacement confidence.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em]">
+              <Link to="/service">
+                Service <ArrowUpRight className="ml-1 h-3 w-3" />
+              </Link>
+            </Button>
           </div>
 
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Replacement motion queue</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Customer-owned machines only. Ranked by recurring service pain, downtime exposure, and replacement confidence.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to="/service">
-                  Open service <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {board.cases.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No service-driven replacement cases are active right now.</p>
-              ) : (
-                board.cases.slice(0, 12).map((item) => {
-                  const drafting = draftMutation.isPending
-                    && draftMutation.variables?.machineId === item.machineId;
-                  return (
-                    <div key={item.machineId} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">{item.machineName}</p>
-                            <PressurePill level={item.tradePressure} />
-                            {item.replacementDate ? (
-                              <span className="text-[11px] text-muted-foreground">
-                                replacement {new Date(item.replacementDate).toLocaleDateString()}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {item.serviceCount180d} service jobs in 180d
-                            {item.openJobCount > 0 ? ` · ${item.openJobCount} open` : ""}
-                            {item.overdueOpenJobs > 0 ? ` · ${item.overdueOpenJobs} overdue` : ""}
-                            {item.engineHours != null ? ` · ${Math.round(item.engineHours).toLocaleString()}h` : ""}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {item.recurringProblem ?? "Recurring service pain detected"} · spend {formatCurrency(item.totalServiceSpend)}
-                            {item.outreachDealValue != null ? ` · upside ${formatCurrency(item.outreachDealValue)}` : ""}
-                          </p>
-                          <p className="mt-2 text-xs text-muted-foreground">{item.reasons.join(" · ")}</p>
+          <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
+            {board.cases.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">No service-driven replacement cases are active right now.</p>
+            ) : (
+              board.cases.slice(0, 12).map((item) => {
+                const tone = pressureTone(item.tradePressure);
+                const drafting = draftMutation.isPending && draftMutation.variables?.machineId === item.machineId;
+                return (
+                  <div key={item.machineId} className="flex flex-col gap-2 px-3 py-2.5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <StatusDot tone={tone} pulse={tone === "hot"} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-[13px] font-medium text-foreground">{item.machineName}</p>
+                          <SignalChip label={`${item.tradePressure} pressure`} tone={tone} />
+                          {item.replacementDate ? (
+                            <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                              rep {new Date(item.replacementDate).toLocaleDateString()}
+                            </span>
+                          ) : null}
                         </div>
-                        <div className="flex flex-wrap gap-2 lg:justify-end">
-                          <Button asChild size="sm" variant="ghost">
-                            <Link to={buildAccountCommandHref(item.companyId)}>
-                              Account <ArrowUpRight className="ml-1 h-3 w-3" />
-                            </Link>
-                          </Button>
-                          <Button asChild size="sm" variant="ghost">
-                            <Link to={`/equipment/${item.machineId}`}>
-                              Machine <ArrowUpRight className="ml-1 h-3 w-3" />
-                            </Link>
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => draftMutation.mutate({ companyId: item.companyId, machineId: item.machineId })}
-                            disabled={draftMutation.isPending}
-                          >
-                            {drafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <TrendingUp className="mr-1 h-3 w-3" />}
-                            Draft trade-up
-                          </Button>
-                        </div>
+                        <p className="mt-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                          {item.serviceCount180d} svc/180d
+                          {item.openJobCount > 0 ? ` · ${item.openJobCount} open` : ""}
+                          {item.overdueOpenJobs > 0 ? ` · ${item.overdueOpenJobs} overdue` : ""}
+                          {item.engineHours != null ? ` · ${Math.round(item.engineHours).toLocaleString()}h` : ""}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {item.recurringProblem ?? "Recurring service pain detected"} · spend {formatCurrency(item.totalServiceSpend)}
+                          {item.outreachDealValue != null ? ` · upside ${fmtMoney(item.outreachDealValue)}` : ""}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{item.reasons.join(" · ")}</p>
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </Card>
-        </>
+                    <div className="flex flex-wrap gap-1.5 lg:shrink-0 lg:justify-end">
+                      <Button asChild size="sm" variant="ghost" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
+                        <Link to={buildAccountCommandHref(item.companyId)}>
+                          Account <ArrowUpRight className="ml-1 h-3 w-3" />
+                        </Link>
+                      </Button>
+                      <Button asChild size="sm" variant="ghost" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80">
+                        <Link to={`/equipment/${item.machineId}`}>
+                          Machine <ArrowUpRight className="ml-1 h-3 w-3" />
+                        </Link>
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => draftMutation.mutate({ companyId: item.companyId, machineId: item.machineId })}
+                        disabled={draftMutation.isPending}
+                        className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em]"
+                      >
+                        {drafting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <TrendingUp className="mr-1 h-3 w-3" />}
+                        Draft
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DeckSurface>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-3xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
-  );
-}
-
-function PressurePill({ level }: { level: "high" | "medium" | "low" }) {
-  const tone = level === "high"
-    ? "bg-red-500/10 text-red-300"
-    : level === "medium"
-      ? "bg-amber-500/10 text-amber-200"
-      : "bg-emerald-500/10 text-emerald-200";
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${tone}`}>
-      {level} pressure
-    </span>
   );
 }

@@ -1,12 +1,11 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ArrowUpRight, RefreshCcw, Timer } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface, StatusDot, type StatusTone } from "../components/command-deck";
 import { buildWorkflowAuditBoard } from "../lib/workflow-audit";
 
 export function WorkflowAuditPage() {
@@ -92,86 +91,124 @@ export function WorkflowAuditPage() {
   });
 
   const board = auditQuery.data;
+  const summary = board?.summary ?? { breaks: 0, stalls: 0, reroutes: 0, silentFails: 0 };
+  const total = summary.breaks + summary.stalls + summary.reroutes + summary.silentFails;
+
+  // Cascading Iron briefing — route to the sharpest audit lever.
+  const auditIronHeadline = auditQuery.isLoading
+    ? "Scanning workflow runs, steps, approvals, exceptions, and action history…"
+    : auditQuery.isError
+      ? "Workflow Audit offline — one of the feeders failed. Check the console."
+      : summary.breaks > 0
+        ? `${summary.breaks} dead-lettered or failed run${summary.breaks === 1 ? "" : "s"} — replay before the work disappears. ${summary.stalls} stall${summary.stalls === 1 ? "" : "s"} · ${summary.silentFails} silent fail${summary.silentFails === 1 ? "" : "s"}.`
+        : summary.stalls > 0
+          ? `${summary.stalls} workflow${summary.stalls === 1 ? "" : "s"} stalled on approvals — decide or escalate before SLAs breach.`
+          : summary.silentFails > 0
+            ? `${summary.silentFails} workflow exception${summary.silentFails === 1 ? "" : "s"} silently sitting — pull them into the active inbox.`
+            : summary.reroutes > 0
+              ? `${summary.reroutes} reroute${summary.reroutes === 1 ? "" : "s"} or override${summary.reroutes === 1 ? "" : "s"} logged — review what the system had to route around.`
+              : "Workflow system is clean. Motion is stable — keep it there.";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Workflow Audit"
         subtitle="Where processes break, stall, reroute, or silently fail across the operating system."
+        crumb={{ surface: "PULSE", lens: "AUDIT", count: total }}
+        metrics={[
+          { label: "Breaks", value: summary.breaks, tone: summary.breaks > 0 ? "hot" : undefined },
+          { label: "Stalls", value: summary.stalls, tone: summary.stalls > 0 ? "warm" : undefined },
+          { label: "Reroutes", value: summary.reroutes, tone: summary.reroutes > 0 ? "active" : undefined },
+          { label: "Silent", value: summary.silentFails, tone: summary.silentFails > 0 ? "warm" : undefined },
+        ]}
+        ironBriefing={{
+          headline: auditIronHeadline,
+          actions: [
+            { label: "Flow admin →", href: "/admin/flow" },
+            { label: "Exception inbox →", href: "/exceptions" },
+          ],
+        }}
       />
       <QrmSubNav />
 
       {auditQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading workflow audit…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading workflow audit…</DeckSurface>
       ) : auditQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-qep-hot/40 bg-qep-hot/5 p-6 text-sm text-qep-hot">
           {auditQuery.error instanceof Error ? auditQuery.error.message : "Workflow audit is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={AlertTriangle} label="Breaks" value={String(board.summary.breaks)} />
-            <SummaryCard icon={Timer} label="Stalls" value={String(board.summary.stalls)} />
-            <SummaryCard icon={RefreshCcw} label="Reroutes" value={String(board.summary.reroutes)} />
-            <SummaryCard icon={Activity} label="Silent Fails" value={String(board.summary.silentFails)} />
-          </div>
+        <div className="grid gap-3 xl:grid-cols-2">
+          <AuditBucket
+            title="Breaks"
+            actionHref="/admin/flow"
+            actionLabel="Flow admin"
+            tone="hot"
+            emptyText="No dead-lettered or failed runs right now."
+          >
+            {board.breaks.slice(0, 10).map((row) => (
+              <AuditRow
+                key={row.id}
+                title={row.workflowSlug}
+                detail={`${row.status}${row.errorText ? ` · ${row.errorText}` : ""}`}
+                tone="hot"
+              />
+            ))}
+          </AuditBucket>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <AuditBucket title="Breaks" actionHref="/admin/flow" actionLabel="Flow admin">
-              {board.breaks.length === 0 ? (
-                <Empty text="No dead-lettered or failed runs right now." />
-              ) : (
-                board.breaks.slice(0, 10).map((row) => (
-                  <AuditRow key={row.id} title={row.workflowSlug} detail={`${row.status}${row.errorText ? ` · ${row.errorText}` : ""}`} />
-                ))
-              )}
-            </AuditBucket>
+          <AuditBucket
+            title="Stalls"
+            actionHref="/qrm/command/approvals"
+            actionLabel="Approvals"
+            tone="warm"
+            emptyText="No stalled workflows right now."
+          >
+            {board.stalls.slice(0, 10).map((row) => (
+              <AuditRow
+                key={row.id}
+                title={row.workflowSlug}
+                detail={`${row.status} · started ${new Date(row.startedAt).toLocaleString()}`}
+                tone="warm"
+              />
+            ))}
+          </AuditBucket>
 
-            <AuditBucket title="Stalls" actionHref="/qrm/command/approvals" actionLabel="Approvals">
-              {board.stalls.length === 0 ? (
-                <Empty text="No stalled workflows right now." />
-              ) : (
-                board.stalls.slice(0, 10).map((row) => (
-                  <AuditRow key={row.id} title={row.workflowSlug} detail={`${row.status} · started ${new Date(row.startedAt).toLocaleString()}`} />
-                ))
-              )}
-            </AuditBucket>
+          <AuditBucket
+            title="Reroutes"
+            actionHref="/admin/flow"
+            actionLabel="Flow admin"
+            tone="active"
+            emptyText="No workflow reroutes or overrides recorded recently."
+          >
+            {board.reroutes.slice(0, 10).map((row, index) => (
+              <AuditRow
+                key={`${row.actionType}-${index}`}
+                title={row.actionType.replace(/_/g, " ")}
+                detail={`Logged ${new Date(row.createdAt).toLocaleString()}`}
+                tone="active"
+              />
+            ))}
+          </AuditBucket>
 
-            <AuditBucket title="Reroutes" actionHref="/admin/flow" actionLabel="Flow admin">
-              {board.reroutes.length === 0 ? (
-                <Empty text="No workflow reroutes or overrides recorded recently." />
-              ) : (
-                board.reroutes.slice(0, 10).map((row, index) => (
-                  <AuditRow key={`${row.actionType}-${index}`} title={row.actionType.replace(/_/g, " ")} detail={`Logged ${new Date(row.createdAt).toLocaleString()}`} />
-                ))
-              )}
-            </AuditBucket>
-
-            <AuditBucket title="Silent Fails" actionHref="/exceptions" actionLabel="Exception inbox">
-              {board.silentFails.length === 0 ? (
-                <Empty text="No unresolved workflow-related exceptions right now." />
-              ) : (
-                board.silentFails.slice(0, 10).map((row) => (
-                  <AuditRow key={row.id} title={row.title} detail={`${row.source} · ${row.status}`} />
-                ))
-              )}
-            </AuditBucket>
-          </div>
-        </>
+          <AuditBucket
+            title="Silent fails"
+            actionHref="/exceptions"
+            actionLabel="Exceptions"
+            tone="warm"
+            emptyText="No unresolved workflow exceptions right now."
+          >
+            {board.silentFails.slice(0, 10).map((row) => (
+              <AuditRow
+                key={row.id}
+                title={row.title}
+                detail={`${row.source} · ${row.status}`}
+                tone="warm"
+              />
+            ))}
+          </AuditBucket>
+        </div>
       )}
     </div>
-  );
-}
-
-function SummaryCard({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }
 
@@ -179,37 +216,46 @@ function AuditBucket({
   title,
   actionHref,
   actionLabel,
+  tone,
+  emptyText,
   children,
 }: {
   title: string;
   actionHref: string;
   actionLabel: string;
+  tone: StatusTone;
+  emptyText: string;
   children: React.ReactNode;
 }) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return (
-    <Card className="p-4">
+    <DeckSurface className="p-3 sm:p-4">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        <Button asChild size="sm" variant="outline">
+        <div className="flex items-center gap-2">
+          <StatusDot tone={tone} pulse={tone === "hot"} />
+          <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">{title}</h2>
+        </div>
+        <Button asChild size="sm" variant="outline" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em]">
           <Link to={actionHref}>
             {actionLabel} <ArrowUpRight className="ml-1 h-3 w-3" />
           </Link>
         </Button>
       </div>
-      <div className="mt-4 space-y-3">{children}</div>
-    </Card>
+      <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
+        {hasChildren ? children : <p className="p-4 text-sm text-muted-foreground">{emptyText}</p>}
+      </div>
+    </DeckSurface>
   );
 }
 
-function AuditRow({ title, detail }: { title: string; detail: string }) {
+function AuditRow({ title, detail, tone }: { title: string; detail: string; tone: StatusTone }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/10 p-3">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    <div className="flex items-start gap-3 px-3 py-2.5">
+      <StatusDot tone={tone} pulse={tone === "hot"} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium text-foreground">{title}</p>
+        <p className="mt-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">{detail}</p>
+      </div>
     </div>
   );
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="text-sm text-muted-foreground">{text}</p>;
 }

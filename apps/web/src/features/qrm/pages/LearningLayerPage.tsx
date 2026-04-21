@@ -1,21 +1,21 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Award, ArrowUpRight, BookOpen, Brain, Workflow, XCircle } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface, SignalChip, StatusDot, type StatusTone } from "../components/command-deck";
 import { buildLearningLayerBoard } from "../lib/learning-layer";
 
-function confidenceTone(confidence: "high" | "medium" | "low"): string {
+function confidenceTone(confidence: "high" | "medium" | "low"): StatusTone {
   switch (confidence) {
     case "high":
-      return "text-emerald-400";
+      return "ok";
     case "medium":
-      return "text-qep-orange";
+      return "active";
     default:
-      return "text-muted-foreground";
+      return "cool";
   }
 }
 
@@ -105,59 +105,62 @@ export function LearningLayerPage() {
   });
 
   const board = boardQuery.data;
+  const summary = board?.summary ?? {
+    wins: 0,
+    losses: 0,
+    workflowPatterns: 0,
+    learnedPatterns: 0,
+  };
+
+  // Cascading Iron briefing — route to the sharpest learning lever.
+  const learnIronHeadline = boardQuery.isLoading
+    ? "Fusing wins, losses, workflows, and intervention memory into dealership learning…"
+    : boardQuery.isError
+      ? "Learning layer offline — one of the feeders failed. Check the console."
+      : summary.learnedPatterns > 0
+        ? `${summary.learnedPatterns} pattern${summary.learnedPatterns === 1 ? "" : "s"} surfaced from the field — promote the ones that keep recurring before the knowledge stales.`
+        : summary.losses > summary.wins && summary.losses > 0
+          ? `${summary.losses} loss${summary.losses === 1 ? "" : "es"} vs ${summary.wins} win${summary.wins === 1 ? "" : "s"} over 90 days — replay the loss reasons and tighten the playbook.`
+          : summary.wins > 0
+            ? `${summary.wins} win${summary.wins === 1 ? "" : "s"} in 90 days — codify what's working before the motion drifts.`
+            : summary.workflowPatterns > 0
+              ? `${summary.workflowPatterns} workflow pattern${summary.workflowPatterns === 1 ? "" : "s"} on the board — distill the repeatable ones into SOPs.`
+              : "Learning surface is quiet. Run more workflows and log outcomes to fill the memory.";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
         title="Learning Layer"
         subtitle="Wins, losses, workflows, and patterns turning into dealership memory."
+        crumb={{ surface: "PULSE", lens: "LEARNING", count: summary.wins + summary.losses }}
+        metrics={[
+          { label: "Wins", value: summary.wins, tone: summary.wins > 0 ? "ok" : undefined },
+          { label: "Losses", value: summary.losses, tone: summary.losses > 0 ? "warm" : undefined },
+          { label: "Workflows", value: summary.workflowPatterns, tone: summary.workflowPatterns > 0 ? "live" : undefined },
+          { label: "Patterns", value: summary.learnedPatterns, tone: summary.learnedPatterns > 0 ? "active" : undefined },
+        ]}
+        ironBriefing={{
+          headline: learnIronHeadline,
+          actions: [{ label: "SOP + Folk →", href: "/qrm/sop-folk" }],
+        }}
       />
       <QrmSubNav />
 
       {boardQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading learning layer…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading learning layer…</DeckSurface>
       ) : boardQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-qep-hot/40 bg-qep-hot/5 p-6 text-sm text-qep-hot">
           {boardQuery.error instanceof Error ? boardQuery.error.message : "Learning layer is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={Award} label="Wins" value={String(board.summary.wins)} />
-            <SummaryCard icon={XCircle} label="Losses" value={String(board.summary.losses)} />
-            <SummaryCard icon={Workflow} label="Workflows" value={String(board.summary.workflowPatterns)} />
-            <SummaryCard icon={Brain} label="Patterns" value={String(board.summary.learnedPatterns)} />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <LearningColumn title="Wins To Repeat" rows={board.wins} emptyText="No recent closed-won deals are available." />
-            <LearningColumn title="Losses To Avoid" rows={board.losses} emptyText="No recent closed-lost patterns are available." />
-            <LearningColumn title="Workflow Memory" rows={board.workflows} emptyText="No recent workflow history is available." />
-            <LearningColumn title="Learned Patterns" rows={board.patterns} emptyText="No intervention or folk patterns are available." />
-          </div>
-        </>
+        <div className="grid gap-3 xl:grid-cols-2">
+          <LearningColumn title="Wins to repeat" rows={board.wins} emptyText="No recent closed-won deals." tone="ok" />
+          <LearningColumn title="Losses to avoid" rows={board.losses} emptyText="No recent closed-lost patterns." tone="warm" />
+          <LearningColumn title="Workflow memory" rows={board.workflows} emptyText="No recent workflow history." tone="live" />
+          <LearningColumn title="Learned patterns" rows={board.patterns} emptyText="No intervention or folk patterns yet." tone="active" />
+        </div>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Award;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }
 
@@ -165,6 +168,7 @@ function LearningColumn({
   title,
   rows,
   emptyText,
+  tone,
 }: {
   title: string;
   rows: Array<{
@@ -176,45 +180,48 @@ function LearningColumn({
     href: string;
   }>;
   emptyText: string;
+  tone: StatusTone;
 }) {
   return (
-    <Card className="p-4">
+    <DeckSurface className="p-3 sm:p-4">
       <div className="flex items-center gap-2">
-        <BookOpen className="h-4 w-4 text-qep-orange" />
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <StatusDot tone={tone} pulse={false} />
+        <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">{title}</h2>
       </div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
         {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{emptyText}</p>
+          <p className="p-4 text-sm text-muted-foreground">{emptyText}</p>
         ) : (
-          rows.map((row) => (
-            <div key={row.id ?? row.key ?? row.title} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-foreground">{row.title}</p>
-                    <span className={`text-[11px] font-medium ${confidenceTone(row.confidence)}`}>
-                      {row.confidence} confidence
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-1">
-                    {row.trace.map((line) => (
-                      <p key={line} className="text-xs text-muted-foreground">
-                        {line}
-                      </p>
-                    ))}
+          rows.map((row) => {
+            const rowTone = confidenceTone(row.confidence);
+            return (
+              <div key={row.id ?? row.key ?? row.title} className="flex flex-col gap-2 px-3 py-2.5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex min-w-0 items-start gap-2">
+                  <StatusDot tone={rowTone} pulse={false} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-[13px] font-medium text-foreground">{row.title}</p>
+                      <SignalChip label={row.confidence} tone={rowTone} />
+                    </div>
+                    <div className="mt-1 space-y-0.5">
+                      {row.trace.map((line) => (
+                        <p key={line} className="text-[11px] text-muted-foreground">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <Button asChild size="sm" variant="outline">
+                <Button asChild size="sm" variant="ghost" className="h-7 px-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-qep-orange hover:text-qep-orange/80 lg:shrink-0">
                   <Link to={row.href}>
                     Open <ArrowUpRight className="ml-1 h-3 w-3" />
                   </Link>
                 </Button>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
-    </Card>
+    </DeckSurface>
   );
 }

@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldAlert, Swords, TrendingUp, ArrowUpRight } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 import { listCrmWeightedOpenDeals } from "../lib/qrm-deals-api";
@@ -10,7 +9,14 @@ import { buildAccountCommandHref } from "../lib/account-command";
 import { buildCompetitiveDisplacementBoard } from "../lib/competitive-displacement";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface, StatusDot, type StatusTone } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
+
+function fmtMoney(v: number) {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${Math.round(v / 1_000)}k`;
+  return `$${Math.round(v)}`;
+}
 
 export function CompetitiveDisplacementCenterPage() {
   const dealsQuery = useQuery({
@@ -84,136 +90,111 @@ export function CompetitiveDisplacementCenterPage() {
 
   const isLoading = dealsQuery.isLoading || boardQuery.isLoading;
   const isError = dealsQuery.isError || boardQuery.isError;
+  const summary = board.summary;
+  const exposure = board.defenseRows.reduce((sum, row) => sum + row.weightedRevenue, 0);
+
+  // Cascading Iron briefing — route to the sharpest compete lever.
+  const competeIronHeadline = isLoading
+    ? "Fusing competitor listings, voice mentions, and open deal pressure…"
+    : isError
+      ? "Competitive displacement offline — one of the feeders failed. Check the console."
+      : summary.threatenedAccounts > 0
+        ? `${summary.threatenedAccounts} account${summary.threatenedAccounts === 1 ? "" : "s"} under pressure with ${fmtMoney(exposure)} weighted exposure — defend before listings harden. ${summary.takeShareWindows} take-share window${summary.takeShareWindows === 1 ? "" : "s"}.`
+        : summary.takeShareWindows > 0
+          ? `${summary.takeShareWindows} take-share window${summary.takeShareWindows === 1 ? "" : "s"} open — stale competitor iron ready to flip. ${summary.staleListings} stale listing${summary.staleListings === 1 ? "" : "s"} on the board.`
+          : summary.activeListings > 0
+            ? `${summary.activeListings} active listing${summary.activeListings === 1 ? "" : "s"} tracked, no pressure yet. Keep the watch — signals turn fast.`
+            : "No competitive pressure surfaced. Quiet market — press white-space instead.";
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pb-12 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="Competitive Displacement Center"
+        title="Competitive Displacement"
         subtitle="Where competitor pressure is rising and where stale competitor inventory creates a take-share opening."
+        crumb={{ surface: "PULSE", lens: "COMPETE", count: summary.threatenedAccounts }}
+        metrics={[
+          { label: "Threatened", value: summary.threatenedAccounts, tone: summary.threatenedAccounts > 0 ? "hot" : undefined },
+          { label: "Take-share", value: summary.takeShareWindows, tone: summary.takeShareWindows > 0 ? "active" : undefined },
+          { label: "Listings", value: summary.activeListings, tone: summary.activeListings > 0 ? "live" : undefined },
+          { label: "Exposure", value: fmtMoney(exposure), tone: exposure > 0 ? "warm" : undefined },
+        ]}
+        ironBriefing={{
+          headline: competeIronHeadline,
+          actions: [{ label: "Threat map →", href: "/qrm/competitive-threat-map" }],
+        }}
       />
       <QrmSubNav />
 
       {isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading competitive displacement…</Card>
+        <DeckSurface className="p-6 text-sm text-muted-foreground">Loading competitive displacement…</DeckSurface>
       ) : isError ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-qep-hot/40 bg-qep-hot/5 p-6 text-sm text-qep-hot">
           Competitive displacement is unavailable right now.
-        </Card>
+        </DeckSurface>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={ShieldAlert} label="Threatened Accounts" value={String(board.summary.threatenedAccounts)} detail="Accounts with competitor voice pressure or matching market listings." />
-            <SummaryCard icon={Swords} label="Take-Share Windows" value={String(board.summary.takeShareWindows)} detail="Make/model markets where competitor inventory is sitting." />
-            <SummaryCard icon={TrendingUp} label="Active Listings" value={String(board.summary.activeListings)} detail={`${board.summary.staleListings} stale listings ripe for displacement`} />
-            <SummaryCard icon={TrendingUp} label="Weighted Exposure" value={formatCurrency(board.defenseRows.reduce((sum, row) => sum + row.weightedRevenue, 0))} detail="Open weighted revenue on threatened accounts." />
-          </div>
+        <div className="grid gap-3 xl:grid-cols-2">
+          <DeckSurface className="p-3 sm:p-4">
+            <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">Accounts to defend</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Accounts showing competitor mentions and matching inventory pressure — immediate rep action.
+            </p>
+            <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
+              {board.defenseRows.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No active competitor pressure detected.</p>
+              ) : (
+                board.defenseRows.slice(0, 10).map((row) => {
+                  const tone: StatusTone = row.weightedRevenue > 0 ? "hot" : "warm";
+                  return (
+                    <Link
+                      key={row.companyId}
+                      to={buildAccountCommandHref(row.companyId)}
+                      className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-qep-orange/[0.04]"
+                    >
+                      <StatusDot tone={tone} pulse={tone === "hot"} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-foreground">{row.companyName}</p>
+                        <p className="mt-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                          {formatCurrency(row.weightedRevenue)} · {row.competitorMentionCount} mention{row.competitorMentionCount === 1 ? "" : "s"} · {row.matchingListings} listing{row.matchingListings === 1 ? "" : "s"}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{row.reasons.join(" · ")}</p>
+                      </div>
+                      <ArrowUpRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-qep-orange" />
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </DeckSurface>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground">Accounts to defend</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Accounts showing competitor mentions and matching inventory pressure that need immediate rep action.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {board.defenseRows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No active competitor pressure detected.</p>
-                ) : (
-                  board.defenseRows.slice(0, 10).map((row) => (
-                    <div key={row.companyId} className="rounded-xl border border-border/60 bg-muted/10 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{row.companyName}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatCurrency(row.weightedRevenue)} weighted revenue · {row.competitorMentionCount} mention{row.competitorMentionCount === 1 ? "" : "s"} · {row.matchingListings} matching listing{row.matchingListings === 1 ? "" : "s"}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">{row.reasons.join(" · ")}</p>
-                        </div>
-                        <Button asChild size="sm" variant="ghost">
-                          <Link to={buildAccountCommandHref(row.companyId)}>
-                            Account <ArrowUpRight className="ml-1 h-3 w-3" />
-                          </Link>
-                        </Button>
+          <DeckSurface className="p-3 sm:p-4">
+            <h2 className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-foreground">Take-share windows</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Competitor inventory sitting long enough to create a displacement opening.
+            </p>
+            <div className="mt-3 divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/30">
+              {board.takeShareRows.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No clear take-share windows right now.</p>
+              ) : (
+                board.takeShareRows.slice(0, 10).map((row) => {
+                  const tone: StatusTone = row.staleListingCount > 0 && row.matchingAccounts > 0 ? "active" : "cool";
+                  return (
+                    <div key={`${row.make}:${row.model}`} className="flex items-start gap-3 px-3 py-2.5">
+                      <StatusDot tone={tone} pulse={false} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-medium text-foreground">{row.make} {row.model}</p>
+                        <p className="mt-0.5 font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                          {row.staleListingCount}/{row.listingCount} stale · {row.matchingAccounts} match · {formatCurrency(row.weightedRevenue)} weighted
+                          {row.avgAsk != null ? ` · ask ${fmtMoney(row.avgAsk)}` : ""}
+                        </p>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground">Take-share windows</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Competitor inventory that has been sitting long enough to create a displacement opening.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {board.takeShareRows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No clear take-share windows right now.</p>
-                ) : (
-                  board.takeShareRows.slice(0, 10).map((row) => (
-                    <div key={`${row.make}:${row.model}`} className="rounded-xl border border-border/60 bg-muted/10 p-3">
-                      <p className="text-sm font-medium text-foreground">{row.make} {row.model}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {row.staleListingCount}/{row.listingCount} stale competitor listing{row.listingCount === 1 ? "" : "s"} · {row.matchingAccounts} matching account{row.matchingAccounts === 1 ? "" : "s"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatCurrency(row.weightedRevenue)} weighted revenue exposed
-                        {row.avgAsk != null ? ` · avg ask ${formatCurrency(row.avgAsk)}` : ""}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          </div>
-
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Open Competitive Threat Map to see the same pressure rolled up by account, rep, and branch.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to="/qrm/competitive-threat-map">
-                  Threat map <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
+                  );
+                })
+              )}
             </div>
-          </Card>
-        </>
+          </DeckSurface>
+        </div>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }
