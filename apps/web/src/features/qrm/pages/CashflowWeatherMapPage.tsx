@@ -25,7 +25,7 @@ import {
 } from "../lib/account-command";
 import { buildCashflowWeatherBoard } from "../lib/cashflow-weather";
 import { QrmPageHeader } from "../components/QrmPageHeader";
-import { DeckSurface } from "../components/command-deck";
+import { QrmSubNav } from "../components/QrmSubNav";
 import { DeckSurface } from "../components/command-deck";
 
 function confidenceTone(confidence: "high" | "medium" | "low"): string {
