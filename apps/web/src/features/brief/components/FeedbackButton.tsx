@@ -2,8 +2,17 @@
  * Floating "Got feedback?" button + modal for the Stakeholder Build Hub.
  *
  * Anchored bottom-right across every /brief route. Opens a minimal dialog
- * with a textarea, a type picker, and a submit that calls
- * `hub-feedback-intake`. Voice/screenshot capture arrives in a later slice.
+ * with a textarea, a type picker, press-and-hold voice capture, and a
+ * submit that calls `hub-feedback-intake`.
+ *
+ * Build Hub v2.2:
+ *   - VoiceCapture mounts above the textarea. On stop, the transcript is
+ *     appended to whatever's already typed (so a user can type, then
+ *     speak, then type more without stomping their earlier content).
+ *   - Page context (path, title, build_item_id data-attr, screen size,
+ *     dark mode, UA shorthand) is captured at submit time and passed to
+ *     intake so Claude's triage summary references where the stakeholder
+ *     was.
  *
  * Non-trapping submit policy: Escape and close always work, even while the
  * request is in flight. The mutation continues in the background so the
@@ -23,7 +32,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { submitHubFeedback, type FeedbackType } from "../lib/brief-api";
+import {
+  submitHubFeedback,
+  type FeedbackType,
+  type SubmissionContext,
+} from "../lib/brief-api";
+import { VoiceCapture, type VoiceCaptureResult } from "./VoiceCapture";
 
 const TYPE_OPTIONS: { value: FeedbackType; label: string; hint: string }[] = [
   { value: "bug", label: "Bug", hint: "Something is broken" },
@@ -86,6 +100,15 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
   const [type, setType] = useState<FeedbackType | "">("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Voice capture side-channel: we don't inline audio path/duration into
+  // the body, but we do forward them to the intake call so the DB row
+  // records them alongside the typed body.
+  const voiceStateRef = useRef<{
+    audio_path: string | null;
+    duration_ms: number | null;
+    transcript: string | null;
+  }>({ audio_path: null, duration_ms: null, transcript: null });
+
   // Track whether a submit completed cleanly — if so, don't save its body
   // back to localStorage when the modal unmounts / closes.
   const submittedCleanlyRef = useRef(false);
@@ -122,15 +145,37 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
     setOpen(false);
   }, []);
 
+  const onVoiceTranscribed = useCallback((result: VoiceCaptureResult) => {
+    // Keep the audio path + duration around to forward to the intake call.
+    voiceStateRef.current = {
+      audio_path: result.audio_path,
+      duration_ms: result.duration_ms,
+      transcript: result.transcript || null,
+    };
+    if (!result.transcript) return;
+    // Append the transcript onto whatever the user has typed so they can
+    // dictate + refine in the same session without losing prior text.
+    setBody((prev) => {
+      const joiner = prev.trim().length === 0 ? "" : prev.endsWith("\n") ? "" : "\n";
+      return `${prev}${joiner}${result.transcript}`.slice(0, 4000);
+    });
+  }, []);
+
   const onSubmit = useCallback(async () => {
     const trimmed = body.trim();
     if (!trimmed) return;
     setSubmitting(true);
     try {
+      const context = captureSubmissionContext(buildItemId);
+      const voice = voiceStateRef.current;
       const result = await submitHubFeedback({
         body: trimmed,
         feedback_type: type || undefined,
         build_item_id: buildItemId ?? undefined,
+        submission_context: context,
+        voice_audio_url: voice.audio_path ?? undefined,
+        voice_transcript: voice.transcript ?? undefined,
+        voice_duration_ms: voice.duration_ms ?? undefined,
       });
       toast({
         title: "Thanks — Claude triaged it.",
@@ -140,6 +185,7 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
       writeDraft({ body: "", type: "" });
       setBody("");
       setType("");
+      voiceStateRef.current = { audio_path: null, duration_ms: null, transcript: null };
       setOpen(false);
     } catch (err) {
       toast({
@@ -171,19 +217,23 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
           <DialogHeader>
             <DialogTitle>Send feedback</DialogTitle>
             <DialogDescription>
-              Claude will triage this in about a second. You'll hear back via
-              the Build Hub (and email if it's urgent).
+              Type or hold the mic. Claude will triage in about a second —
+              you'll hear back in the Build Hub (and email if it's urgent).
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <VoiceCapture onTranscribed={onVoiceTranscribed} disabled={submitting} />
+            </div>
+
             <label className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
               What's on your mind?
             </label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Type what you noticed. Short is fine."
+              placeholder="Type what you noticed — or hold the mic above and speak."
               rows={5}
               maxLength={4000}
               disabled={submitting}
@@ -236,4 +286,89 @@ export function FeedbackButton({ buildItemId }: FeedbackButtonProps) {
       </Dialog>
     </>
   );
+}
+
+/**
+ * Capture the page + device context to attach to the intake call so the
+ * triage prompt knows where the stakeholder was when they submitted.
+ *
+ *   - `path`: window.location.pathname — omit hostname (we know the
+ *     workspace) but keep query/hash off for privacy (tokens land in query).
+ *   - `title`: document.title for breadcrumb context.
+ *   - `build_item_id`: read from a `data-build-item-id` attr on the nearest
+ *     ancestor of the active element, when the modal was opened from
+ *     within a build-item card. Falls back to the explicit prop if none.
+ *   - `screen`: {w, h} at time of capture — Claude uses this to notice
+ *     mobile-vs-desktop class bugs.
+ *   - `dark_mode`: reflected from `prefers-color-scheme` + the `.dark`
+ *     class the theme toggle sets on <html>.
+ *   - `ua_short`: one-line UA summary ("Chrome 128 on macOS"), enough for
+ *     the prompt without inviting fingerprint leakage.
+ */
+function captureSubmissionContext(
+  explicitBuildItemId?: string | null,
+): SubmissionContext | undefined {
+  if (typeof window === "undefined" || typeof document === "undefined") return undefined;
+  try {
+    const path = window.location.pathname;
+    const title = document.title;
+    const buildItemId = explicitBuildItemId ?? findAncestorBuildItemId();
+    const w = Math.round(window.innerWidth);
+    const h = Math.round(window.innerHeight);
+    const darkByClass = document.documentElement.classList.contains("dark");
+    const darkByPref = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+    const dark_mode = darkByClass || darkByPref;
+    const ua_short = summariseUa(window.navigator.userAgent);
+
+    const ctx: SubmissionContext = {
+      path,
+      title,
+      build_item_id: buildItemId,
+      screen: { w, h },
+      dark_mode,
+      ua_short,
+    };
+    return ctx;
+  } catch {
+    return undefined;
+  }
+}
+
+function findAncestorBuildItemId(): string | null {
+  if (typeof document === "undefined") return null;
+  const active = document.activeElement;
+  const start = active && active instanceof HTMLElement ? active : document.body;
+  const match = start.closest?.("[data-build-item-id]") as HTMLElement | null;
+  const attr = match?.dataset.buildItemId ?? null;
+  return attr && attr.length === 36 ? attr : null;
+}
+
+/**
+ * Distil a navigator.userAgent into "Chrome 128 on macOS"-style shorthand.
+ * The full UA is privacy-hostile; the shorthand is enough for triage.
+ */
+function summariseUa(ua: string): string {
+  const u = ua || "";
+  let browser = "Browser";
+  const browserMatchers: Array<[RegExp, string]> = [
+    [/Edg\/(\d+)/, "Edge"],
+    [/OPR\/(\d+)/, "Opera"],
+    [/Chrome\/(\d+)/, "Chrome"],
+    [/Firefox\/(\d+)/, "Firefox"],
+    [/Version\/(\d+).*Safari\//, "Safari"],
+  ];
+  for (const [re, name] of browserMatchers) {
+    const m = u.match(re);
+    if (m) {
+      browser = `${name} ${m[1]}`;
+      break;
+    }
+  }
+  let os = "Unknown OS";
+  if (/iPhone|iPad|iPod/.test(u)) os = "iOS";
+  else if (/Android/.test(u)) os = "Android";
+  else if (/Mac OS X/.test(u)) os = "macOS";
+  else if (/Windows/.test(u)) os = "Windows";
+  else if (/Linux/.test(u)) os = "Linux";
+  return `${browser} on ${os}`;
 }

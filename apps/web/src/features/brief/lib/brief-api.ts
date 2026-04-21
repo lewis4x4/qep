@@ -76,7 +76,65 @@ export interface IntakePayload {
   build_item_id?: string;
   voice_audio_url?: string;
   voice_transcript?: string;
+  voice_duration_ms?: number;
   screenshot_url?: string;
+  /**
+   * Build Hub v2.2 — page + device metadata captured at submit time.
+   * Shape: `{ path, title, build_item_id, screen: {w,h}, dark_mode, ua_short }`.
+   * Fed into the triage prompt so Claude summaries reference where the
+   * stakeholder was, not just what they said.
+   */
+  submission_context?: SubmissionContext;
+}
+
+export interface SubmissionContext {
+  path?: string;
+  title?: string;
+  build_item_id?: string | null;
+  screen?: { w: number; h: number };
+  dark_mode?: boolean;
+  ua_short?: string;
+  /** Any extra hints the component captured (e.g. selected row, query params). */
+  [key: string]: unknown;
+}
+
+/**
+ * Response from hub-feedback-transcribe. Mirrors the TranscribeResult
+ * shape in that edge function.
+ */
+export interface TranscribeResult {
+  transcript: string;
+  confidence: number;
+  language: string;
+  duration_ms: number;
+  audio_path: string | null;
+  audio_mime: string;
+  bytes: number;
+}
+
+/**
+ * Upload an audio clip to hub-feedback-transcribe. Returns the Whisper
+ * transcript + the private storage path (which the caller then passes as
+ * `voice_audio_url` on the subsequent intake call).
+ *
+ * Zero-blocking contract: the server returns an empty transcript if
+ * OPENAI_API_KEY is missing — the stakeholder can still type.
+ */
+export async function transcribeFeedbackAudio(file: File | Blob): Promise<TranscribeResult> {
+  const form = new FormData();
+  form.append("audio", file, "audio" in (file as File) ? (file as File).name || "hub-feedback.webm" : "hub-feedback.webm");
+
+  const { data, error } = await supabase.functions.invoke<TranscribeResult>(
+    "hub-feedback-transcribe",
+    { body: form },
+  );
+  if (error) {
+    throw new Error(error.message || "transcribe failed");
+  }
+  if (!data) {
+    throw new Error("transcribe returned empty payload");
+  }
+  return data;
 }
 
 export interface IntakeResult {
