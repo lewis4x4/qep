@@ -24,6 +24,7 @@ import type { ProposalCallFlipReport } from "../proposal-call-flips";
 import type { ProposalApplyVerdict } from "../proposal-apply-verdict";
 import type { ProposalWatchlist } from "../proposal-watchlist";
 import type { ProposalStabilityReport } from "../proposal-stability";
+import type { ProposalRollbackPlan } from "../proposal-rollback";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -76,6 +77,7 @@ function nullCtx(): ProposalMarkdownContext {
     verdict: null,
     watchlist: null,
     stability: null,
+    rollback: null,
   };
 }
 
@@ -1209,5 +1211,152 @@ describe("renderProposalMarkdownWithContext — stability section (20aa)", () =>
     expect(watchlistIdx).toBeGreaterThan(-1);
     expect(confidenceIdx).toBeLessThan(stabilityIdx);
     expect(stabilityIdx).toBeLessThan(watchlistIdx);
+  });
+});
+
+describe("renderProposalMarkdownWithContext — rollback section (20ab)", () => {
+  test("null rollback → no Rollback plan block", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), rollback: null };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Rollback plan**");
+  });
+
+  test("empty rollback → no Rollback plan block (silent fallthrough)", () => {
+    const rollback: ProposalRollbackPlan = {
+      steps: [],
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), rollback };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Rollback plan**");
+  });
+
+  test("single flip step renders with priority + operation + impact", () => {
+    const rollback: ProposalRollbackPlan = {
+      steps: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          operation: "Revert sign flip — restore the positive weight direction at +8.0.",
+          impact: "Deals that re-scored under the flipped sign return to their pre-proposal ranking on this factor.",
+          priority: "high",
+          hasWatchTrigger: false,
+        },
+      ],
+      headline: "1 rollback step — 1 sign flip.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), rollback };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Rollback plan**: 1 rollback step — 1 sign flip.");
+    expect(md).toContain("`Trade in hand` · flip · 🔴 high");
+    expect(md).toContain("_Operation_:");
+    expect(md).toContain("_Impact_:");
+    // Not cross-linked → no 👁 watched tag
+    expect(md).not.toContain("👁");
+  });
+
+  test("cross-linked step carries 👁 watched tag", () => {
+    const rollback: ProposalRollbackPlan = {
+      steps: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          operation: "Revert sign flip — restore +8.0.",
+          impact: "Deals return to prior ranking.",
+          priority: "high",
+          hasWatchTrigger: true,
+        },
+      ],
+      headline: "1 rollback step — 1 sign flip. All cross-linked to the watchlist.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), rollback };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("👁 watched");
+    expect(md).toContain("All cross-linked to the watchlist");
+  });
+
+  test("multi-step rollback emits each step with its priority badge", () => {
+    const rollback: ProposalRollbackPlan = {
+      steps: [
+        {
+          label: "A",
+          action: "flip",
+          operation: "op a",
+          impact: "impact a",
+          priority: "high",
+          hasWatchTrigger: true,
+        },
+        {
+          label: "B",
+          action: "drop",
+          operation: "op b",
+          impact: "impact b",
+          priority: "medium",
+          hasWatchTrigger: false,
+        },
+        {
+          label: "C",
+          action: "strengthen",
+          operation: "op c",
+          impact: "impact c",
+          priority: "low",
+          hasWatchTrigger: false,
+        },
+      ],
+      headline: "3 rollback steps — 1 sign flip, 1 re-add, 1 weight adjustment. 1 of 3 cross-linked to the watchlist.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), rollback };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("`A` · flip · 🔴 high · 👁 watched");
+    expect(md).toContain("`B` · drop · 🟡 medium");
+    expect(md).toContain("`C` · strengthen · ⚪ low");
+    // B and C have no watchtrigger so no 👁 on their lines
+    expect(md).not.toContain("`B` · drop · 🟡 medium · 👁");
+    expect(md).not.toContain("`C` · strengthen · ⚪ low · 👁");
+  });
+
+  test("rollback sits after watchlist in the context ordering", () => {
+    const watchlist = {
+      items: [
+        {
+          label: "Trade in hand",
+          action: "flip" as const,
+          concern: "sign reversal",
+          trigger: "revisit in 20 deals",
+          priority: "high" as const,
+        },
+      ],
+      headline: "1 factor to monitor closely after applying.",
+      empty: false,
+    };
+    const rollback: ProposalRollbackPlan = {
+      steps: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          operation: "Revert sign flip.",
+          impact: "Deals revert.",
+          priority: "high",
+          hasWatchTrigger: true,
+        },
+      ],
+      headline: "1 rollback step — 1 sign flip. All cross-linked to the watchlist.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      watchlist,
+      rollback,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const watchlistIdx = md.indexOf("**Watchlist**");
+    const rollbackIdx = md.indexOf("**Rollback plan**");
+    expect(watchlistIdx).toBeGreaterThan(-1);
+    expect(rollbackIdx).toBeGreaterThan(-1);
+    expect(watchlistIdx).toBeLessThan(rollbackIdx);
   });
 });

@@ -41,6 +41,7 @@ import { describeProposalVerdictPill } from "./proposal-apply-verdict";
 import type { ProposalWatchlist } from "./proposal-watchlist";
 import type { ProposalStabilityReport } from "./proposal-stability";
 import { describeStabilityPill } from "./proposal-stability";
+import type { ProposalRollbackPlan } from "./proposal-rollback";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -72,6 +73,12 @@ export interface ProposalMarkdownContext {
    *  compute; `empty=true` report is handled — section is omitted
    *  cleanly when the proposal has no actionable changes. */
   stability: ProposalStabilityReport | null;
+  /** 20ab — the concrete rollback plan. Per-actionable-change reversal
+   *  operation with priority inherited from the watchlist when
+   *  cross-linked. Rendered after the watchlist so the reader sees
+   *  "what to watch" followed by "how to unwind when a watch trips."
+   *  Null when caller didn't compute; empty-plan is handled. */
+  rollback: ProposalRollbackPlan | null;
 }
 
 /**
@@ -258,6 +265,33 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
       lines.push(`  - \`${item.label}\` · ${item.action} · ${priorityTag}`);
       lines.push(`    - _Concern_: ${item.concern}`);
       lines.push(`    - _Trigger_: ${item.trigger}`);
+    }
+  }
+
+  // Rollback plan (20ab) — the very last section in the context block,
+  // because it's the step you take AFTER the watchlist trips. Reading
+  // order: verdict (decide) → signals (why) → stability (robustness)
+  // → watchlist (what to watch) → rollback (how to unwind). When the
+  // plan is empty (no actionable changes) we omit it cleanly so the
+  // all-keep case doesn't render an "0 rollback steps" stub.
+  if (ctx.rollback && !ctx.rollback.empty && ctx.rollback.steps.length > 0) {
+    const headline =
+      ctx.rollback.headline ??
+      `${ctx.rollback.steps.length} rollback step${ctx.rollback.steps.length === 1 ? "" : "s"}.`;
+    lines.push(`**Rollback plan**: ${headline}`);
+    for (const step of ctx.rollback.steps) {
+      const priorityTag =
+        step.priority === "high"
+          ? "🔴 high"
+          : step.priority === "medium"
+            ? "🟡 medium"
+            : "⚪ low";
+      const watchTag = step.hasWatchTrigger ? " · 👁 watched" : "";
+      lines.push(
+        `  - \`${step.label}\` · ${step.action} · ${priorityTag}${watchTag}`,
+      );
+      lines.push(`    - _Operation_: ${step.operation}`);
+      lines.push(`    - _Impact_: ${step.impact}`);
     }
   }
 

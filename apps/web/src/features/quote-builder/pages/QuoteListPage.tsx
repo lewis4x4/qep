@@ -100,6 +100,10 @@ import {
   describeStabilityPill,
   type ProposalStabilityReport,
 } from "../lib/proposal-stability";
+import {
+  computeProposalRollback,
+  type ProposalRollbackPlan,
+} from "../lib/proposal-rollback";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -511,6 +515,20 @@ export function QuoteListPage() {
     return computeProposalStability(attributionReport, scorerProposal);
   }, [attributionReport, scorerProposal]);
 
+  /**
+   * Slice 20ab — proposal rollback plan. Mirror of the watchlist: for
+   * each actionable change, a concrete reversal operation the manager
+   * can copy into a future ticket when the watch trips. Priority is
+   * inherited from the watchlist entry when one exists (so a
+   * watch-escalated weaken rolls back at higher priority than a
+   * routine one), else derived from the action verb. Null when no
+   * proposal; empty when proposal is all-keep.
+   */
+  const proposalRollback = useMemo<ProposalRollbackPlan | null>(() => {
+    if (!scorerProposal) return null;
+    return computeProposalRollback(scorerProposal, proposalWatchlist);
+  }, [scorerProposal, proposalWatchlist]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -609,6 +627,7 @@ export function QuoteListPage() {
           verdict={proposalVerdict}
           watchlist={proposalWatchlist}
           stability={proposalStability}
+          rollback={proposalRollback}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1684,6 +1703,7 @@ function ScorerProposalCard({
   verdict,
   watchlist,
   stability,
+  rollback,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1731,6 +1751,13 @@ function ScorerProposalCard({
    *  proposal are rock-solid and which are knife's-edge calls. Null
    *  when we don't have attribution data yet; empty-report is handled. */
   stability: ProposalStabilityReport | null;
+  /** Slice 20ab — rollback plan. Per-actionable-change reversal
+   *  operation with priority inherited from the watchlist when a
+   *  matching entry exists. Rendered directly below the watchlist in
+   *  the expanded panel so the manager reads "what to watch" and
+   *  "how to unwind" adjacent. Null when no proposal; empty when
+   *  proposal has no actionable changes. */
+  rollback: ProposalRollbackPlan | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1773,6 +1800,7 @@ function ScorerProposalCard({
         verdict,
         watchlist,
         stability,
+        rollback,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -2097,6 +2125,14 @@ function ScorerProposalCard({
               {watchlist && watchlist.items.length > 0 && (
                 <ScorerProposalWatchlistRow watchlist={watchlist} />
               )}
+              {/* Slice 20ab — rollback plan. Adjacent to the watchlist
+                  because they are the matched pair: one says what to
+                  watch, the other says how to unwind. Hidden when the
+                  plan is empty (no actionable changes) so all-keep
+                  proposals don't render a stub section. */}
+              {rollback && !rollback.empty && rollback.steps.length > 0 && (
+                <ScorerProposalRollbackRow rollback={rollback} />
+              )}
               {actionable.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
@@ -2278,6 +2314,87 @@ function ScorerProposalWatchlistRow({
               </p>
               <p className="mt-0.5 text-[10px] text-muted-foreground">
                 <span className="text-foreground">Trigger:</span> {item.trigger}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Slice 20ab — rollback plan row inside the ScorerProposalCard.
+ *
+ * Companion to the watchlist row: the watchlist says "here is what
+ * to monitor after applying," and this row says "here is exactly
+ * how to unwind each piece." Cross-linked items carry a 👁 badge so
+ * the manager can tell at a glance which rollback steps are on-call
+ * responses to active watches vs. hypothetical plans.
+ *
+ * Same neutral muted border as the watchlist row — the rollback plan
+ * is informational, not a state change on the card.
+ */
+function ScorerProposalRollbackRow({
+  rollback,
+}: {
+  rollback: ProposalRollbackPlan;
+}) {
+  return (
+    <div
+      className="rounded border border-violet-500/15 bg-background/40 p-2"
+      role="region"
+      aria-label="Proposal rollback plan"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+          Rollback plan
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          {rollback.steps.length} step{rollback.steps.length === 1 ? "" : "s"}
+        </div>
+      </div>
+      {rollback.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">{rollback.headline}</p>
+      )}
+      <ul className="mt-1.5 space-y-1.5">
+        {rollback.steps.map((step, i) => {
+          const priorityTone =
+            step.priority === "high"
+              ? { icon: "🔴", color: "text-rose-300" }
+              : step.priority === "medium"
+                ? { icon: "🟡", color: "text-amber-300" }
+                : { icon: "⚪", color: "text-muted-foreground" };
+          return (
+            <li
+              key={`${step.label}-${i}`}
+              className="border-l border-violet-500/20 pl-2"
+              aria-label={`Rollback ${step.label}: ${step.action}, ${step.priority} priority${step.hasWatchTrigger ? ", cross-linked to watchlist" : ""}`}
+            >
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className={priorityTone.color}>{priorityTone.icon}</span>
+                <span
+                  className="font-mono text-foreground truncate"
+                  title={step.label}
+                >
+                  {step.label}
+                </span>
+                <span className="text-muted-foreground">· {step.action}</span>
+                {step.hasWatchTrigger && (
+                  <span
+                    className="ml-auto text-[9px] text-violet-300"
+                    title="Cross-linked to the watchlist — this rollback is the on-call response to an active watch."
+                  >
+                    👁 watched
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                <span className="text-foreground">Operation:</span>{" "}
+                {step.operation}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                <span className="text-foreground">Impact:</span> {step.impact}
               </p>
             </li>
           );
