@@ -111,6 +111,7 @@ function toolHintForMoveEntity(
     case "contact":
       return "Then call summarize_contact with the contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
     case "equipment":
+      return "Then call summarize_equipment with the equipment_id to pull the machine row + open rentals + recent touches + open signals in one shot.";
     case "rental":
     case "activity":
     case "workspace":

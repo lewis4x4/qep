@@ -259,15 +259,19 @@ describe("formatIronMovePrompt", () => {
   // the summarize_signal-only closer fires instead (covered by its
   // own Slice 22 tests below). These tests use signal_ids: [] so the
   // prompt actually reaches the generic closer.
-  it("keeps the generic closer for equipment (no synthesizer yet)", () => {
+  it("names summarize_equipment in the equipment closer", () => {
     const p = formatIronMovePrompt(
       makeMove({ entity_type: "equipment", entity_id: "eq-1", signal_ids: [] }),
     );
+    expect(p).toContain("summarize_equipment");
+    expect(p).toContain("equipment_id");
+    // Regression guards: no cross-entity synthesizer leakage, and the
+    // old generic closer shouldn't fire for equipment anymore.
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
     expect(p).not.toContain("summarize_signal");
-    expect(p).toContain("Use the detail + signal tools");
+    expect(p).not.toContain("Use the detail + signal tools");
   });
 
   it("keeps the generic closer for rental (no synthesizer yet)", () => {
@@ -277,6 +281,7 @@ describe("formatIronMovePrompt", () => {
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_equipment");
     expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
@@ -288,6 +293,7 @@ describe("formatIronMovePrompt", () => {
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_equipment");
     expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
@@ -299,6 +305,7 @@ describe("formatIronMovePrompt", () => {
     expect(p).not.toContain("summarize_deal");
     expect(p).not.toContain("summarize_company");
     expect(p).not.toContain("summarize_contact");
+    expect(p).not.toContain("summarize_equipment");
     expect(p).not.toContain("summarize_signal");
     expect(p).toContain("Use the detail + signal tools");
   });
