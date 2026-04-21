@@ -58,6 +58,7 @@ interface Citation {
   notebooklm_source_id: string | null;
   related_build_item_id: string | null;
   related_decision_id: string | null;
+  related_feedback_id: string | null;
   similarity: number;
   body: string;
 }
@@ -111,6 +112,7 @@ Deno.serve(async (req) => {
       notebooklm_source_id: string | null;
       related_build_item_id: string | null;
       related_decision_id: string | null;
+      related_feedback_id: string | null;
     }>;
 
     const citations: Citation[] = rows.map((r, i) => ({
@@ -122,6 +124,7 @@ Deno.serve(async (req) => {
       notebooklm_source_id: r.notebooklm_source_id,
       related_build_item_id: r.related_build_item_id,
       related_decision_id: r.related_decision_id,
+      related_feedback_id: r.related_feedback_id ?? null,
       similarity: Number(r.similarity.toFixed(3)),
       body: r.body,
     }));

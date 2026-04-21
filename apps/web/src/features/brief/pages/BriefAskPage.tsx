@@ -8,7 +8,15 @@
  */
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowUpRight, BrainCircuit, ExternalLink, Loader2, Send } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  ArrowUpRight,
+  BrainCircuit,
+  ExternalLink,
+  Loader2,
+  MessageSquareQuote,
+  Send,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -185,6 +193,15 @@ function CitationCard({
             <p className="font-medium text-foreground">{citation.source_title}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {citation.source_type} · similarity {citation.similarity.toFixed(2)}
+              {citation.related_feedback_id && (
+                <>
+                  {" · "}
+                  <span className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400">
+                    <MessageSquareQuote className="h-3 w-3" aria-hidden />
+                    submitter-driven
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -195,17 +212,31 @@ function CitationCard({
       {expanded && (
         <div className="border-t border-border px-3 py-3 text-xs text-foreground">
           <p className="whitespace-pre-wrap">{citation.body}</p>
-          {citation.notebooklm_source_id && (
-            <a
-              href={`https://drive.google.com/file/d/${citation.notebooklm_source_id}/view`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="mt-2 inline-flex items-center text-sky-600 hover:underline dark:text-sky-400"
-            >
-              Open source in Drive
-              <ExternalLink className="ml-1 h-3 w-3" />
-            </a>
-          )}
+          <div className="mt-2 flex flex-wrap gap-3">
+            {citation.related_feedback_id && (
+              // v2.3 "Remembered" tenet: show the stakeholder the actual row
+              // their feedback became, not just the resulting changelog.
+              // Deep-links to /brief/feedback with the row-id anchored.
+              <Link
+                to={`/brief/feedback#${citation.related_feedback_id}`}
+                className="inline-flex items-center text-sky-600 hover:underline dark:text-sky-400"
+              >
+                <MessageSquareQuote className="mr-1 h-3 w-3" aria-hidden />
+                View original feedback
+              </Link>
+            )}
+            {citation.notebooklm_source_id && (
+              <a
+                href={`https://drive.google.com/file/d/${citation.notebooklm_source_id}/view`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center text-sky-600 hover:underline dark:text-sky-400"
+              >
+                Open source in Drive
+                <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            )}
+          </div>
         </div>
       )}
     </li>
