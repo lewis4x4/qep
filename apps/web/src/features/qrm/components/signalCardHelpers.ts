@@ -6,7 +6,6 @@
 
 import type {
   QrmSignal,
-  QrmSignalEntityType,
   QrmSignalKind,
   QrmSignalSeverity,
 } from "../lib/signals-types";
@@ -87,33 +86,6 @@ export function hrefForSignalEntity(signal: QrmSignal): string | null {
 }
 
 /**
- * Per-entity synthesizer hint. Slice 18 mirror of Slice 17's Graph update
- * — when the signal is tied to a deal/company/contact, name Iron's
- * dedicated synthesizer tool in the closer so the LLM reaches for the
- * bundled read instead of chaining get_*_detail + list_recent_signals
- * across multiple turns. Equipment / rental / activity / workspace
- * signals keep the generic closer because no synthesizer covers them
- * yet; when one ships, this is the single spot to wire it in.
- */
-function toolHintForSignalEntity(
-  entityType: QrmSignalEntityType,
-): string | null {
-  switch (entityType) {
-    case "deal":
-      return "Then call summarize_deal with the deal_id to pull the deal row + recent activities + open signals in one shot.";
-    case "company":
-      return "Then call summarize_company with the company_id to pull the account row + open deals + recent activities + signals in one shot.";
-    case "contact":
-      return "Then call summarize_contact with the contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
-    case "equipment":
-    case "rental":
-    case "activity":
-    case "workspace":
-      return null;
-  }
-}
-
-/**
  * Slice 8 — Pulse → Ask Iron triage handoff.
  *
  * Build a well-scoped seed question for Ask Iron when the operator clicks
@@ -122,6 +94,14 @@ function toolHintForSignalEntity(
  * for Iron to (a) look up the entity with search_entities, (b) read
  * related signals via list_recent_signals, and (c) queue a move with
  * propose_move.
+ *
+ * Slice 21 update: now names summarize_signal directly with the signal
+ * id. Iron's signal synthesizer (Slice 20) bundles the signal row, the
+ * parent entity, related signals on that entity, and moves the signal
+ * triggered — one tool call replaces what used to be a chain of
+ * list_recent_signals + search_entities + summarize_<entity>. This
+ * keeps the Pulse triage flow literal: the operator clicked on a
+ * signal, Iron reaches for the signal-centric tool.
  *
  * Kept pure so Bun can exercise formatting without the HTTP client: the
  * caller composes a string, navigates to the Ask Iron surface with it in
@@ -135,7 +115,7 @@ function toolHintForSignalEntity(
 export function formatIronTriagePrompt(
   signal: Pick<
     QrmSignal,
-    "kind" | "severity" | "title" | "description" | "entity_type" | "entity_id" | "occurred_at"
+    "id" | "kind" | "severity" | "title" | "description" | "entity_type" | "entity_id" | "occurred_at"
   >,
   nowMs: number = Date.now(),
 ): string {
@@ -152,8 +132,9 @@ export function formatIronTriagePrompt(
     `• ${kindLabel}${when ? ` (${when})` : ""}: ${signal.title.trim() || "untitled signal"}`,
   );
 
-  // Cap description to keep the seed question tight — Iron will read the
-  // signal row directly via list_recent_signals if it needs more.
+  // Cap description to keep the seed question tight — summarize_signal
+  // returns the full description too, so Iron can re-read from the tool
+  // response if it truncates something important here.
   if (signal.description) {
     const desc = signal.description.replace(/\s+/g, " ").trim();
     if (desc.length > 0) {
@@ -162,19 +143,22 @@ export function formatIronTriagePrompt(
     }
   }
 
-  // Entity scope hint — Iron can search_entities if this is missing, but
-  // passing it when we have it saves a tool round-trip.
+  // Entity scope hint — kept for the operator's own readability on the
+  // prompt (since it's seeded visibly in the Ask Iron thread). Iron's
+  // summarize_signal response will surface parent_entity on its own for
+  // routable entity types.
   if (signal.entity_type && signal.entity_id) {
     parts.push(`• Entity: ${signal.entity_type} (${signal.entity_id})`);
   }
 
-  // Slice 18 — synthesizer tool-naming. Only emitted when the signal
-  // carries BOTH an entity_type and an entity_id, since without the id
-  // the named tool would be stuck back at search_entities anyway.
-  const toolHint = signal.entity_type && signal.entity_id
-    ? toolHintForSignalEntity(signal.entity_type)
-    : null;
-  if (toolHint) parts.push(toolHint);
+  // Slice 21 — direct signal synthesizer naming. summarize_signal
+  // bundles the signal row + parent entity + related signals on that
+  // entity + moves triggered by the signal, which is exactly the set
+  // of reads a Pulse triage answer needs. Always emitted because the
+  // signal always has an id.
+  parts.push(
+    `Call summarize_signal with signal_id "${signal.id}" to pull the signal row, the entity it points at, related signals on that entity, and any moves it triggered in one shot.`,
+  );
 
   parts.push(
     "If there's a clear follow-up, call propose_move. Otherwise explain what you'd want to know before queueing anything.",
