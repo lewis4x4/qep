@@ -15,9 +15,11 @@ import {
   normalizeSearchInput,
   normalizeSignalFilters,
   normalizeSummarizeCompanyInput,
+  normalizeSummarizeContactInput,
   normalizeSummarizeDayInput,
   normalizeSummarizeDealInput,
   SUMMARIZE_COMPANY_DEAL_LIMIT,
+  SUMMARIZE_CONTACT_DEAL_LIMIT,
   SUMMARIZE_DAY_COMPLETED_LIMIT,
   SUMMARIZE_DAY_DEFAULT_HOURS,
   SUMMARIZE_DAY_MOVE_LIMIT,
@@ -158,7 +160,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the ten tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the eleven tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -169,6 +171,7 @@ Deno.test("ASK_IRON_TOOLS exposes the ten tools", () => {
     "propose_move",
     "search_entities",
     "summarize_company",
+    "summarize_contact",
     "summarize_day",
     "summarize_deal",
   ]);
@@ -2392,6 +2395,494 @@ Deno.test(
     assertEquals(payload.active_moves[0].rationale!.endsWith("…"), true);
     assertEquals(payload.recent_touches[0].body!.endsWith("…"), true);
     assertEquals(payload.open_signals[0].description!.endsWith("…"), true);
+  },
+);
+
+// ── normalizeSummarizeContactInput (Slice 16) ──────────────────────────────
+
+Deno.test("normalizeSummarizeContactInput defaults lookback_days to the shared window", () => {
+  const now = Date.parse("2026-04-20T12:00:00Z");
+  const n = normalizeSummarizeContactInput({ contact_id: "c-1" }, now);
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  assertEquals(n.sinceIso, new Date(now - 30 * 24 * 3_600_000).toISOString());
+});
+
+Deno.test("normalizeSummarizeContactInput clamps lookback above max", () => {
+  const n = normalizeSummarizeContactInput(
+    { contact_id: "c-1", lookback_days: 365 },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_MAX_DAYS);
+});
+
+Deno.test("normalizeSummarizeContactInput clamps lookback below 1", () => {
+  const n = normalizeSummarizeContactInput(
+    { contact_id: "c-1", lookback_days: 0 },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, 1);
+});
+
+Deno.test("normalizeSummarizeContactInput falls back to default when lookback is non-numeric", () => {
+  const n = normalizeSummarizeContactInput(
+    { contact_id: "c-1", lookback_days: "one week" },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeContactInput trims whitespace from contact_id", () => {
+  const n = normalizeSummarizeContactInput(
+    { contact_id: "  c-1  " },
+    Date.parse("2026-04-20T12:00:00Z"),
+  );
+  assertEquals(n.contactId, "c-1");
+});
+
+Deno.test("normalizeSummarizeContactInput throws VALIDATION_ERROR when contact_id is missing", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeContactInput({});
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+  assertEquals(caught?.message.includes("contact_id"), true);
+});
+
+Deno.test("normalizeSummarizeContactInput throws when contact_id is whitespace-only", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeContactInput({ contact_id: "   " });
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+});
+
+// ── executor: summarize_contact (Slice 16) ─────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool summarize_contact returns found:false for missing/invisible contact",
+  async () => {
+    const { client } = makeStubClient({
+      crm_contacts: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_contact", {
+      contact_id: "ghost",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as { found: boolean; lookback_days: number };
+    assertEquals(payload.found, false);
+    assertEquals(payload.lookback_days, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact short-circuits: no deal/activity/signal query when contact missing",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", { contact_id: "ghost" });
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("crm_deals_rep_safe"), false);
+    assertEquals(tables.includes("crm_activities"), false);
+    assertEquals(tables.includes("signals"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact bundles contact + related deals + activities + signals in one call",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-1",
+          first_name: "Jordan",
+          last_name: "Reeves",
+          email: "jordan@acme.test",
+          phone: "555-0100",
+          title: "Operations Manager",
+          company_id: "co-1",
+          updated_at: "2026-04-19T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: {
+        data: [
+          {
+            id: "d-1",
+            name: "Acme CAT 305",
+            amount: 140000,
+            stage: "proposal",
+            expected_close_on: "2026-05-15",
+            assigned_rep_id: "rep-me",
+            updated_at: "2026-04-18T12:00:00Z",
+          },
+        ],
+        error: null,
+      },
+      crm_activities: {
+        data: [
+          {
+            id: "a-1",
+            activity_type: "call",
+            body: "Left voicemail",
+            occurred_at: "2026-04-19T15:00:00Z",
+            created_by: "rep-me",
+            deal_id: null,
+            company_id: "co-1",
+          },
+        ],
+        error: null,
+      },
+      signals: {
+        data: [
+          {
+            id: "s-1",
+            kind: "inbound_email",
+            severity: "medium",
+            source: "email",
+            title: "Replied with timeline",
+            description: "Will review quote by Friday",
+            occurred_at: "2026-04-19T16:00:00Z",
+          },
+        ],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep", workspaceId: "ws-1" });
+    const res = await executeAskIronTool(ctx, "summarize_contact", {
+      contact_id: "c-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      contact: { id: string };
+      related_deals: Array<{ id: string }>;
+      recent_activities: Array<{ id: string }>;
+      open_signals: Array<{ id: string }>;
+      counts: { deals: number; activities: number; signals: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.contact.id, "c-1");
+    assertEquals(payload.related_deals.length, 1);
+    assertEquals(payload.recent_activities.length, 1);
+    assertEquals(payload.open_signals.length, 1);
+    assertEquals(payload.counts.deals, 1);
+    assertEquals(payload.counts.activities, 1);
+    assertEquals(payload.counts.signals, 1);
+
+    // All four queries must carry the workspace filter.
+    for (
+      const table of [
+        "crm_contacts",
+        "crm_deals_rep_safe",
+        "crm_activities",
+        "signals",
+      ]
+    ) {
+      const q = captures.find((c) => c.table === table);
+      if (!q) throw new Error(`missing capture for ${table}`);
+      const ws = q.filters.find(
+        (f) => f.op === "eq" && f.column === "workspace_id",
+      );
+      assertEquals(ws?.value, "ws-1", `${table} missing workspace_id filter`);
+    }
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact skips the deal query when contact has no company",
+  async () => {
+    // A contact detached from any company (legacy import, lead form,
+    // etc.) should still produce a useful brief — we just can't surface
+    // related deals without a company to join through.
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-orphan",
+          first_name: "Orphan",
+          last_name: "Lead",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: null,
+          updated_at: "2026-04-19T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_contact", {
+      contact_id: "c-orphan",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      related_deals: unknown[];
+      counts: { deals: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.related_deals.length, 0);
+    assertEquals(payload.counts.deals, 0);
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("crm_deals_rep_safe"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact filters activities to the exact contact_id with soft-delete guard",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-9",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: "co-9",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: { data: [], error: null },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", { contact_id: "c-9" });
+
+    const activities = captures.find((c) => c.table === "crm_activities");
+    if (!activities) throw new Error("no activity capture");
+    const contactFilter = activities.filters.find(
+      (f) => f.op === "eq" && f.column === "contact_id",
+    );
+    assertEquals(contactFilter?.value, "c-9");
+    const soft = activities.filters.find(
+      (f) => f.op === "is" && f.column === "deleted_at",
+    );
+    assertEquals(soft?.value, null);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact filters signals to entity_type='contact' + entity_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-9",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: "co-9",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: { data: [], error: null },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", { contact_id: "c-9" });
+
+    const signals = captures.find((c) => c.table === "signals");
+    if (!signals) throw new Error("no signal capture");
+    const typeFilter = signals.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_type",
+    );
+    assertEquals(typeFilter?.value, "contact");
+    const idFilter = signals.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_id",
+    );
+    assertEquals(idFilter?.value, "c-9");
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact filters related deals by the contact's company_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-1",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: "co-42",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: { data: [], error: null },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", { contact_id: "c-1" });
+
+    const deals = captures.find((c) => c.table === "crm_deals_rep_safe");
+    if (!deals) throw new Error("no deal capture");
+    const companyFilter = deals.filters.find(
+      (f) => f.op === "eq" && f.column === "company_id",
+    );
+    assertEquals(companyFilter?.value, "co-42");
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact guards the contact read with deleted_at is null",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-9",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: null,
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", { contact_id: "c-9" });
+
+    const contact = captures.find((c) => c.table === "crm_contacts");
+    if (!contact) throw new Error("no contact capture");
+    const soft = contact.filters.find(
+      (f) => f.op === "is" && f.column === "deleted_at",
+    );
+    assertEquals(soft?.value, null);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact hard-caps each list arm regardless of lookback",
+  async () => {
+    const { client, captures } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-1",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: "co-1",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: { data: [], error: null },
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_contact", {
+      contact_id: "c-1",
+      lookback_days: 90,
+    });
+
+    const deals = captures.find((c) => c.table === "crm_deals_rep_safe");
+    const activities = captures.find((c) => c.table === "crm_activities");
+    const signals = captures.find((c) => c.table === "signals");
+    assertEquals(deals?.limit, SUMMARIZE_CONTACT_DEAL_LIMIT);
+    assertEquals(activities?.limit, SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+    assertEquals(signals?.limit, SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact truncates long activity bodies and signal descriptions",
+  async () => {
+    const longText = "y".repeat(SUMMARIZE_DEAL_TEXT_CAP + 500);
+    const { client } = makeStubClient({
+      crm_contacts: {
+        data: {
+          id: "c-1",
+          first_name: "A",
+          last_name: "B",
+          email: null,
+          phone: null,
+          title: null,
+          company_id: "co-1",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      crm_deals_rep_safe: { data: [], error: null },
+      crm_activities: {
+        data: [{
+          id: "a-1",
+          activity_type: "note",
+          body: longText,
+          occurred_at: "2026-04-19T15:00:00Z",
+          created_by: null,
+          deal_id: null,
+          company_id: "co-1",
+        }],
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "news_mention",
+          severity: "low",
+          source: "news",
+          title: "t",
+          description: longText,
+          occurred_at: "2026-04-19T16:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_contact", {
+      contact_id: "c-1",
+    });
+    const payload = res.data as {
+      recent_activities: Array<{ body: string | null }>;
+      open_signals: Array<{ description: string | null }>;
+    };
+    assertEquals(
+      payload.recent_activities[0].body!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(
+      payload.open_signals[0].description!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(payload.recent_activities[0].body!.endsWith("…"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_contact returns VALIDATION_ERROR for missing contact_id",
+  async () => {
+    const { client } = makeStubClient({});
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_contact", {});
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
   },
 );
 

@@ -347,6 +347,54 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
     },
   },
   {
+    // Slice 16: person-centric mirror of summarize_deal / summarize_company.
+    // The field rep's most common "before I pick up the phone" question is
+    // "who is this person, what's their role, and what's the status across
+    // everything they're on?". Before this tool, Iron had to chain
+    // get_deal_detail (no contact detail tool exists) + list_my_touches
+    // (scoped by contact_id) + list_recent_signals (entity_type='contact')
+    // which the model rarely got right without prompting. summarize_contact
+    // bundles four reads in one shot:
+    //
+    //   1. Contact row            — crm_contacts (name/email/phone/company)
+    //   2. Related open deals     — crm_deals_rep_safe where company_id
+    //                                matches the contact's company_id (the
+    //                                schema doesn't pin deals to contacts
+    //                                directly, so company is the natural
+    //                                relation for a "what's open on them"
+    //                                question)
+    //   3. Recent activities      — crm_activities filtered by contact_id
+    //                                within the lookback window
+    //   4. Open signals           — signals where entity_type='contact'
+    //
+    // Visibility: crm_deals_rep_safe applies the rep-vs-company-deals
+    // filter so a rep summarizing a contact sees only their own deals on
+    // that contact's company. The description tells Claude to describe
+    // related_deals as "deals you can see on <their company>" rather than
+    // claiming a ground-truth count.
+    name: "summarize_contact",
+    description:
+      "Bundle a contact's row, related open deals at their company, recent activities on them, and active signals into one call. Use for person-centric questions — 'who is <name>', 'brief me on <person> before I call', 'what's the status with <contact>', 'anything new on <person>'. Distinguish from summarize_company (the whole account) and summarize_deal (one opportunity): contact = the person. Do NOT use for single-field lookups (there's no dedicated contact-detail tool — call search_entities then this). Returns structured data — write the brief yourself in 2–4 sentences. related_deals may be a partial list for rep callers due to deal visibility rules; describe it as 'deals you can see on their company'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contact_id: {
+          type: "string",
+          description:
+            "UUID of the contact to summarize. Obtain from search_entities if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30.",
+        },
+      },
+      required: ["contact_id"],
+    },
+  },
+  {
     // Slice 11: account-centric mirror of summarize_deal. Equipment/parts
     // dealerships run on accounts (territories = companies, not deals), so
     // "what's going on at Acme?" is the single most common narrative
@@ -773,6 +821,49 @@ export function normalizeSummarizeCompanyInput(
   return { companyId, lookbackDays, sinceIso };
 }
 
+// ── summarize_contact normalization (Slice 16) ─────────────────────────────
+
+export interface NormalizedSummarizeContact {
+  contactId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the `related_deals` arm of summarize_contact. Same number as
+ * summarize_company's open_deals cap — a contact's "related deals" list is
+ * computed via their company_id, so the density characteristics match.
+ */
+export const SUMMARIZE_CONTACT_DEAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_contact` input. Throws
+ * VALIDATION_ERROR on missing/empty contact_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run search_entities). Clamps
+ * lookback_days to the same 1..90 window as summarize_deal/company so
+ * operators don't have to remember three defaults.
+ */
+export function normalizeSummarizeContactInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeContact {
+  const contactId = typeof input.contact_id === "string"
+    ? input.contact_id.trim()
+    : "";
+  if (!contactId) throw new Error("VALIDATION_ERROR:contact_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { contactId, lookbackDays, sinceIso };
+}
+
 // ── list_my_touches normalization (Slice 13) ───────────────────────────────
 
 export interface NormalizedTouchFilters {
@@ -984,6 +1075,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeDeal(ctx, input) };
       case "summarize_company":
         return { ok: true, data: await toolSummarizeCompany(ctx, input) };
+      case "summarize_contact":
+        return { ok: true, data: await toolSummarizeContact(ctx, input) };
       case "list_my_touches":
         return { ok: true, data: await toolListMyTouches(ctx, input) };
       case "summarize_day":
@@ -1465,6 +1558,141 @@ async function toolSummarizeCompany(
 }
 
 /**
+ * Slice 16 — contact-level synthesizer. Answers the field rep's "who is
+ * this person before I pick up the phone" question in one round-trip.
+ *
+ * Four reads, sequenced so an invisible/soft-deleted contact short-
+ * circuits the downstream fan-out:
+ *
+ *   1. Contact row        — crm_contacts (soft-delete guarded). When
+ *                           null we return `{ found: false }` and skip
+ *                           the other three arms entirely.
+ *   2. Related deals      — crm_deals_rep_safe filtered by the contact's
+ *                           company_id. The crm_deals schema pins deals
+ *                           to companies, not contacts, so this is the
+ *                           most useful "what's open on them" slice.
+ *                           When the contact has no company_id we skip
+ *                           this arm and return an empty array — the
+ *                           LLM should still see the contact row + touches
+ *                           + signals, just without the deal context.
+ *   3. Recent activities  — crm_activities filtered by contact_id within
+ *                           the lookback window. Bodies truncated at the
+ *                           summarize-cap for context-budget predictability.
+ *   4. Open signals       — signals where entity_type='contact' +
+ *                           entity_id = contactId within the window.
+ *
+ * Scope: everything goes through callerDb with explicit workspace_id so
+ * RLS carries the tenant work. Rep-vs-company-deals visibility is baked
+ * into crm_deals_rep_safe, so a rep summarizing a contact at an account
+ * they don't own will see a filtered related_deals list; the description
+ * tells Claude to phrase that list as "deals you can see on <company>"
+ * rather than a ground-truth count.
+ */
+async function toolSummarizeContact(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeContactInput(input);
+
+  // 1) Contact row — workspace-scoped + soft-delete guard.
+  const { data: contactRow, error: contactErr } = await ctx.callerDb
+    .from("crm_contacts")
+    .select(
+      "id, first_name, last_name, email, phone, title, company_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (contactErr) throw contactErr;
+  if (!contactRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  const companyId = (contactRow as { company_id?: string | null }).company_id
+    ?? null;
+
+  // 2) Related deals — only queried when the contact has a company. The
+  // crm_deals schema pins deals to companies, not contacts; pairing the
+  // contact to their company and listing that company's visible open
+  // deals is the most useful "what's open on them" proxy.
+  let dealRows: unknown[] = [];
+  if (companyId) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_deals_rep_safe")
+      .select(
+        "id, name, amount, stage, expected_close_on, assigned_rep_id, updated_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("company_id", companyId)
+      .order("updated_at", { ascending: false })
+      .limit(SUMMARIZE_CONTACT_DEAL_LIMIT);
+    if (error) throw error;
+    dealRows = data ?? [];
+  }
+
+  // 3) Recent activities on this contact within the lookback window.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by, deal_id, company_id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("contact_id", n.contactId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 4) Signals tied to this contact within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "contact")
+    .eq("entity_id", n.contactId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    contact: contactRow,
+    related_deals: dealRows,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      deals: dealRows.length,
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
  * Slice 13 — the rep's own activity trail.
  *
  * Reads crm_activities filtered by workspace + soft-delete + caller's
@@ -1816,6 +2044,7 @@ Rules:
 - For morning-briefing questions — "what's on my plate", "brief me on my day", "where should I start", "catch me up" — call summarize_day. It bundles active moves, moves completed in the window, recent touches, and workspace signals into one round-trip. Do NOT chain list_my_moves + list_my_touches + list_recent_signals for these questions; summarize_day returns all four in a single call. Note: open_signals in the result is workspace-wide, so describe it as "on the yard's radar" or "across the workspace" rather than "on your accounts".
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
+- For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
