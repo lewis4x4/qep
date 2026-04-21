@@ -19,6 +19,7 @@ import {
   normalizeSummarizeDayInput,
   normalizeSummarizeDealInput,
   normalizeSummarizeEquipmentInput,
+  normalizeSummarizeRentalInput,
   normalizeSummarizeSignalInput,
   SUMMARIZE_COMPANY_DEAL_LIMIT,
   SUMMARIZE_CONTACT_DEAL_LIMIT,
@@ -36,6 +37,7 @@ import {
   SUMMARIZE_EQUIPMENT_RENTAL_LIMIT,
   SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT,
   SUMMARIZE_EQUIPMENT_TOUCH_LIMIT,
+  SUMMARIZE_RENTAL_SIGNAL_LIMIT,
   SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT,
   SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT,
 } from "./qrm-ask-iron.ts";
@@ -176,7 +178,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the thirteen tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the fourteen tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -191,6 +193,7 @@ Deno.test("ASK_IRON_TOOLS exposes the thirteen tools", () => {
     "summarize_day",
     "summarize_deal",
     "summarize_equipment",
+    "summarize_rental",
     "summarize_signal",
   ]);
 });
@@ -3698,6 +3701,359 @@ Deno.test(
     const { client } = makeStubClient({});
     const ctx = makeCtx(client, { role: "rep" });
     const res = await executeAskIronTool(ctx, "summarize_equipment", {});
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);
+
+// ── normalizeSummarizeRentalInput (Slice 26) ───────────────────────────────
+
+Deno.test("normalizeSummarizeRentalInput defaults lookback_days to the shared window", () => {
+  const now = new Date("2026-04-20T12:00:00Z").getTime();
+  const n = normalizeSummarizeRentalInput({ rental_id: "r-1" }, now);
+  assertEquals(n.rentalId, "r-1");
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeRentalInput clamps lookback above max", () => {
+  const n = normalizeSummarizeRentalInput(
+    { rental_id: "r-1", lookback_days: 1000 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_MAX_DAYS);
+});
+
+Deno.test("normalizeSummarizeRentalInput clamps lookback below 1", () => {
+  const n = normalizeSummarizeRentalInput(
+    { rental_id: "r-1", lookback_days: 0 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, 1);
+});
+
+Deno.test("normalizeSummarizeRentalInput falls back to default when lookback is non-numeric", () => {
+  const n = normalizeSummarizeRentalInput(
+    { rental_id: "r-1", lookback_days: "nope" },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeRentalInput trims whitespace from rental_id", () => {
+  const n = normalizeSummarizeRentalInput(
+    { rental_id: "  r-1  " },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.rentalId, "r-1");
+});
+
+Deno.test("normalizeSummarizeRentalInput throws VALIDATION_ERROR when rental_id is missing", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeRentalInput({});
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+  assertEquals(caught?.message.includes("rental_id"), true);
+});
+
+Deno.test("normalizeSummarizeRentalInput throws when rental_id is whitespace-only", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeRentalInput({ rental_id: "   " });
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+});
+
+// ── executor: summarize_rental (Slice 26) ──────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool summarize_rental returns found:false for unknown rental",
+  async () => {
+    const { client } = makeStubClient({
+      rental_contracts: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_rental", {
+      rental_id: "ghost",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as { found: boolean; lookback_days: number };
+    assertEquals(payload.found, false);
+    assertEquals(payload.lookback_days, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_rental short-circuits extensions/equipment/signals when rental missing",
+  async () => {
+    const { client, captures } = makeStubClient({
+      rental_contracts: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    await executeAskIronTool(ctx, "summarize_rental", {
+      rental_id: "ghost",
+    });
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("rental_contracts"), true);
+    assertEquals(tables.includes("rental_contract_extensions"), false);
+    assertEquals(tables.includes("crm_equipment"), false);
+    assertEquals(tables.includes("signals"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_rental bundles rental + extensions + equipment + signals",
+  async () => {
+    const { client, captures } = makeStubClient({
+      rental_contracts: {
+        data: {
+          id: "rc-1",
+          status: "active",
+          request_type: "booking",
+          portal_customer_id: "pc-1",
+          equipment_id: "e-1",
+          branch_id: "b-1",
+          requested_category: null,
+          requested_make: null,
+          requested_model: null,
+          delivery_mode: "delivery",
+          delivery_location: "123 Yard Rd",
+          requested_start_date: "2026-04-10",
+          requested_end_date: "2026-05-10",
+          approved_start_date: "2026-04-10",
+          approved_end_date: "2026-05-10",
+          estimate_daily_rate: null,
+          estimate_weekly_rate: null,
+          estimate_monthly_rate: null,
+          agreed_daily_rate: 450,
+          agreed_weekly_rate: null,
+          agreed_monthly_rate: null,
+          deposit_required: true,
+          deposit_amount: 2000,
+          deposit_status: "paid",
+          customer_notes: null,
+          dealer_notes: null,
+          dealer_response: null,
+          updated_at: "2026-04-20T09:00:00Z",
+        },
+        error: null,
+      },
+      rental_contract_extensions: {
+        data: [{
+          id: "ext-1",
+          status: "submitted",
+          requested_end_date: "2026-05-24",
+          approved_end_date: null,
+          customer_reason: "Job running long",
+          dealer_response: null,
+          additional_charge: null,
+          payment_status: null,
+          created_at: "2026-04-18T08:00:00Z",
+          updated_at: "2026-04-18T08:00:00Z",
+        }],
+        error: null,
+      },
+      crm_equipment: {
+        data: {
+          id: "e-1",
+          name: "CAT 320",
+          asset_tag: "EX-042",
+          serial_number: "CAT320-99887",
+          company_id: "co-7",
+          primary_contact_id: "c-3",
+        },
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "sla_breach",
+          severity: "high",
+          source: "rentals",
+          title: "Extension overdue for review",
+          description: "Submitted 2 days ago",
+          occurred_at: "2026-04-20T06:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_rental", {
+      rental_id: "rc-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      rental: { id: string };
+      extensions: Array<{ id: string }>;
+      equipment: { id: string; name: string | null } | null;
+      open_signals: Array<{ id: string }>;
+      counts: { extensions: number; signals: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.rental.id, "rc-1");
+    assertEquals(payload.extensions[0].id, "ext-1");
+    assertEquals(payload.equipment?.id, "e-1");
+    assertEquals(payload.open_signals[0].id, "s-1");
+    assertEquals(payload.counts.extensions, 1);
+    assertEquals(payload.counts.signals, 1);
+
+    // Extensions arm scopes by rental_contract_id.
+    const extCapture = captures.find(
+      (c) => c.table === "rental_contract_extensions",
+    );
+    assertEquals(extCapture !== undefined, true);
+    const rcFilter = extCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "rental_contract_id",
+    );
+    assertEquals(rcFilter?.value, "rc-1");
+
+    // Signals arm scopes by entity_type='rental' + entity_id.
+    const signalCapture = captures.find((c) => c.table === "signals");
+    assertEquals(signalCapture !== undefined, true);
+    const typeFilter = signalCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_type",
+    );
+    assertEquals(typeFilter?.value, "rental");
+    const idFilter = signalCapture!.filters.find(
+      (f) => f.op === "eq" && f.column === "entity_id",
+    );
+    assertEquals(idFilter?.value, "rc-1");
+    assertEquals(signalCapture!.limit, SUMMARIZE_RENTAL_SIGNAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_rental returns null equipment for category bookings",
+  async () => {
+    // A rental with no equipment_id (still in triage) should skip the
+    // equipment read entirely and return equipment: null.
+    const { client, captures } = makeStubClient({
+      rental_contracts: {
+        data: {
+          id: "rc-9",
+          status: "submitted",
+          request_type: "booking",
+          portal_customer_id: "pc-1",
+          equipment_id: null,
+          branch_id: null,
+          requested_category: "excavator",
+          requested_make: "CAT",
+          requested_model: "320",
+          delivery_mode: "pickup",
+          delivery_location: null,
+          requested_start_date: "2026-05-01",
+          requested_end_date: "2026-05-15",
+          approved_start_date: null,
+          approved_end_date: null,
+          estimate_daily_rate: null,
+          estimate_weekly_rate: null,
+          estimate_monthly_rate: null,
+          agreed_daily_rate: null,
+          agreed_weekly_rate: null,
+          agreed_monthly_rate: null,
+          deposit_required: false,
+          deposit_amount: null,
+          deposit_status: null,
+          customer_notes: "Need for spring dig",
+          dealer_notes: null,
+          dealer_response: null,
+          updated_at: "2026-04-20T09:00:00Z",
+        },
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_rental", {
+      rental_id: "rc-9",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as { found: boolean; equipment: unknown };
+    assertEquals(payload.found, true);
+    assertEquals(payload.equipment, null);
+    // Equipment read must NOT happen when equipment_id is null.
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.includes("crm_equipment"), false);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_rental truncates long signal descriptions",
+  async () => {
+    const longDesc = "z".repeat(SUMMARIZE_DEAL_TEXT_CAP + 200);
+    const { client } = makeStubClient({
+      rental_contracts: {
+        data: {
+          id: "rc-1",
+          status: "active",
+          request_type: "booking",
+          portal_customer_id: "pc-1",
+          equipment_id: null,
+          branch_id: null,
+          requested_category: null,
+          requested_make: null,
+          requested_model: null,
+          delivery_mode: "pickup",
+          delivery_location: null,
+          requested_start_date: "2026-04-10",
+          requested_end_date: "2026-05-10",
+          approved_start_date: null,
+          approved_end_date: null,
+          estimate_daily_rate: null,
+          estimate_weekly_rate: null,
+          estimate_monthly_rate: null,
+          agreed_daily_rate: null,
+          agreed_weekly_rate: null,
+          agreed_monthly_rate: null,
+          deposit_required: false,
+          deposit_amount: null,
+          deposit_status: null,
+          customer_notes: null,
+          dealer_notes: null,
+          dealer_response: null,
+          updated_at: "2026-04-20T09:00:00Z",
+        },
+        error: null,
+      },
+      signals: {
+        data: [{
+          id: "s-1",
+          kind: "sla_warning",
+          severity: "medium",
+          source: "rentals",
+          title: "Long",
+          description: longDesc,
+          occurred_at: "2026-04-20T06:00:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_rental", {
+      rental_id: "rc-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      open_signals: Array<{ description: string | null }>;
+    };
+    assertEquals(
+      payload.open_signals[0].description!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(payload.open_signals[0].description!.endsWith("…"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_rental returns VALIDATION_ERROR for missing rental_id",
+  async () => {
+    const { client } = makeStubClient({});
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_rental", {});
     assertEquals(res.ok, false);
     assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
   },

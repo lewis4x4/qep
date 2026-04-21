@@ -528,6 +528,57 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
       required: ["equipment_id"],
     },
   },
+  {
+    // Slice 26: rental-centric mirror of summarize_equipment. Rental
+    // requests have their own lifecycle (submitted → quoted → approved
+    // → active → completed) with extensions layered in, and operators
+    // often ask "where is rental request #7", "what's the status on
+    // <customer>'s booking", "what's blocking this rental". Before
+    // this tool, Iron's only path was get_* detail chains + list_recent
+    // _signals(entity_type='rental'), which missed extensions entirely
+    // and required a second tool call for the equipment row.
+    //
+    // Four-arm fan-out:
+    //   1. Rental contract row     — rental_contracts (status + dates
+    //                                + rates + deposit + delivery mode
+    //                                + notes)
+    //   2. Extensions              — rental_contract_extensions for
+    //                                this contract, all statuses
+    //                                (approved extensions are part of
+    //                                the current picture, not history)
+    //   3. Equipment (optional)    — qrm_equipment via equipment_id
+    //                                when present. Rental requests
+    //                                without equipment are "category
+    //                                bookings" still in triage.
+    //   4. Related signals         — signals(entity_type='rental') on
+    //                                this rental within window
+    //
+    // Scope: callerDb with explicit workspace_id. rental_contracts has
+    // portal-customer RLS, so a rep may see a subset of rentals. If
+    // the row isn't visible, we return {found:false} rather than
+    // throwing — same recovery path as summarize_equipment.
+    name: "summarize_rental",
+    description:
+      "Bundle a rental contract row, its extension requests, the equipment (if assigned), and related signals into one call. Use for rental-centric questions — 'where is rental request #7', 'status of <customer>'s booking', 'what's blocking this rental', 'brief me on this rental before I approve'. Distinguish from summarize_equipment (one machine across all rentals) and summarize_deal (sales): rental = one contract. Do NOT use for single-field lookups. Returns structured data — write the status yourself in 2–4 sentences. equipment may be null when the request is still in triage (category booking).",
+    input_schema: {
+      type: "object",
+      properties: {
+        rental_id: {
+          type: "string",
+          description:
+            "UUID of the rental_contracts row. Obtain from search_entities if only the rental request number is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of signals to pull. Default 30. Extensions are not lookback-scoped — all extensions on the contract return.",
+        },
+      },
+      required: ["rental_id"],
+    },
+  },
 ];
 
 // ── Input normalization (pure, testable) ────────────────────────────────────
@@ -1072,6 +1123,48 @@ export function normalizeSummarizeEquipmentInput(
   return { equipmentId, lookbackDays, sinceIso };
 }
 
+// ── summarize_rental normalization (Slice 26) ──────────────────────────────
+
+export interface NormalizedSummarizeRental {
+  rentalId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the signals arm of summarize_rental. Extensions are not
+ * capped — a contract typically has 0–2 extensions, and if one has
+ * dozens that's itself the answer (the operator should see the chaos).
+ */
+export const SUMMARIZE_RENTAL_SIGNAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_rental` input. Throws
+ * VALIDATION_ERROR on missing/empty rental_id so Claude sees a clean
+ * structured error and can recover. Clamps lookback_days to the same
+ * 1..90 window as the other summarize_* tools.
+ */
+export function normalizeSummarizeRentalInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeRental {
+  const rentalId = typeof input.rental_id === "string"
+    ? input.rental_id.trim()
+    : "";
+  if (!rentalId) throw new Error("VALIDATION_ERROR:rental_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { rentalId, lookbackDays, sinceIso };
+}
+
 // ── list_my_touches normalization (Slice 13) ───────────────────────────────
 
 export interface NormalizedTouchFilters {
@@ -1289,6 +1382,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeSignal(ctx, input) };
       case "summarize_equipment":
         return { ok: true, data: await toolSummarizeEquipment(ctx, input) };
+      case "summarize_rental":
+        return { ok: true, data: await toolSummarizeRental(ctx, input) };
       case "list_my_touches":
         return { ok: true, data: await toolListMyTouches(ctx, input) };
       case "summarize_day":
@@ -2220,6 +2315,125 @@ async function toolSummarizeEquipment(
 }
 
 /**
+ * Slice 26 — summarize_rental executor.
+ *
+ * Four-arm fan-out:
+ *
+ *   1. Rental row        — rental_contracts row. Workspace-scoped +
+ *                           portal-customer RLS. No soft-delete column;
+ *                           status is the lifecycle gate.
+ *   2. Extensions        — rental_contract_extensions for this
+ *                           contract, all statuses. No lookback —
+ *                           extensions are always "current picture".
+ *   3. Equipment         — qrm_equipment via rental.equipment_id when
+ *                           present. Category bookings (no equipment
+ *                           assigned yet) return null here.
+ *   4. Related signals   — signals where entity_type='rental' +
+ *                           entity_id = target within lookback.
+ *
+ * Returns {found: false} rather than throwing when the rental isn't
+ * visible, matching summarize_equipment / summarize_contact.
+ */
+async function toolSummarizeRental(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeRentalInput(input);
+
+  // 1) Rental contract row — workspace-scoped + RLS.
+  const { data: rentalRow, error: rentalErr } = await ctx.callerDb
+    .from("rental_contracts")
+    .select(
+      "id, status, request_type, portal_customer_id, equipment_id, branch_id, requested_category, requested_make, requested_model, delivery_mode, delivery_location, requested_start_date, requested_end_date, approved_start_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, deposit_required, deposit_amount, deposit_status, customer_notes, dealer_notes, dealer_response, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.rentalId)
+    .maybeSingle();
+  if (rentalErr) throw rentalErr;
+  if (!rentalRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Extensions — all statuses, no lookback (small set by nature).
+  const { data: extensionRows, error: extensionErr } = await ctx.callerDb
+    .from("rental_contract_extensions")
+    .select(
+      "id, status, requested_end_date, approved_end_date, customer_reason, dealer_response, additional_charge, payment_status, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("rental_contract_id", n.rentalId)
+    .order("created_at", { ascending: false });
+  if (extensionErr) throw extensionErr;
+
+  // 3) Equipment — only when the rental has one assigned.
+  type RentalSelect = {
+    equipment_id: string | null;
+  };
+  const rentalSelect = rentalRow as unknown as RentalSelect;
+  let equipment:
+    | {
+        id: string;
+        name: string | null;
+        asset_tag: string | null;
+        serial_number: string | null;
+        company_id: string | null;
+        primary_contact_id: string | null;
+      }
+    | null = null;
+  if (rentalSelect.equipment_id) {
+    const { data: equipmentRow, error: equipmentErr } = await ctx.callerDb
+      .from("crm_equipment")
+      .select(
+        "id, name, asset_tag, serial_number, company_id, primary_contact_id",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", rentalSelect.equipment_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (equipmentErr) throw equipmentErr;
+    equipment = equipmentRow ?? null;
+  }
+
+  // 4) Signals tied to this rental within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "rental")
+    .eq("entity_id", n.rentalId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_RENTAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    rental: rentalRow,
+    extensions: extensionRows ?? [],
+    equipment,
+    open_signals: signals,
+    counts: {
+      extensions: (extensionRows ?? []).length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
  * Slice 13 — the rep's own activity trail.
  *
  * Reads crm_activities filtered by workspace + soft-delete + caller's
@@ -2574,6 +2788,7 @@ Rules:
 - For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
 - For signal-centric triage questions — "triage this signal", "why is this signal hot", "what's going on with this <kind> signal", "brief me on this alert on <entity>" — call summarize_signal with the signal_id (obtain via list_recent_signals if only the kind/title is known). It bundles the signal row, the parent entity, other related signals on that entity, and moves the signal triggered. Do NOT chain list_recent_signals + search_entities + a summarize_* on the parent for triage questions; summarize_signal returns all four in one shot. parent_entity may be null for equipment/rental/activity/workspace signals — say so plainly rather than guessing.
 - For machine-centric questions — "where is <asset tag>", "status of CAT 320", "what's up with serial <serial>", "brief me on this machine", "any activity on <equipment>" — call search_entities to resolve the equipment_id (if only the asset tag or serial is known), then call summarize_equipment. It bundles the equipment row, open (non-terminal) rental contracts tied to the machine, recent touches (yard activity), and open signals on the equipment. Do NOT chain search_entities + list_recent_signals(entity_type='equipment') + a separate rentals read; summarize_equipment returns all four in one shot. open_rentals may be a partial list due to portal-customer visibility — describe it as "rentals you can see on this machine" rather than "all rentals".
+- For rental-centric questions — "where is rental request #7", "status of <customer>'s booking", "what's blocking this rental", "brief me on this rental before I approve", "any extensions pending" — call search_entities to resolve the rental_id, then call summarize_rental. It bundles the rental contract row, all extensions on the contract, the equipment (if assigned; null for category bookings), and related signals in one shot. Do NOT chain get_* + list_recent_signals(entity_type='rental') + a separate extensions read. equipment may be null when the request is still in triage — say so plainly.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
