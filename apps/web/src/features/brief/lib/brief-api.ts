@@ -406,6 +406,54 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
   return (data ?? []) as HubFeedbackRow[];
 }
 
+// ── V2.4 dedup links ────────────────────────────────────────────────────────
+
+export interface HubFeedbackLinkRow {
+  primary_id: string;
+  duplicate_id: string;
+  workspace_id: string;
+  similarity: number;
+  link_reason: "semantic_dup" | "manual_merge" | "admin_link";
+  created_at: string;
+}
+
+export interface FeedbackLinkSummary {
+  /** Count of other rows (duplicates + primaries) linked to this feedback. */
+  count: number;
+  /** Max similarity score across the linked rows (useful for admin confidence). */
+  maxSimilarity: number;
+  /** Raw edges for deeper drill-down. */
+  edges: HubFeedbackLinkRow[];
+}
+
+/**
+ * Load the dedup link summary for a feedback row. Returns edges in both
+ * directions — the caller may be the primary in some edges and the
+ * duplicate in others. The UI just renders a "+N linked" chip; the
+ * detail view (v2.5) will fan out into a cluster timeline.
+ */
+export async function listFeedbackLinks(feedbackId: string): Promise<FeedbackLinkSummary> {
+  const [asPrimary, asDuplicate] = await Promise.all([
+    supabase
+      .from("hub_feedback_links")
+      .select("primary_id, duplicate_id, workspace_id, similarity, link_reason, created_at")
+      .eq("primary_id", feedbackId),
+    supabase
+      .from("hub_feedback_links")
+      .select("primary_id, duplicate_id, workspace_id, similarity, link_reason, created_at")
+      .eq("duplicate_id", feedbackId),
+  ]);
+  if (asPrimary.error) throw new Error(asPrimary.error.message);
+  if (asDuplicate.error) throw new Error(asDuplicate.error.message);
+
+  const edges = [
+    ...((asPrimary.data ?? []) as HubFeedbackLinkRow[]),
+    ...((asDuplicate.data ?? []) as HubFeedbackLinkRow[]),
+  ];
+  const maxSimilarity = edges.reduce((m, e) => Math.max(m, e.similarity), 0);
+  return { count: edges.length, maxSimilarity, edges };
+}
+
 // ── V2.1 submitter loop-back ────────────────────────────────────────────────
 
 /**

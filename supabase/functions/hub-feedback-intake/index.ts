@@ -8,24 +8,38 @@
  *     build_item_id?: string,         // uuid
  *     voice_audio_url?: string,
  *     voice_transcript?: string,
- *     screenshot_url?: string
+ *     voice_duration_ms?: number,
+ *     screenshot_url?: string,
+ *     submission_context?: { path, title, screen, dark_mode, ua_short, ... }
  *   }
  *
  * Flow:
  *   1. requireHubUser — stakeholders + internal roles allowed.
  *   2. Call Claude Sonnet 4.6 to infer type (if missing), priority,
- *      one-line ai_summary, ai_suggested_action. Low confidence escalates
- *      to Opus 4.7 (future — the model_name is parameterized).
- *   3. Insert hub_feedback row with status='triaged' (skips 'open' — we
+ *      one-line ai_summary, ai_suggested_action.
+ *   3. v2.4 dedup: embed "<body>\n<ai_summary>" with
+ *      text-embedding-3-small and call match_hub_feedback_dedup to find
+ *      the nearest in-flight workspace row. If similarity ≥ 0.85, we'll
+ *      create the new row AND a hub_feedback_links edge — both submitters
+ *      keep their loop-back, but Brian sees "+1 linked" signal instead
+ *      of a duplicate card.
+ *   4. Insert hub_feedback row with status='triaged' (skips 'open' — we
  *      triage synchronously so Brian sees a filled row the moment the
  *      stakeholder submits).
- *   4. If priority='high', fire Resend email to the ops inbox (HUB_OPS_EMAIL).
+ *   5. If we found a dedup match, write hub_feedback_links (service role)
+ *      + emit a 'duplicate_linked' event on the primary.
+ *   6. If priority='high', fire Resend email to the ops inbox (HUB_OPS_EMAIL).
  *      Zero-blocking: falls back to no-op when RESEND_API_KEY is unset.
  *
+ * Zero-blocking on dedup: if OPENAI_API_KEY is missing or the embedding
+ * call fails, we skip dedup and proceed with the classic insert path.
+ * Brian still gets the row; the link is lossy but not load-bearing.
+ *
  * Auth: user JWT (stakeholders + admin/owner/manager/rep).
- * Response: { feedback: <row>, triage_model: string, elapsed_ms: number }.
+ * Response: { feedback, triage_model, elapsed_ms, linked_to?: { id, similarity } }.
  */
 
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   optionsResponse,
   safeJsonError,
@@ -34,6 +48,14 @@ import {
 import { requireHubUser } from "../_shared/hub-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
+import { embedText, formatVectorLiteral } from "../_shared/openai-embeddings.ts";
+
+// Empirically 0.85 cosine ≈ "these are about the same thing." Below that
+// we see distinct issues in the same module get lumped together (false
+// merge), above it we miss obvious "+1" cases. Tuned from the v2.4
+// calibration set in docs/build-hub-v2-roadmap.md.
+const DEDUP_MIN_SIMILARITY = 0.85;
+const DEDUP_MAX_AGE_DAYS = 45;
 
 const TRIAGE_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 512;
@@ -148,6 +170,34 @@ Deno.serve(async (req) => {
 
     const finalType: FeedbackType = providedType ?? triage.feedback_type;
 
+    // ── v2.4 dedup: embed body+summary, search for near-duplicates ──
+    //
+    // We run the embedding + match step before insert so the new row goes
+    // in WITH the embedding populated (no follow-up UPDATE needed) and so
+    // we can write the link atomically-ish. The match uses the caller's
+    // JWT-scoped RPC (SECURITY DEFINER inside resolves workspace), so we
+    // don't need service role for the lookup.
+    //
+    // Zero-blocking: if any step fails, we fall through to the plain
+    // insert path — dedup is a nice-to-have, not load-bearing.
+    let embeddingLiteral: string | null = null;
+    let dedupMatch: DedupMatch | null = null;
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (openaiKey) {
+      try {
+        const embedText_ = [body, triage.ai_summary].filter(Boolean).join("\n").slice(0, 8000);
+        const vec = await embedText(embedText_);
+        embeddingLiteral = formatVectorLiteral(vec);
+        dedupMatch = await findDedupMatch(auth.supabase, embeddingLiteral);
+      } catch (err) {
+        console.warn(
+          `[hub-feedback-intake] dedup skipped: ${(err as Error).message ?? "unknown"}`,
+        );
+        embeddingLiteral = null;
+        dedupMatch = null;
+      }
+    }
+
     const insertPayload = {
       workspace_id: auth.workspaceId,
       submitted_by: auth.userId,
@@ -163,6 +213,7 @@ Deno.serve(async (req) => {
       ai_summary: triage.ai_summary,
       ai_suggested_action: triage.ai_suggested_action,
       submission_context: submissionContext ?? {},
+      embedding: embeddingLiteral,
     };
 
     const { data: inserted, error: insertErr } = await auth.supabase
@@ -173,6 +224,31 @@ Deno.serve(async (req) => {
 
     if (insertErr || !inserted) {
       throw new Error(`insert failed: ${insertErr?.message ?? "unknown"}`);
+    }
+
+    // ── Write the dedup link + event via service role ───────────────────
+    //
+    // hub_feedback_links RLS restricts inserts to service role / internal
+    // admin. Stakeholder JWTs can't write here, so we create a short-lived
+    // service client just for this edge. The row.ID we just got back is
+    // always the *duplicate* (newer submission), the matched row is the
+    // *primary* (older, already-triaged).
+    if (dedupMatch) {
+      try {
+        await writeDedupLink({
+          primaryId: dedupMatch.feedback_id,
+          duplicateId: inserted.id as string,
+          workspaceId: auth.workspaceId,
+          similarity: dedupMatch.similarity,
+          newSubmitterId: auth.userId,
+        });
+      } catch (err) {
+        // The row is already in. A missing link is recoverable later
+        // (admins can hand-link) but should never abort the intake.
+        console.warn(
+          `[hub-feedback-intake] dedup link write failed: ${(err as Error).message ?? "unknown"}`,
+        );
+      }
     }
 
     // High-priority items page the ops inbox. Zero-blocking — skipped
@@ -204,6 +280,13 @@ Deno.serve(async (req) => {
         feedback: inserted,
         triage_model: TRIAGE_MODEL,
         elapsed_ms: Date.now() - startMs,
+        linked_to: dedupMatch
+          ? {
+              feedback_id: dedupMatch.feedback_id,
+              similarity: Number(dedupMatch.similarity.toFixed(3)),
+              ai_summary: dedupMatch.ai_summary,
+            }
+          : null,
       },
       origin,
     );
@@ -238,6 +321,102 @@ function sanitizeSubmissionContext(raw: unknown): SubmissionContext | null {
   if (typeof src.dark_mode === "boolean") out.dark_mode = src.dark_mode;
   if (typeof src.ua_short === "string") out.ua_short = src.ua_short.slice(0, 120);
   return Object.keys(out).length === 0 ? null : out;
+}
+
+/**
+ * Shape returned by match_hub_feedback_dedup RPC. Only the fields we
+ * consume here are typed; the RPC returns a couple more we ignore.
+ */
+interface DedupMatch {
+  feedback_id: string;
+  submitted_by: string | null;
+  body: string;
+  ai_summary: string;
+  status: string;
+  priority: string;
+  similarity: number;
+  created_at: string;
+}
+
+/**
+ * Call match_hub_feedback_dedup to find the nearest in-flight row. Returns
+ * the single best match (already threshold-filtered inside the RPC) or null.
+ */
+async function findDedupMatch(
+  supabase: SupabaseClient,
+  embeddingLiteral: string,
+): Promise<DedupMatch | null> {
+  const { data, error } = await supabase.rpc("match_hub_feedback_dedup", {
+    p_query_embedding: embeddingLiteral,
+    p_exclude_id: null,
+    p_min_similarity: DEDUP_MIN_SIMILARITY,
+    p_max_age_days: DEDUP_MAX_AGE_DAYS,
+    p_match_count: 1,
+  });
+  if (error) throw new Error(`match_hub_feedback_dedup: ${error.message}`);
+  const rows = (data ?? []) as DedupMatch[];
+  if (rows.length === 0) return null;
+  return rows[0];
+}
+
+/**
+ * Persist the dedup edge as (primary, duplicate) with service-role
+ * writes, then emit a timeline event on the primary so both submitters
+ * see the "+1 from Angela" signal in their inbox.
+ *
+ * We use a short-lived service-role client because hub_feedback_links
+ * RLS excludes stakeholders from writing (by design — we don't want a
+ * compromised JWT to merge cards). The JWT that reached us is still
+ * the user's; we only elevate for these two writes.
+ */
+async function writeDedupLink(params: {
+  primaryId: string;
+  duplicateId: string;
+  workspaceId: string;
+  similarity: number;
+  newSubmitterId: string;
+}): Promise<void> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("dedup link: SUPABASE env missing");
+  }
+  const service: SupabaseClient = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // Idempotent insert — the (primary_id, duplicate_id) pair is the PK.
+  // `upsert` with onConflict lets a retry not blow up.
+  const { error: linkErr } = await service
+    .from("hub_feedback_links")
+    .upsert(
+      {
+        primary_id: params.primaryId,
+        duplicate_id: params.duplicateId,
+        workspace_id: params.workspaceId,
+        similarity: params.similarity,
+        link_reason: "semantic_dup",
+      },
+      { onConflict: "primary_id,duplicate_id" },
+    );
+  if (linkErr) throw new Error(`hub_feedback_links insert: ${linkErr.message}`);
+
+  // Emit a timeline event on the primary. Payload carries the duplicate
+  // row id + the new submitter so the admin inbox can render
+  // "Angela also reported this" without a second fetch.
+  const { error: evErr } = await service.from("hub_feedback_events").insert({
+    feedback_id: params.primaryId,
+    workspace_id: params.workspaceId,
+    event_type: "duplicate_linked",
+    actor_id: params.newSubmitterId,
+    actor_role: "submitter",
+    payload: {
+      duplicate_id: params.duplicateId,
+      similarity: params.similarity,
+      new_submitter_id: params.newSubmitterId,
+    },
+  });
+  if (evErr) throw new Error(`hub_feedback_events insert: ${evErr.message}`);
 }
 
 function normalizeType(raw: unknown): FeedbackType | null {
