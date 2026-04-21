@@ -107,14 +107,27 @@ async function resolveCallerWorkspaceId(callerDb) {
   return data.trim();
 }
 async function getCallerProfile(jwt) {
-  const caller = createCallerClient(jwt);
-  const { data: { user }, error } = await caller.auth.getUser();
-  if (error || !user) return null;
-  const { data: profile } = await adminClient.from("profiles").select("id, role").eq("id", user.id).single();
+  // ES256-safe token validation via GoTrue. supabase-js v2's local verifier
+  // rejects this project's ES256 tokens; hit /auth/v1/user directly instead.
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!anonKey) return null;
+  let userId;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${jwt}`, apikey: anonKey },
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    if (!body || typeof body.id !== "string") return null;
+    userId = body.id;
+  } catch {
+    return null;
+  }
+  const { data: profile } = await adminClient.from("profiles").select("id, role").eq("id", userId).single();
   const role = profile?.role;
   const parsedRole = role === "rep" || role === "admin" || role === "manager" || role === "owner" ? role : null;
   return {
-    id: user.id,
+    id: userId,
     role: parsedRole
   };
 }

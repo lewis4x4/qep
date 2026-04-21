@@ -332,3 +332,27 @@ verify_jwt = false
 
 [functions.qrm-reminder-dispatcher]
 verify_jwt = false
+
+# Standard rep+ cohort (legacy migration batch 4). Each function authenticates
+# via _shared/service-auth.ts::requireServiceUser. Gateway verify_jwt must be
+# off so ES256 user sessions reach the function's own canonical auth.
+[functions.demo-manager]
+verify_jwt = false
+
+[functions.dge-optimizer]
+verify_jwt = false
+
+[functions.prep-sheet]
+verify_jwt = false
+
+[functions.sop-engine]
+verify_jwt = false
+
+[functions.sop-ingest]
+verify_jwt = false
+
+[functions.sop-suggest]
+verify_jwt = false
+
+[functions.voice-to-qrm]
+verify_jwt = false

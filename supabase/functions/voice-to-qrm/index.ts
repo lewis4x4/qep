@@ -18,6 +18,7 @@
  * Auth: rep/manager/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -242,37 +243,20 @@ Deno.serve(async (req) => {
   const pipelineStart = Date.now();
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return safeJsonError("Unauthorized", 401, origin);
+    // Canonical ES256-safe JWT auth; tighten to rep/manager/owner (no admin).
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    if (!["rep", "manager", "owner"].includes(auth.role)) {
+      return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
-
-    // Verify role and get workspace
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role, iron_role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["rep", "manager", "owner"].includes(profile.role)) {
-      return safeJsonError("Your role does not have access to voice-to-QRM.", 403, origin);
-    }
     const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
 
     // ── 1. Parse multipart form data ───���──────────────────────────────────

@@ -17,14 +17,10 @@
  *
  * Auth: rep/admin/manager/owner (workspace-scoped)
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
-
-interface ProfileRoleRow {
-  role: string | null;
-}
 
 function stringArrayFromUnknown(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -36,24 +32,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    const callerRole = ((profile as ProfileRoleRow | null)?.role ?? "").trim();
+    // Canonical ES256-safe JWT auth, rep/admin/manager/owner role gate.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
+    const callerRole = auth.role;
     const isManagerPlus = callerRole === "manager" || callerRole === "owner" || callerRole === "admin";
 
     const url = new URL(req.url);

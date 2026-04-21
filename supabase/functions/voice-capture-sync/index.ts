@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { decryptToken, encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -120,35 +121,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    // Canonical ES256-safe JWT auth, rep/admin/manager/owner role gate.
+    const origin = req.headers.get("origin");
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) {
       return jsonError("Unauthorized", 401, headers);
     }
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return jsonError("Unauthorized", 401, headers);
-    }
-
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("Your role does not have access to voice capture sync.", 403, headers);
-    }
 
     const body = await req.json().catch(() => null) as { capture_id?: string } | null;
     const captureId = body?.capture_id?.trim();

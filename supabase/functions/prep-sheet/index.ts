@@ -9,6 +9,7 @@
  * Returns markdown formatted for printing or display.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
 const ALLOWED_ORIGINS = [
@@ -324,37 +325,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    // Canonical ES256-safe JWT auth, rep/admin/manager/owner role gate.
+    const origin = req.headers.get("origin");
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) {
       return jsonError("Unauthorized", 401, ch);
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return jsonError("Unauthorized", 401, ch);
-    }
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
     const adminDb = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    // Enforce role: only reps, managers, admins, and owners
-    const { data: profile } = await adminDb
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("Forbidden", 403, ch);
-    }
 
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const entityType = (body.entity_type as string) ?? "company";

@@ -15,6 +15,7 @@
  * Auth: admin/manager/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -140,34 +141,27 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    // Canonical ES256-safe JWT auth; tighten to admin/manager/owner below.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    if (!["admin", "manager", "owner"].includes(auth.role)) {
+      return safeJsonError("SOP ingestion requires admin, manager, or owner role", 403, origin);
+    }
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
-
+    // Need active_workspace_id for downstream writes.
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, active_workspace_id")
+      .select("active_workspace_id")
       .eq("id", user.id)
       .single();
-
-    if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
-      return safeJsonError("SOP ingestion requires admin, manager, or owner role", 403, origin);
-    }
-
-    const workspace = profile.active_workspace_id || "default";
+    const workspace = profile?.active_workspace_id || "default";
 
     const body = await req.json();
     let documentText = body.text || "";

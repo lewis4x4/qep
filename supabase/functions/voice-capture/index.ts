@@ -12,6 +12,7 @@
  *   7. Return capture record + extracted data
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { encryptToken, decryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
 import {
@@ -35,38 +36,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    // ── Canonical ES256-safe JWT auth, rep/admin/manager/owner role gate. ──
+    const origin = req.headers.get("origin");
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) {
       return jsonError("Unauthorized", 401, ch);
     }
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return jsonError("Unauthorized", 401, ch);
-    }
-
-    // Verify role — parts/service roles cannot use voice capture
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("Your role does not have access to voice capture.", 403, ch);
-    }
 
     // SEC-QEP-006: Per-user rate limiting — 5 requests per minute
     const allowed = await checkVoiceCaptureRateLimit(supabaseAdmin, user.id);

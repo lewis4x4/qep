@@ -5,6 +5,7 @@
  */
 import { Buffer } from "node:buffer";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import mammoth from "npm:mammoth@1.8.0";
 import pdfParse from "npm:pdf-parse@1.1.1";
 import XLSX from "npm:xlsx@0.18.5";
@@ -311,31 +312,27 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
+    // Canonical ES256-safe JWT auth. requireServiceUser gates rep+; this
+    // endpoint tightens further to admin/manager/owner below.
+    const origin = req.headers.get("origin");
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) {
+      // Preserve the legacy jsonResponse shape (local ch header helper).
       return jsonResponse({ error: "Unauthorized" }, 401, ch);
     }
-
-    // Auth check — only admin/manager/owner roles
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return jsonResponse({ error: "Unauthorized" }, 401, ch);
+    if (!["admin", "manager", "owner"].includes(auth.role)) {
+      return jsonResponse({ error: "Forbidden: insufficient role" }, 403, ch);
     }
+    const user = { id: auth.userId };
 
+    // Need active_workspace_id for downstream writes; pull just that column.
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("role, active_workspace_id")
       .eq("id", user.id)
       .single();
-
-    if (!profile || !["admin", "manager", "owner"].includes(profile.role)) {
-      return jsonResponse({ error: "Forbidden: insufficient role" }, 403, ch);
+    if (!profile) {
+      return jsonResponse({ error: "Profile not found" }, 403, ch);
     }
 
     const contentType = req.headers.get("content-type") || "";
