@@ -1,7 +1,15 @@
 export function resolveHomeRoute(
   userRole: string | null | undefined,
   ironRole?: string | null,
+  audience?: string | null,
 ): string {
+  // Stakeholder audience (external QEP USA build observers — Ryan, Rylee,
+  // Juan, Angela) always lands on the Build Hub regardless of role/iron role.
+  // Internal operators keep their role-based routing below.
+  if (audience === "stakeholder") {
+    return "/brief";
+  }
+
   // Iron role is the most reliable routing signal — check it first.
   // This handles cases where role is generic ("rep") but iron_role
   // is explicitly set to a department-specific persona.

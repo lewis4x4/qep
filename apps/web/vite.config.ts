@@ -65,12 +65,14 @@ export default defineConfig({
   },
   build: {
     ...(sentrySourceMapUpload ? { sourcemap: "hidden" as const } : {}),
-    // Maplibre-gl is a monolithic WebGL renderer (~1MB raw / ~280KB gzip)
-    // and lives in its own route-split chunk that ONLY downloads when the
-    // user opens /fleet or /portal/fleet. The 500KB warning is noise for
-    // this case — bump just past maplibre's real size so genuinely-too-big
-    // chunks (>1.2MB) still warn.
-    chunkSizeWarningLimit: 1200,
+    // Two monolithic libs live in dedicated route-split chunks:
+    //   * maplibre-gl (~1MB raw / ~280KB gzip) — only loads on map routes.
+    //   * @react-pdf/renderer (~1.55MB raw / ~517KB gzip) — only loads when
+    //     a user taps "Download PDF" in quote-builder (dynamic import in
+    //     useQuotePDF.ts). Never in the initial bundle.
+    // Neither affects initial page weight. Bump the warning threshold past
+    // react-pdf's real size so genuinely-too-big chunks (>1.6MB) still warn.
+    chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
         manualChunks(id) {

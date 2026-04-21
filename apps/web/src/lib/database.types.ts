@@ -12909,6 +12909,7 @@ export type Database = {
       profiles: {
         Row: {
           active_workspace_id: string
+          audience: string | null
           created_at: string
           email: string | null
           full_name: string | null
@@ -12918,10 +12919,12 @@ export type Database = {
           is_active: boolean
           is_support: boolean
           role: Database["public"]["Enums"]["user_role"]
+          stakeholder_subrole: string | null
           updated_at: string
         }
         Insert: {
           active_workspace_id?: string
+          audience?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -12931,10 +12934,12 @@ export type Database = {
           is_active?: boolean
           is_support?: boolean
           role?: Database["public"]["Enums"]["user_role"]
+          stakeholder_subrole?: string | null
           updated_at?: string
         }
         Update: {
           active_workspace_id?: string
+          audience?: string | null
           created_at?: string
           email?: string | null
           full_name?: string | null
@@ -12944,6 +12949,7 @@ export type Database = {
           is_active?: boolean
           is_support?: boolean
           role?: Database["public"]["Enums"]["user_role"]
+          stakeholder_subrole?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -28966,7 +28972,7 @@ export type Database = {
         | "daily"
         | "weekly"
         | "manual"
-      user_role: "rep" | "admin" | "manager" | "owner"
+      user_role: "rep" | "admin" | "manager" | "owner" | "client_stakeholder"
       voice_capture_status: "pending" | "processing" | "synced" | "failed"
       voice_intent:
         | "lookup"

@@ -22,9 +22,10 @@ import {
   mergeDuplicateContacts,
 } from "../lib/qrm-router-api";
 import type { QrmDuplicateCandidate } from "../lib/types";
+import type { UserRole } from "@/lib/database.types";
 
 interface QrmDuplicatesPageProps {
-  userRole: "rep" | "admin" | "manager" | "owner";
+  userRole: UserRole;
 }
 
 function ContactColumn({
