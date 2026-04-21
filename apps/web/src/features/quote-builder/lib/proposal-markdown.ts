@@ -39,6 +39,8 @@ import {
 import type { ProposalApplyVerdict } from "./proposal-apply-verdict";
 import { describeProposalVerdictPill } from "./proposal-apply-verdict";
 import type { ProposalWatchlist } from "./proposal-watchlist";
+import type { ProposalStabilityReport } from "./proposal-stability";
+import { describeStabilityPill } from "./proposal-stability";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -64,6 +66,12 @@ export interface ProposalMarkdownContext {
    *  handled — section is omitted cleanly when no factors warrant
    *  monitoring (e.g. an all-healthy strengthen proposal). */
   watchlist: ProposalWatchlist | null;
+  /** 20aa — per-change sensitivity report: which actionable changes
+   *  hold up under small perturbations of the measured lift and sample
+   *  size, and which are knife's-edge calls. Null when caller doesn't
+   *  compute; `empty=true` report is handled — section is omitted
+   *  cleanly when the proposal has no actionable changes. */
+  stability: ProposalStabilityReport | null;
 }
 
 /**
@@ -199,6 +207,34 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
         const sign = d.contribution > 0 ? "+" : "";
         lines.push(`  - \`${sign}${d.contribution}\` — ${d.rationale}`);
       }
+    }
+  }
+
+  // Stability (20aa) — per-change sensitivity analysis sits just above
+  // the watchlist because "is this call solid?" logically precedes
+  // "what do I watch after applying it?". Omitted when the proposal
+  // has no actionable changes, or when the stability report is empty
+  // for any other reason — the header is only useful alongside the
+  // per-row detail that pinpoints which changes are knife's-edge.
+  if (ctx.stability && !ctx.stability.empty && ctx.stability.changes.length > 0) {
+    const pill = describeStabilityPill(ctx.stability);
+    const headline = ctx.stability.headline ?? "";
+    lines.push(`**Stability**: ${pill.label} — ${headline}`);
+    for (const row of ctx.stability.changes) {
+      const ratingTag =
+        row.rating === "stable"
+          ? "🟢 stable"
+          : row.rating === "mixed"
+            ? "🟡 mixed"
+            : "🔴 fragile";
+      const pct = Math.round(row.stability * 100);
+      const alt =
+        row.altAction && row.altAction !== row.action
+          ? ` · would drift to \`${row.altAction}\``
+          : "";
+      lines.push(
+        `  - \`${row.label}\` · ${row.action} · ${ratingTag} (${pct}% stable)${alt}`,
+      );
     }
   }
 

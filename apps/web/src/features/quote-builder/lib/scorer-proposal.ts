@@ -98,7 +98,13 @@ export interface ScorerProposal {
  * observations" rationale — we never recommend mutating something we
  * haven't measured.
  */
-function pickAction(f: FactorAttribution): {
+/**
+ * Decide the action verb + rationale for one factor. Exported so that
+ * downstream stability / sensitivity analysis (20aa) can re-evaluate
+ * the same rule against perturbed factor inputs without duplicating
+ * the decision matrix.
+ */
+export function pickAction(f: FactorAttribution): {
   action: ScorerAction;
   rationale: string;
 } {

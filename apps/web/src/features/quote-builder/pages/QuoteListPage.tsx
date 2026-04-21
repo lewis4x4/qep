@@ -95,6 +95,11 @@ import {
   computeProposalWatchlist,
   type ProposalWatchlist,
 } from "../lib/proposal-watchlist";
+import {
+  computeProposalStability,
+  describeStabilityPill,
+  type ProposalStabilityReport,
+} from "../lib/proposal-stability";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
 
 /**
@@ -318,13 +323,23 @@ export function QuoteListPage() {
    * null summary (rep / thin data / no closed deals) gracefully yields
    * null corroboration.
    */
-  const scorerProposal = useMemo<ScorerProposal | null>(() => {
+  /**
+   * The factor-attribution report is computed once here and reused by
+   * both the proposal itself (20m) and the stability / sensitivity
+   * analysis (20aa). Keeping it memoised at page scope means we don't
+   * recompute the same deal-grouped aggregation when either downstream
+   * memo fires.
+   */
+  const attributionReport = useMemo<FactorAttributionReport | null>(() => {
     const r = factorsQueryTop.data;
     if (!r || !r.ok) return null;
-    const report = computeFactorAttribution(r.deals);
-    if (report.factors.length === 0) return null;
-    return computeScorerProposal(report, shadowCalibrationSummary);
-  }, [factorsQueryTop.data, shadowCalibrationSummary]);
+    return computeFactorAttribution(r.deals);
+  }, [factorsQueryTop.data]);
+
+  const scorerProposal = useMemo<ScorerProposal | null>(() => {
+    if (!attributionReport || attributionReport.factors.length === 0) return null;
+    return computeScorerProposal(attributionReport, shadowCalibrationSummary);
+  }, [attributionReport, shadowCalibrationSummary]);
 
   /**
    * Slice 20p — scorer what-if preview. Runs the proposed changes against
@@ -482,6 +497,20 @@ export function QuoteListPage() {
     return computeProposalWatchlist(scorerProposal, factorDriftReport);
   }, [scorerProposal, factorDriftReport]);
 
+  /**
+   * Slice 20aa — proposal stability / sensitivity analysis. For every
+   * actionable change in the proposal, we perturb the measured lift by
+   * small amounts (±5pp in 2.5pp steps) and scale the sample size
+   * (±20%), re-running the classifier on each of the 15 resulting
+   * cells. The output tells the manager which changes are rock-solid
+   * and which are knife's-edge calls. Null when no attribution report
+   * yet; empty-report when proposal has no actionable changes.
+   */
+  const proposalStability = useMemo<ProposalStabilityReport | null>(() => {
+    if (!attributionReport || !scorerProposal) return null;
+    return computeProposalStability(attributionReport, scorerProposal);
+  }, [attributionReport, scorerProposal]);
+
   const items: QuoteListItem[] = quotesQuery.data?.items ?? [];
 
   const stats = useMemo(() => computeStats(items), [items]);
@@ -579,6 +608,7 @@ export function QuoteListPage() {
           callFlips={proposalCallFlips}
           verdict={proposalVerdict}
           watchlist={proposalWatchlist}
+          stability={proposalStability}
           calibrationDrift={calibrationDrift}
           factorDrift={factorDriftReport}
         />
@@ -1653,6 +1683,7 @@ function ScorerProposalCard({
   callFlips,
   verdict,
   watchlist,
+  stability,
   calibrationDrift,
   factorDrift,
 }: {
@@ -1692,6 +1723,14 @@ function ScorerProposalCard({
    *  clipboard markdown so the ticket carries an actionable checklist
    *  for the N days after the proposal lands. Null when no proposal. */
   watchlist: ProposalWatchlist | null;
+  /** Slice 20aa — proposal stability / sensitivity report: for every
+   *  actionable change, stability fraction under small lift + sample
+   *  perturbations, plus aggregate rating. The card renders an
+   *  emerald/amber/rose pill in the header and a per-change row list
+   *  in the expanded panel so the manager can see which pieces of the
+   *  proposal are rock-solid and which are knife's-edge calls. Null
+   *  when we don't have attribution data yet; empty-report is handled. */
+  stability: ProposalStabilityReport | null;
   /** Slice 20u — scorer-wide calibration drift (20s) passed through so
    *  the "Copy as ticket" handoff carries the full evidence chain, not
    *  just the proposal body. Null when no calibration window exists. */
@@ -1733,6 +1772,7 @@ function ScorerProposalCard({
         callFlips,
         verdict,
         watchlist,
+        stability,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
@@ -1818,6 +1858,33 @@ function ScorerProposalCard({
                   {describeProposalVerdictPill(verdict.verdict)}
                 </span>
               )}
+              {/* Slice 20aa — stability pill. Sits last in the pill
+                  row because it's the "kick the tires" signal — after
+                  urgency (when), confidence (how much to trust), and
+                  verdict (what to do), stability answers "is the call
+                  itself robust?". Hidden when empty (no actionable
+                  changes) or null (no attribution data) so the row
+                  doesn't show a meaningless "NO DATA" chip. */}
+              {stability && !stability.empty && stability.rating !== null && (() => {
+                const pill = describeStabilityPill(stability);
+                const cls =
+                  pill.tone === "emerald"
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : pill.tone === "amber"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : pill.tone === "rose"
+                        ? "bg-rose-500/15 text-rose-300"
+                        : "bg-muted/30 text-muted-foreground";
+                return (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide tabular-nums ${cls}`}
+                    aria-label={`Stability: ${stability.rating} — ${stability.headline ?? ""}`}
+                    title={stability.headline ?? ""}
+                  >
+                    {pill.label}
+                  </span>
+                );
+              })()}
               <span
                 className="text-[10px] text-muted-foreground tabular-nums"
                 aria-label={`${actionable.length} recommended changes, ${keeps.length} keep as-is`}
@@ -2009,6 +2076,17 @@ function ScorerProposalCard({
                   changing any verdicts"), because that's still a fact
                   the manager wants to know before approving. */}
               {callFlips && <ScorerProposalCallFlipsRow report={callFlips} />}
+              {/* Slice 20aa — proposal stability / sensitivity row.
+                  Sits just above the watchlist because it answers "is
+                  the decision robust?" and the watchlist answers "what
+                  do I monitor after applying?". A fragile stability
+                  rating should make the manager read the watchlist
+                  more carefully. Hidden when the report is empty / no
+                  actionable changes — same fall-through grammar as the
+                  watchlist row. */}
+              {stability && !stability.empty && stability.changes.length > 0 && (
+                <ScorerProposalStabilityRow stability={stability} />
+              )}
               {/* Slice 20z — post-apply watchlist. Rendered below the
                   call-flips so a reviewer reads the decision signals
                   first ("here's what the proposal does") and THEN the
@@ -2201,6 +2279,95 @@ function ScorerProposalWatchlistRow({
               <p className="mt-0.5 text-[10px] text-muted-foreground">
                 <span className="text-foreground">Trigger:</span> {item.trigger}
               </p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Slice 20aa — proposal stability / sensitivity row inside the
+ * ScorerProposalCard.
+ *
+ * Per actionable change, renders a row with the stability rating
+ * badge (🟢/🟡/🔴), stability percentage, and — when the call
+ * flipped under perturbation — the most common alternative action
+ * so the manager can see which way the decision would drift.
+ *
+ * "Stability: 100% · flip on `Trade in hand`" reads as "rock solid."
+ * "Stability: 40% · drop on `Edge` would drift to keep" reads as
+ * "this one is a knife's-edge call — one more deal could flip it."
+ * The row is the visual complement of the header pill: the pill
+ * tells you the aggregate, the row tells you which specific pieces
+ * earned it.
+ */
+function ScorerProposalStabilityRow({
+  stability,
+}: {
+  stability: ProposalStabilityReport;
+}) {
+  const meanPct =
+    stability.meanStability === null
+      ? null
+      : Math.round(stability.meanStability * 100);
+  return (
+    <div
+      className="rounded border border-violet-500/15 bg-background/40 p-2"
+      role="region"
+      aria-label="Proposal stability under small perturbations"
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+          Stability (sensitivity)
+        </div>
+        {meanPct !== null && (
+          <div className="text-[10px] text-muted-foreground tabular-nums">
+            {meanPct}% mean
+          </div>
+        )}
+      </div>
+      {stability.headline && (
+        <p className="mt-0.5 text-[11px] text-foreground">{stability.headline}</p>
+      )}
+      <ul className="mt-1.5 space-y-1">
+        {stability.changes.map((row, i) => {
+          const ratingTone =
+            row.rating === "stable"
+              ? { icon: "🟢", color: "text-emerald-300" }
+              : row.rating === "mixed"
+                ? { icon: "🟡", color: "text-amber-300" }
+                : { icon: "🔴", color: "text-rose-300" };
+          const pct = Math.round(row.stability * 100);
+          const drift =
+            row.altAction && row.altAction !== row.action
+              ? `would drift to ${row.altAction}`
+              : null;
+          return (
+            <li
+              key={`${row.label}-${i}`}
+              className="border-l border-violet-500/20 pl-2"
+              aria-label={`${row.label}: ${row.action} is ${row.rating} at ${pct} percent stability${drift ? ` — ${drift}` : ""}`}
+            >
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className={ratingTone.color}>{ratingTone.icon}</span>
+                <span
+                  className="font-mono text-foreground truncate"
+                  title={row.label}
+                >
+                  {row.label}
+                </span>
+                <span className="text-muted-foreground">· {row.action}</span>
+                <span className={`ml-auto tabular-nums ${ratingTone.color}`}>
+                  {pct}%
+                </span>
+              </div>
+              {drift && (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <span className="text-foreground">If perturbed:</span> {drift}
+                </p>
+              )}
             </li>
           );
         })}

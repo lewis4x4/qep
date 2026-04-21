@@ -23,6 +23,7 @@ import type { ProposalConfidenceResult } from "../proposal-confidence";
 import type { ProposalCallFlipReport } from "../proposal-call-flips";
 import type { ProposalApplyVerdict } from "../proposal-apply-verdict";
 import type { ProposalWatchlist } from "../proposal-watchlist";
+import type { ProposalStabilityReport } from "../proposal-stability";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -74,6 +75,7 @@ function nullCtx(): ProposalMarkdownContext {
     callFlips: null,
     verdict: null,
     watchlist: null,
+    stability: null,
   };
 }
 
@@ -1031,5 +1033,181 @@ describe("renderProposalMarkdownWithContext — watchlist section (20z)", () => 
     const ctx: ProposalMarkdownContext = { ...nullCtx(), watchlist };
     const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
     expect(md).toContain("**Watchlist**: 2 factors to monitor after applying.");
+  });
+});
+
+describe("renderProposalMarkdownWithContext — stability section (20aa)", () => {
+  test("empty stability report → no Stability block", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [],
+      meanStability: null,
+      rating: null,
+      headline: null,
+      empty: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("Stability");
+  });
+
+  test("null stability → no Stability block (silent fallthrough)", () => {
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability: null };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Stability**");
+  });
+
+  test("stable rating → emerald pill + 100% stable row, no drift hint", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          stability: 1,
+          altAction: null,
+          rating: "stable",
+        },
+      ],
+      meanStability: 1,
+      rating: "stable",
+      headline: "Stable — 100% mean stability across 1 actionable change, all survive small lift perturbations.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Stability**: ✓ STABLE 100%");
+    expect(md).toContain("Stable — 100% mean stability");
+    expect(md).toContain("`Trade in hand` · flip · 🟢 stable (100% stable)");
+    expect(md).not.toContain("would drift to");
+  });
+
+  test("mixed rating → amber pill + includes altAction hint when present", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [
+        {
+          label: "Tiny signal",
+          action: "drop",
+          stability: 0.6,
+          altAction: "keep",
+          rating: "mixed",
+        },
+      ],
+      meanStability: 0.6,
+      rating: "mixed",
+      headline: "Mixed — 60% mean stability across 1 actionable change (0 stable, 1 mixed).",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Stability**: ⚠ MIXED 60%");
+    expect(md).toContain("🟡 mixed");
+    expect(md).toContain("would drift to `keep`");
+  });
+
+  test("fragile rating → rose pill", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [
+        {
+          label: "Edge",
+          action: "strengthen",
+          stability: 0.2,
+          altAction: "keep",
+          rating: "fragile",
+        },
+      ],
+      meanStability: 0.2,
+      rating: "fragile",
+      headline: "Fragile — 20% mean stability, 1 of 1 change would pick a different action under small perturbations.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Stability**: ✗ FRAGILE 20%");
+    expect(md).toContain("🔴 fragile");
+  });
+
+  test("multiple changes → each gets its own row with label, action, rating, pct", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [
+        {
+          label: "A",
+          action: "drop",
+          stability: 0.4,
+          altAction: "keep",
+          rating: "fragile",
+        },
+        {
+          label: "B",
+          action: "flip",
+          stability: 1,
+          altAction: null,
+          rating: "stable",
+        },
+      ],
+      meanStability: 0.7,
+      rating: "mixed",
+      headline: "Mixed — 70% mean stability, but 1 of 2 changes is fragile against small perturbations.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), stability };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("`A` · drop · 🔴 fragile (40% stable)");
+    expect(md).toContain("`B` · flip · 🟢 stable (100% stable)");
+    // Stable row should not have drift-to hint
+    expect(md.includes("`B` · flip · 🟢 stable (100% stable) · would drift")).toBe(
+      false,
+    );
+  });
+
+  test("stability block sits between confidence and watchlist in ordering", () => {
+    const stability: ProposalStabilityReport = {
+      changes: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          stability: 1,
+          altAction: null,
+          rating: "stable",
+        },
+      ],
+      meanStability: 1,
+      rating: "stable",
+      headline: "Stable — 100% mean stability.",
+      empty: false,
+    };
+    const confidence: ProposalConfidenceResult = {
+      confidence: 75,
+      band: "high",
+      rationale: "Signals aligned across drift, audit, and corroboration.",
+      drivers: [],
+      dampenedByThinSample: false,
+    };
+    const watchlist: ProposalWatchlist = {
+      items: [
+        {
+          label: "Trade in hand",
+          action: "flip",
+          concern: "sign reversal",
+          trigger: "revisit within 20 deals",
+          priority: "high",
+        },
+      ],
+      headline: "1 factor to monitor closely after applying.",
+      empty: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      ...nullCtx(),
+      confidence,
+      stability,
+      watchlist,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const confidenceIdx = md.indexOf("**Confidence**");
+    const stabilityIdx = md.indexOf("**Stability**");
+    const watchlistIdx = md.indexOf("**Watchlist**");
+    expect(confidenceIdx).toBeGreaterThan(-1);
+    expect(stabilityIdx).toBeGreaterThan(-1);
+    expect(watchlistIdx).toBeGreaterThan(-1);
+    expect(confidenceIdx).toBeLessThan(stabilityIdx);
+    expect(stabilityIdx).toBeLessThan(watchlistIdx);
   });
 });
