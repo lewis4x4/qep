@@ -148,4 +148,53 @@ describe("formatIronGraphPrompt", () => {
     const without = formatIronGraphPrompt(makeItem({ subtitle: null }));
     expect(without.length).toBeLessThan(with_.length);
   });
+
+  // Slice 17 — synthesizer tool-naming in the closer. Each of the three
+  // entity types with a synthesizer must name it by hand so Iron picks
+  // the bundled read over the cheaper detail+list chain.
+  it("names summarize_deal in the deal closer", () => {
+    const p = formatIronGraphPrompt(makeItem({ type: "deal" }));
+    expect(p).toContain("summarize_deal");
+  });
+
+  it("names summarize_company in the company closer", () => {
+    const p = formatIronGraphPrompt(
+      makeItem({ type: "company", title: "Acme Materials" }),
+    );
+    expect(p).toContain("summarize_company");
+  });
+
+  it("names summarize_contact in the contact closer", () => {
+    const p = formatIronGraphPrompt(
+      makeItem({ type: "contact", title: "Jane Doe" }),
+    );
+    expect(p).toContain("summarize_contact");
+  });
+
+  it("keeps the generic closer for equipment (no synthesizer yet)", () => {
+    const p = formatIronGraphPrompt(
+      makeItem({ type: "equipment", title: "CAT 320 #42" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail tools");
+  });
+
+  it("keeps the generic closer for rental (no synthesizer yet)", () => {
+    const p = formatIronGraphPrompt(
+      makeItem({ type: "rental", title: "Rental request #7" }),
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+    expect(p).toContain("Use the detail tools");
+  });
+
+  it("still includes propose_move invitation on every entity type", () => {
+    for (const type of ["deal", "company", "contact", "equipment", "rental"] as const) {
+      const p = formatIronGraphPrompt(makeItem({ type }));
+      expect(p).toContain("propose_move");
+    }
+  });
 });

@@ -55,6 +55,31 @@ function openerForGraphEntity(type: QrmSearchEntityType): string {
 }
 
 /**
+ * Per-entity synthesizer hint. Slice 17: Iron now has three dedicated
+ * synthesizer tools (summarize_deal / summarize_company / summarize_contact)
+ * that bundle the entity row + related rows + signals into a single tool
+ * call. Naming the tool by hand in the prompt keeps Iron's tool selection
+ * stable as the catalog grows — otherwise the model may default to the
+ * cheaper but noisier get_*_detail + list_recent_signals chain.
+ *
+ * Returns null for entity types that don't have a synthesizer yet
+ * (equipment, rental) — those keep the generic closer.
+ */
+function toolHintForGraphEntity(type: QrmSearchEntityType): string | null {
+  switch (type) {
+    case "deal":
+      return "Call summarize_deal with this deal_id to pull the deal row + recent activities + open signals in one shot.";
+    case "company":
+      return "Call summarize_company with this company_id to pull the account row + open deals + recent activities + signals in one shot.";
+    case "contact":
+      return "Call summarize_contact with this contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
+    case "equipment":
+    case "rental":
+      return null;
+  }
+}
+
+/**
  * Slice 9 — Graph → Ask Iron deep-brief handoff.
  *
  * Build a well-scoped seed question for Ask Iron when the operator clicks
@@ -93,9 +118,22 @@ export function formatIronGraphPrompt(item: QrmSearchItem): string {
   // starting with search_entities.
   parts.push(`• Entity: ${item.type} (${item.id})`);
 
-  parts.push(
-    "Use the detail tools and recent signals to ground your answer. If there's a clear follow-up, call propose_move; otherwise explain what you'd want to know before queueing anything.",
-  );
+  // Slice 17 — if the entity has a synthesizer tool, name it explicitly.
+  // The system prompt already describes the synthesizer for narrative
+  // questions, but handoffs are user-role messages and benefit from
+  // belt-and-suspenders tool-naming. Equipment / rental keep the generic
+  // closer since they have no synthesizer yet.
+  const toolHint = toolHintForGraphEntity(item.type);
+  if (toolHint) {
+    parts.push(toolHint);
+    parts.push(
+      "If there's a clear follow-up, call propose_move; otherwise tell me what you'd want to know before queueing anything.",
+    );
+  } else {
+    parts.push(
+      "Use the detail tools and recent signals to ground your answer. If there's a clear follow-up, call propose_move; otherwise explain what you'd want to know before queueing anything.",
+    );
+  }
 
   return parts.join("\n");
 }
