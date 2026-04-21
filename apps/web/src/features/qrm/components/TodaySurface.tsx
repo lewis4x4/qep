@@ -17,6 +17,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +35,8 @@ import {
   PROVENANCE_LABEL,
   type ProvenanceFilter,
 } from "./moveProvenance";
+import { ASK_IRON_PATH, type AskIronSeedState } from "./askIronHandoff";
+import { formatIronMovePrompt } from "./moveHandoffHelpers";
 
 type Scope = "mine" | "team";
 
@@ -45,6 +48,7 @@ interface TodaySurfaceProps {
 
 export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const role = profile?.role ?? null;
   const userId = profile?.id ?? null;
@@ -155,6 +159,27 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
     [mutation],
   );
 
+  // Slice 12 — Today → Iron handoff. Mirrors Pulse (Slice 8) and Graph
+  // (Slice 9). Compose a defend-or-challenge brief for the selected move
+  // and navigate to Ask Iron with the question in router state.
+  // AskIronSurface consumes the seed via isAskIronSeedState and
+  // auto-sends once. The handoff does NOT accept / snooze / dismiss the
+  // move — those lifecycle actions remain explicit on the card footer.
+  const handleAskIron = useCallback(
+    (move: QrmMove) => {
+      const question = formatIronMovePrompt(move);
+      const state: AskIronSeedState = {
+        askIronSeed: {
+          question,
+          source: "today",
+          sourceId: move.id,
+        },
+      };
+      navigate(ASK_IRON_PATH, { state });
+    },
+    [navigate],
+  );
+
   // Group: accepted moves ("in flight") first, then suggestions ranked by
   // priority. The recommender already returns them priority-desc, so we only
   // need a stable partition here.
@@ -243,6 +268,7 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
               onSnooze={handleSnooze}
               onDismiss={handleDismiss}
               onComplete={handleComplete}
+              onAskIron={handleAskIron}
             />
           ))}
         </Section>
@@ -259,6 +285,7 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
               onSnooze={handleSnooze}
               onDismiss={handleDismiss}
               onComplete={handleComplete}
+              onAskIron={handleAskIron}
             />
           ))}
         </Section>

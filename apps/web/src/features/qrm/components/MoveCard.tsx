@@ -109,6 +109,14 @@ interface MoveCardProps {
    * minimal auto-touch.
    */
   onComplete: (moveId: string, touch?: PatchMoveTouchInput) => void;
+  /**
+   * Slice 12 — optional Ask Iron handoff. When provided, the card renders
+   * an orange "Ask Iron" chip that invites Iron to defend or challenge
+   * the move using the signals / entity behind it. Kept optional so
+   * non-Today mountpoints (e.g. inside a deal detail) can still use
+   * MoveCard without the handoff.
+   */
+  onAskIron?: (move: QrmMove) => void;
 }
 
 export function MoveCard({
@@ -118,6 +126,7 @@ export function MoveCard({
   onSnooze,
   onDismiss,
   onComplete,
+  onAskIron,
 }: MoveCardProps) {
   const Icon = MOVE_ICON[move.kind];
   const href = hrefForMoveEntity(move);
@@ -249,6 +258,37 @@ export function MoveCard({
           <X className="h-3.5 w-3.5" />
           Dismiss
         </button>
+
+        {/*
+          Slice 12 — "Ask Iron" sibling on Today moves. Mirrors the Pulse
+          and Graph chips (orange, Sparkles) so operators build one
+          muscle memory across surfaces. The chip hands the move off to
+          Iron for a defend-or-challenge brief; it does NOT accept /
+          snooze / dismiss the move itself.
+
+          Uses `ml-auto` only when there's no `href` — when both the
+          chip and the deep link render, the link claims `ml-auto` and
+          the chip sits flush against the dismiss button.
+        */}
+        {onAskIron && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onAskIron(move)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-2.5 py-1 text-[11px] font-medium text-qep-orange",
+              "transition-colors hover:border-qep-orange/60 hover:bg-qep-orange/10",
+              "focus:outline-none focus:ring-2 focus:ring-qep-orange/40",
+              "disabled:cursor-not-allowed disabled:opacity-60",
+              !href && "ml-auto",
+            )}
+            aria-label={`Ask Iron about ${move.title}`}
+            title="Hand this move to Ask Iron for context"
+          >
+            <Sparkles className="h-3 w-3" aria-hidden />
+            Ask Iron
+          </button>
+        )}
 
         {href && (
           <Link
