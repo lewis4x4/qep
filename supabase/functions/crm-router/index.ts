@@ -27,6 +27,21 @@ import {
   type CampaignPayload,
 } from "../_shared/crm-campaigns.ts";
 import {
+  createMove,
+  listMoves,
+  parseMoveListFilters,
+  patchMove,
+  type MoveCreatePayload,
+  type MovePatchPayload,
+} from "../_shared/qrm-moves.ts";
+import {
+  ingestSignal,
+  listSignals,
+  listSignalsByIds,
+  parseSignalListFilters,
+  type SignalIngestPayload,
+} from "../_shared/qrm-signals.ts";
+import {
   createActivity,
   createCompany,
   createContact,
@@ -377,7 +392,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const path = normalizeRouterPath(url.pathname);
   const segments = path.split("/").filter(Boolean);
 
-  if (segments.length === 0 || segments[0] !== "crm") {
+  // Accept both "crm" (legacy) and "qrm" (canonical post-rename) as the first segment.
+  // The frontend calls /functions/v1/qrm-router/qrm/... after the Tier 4 rename;
+  // external callers that still target /functions/v1/crm-router/crm/... also work.
+  if (
+    segments.length === 0 ||
+    (segments[0] !== "crm" && segments[0] !== "qrm")
+  ) {
     return crmFail({
       origin,
       status: 404,
@@ -393,7 +414,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (req.method === "GET" && segments[1] === "search") {
       requireCaller(ctx);
       const q = url.searchParams.get("q") ?? "";
-      const types = url.searchParams.get("types") ?? "contact,company";
+      // Default to universal search across all known entity types; callers
+      // that want a narrower slice (e.g. the header search bar) pass `types`.
+      const types = url.searchParams.get("types") ?? "contact,company,deal,equipment,rental";
       const results = await crmSearch(ctx, q, types);
       return crmOk({ results }, { origin });
     }
@@ -743,6 +766,80 @@ Deno.serve(async (req: Request): Promise<Response> => {
         requireElevated(ctx);
         await dismissDuplicateCandidate(ctx, segments[2]);
         return crmOk({ ok: true }, { origin });
+      }
+    }
+
+    if (segments[1] === "moves") {
+      requireCaller(ctx);
+
+      // GET /qrm/moves — list moves (rep sees own, elevated sees all).
+      if (req.method === "GET" && segments.length === 2) {
+        const filters = parseMoveListFilters(url.searchParams);
+        const moves = await listMoves(ctx, filters);
+        return crmOk({ moves }, { origin });
+      }
+
+      // PATCH /qrm/moves/:id — lifecycle transition (accept/snooze/dismiss/
+      // complete/reopen). RLS lets reps patch only their own assigned moves.
+      // On `complete`, the service also auto-logs a touch (optionally with
+      // the rep's channel/summary payload) and suppresses the triggering
+      // signals for 7 days — Slice 5 closure loop.
+      if (req.method === "PATCH" && segments.length === 3) {
+        const body = await readJsonBody<MovePatchPayload>(req);
+        const result = await patchMove(ctx, segments[2], body);
+        return crmOk(
+          {
+            move: result.move,
+            touch_id: result.touchId,
+            signals_suppressed: result.signalsSuppressed,
+          },
+          { origin },
+        );
+      }
+
+      // POST /qrm/moves — create (recommender / service-role + elevated only).
+      // Reps cannot author moves directly; the recommender is the canonical
+      // source, with elevated users able to hand-craft a move when needed.
+      if (req.method === "POST" && segments.length === 2) {
+        requireElevated(ctx);
+        const body = await readJsonBody<MoveCreatePayload>(req);
+        const move = await createMove(ctx, body);
+        return crmOk({ move }, { origin, status: 201 });
+      }
+    }
+
+    if (segments[1] === "signals") {
+      requireCaller(ctx);
+
+      // GET /qrm/signals — the Pulse feed. Any authenticated caller; RLS
+      // filters to rows the caller can see. When the caller passes
+      // `?ids=uuid1,uuid2,...`, the endpoint returns exactly those signals
+      // (bounded to 20). This is what powers the "Triggered by" panel on
+      // a MoveCard — Slice 5 closure loop.
+      if (req.method === "GET" && segments.length === 2) {
+        const idsParam = url.searchParams.get("ids");
+        if (idsParam) {
+          const ids = idsParam
+            .split(",")
+            .map((raw) => raw.trim())
+            .filter((raw) => raw.length > 0);
+          const signals = await listSignalsByIds(ctx, ids);
+          return crmOk({ signals }, { origin });
+        }
+        const filters = parseSignalListFilters(url.searchParams);
+        const signals = await listSignals(ctx, filters);
+        return crmOk({ signals }, { origin });
+      }
+
+      // POST /qrm/signals — ingest a signal. Adapters (inbound-email,
+      // telematics, news-scan) are the canonical writers; elevated users
+      // can hand-author a signal for testing or manual triage. Reps cannot
+      // write directly — requireElevated also permits service-role.
+      if (req.method === "POST" && segments.length === 2) {
+        requireElevated(ctx);
+        const body = await readJsonBody<SignalIngestPayload>(req);
+        const signal = await ingestSignal(ctx, body);
+        return crmOk({ signal }, { origin, status: 201 });
       }
     }
 

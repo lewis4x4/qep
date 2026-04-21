@@ -438,6 +438,35 @@ const HubSpotConnectPage = lazy(() =>
 const QrmContactsPage = lazy(() =>
   import("./features/qrm/pages/QrmContactsPage").then((m) => ({ default: m.QrmContactsPage }))
 );
+// Shell v2: when flag is on, legacy list pages are replaced by the universal
+// GraphExplorer via the WithGraphExplorer wrapper (see shell/withGraphExplorer).
+const WithGraphExplorer = lazy(() =>
+  import("./features/qrm/shell/withGraphExplorer").then((m) => ({
+    default: m.WithGraphExplorer,
+  }))
+);
+// Shell v2: Today surface replaces the legacy activities feed when the flag is on.
+const WithTodaySurface = lazy(() =>
+  import("./features/qrm/shell/withTodaySurface").then((m) => ({
+    default: m.WithTodaySurface,
+  }))
+);
+// Shell v2: Pulse surface replaces the legacy ExceptionHandlingPage when the
+// flag is on. Pulse reads the normalized signals feed (Slice 3) so reps and
+// elevated operators see the same "what changed" list.
+const WithPulseSurface = lazy(() =>
+  import("./features/qrm/shell/withPulseSurface").then((m) => ({
+    default: m.WithPulseSurface,
+  }))
+);
+// Shell v2: Ask Iron replaces the legacy OperationsCopilotPage board when
+// the flag is on. Ask Iron is the 4th surface — the ambient agent backed by
+// Claude tool-use over moves/signals/graph (Slice 4).
+const WithAskIronSurface = lazy(() =>
+  import("./features/qrm/shell/withAskIronSurface").then((m) => ({
+    default: m.WithAskIronSurface,
+  }))
+);
 const QrmContactDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmContactDetailPage").then((m) => ({
     default: m.QrmContactDetailPage,
@@ -1696,7 +1725,7 @@ function App() {
                 path="/qrm/activities"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmActivitiesPage />
+                    <WithTodaySurface fallback={<QrmActivitiesPage />} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1714,7 +1743,12 @@ function App() {
                 path="/qrm/deals"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmPipelinePage userRole={profile.role} />
+                    <WithGraphExplorer
+                      defaultLens="deal"
+                      title="Deals"
+                      subtitle="Every active deal — filtered, searched, one list."
+                      fallback={<QrmPipelinePage userRole={profile.role} />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1725,7 +1759,12 @@ function App() {
                 path="/qrm/contacts"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmContactsPage />
+                    <WithGraphExplorer
+                      defaultLens="contact"
+                      title="Contacts"
+                      subtitle="Every person — searchable across the graph."
+                      fallback={<QrmContactsPage />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -1945,7 +1984,7 @@ function App() {
                 path="/qrm/operations-copilot"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <OperationsCopilotPage />
+                    <WithAskIronSurface fallback={<OperationsCopilotPage />} />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2026,7 +2065,12 @@ function App() {
                 path="/qrm/companies"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
-                    <QrmCompaniesPage />
+                    <WithGraphExplorer
+                      defaultLens="company"
+                      title="Companies"
+                      subtitle="Every business — searchable across the graph."
+                      fallback={<QrmCompaniesPage />}
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
@@ -2135,8 +2179,16 @@ function App() {
               <Route
                 path="/qrm/exceptions"
                 element={
-                  ["admin", "manager", "owner"].includes(profile.role) ? (
-                    <ExceptionHandlingPage />
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <WithPulseSurface
+                      fallback={
+                        ["admin", "manager", "owner"].includes(profile.role) ? (
+                          <ExceptionHandlingPage />
+                        ) : (
+                          <Navigate to="/dashboard" replace />
+                        )
+                      }
+                    />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

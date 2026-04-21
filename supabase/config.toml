@@ -159,7 +159,32 @@ verify_jwt = false
 [functions.post-sale-parts-playbook]
 verify_jwt = false
 
-# Stakeholder Build Hub (migrations 310-315). Gateway verify_jwt off;
+# Slice 2: deterministic recommender. Consumes recent signals and writes moves.
+# Called by pg_cron every 5 minutes + on-demand by elevated users from the
+# Today surface. Auth is validated inside the function via x-internal-service
+# -secret header or resolved caller role.
+[functions.recommend-moves]
+verify_jwt = false
+
+# Slice 3: ambient capture adapters — write into the signals feed.
+# All three auth internally via x-internal-service-secret (service-role
+# callers) or a JWT with admin/manager/owner role.
+[functions.inbound-email-signal]
+verify_jwt = false
+
+[functions.telematics-signal-ingest]
+verify_jwt = false
+
+[functions.news-mention-scan]
+verify_jwt = false
+
+# Ask Iron — the QRM assistant. verify_jwt = false so the function can pull
+# the auth header itself via resolveCallerContext; requireCaller() inside
+# rejects anonymous traffic with 401.
+[functions.qrm-ask-iron]
+verify_jwt = false
+
+# Stakeholder Build Hub (migrations 310-315 on main). Gateway verify_jwt off;
 # each function authenticates via _shared/hub-auth.ts (requireHubUser).
 # Stakeholder JWTs are ES256 like everyone else — same reason as the
 # service-auth block above.

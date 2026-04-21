@@ -1,0 +1,2805 @@
+/**
+ * Ask Iron — tool-use catalog + executor for the QRM assistant.
+ *
+ * Slice 4 of the 4-surface collapse. "Ask Iron" is the ambient agent surface:
+ * reps ask "what's on my plate?", "which rentals are returning next week?",
+ * "pull up Acme" — and the agent answers with real rows, not hallucinated
+ * prose. This module owns the tool catalog and the executor; the edge
+ * function is a thin Claude tool-use loop around it.
+ *
+ * Why a separate module:
+ *   1. Testable without the Anthropic API or real HTTP — stubbed
+ *      SupabaseClient → assert tool routing and workspace scoping.
+ *   2. Sharable with future clients (CarPlay/watch bridges, terminal
+ *      debugger, etc.) that want the same tool contract.
+ *
+ * Tool catalog:
+ *   - list_my_moves        — today's moves for the caller (rep → own; elevated → all)
+ *   - list_recent_signals  — recent signal stream, with severity/kind filters
+ *   - search_entities      — fuzzy search across contacts/companies/deals
+ *   - get_deal_detail      — drill into a single deal (id known)
+ *   - get_company_detail   — drill into a single company (id known)
+ *   - propose_move         — create a new move in Today (Slice 6: write surface)
+ *
+ * Auth envelope:
+ *   Tools run through the same `RouterCtx` as the HTTP router, so RLS on
+ *   `callerDb` enforces workspace+rep visibility and admin tables like
+ *   `moves` fall back to the service-role admin client for signal triage.
+ *   The caller's role never widens inside the executor.
+ *
+ * Cost guardrails:
+ *   - Row caps on every list tool (25 default, 50 hard max).
+ *   - Text returned to Claude capped per-tool to keep context small.
+ *   - No embeddings / RAG call in the hot path (Slice 5 territory).
+ */
+
+import type { RouterCtx } from "./crm-router-service.ts";
+import {
+  createMove,
+  type MoveCreatePayload,
+  type MoveEntityType,
+  type MoveKind,
+} from "./qrm-moves.ts";
+
+// ── Tool schema ────────────────────────────────────────────────────────────
+
+export interface AskIronTool {
+  name: string;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+/**
+ * Tool definitions surfaced to Claude. Keep these descriptions concrete —
+ * the LLM picks from them, so vague copy → wrong tool choice.
+ */
+export const ASK_IRON_TOOLS: AskIronTool[] = [
+  {
+    name: "list_my_moves",
+    description:
+      "Recommended moves from the QRM recommender. Rep callers see their own queue; admins/managers see everyone's unless they pass assigned_rep_id. Use for 'what should I do next', 'what's on my plate', 'any hot moves today'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        statuses: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["suggested", "accepted", "completed", "snoozed", "dismissed"],
+          },
+          description:
+            "Default ['suggested','accepted']. Pass ['completed'] for a recap of what's been cleared today.",
+        },
+        assigned_rep_id: {
+          type: "string",
+          description:
+            "UUID of a rep. Admins/managers use this to answer 'what's on Jim's plate'. Reps can only use their own.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    name: "list_recent_signals",
+    description:
+      "The normalized event stream — inbound emails, telematics faults, SLA breaches, news mentions, quote-viewed, etc. Use for 'what changed', 'any new faults', 'anyone in the news this week'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kinds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Signal kinds to include, e.g. ['inbound_email','telematics_fault']. Omit for all.",
+        },
+        severity_at_least: {
+          type: "string",
+          enum: ["low", "medium", "high", "critical"],
+          description: "Floor severity; returns this severity and above.",
+        },
+        since_hours: {
+          type: "integer",
+          minimum: 1,
+          maximum: 168,
+          description: "Only signals within the last N hours. Default 48.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    name: "search_entities",
+    description:
+      "Fuzzy search across contacts, companies, deals, equipment, rentals in the caller's workspace. Use whenever the question names a customer, rep, job, or machine by partial name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The term to search for." },
+        types: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["company", "contact", "deal", "equipment", "rental"],
+          },
+          description: "Entity types to include. Omit for all.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 25 },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_deal_detail",
+    description:
+      "Full detail for a specific deal by id (from list_my_moves or search_entities). Returns amount, stage, expected close, assigned rep.",
+    input_schema: {
+      type: "object",
+      properties: {
+        deal_id: { type: "string" },
+      },
+      required: ["deal_id"],
+    },
+  },
+  {
+    name: "get_company_detail",
+    description:
+      "Full detail for a specific company by id. Returns name, city/state, industry, open deal count.",
+    input_schema: {
+      type: "object",
+      properties: {
+        company_id: { type: "string" },
+      },
+      required: ["company_id"],
+    },
+  },
+  {
+    name: "propose_move",
+    description:
+      "Create a new move on the operator's Today queue. Use when the operator explicitly asks for a follow-up action ('add a call to Acme tomorrow', 'remind me to send a quote', 'queue a field visit on Wednesday'). Do NOT use proactively — propose only when the operator requested an action. The move is assigned to the caller by default; managers/admins may route to another rep in the same workspace.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind: {
+          type: "string",
+          enum: [
+            "call_now",
+            "send_quote",
+            "send_follow_up",
+            "schedule_meeting",
+            "escalate",
+            "drop_deal",
+            "reassign",
+            "field_visit",
+            "send_proposal",
+            "pricing_review",
+            "inventory_reserve",
+            "service_escalate",
+            "rescue_offer",
+            "other",
+          ],
+          description:
+            "Move kind — pick the one closest to the action the operator asked for. Use 'other' only if nothing else fits.",
+        },
+        title: {
+          type: "string",
+          description:
+            "Short imperative summary of the action, e.g. 'Call Acme about CAT 305 quote'. Max 120 chars.",
+        },
+        rationale: {
+          type: "string",
+          description:
+            "One-sentence reason, grounded in the operator's request. Max 280 chars.",
+        },
+        entity_type: {
+          type: "string",
+          enum: ["deal", "contact", "company", "equipment", "rental"],
+          description:
+            "What the move is about. Omit only if the move doesn't map to a specific entity.",
+        },
+        entity_id: {
+          type: "string",
+          description:
+            "UUID for the entity, obtained from search_entities / list_my_moves / list_recent_signals.",
+        },
+        priority: {
+          type: "integer",
+          minimum: 0,
+          maximum: 100,
+          description:
+            "Priority 0–100. Default 55 for operator-requested moves (slightly above baseline).",
+        },
+        due_at: {
+          type: "string",
+          description:
+            "ISO-8601 timestamp for when this should be done by. Omit if the operator didn't give one.",
+        },
+        assigned_rep_id: {
+          type: "string",
+          description:
+            "UUID of the rep to own this move. Elevated callers only; rep callers are always assigned their own id regardless of this field.",
+        },
+      },
+      required: ["kind", "title"],
+    },
+  },
+  {
+    // Slice 10: a synthesizer tool for narrative deal questions. Before
+    // this tool, "what's the story on Acme?" forced Claude to chain
+    // get_deal_detail + list_recent_signals + (maybe) list_my_moves in
+    // three LLM turns. summarize_deal bundles all three in one round trip,
+    // scoped to the deal, capped for context, and ready for prose.
+    name: "summarize_deal",
+    description:
+      "Bundle a deal's current row, recent activities, and open signals into one call. Use for narrative questions — 'what's the story on <deal>', 'where does this deal stand', 'brief me on <deal>', 'status of <deal>'. Do NOT use for single-field lookups (call get_deal_detail instead) or for listing all deals (call search_entities). Returns structured data — write the summary yourself in 2–4 sentences.",
+    input_schema: {
+      type: "object",
+      properties: {
+        deal_id: {
+          type: "string",
+          description:
+            "UUID of the deal to summarize. Obtain from search_entities or list_my_moves if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30 — enough to cover a typical sales cycle without blowing context.",
+        },
+      },
+      required: ["deal_id"],
+    },
+  },
+  {
+    // Slice 14: the morning-briefing synthesizer. Pulls four arms into one
+    // round-trip so Claude can answer "what's on my plate" / "brief me on
+    // my day" without chaining list_my_moves + list_my_touches +
+    // list_recent_signals + a completed-moves query across four turns.
+    //
+    //   1. active_moves      — suggested + accepted, priority desc
+    //   2. completed_today   — moves the rep closed inside the window
+    //   3. recent_touches    — the rep's outbound log (same shape as
+    //                           list_my_touches)
+    //   4. open_signals      — medium+ severity signals in the window
+    //
+    // Rep callers are always pinned to their own userId; managers may
+    // target a specific rep via rep_id (with the same cross-workspace
+    // guard used by list_my_moves / list_my_touches / propose_move).
+    //
+    // Scope note: open_signals is workspace-wide, not rep-scoped — a rep
+    // briefing also wants to know if something signal-worthy hit the
+    // workspace even if it isn't pinned to one of their deals yet. The
+    // returned payload labels this explicitly so the LLM doesn't claim
+    // "no signals on your accounts".
+    name: "summarize_day",
+    description:
+      "Morning-briefing bundle for the caller. Returns active moves (suggested + accepted), moves completed in the window, the rep's recent outbound touches, and workspace signals at medium+ severity — all scoped to the last lookback_hours. Use for 'what's on my plate this morning', 'brief me on my day', 'where should I start', 'catch me up'. Do NOT use for narrower questions — for just moves call list_my_moves, for just touches call list_my_touches, for just signals call list_recent_signals. Returns structured data — write the briefing yourself in 2–4 sentences. open_signals is workspace-wide (not just this rep's accounts).",
+    input_schema: {
+      type: "object",
+      properties: {
+        lookback_hours: {
+          type: "integer",
+          minimum: 1,
+          maximum: 168,
+          description:
+            "Window to pull completed moves, recent touches, and signals from. Default 24 (one day). Use 72 for 'what happened while I was out Friday'.",
+        },
+        rep_id: {
+          type: "string",
+          description:
+            "UUID of a rep. Admins/managers use this to answer 'how's Jim's day looking'. Reps are always scoped to themselves.",
+        },
+      },
+    },
+  },
+  {
+    // Slice 13: the rep's own activity trail. Before this tool, Iron could
+    // see moves (recommender output) and signals (inbound events) but had
+    // zero visibility into what the rep actually did. "Did I call Acme this
+    // week?" forced Claude to fudge or apologize. list_my_touches pulls
+    // the crm_activities rows authored by the caller (rep pins to self;
+    // managers may query a specific rep_id), scoped by workspace and
+    // optionally by entity or activity_type.
+    //
+    // Distinct from list_recent_signals: that's the inbound event stream
+    // (emails coming in, telematics firing, etc.). list_my_touches is the
+    // outbound log — what the operator logged themselves.
+    name: "list_my_touches",
+    description:
+      "Recent activity trail for the caller — calls, emails, notes, follow-ups, meetings, tasks they've logged. Use for 'did I call <customer>', 'what did I do yesterday', 'any touches on <deal>', 'how many follow-ups this week'. Rep callers always see their own trail; admins/managers may pass rep_id to inspect another rep. Distinct from list_recent_signals: this is the operator's outbound log, not the inbound event stream.",
+    input_schema: {
+      type: "object",
+      properties: {
+        since_hours: {
+          type: "integer",
+          minimum: 1,
+          maximum: 168,
+          description:
+            "Only touches within the last N hours. Default 72 (covers a typical work-week).",
+        },
+        activity_types: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Filter to these activity types, e.g. ['call','follow_up','meeting']. Omit for all types.",
+        },
+        entity_type: {
+          type: "string",
+          enum: ["deal", "company", "contact"],
+          description:
+            "Narrow to touches tied to this entity. Requires entity_id.",
+        },
+        entity_id: {
+          type: "string",
+          description: "UUID for the entity scope. Pairs with entity_type.",
+        },
+        rep_id: {
+          type: "string",
+          description:
+            "UUID of a rep. Admins/managers use this to answer 'what has Jim done this week'. Reps are always scoped to themselves regardless of this field.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
+  {
+    // Slice 16: person-centric mirror of summarize_deal / summarize_company.
+    // The field rep's most common "before I pick up the phone" question is
+    // "who is this person, what's their role, and what's the status across
+    // everything they're on?". Before this tool, Iron had to chain
+    // get_deal_detail (no contact detail tool exists) + list_my_touches
+    // (scoped by contact_id) + list_recent_signals (entity_type='contact')
+    // which the model rarely got right without prompting. summarize_contact
+    // bundles four reads in one shot:
+    //
+    //   1. Contact row            — crm_contacts (name/email/phone/company)
+    //   2. Related open deals     — crm_deals_rep_safe where company_id
+    //                                matches the contact's company_id (the
+    //                                schema doesn't pin deals to contacts
+    //                                directly, so company is the natural
+    //                                relation for a "what's open on them"
+    //                                question)
+    //   3. Recent activities      — crm_activities filtered by contact_id
+    //                                within the lookback window
+    //   4. Open signals           — signals where entity_type='contact'
+    //
+    // Visibility: crm_deals_rep_safe applies the rep-vs-company-deals
+    // filter so a rep summarizing a contact sees only their own deals on
+    // that contact's company. The description tells Claude to describe
+    // related_deals as "deals you can see on <their company>" rather than
+    // claiming a ground-truth count.
+    name: "summarize_contact",
+    description:
+      "Bundle a contact's row, related open deals at their company, recent activities on them, and active signals into one call. Use for person-centric questions — 'who is <name>', 'brief me on <person> before I call', 'what's the status with <contact>', 'anything new on <person>'. Distinguish from summarize_company (the whole account) and summarize_deal (one opportunity): contact = the person. Do NOT use for single-field lookups (there's no dedicated contact-detail tool — call search_entities then this). Returns structured data — write the brief yourself in 2–4 sentences. related_deals may be a partial list for rep callers due to deal visibility rules; describe it as 'deals you can see on their company'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contact_id: {
+          type: "string",
+          description:
+            "UUID of the contact to summarize. Obtain from search_entities if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30.",
+        },
+      },
+      required: ["contact_id"],
+    },
+  },
+  {
+    // Slice 11: account-centric mirror of summarize_deal. Equipment/parts
+    // dealerships run on accounts (territories = companies, not deals), so
+    // "what's going on at Acme?" is the single most common narrative
+    // question from a rep pulling into a yard. This tool answers it in one
+    // round-trip instead of chaining get_company_detail + search_entities
+    // (for open deals) + list_recent_signals.
+    //
+    // Visibility note: open_deals comes from crm_deals_rep_safe, which
+    // applies the rep-vs-company-deals RLS rules. A rep summarizing a
+    // company may see a partial list — the prompt tells Claude not to
+    // claim "no other deals" since what's visible is a slice, not the
+    // ground truth.
+    name: "summarize_company",
+    description:
+      "Bundle a company's row, open deals, recent activities across all of its contacts, and active signals into one call. Use for narrative account questions — 'what's going on at <company>', 'brief me on <company>', 'status at <company>', 'what's happening at Acme'. Distinguish from summarize_deal: deal = one opportunity, company = whole account. Do NOT use for single-field lookups (call get_company_detail instead). Returns structured data — write the summary yourself in 2–4 sentences. Note: open_deals may be a partial list for rep callers due to deal visibility rules; describe it as 'deals you can see' not 'all deals'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        company_id: {
+          type: "string",
+          description:
+            "UUID of the company to summarize. Obtain from search_entities if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30.",
+        },
+      },
+      required: ["company_id"],
+    },
+  },
+  {
+    // Slice 20: signal-centric mirror of summarize_deal/company/contact.
+    // The Pulse → Ask Iron handoff (Slice 8) asks Iron to "triage this
+    // signal" — before this tool, the only path was list_recent_signals
+    // (list, not deep-dive) + search_entities + a summarize_* on the
+    // parent entity, which required three turns to give one answer.
+    // summarize_signal bundles four reads in one shot:
+    //
+    //   1. Signal row         — signals (kind/severity/source/title/desc)
+    //   2. Parent entity      — the deal/company/contact row the signal
+    //                           points at, pulled via the same visibility
+    //                           view as the per-entity synthesizers so a
+    //                           rep's rep-vs-company rules carry through.
+    //   3. Related signals    — other signals on the same entity within
+    //                           the lookback window, excluding this one,
+    //                           so Iron can frame the signal as a single
+    //                           event or part of a cluster.
+    //   4. Related moves      — moves whose signal_ids array contains
+    //                           this signal's id — direct causal trail,
+    //                           tight scope (no entity-wide fan-out).
+    //
+    // Parent entity is null for equipment/rental/activity/workspace
+    // signals since those synthesizers don't exist yet; when they ship,
+    // this is the one place to wire them in.
+    name: "summarize_signal",
+    description:
+      "Bundle a signal's row, the entity it points at, other signals on the same entity, and moves triggered by it into one call. Use for triage questions — 'why is this signal hot', 'what's the story on this signal', 'triage this <kind> signal on <entity>'. Distinguish from list_recent_signals (which lists many signals, shallow) and summarize_deal/company/contact (which center on the entity, not the event). Do NOT use for single-field lookups on a signal. Returns structured data — write the triage note yourself in 2–4 sentences. parent_entity may be null for equipment/rental/activity/workspace signals; say so plainly rather than inventing a name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        signal_id: {
+          type: "string",
+          description:
+            "UUID of the signal to summarize. Obtain from list_recent_signals if only the kind/title is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of related signals and moves to pull. Default 30 — enough to cover recent clustering without blowing context.",
+        },
+      },
+      required: ["signal_id"],
+    },
+  },
+  {
+    // Slice 23: equipment-centric mirror of summarize_deal/company/contact.
+    // This is an equipment-and-parts dealership — the machine is the
+    // core asset, and "where is #42?" / "what's up with the CAT 320?"
+    // questions are as common on the yard as "brief me on Acme" is in
+    // sales. Before this tool, Iron had no direct way to answer: the
+    // chain was search_entities + (no get_equipment_detail tool) +
+    // list_recent_signals(entity_type='equipment'), which missed
+    // rentals and touches entirely. summarize_equipment bundles four
+    // reads in one shot:
+    //
+    //   1. Equipment row        — crm_equipment (name/asset_tag/serial/
+    //                              company_id/primary_contact_id)
+    //   2. Open rentals         — rental_contracts tied to this
+    //                              equipment, filtered to non-terminal
+    //                              statuses (submitted through active;
+    //                              completed/declined/cancelled dropped)
+    //   3. Recent touches       — touches where equipment_id = target
+    //                              within the lookback window. Equipment
+    //                              activity trail lives in touches, not
+    //                              crm_activities (which is contact/
+    //                              deal/company-only per migration 021).
+    //   4. Open signals         — signals where entity_type='equipment'
+    //                              + entity_id = target within window
+    //
+    // Scope: everything goes through callerDb with explicit workspace_id.
+    // Equipment isn't rep-scoped — reps can see any machine in the yard
+    // — but rental_contracts inherits RLS from portal_customers, which
+    // may filter a rep's visibility. We phrase open_rentals as "rentals
+    // you can see on this machine" in the description to match the
+    // summarize_company / summarize_contact partial-visibility pattern.
+    name: "summarize_equipment",
+    description:
+      "Bundle an equipment row, open rental contracts tied to it, recent touches (yard activity), and active signals into one call. Use for machine-centric questions — 'where is <asset tag>', 'what's up with the CAT 320', 'status of <serial>', 'brief me on this machine before the walk-through'. Distinguish from summarize_deal (one sale) and summarize_company (the whole account): equipment = one asset. Do NOT use for single-field lookups (call search_entities then this). Returns structured data — write the status yourself in 2–4 sentences. open_rentals may be a partial list due to portal visibility rules; describe it as 'rentals you can see on this machine'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        equipment_id: {
+          type: "string",
+          description:
+            "UUID of the equipment to summarize. Obtain from search_entities if only the asset tag / serial / make is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of touches and signals to pull. Default 30.",
+        },
+      },
+      required: ["equipment_id"],
+    },
+  },
+  {
+    // Slice 26: rental-centric mirror of summarize_equipment. Rental
+    // requests have their own lifecycle (submitted → quoted → approved
+    // → active → completed) with extensions layered in, and operators
+    // often ask "where is rental request #7", "what's the status on
+    // <customer>'s booking", "what's blocking this rental". Before
+    // this tool, Iron's only path was get_* detail chains + list_recent
+    // _signals(entity_type='rental'), which missed extensions entirely
+    // and required a second tool call for the equipment row.
+    //
+    // Four-arm fan-out:
+    //   1. Rental contract row     — rental_contracts (status + dates
+    //                                + rates + deposit + delivery mode
+    //                                + notes)
+    //   2. Extensions              — rental_contract_extensions for
+    //                                this contract, all statuses
+    //                                (approved extensions are part of
+    //                                the current picture, not history)
+    //   3. Equipment (optional)    — qrm_equipment via equipment_id
+    //                                when present. Rental requests
+    //                                without equipment are "category
+    //                                bookings" still in triage.
+    //   4. Related signals         — signals(entity_type='rental') on
+    //                                this rental within window
+    //
+    // Scope: callerDb with explicit workspace_id. rental_contracts has
+    // portal-customer RLS, so a rep may see a subset of rentals. If
+    // the row isn't visible, we return {found:false} rather than
+    // throwing — same recovery path as summarize_equipment.
+    name: "summarize_rental",
+    description:
+      "Bundle a rental contract row, its extension requests, the equipment (if assigned), and related signals into one call. Use for rental-centric questions — 'where is rental request #7', 'status of <customer>'s booking', 'what's blocking this rental', 'brief me on this rental before I approve'. Distinguish from summarize_equipment (one machine across all rentals) and summarize_deal (sales): rental = one contract. Do NOT use for single-field lookups. Returns structured data — write the status yourself in 2–4 sentences. equipment may be null when the request is still in triage (category booking).",
+    input_schema: {
+      type: "object",
+      properties: {
+        rental_id: {
+          type: "string",
+          description:
+            "UUID of the rental_contracts row. Obtain from search_entities if only the rental request number is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of signals to pull. Default 30. Extensions are not lookback-scoped — all extensions on the contract return.",
+        },
+      },
+      required: ["rental_id"],
+    },
+  },
+];
+
+// ── Input normalization (pure, testable) ────────────────────────────────────
+
+export interface NormalizedMoveFilters {
+  statuses: Array<
+    "suggested" | "accepted" | "completed" | "snoozed" | "dismissed"
+  >;
+  assignedRepId: string | null;
+  limit: number;
+}
+
+const ALLOWED_MOVE_STATUSES = new Set<NormalizedMoveFilters["statuses"][number]>([
+  "suggested",
+  "accepted",
+  "completed",
+  "snoozed",
+  "dismissed",
+]);
+
+/**
+ * Normalize LLM-provided input for `list_my_moves`. We validate here (not
+ * inside the Supabase call) so a hallucinated status string becomes a clean
+ * fallback instead of a query error.
+ *
+ * Rep enforcement: if the caller is a rep, `assigned_rep_id` gets pinned to
+ * the caller's own userId regardless of what the model passed. This is the
+ * single checkpoint that keeps the agent from leaking another rep's queue.
+ */
+export function normalizeMoveFilters(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+): NormalizedMoveFilters {
+  const rawStatuses = Array.isArray(input.statuses) ? input.statuses : null;
+  const statuses = rawStatuses
+    ? (rawStatuses
+        .filter((s): s is string => typeof s === "string")
+        .filter((s) =>
+          ALLOWED_MOVE_STATUSES.has(s as NormalizedMoveFilters["statuses"][number]),
+        ) as NormalizedMoveFilters["statuses"])
+    : (["suggested", "accepted"] as NormalizedMoveFilters["statuses"]);
+
+  const requestedRepId =
+    typeof input.assigned_rep_id === "string" && input.assigned_rep_id.length > 0
+      ? input.assigned_rep_id
+      : null;
+
+  // Rep callers: pin to self. Service/elevated: honor requested, else null.
+  let assignedRepId: string | null;
+  if (!ctx.caller.isServiceRole && ctx.caller.role === "rep") {
+    assignedRepId = ctx.caller.userId;
+  } else {
+    assignedRepId = requestedRepId;
+  }
+
+  const limitRaw = Number(input.limit ?? 15);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50)
+    : 15;
+
+  return {
+    statuses: statuses.length > 0 ? statuses : ["suggested", "accepted"],
+    assignedRepId,
+    limit,
+  };
+}
+
+export interface NormalizedSignalFilters {
+  kinds: string[];
+  severityAtLeast: "low" | "medium" | "high" | "critical" | null;
+  sinceIso: string;
+  limit: number;
+}
+
+const ALLOWED_SEVERITIES = new Set<
+  NonNullable<NormalizedSignalFilters["severityAtLeast"]>
+>(["low", "medium", "high", "critical"]);
+
+export function normalizeSignalFilters(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSignalFilters {
+  const rawKinds = Array.isArray(input.kinds) ? input.kinds : null;
+  const kinds = rawKinds
+    ? rawKinds.filter((k): k is string => typeof k === "string" && k.length > 0)
+    : [];
+
+  const sevRaw = typeof input.severity_at_least === "string"
+    ? input.severity_at_least
+    : null;
+  const severityAtLeast = sevRaw && ALLOWED_SEVERITIES.has(
+    sevRaw as NonNullable<NormalizedSignalFilters["severityAtLeast"]>,
+  )
+    ? (sevRaw as NonNullable<NormalizedSignalFilters["severityAtLeast"]>)
+    : null;
+
+  const hoursRaw = Number(input.since_hours ?? 48);
+  const hours = Number.isFinite(hoursRaw)
+    ? Math.min(Math.max(Math.trunc(hoursRaw), 1), 168)
+    : 48;
+  const sinceIso = new Date(nowMs - hours * 3_600_000).toISOString();
+
+  const limitRaw = Number(input.limit ?? 20);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50)
+    : 20;
+
+  return { kinds, severityAtLeast, sinceIso, limit };
+}
+
+export interface NormalizedSearchInput {
+  query: string;
+  types: string[];
+  limit: number;
+}
+
+const ALLOWED_SEARCH_TYPES = new Set<string>([
+  "company",
+  "contact",
+  "deal",
+  "equipment",
+  "rental",
+]);
+
+/**
+ * Strip PostgREST meta-characters from the free-text query before it gets
+ * interpolated into an `.or()` or `.ilike()` filter.
+ *
+ * Why this matters: PostgREST parses `.or("first_name.ilike.${x}")` with `,`
+ * as the expression separator, so a raw user string like
+ *   `foo,id.neq.00000000-0000-0000-0000-000000000000`
+ * would escape the ilike operand and inject a free filter. We also drop
+ * `%` and `_` (ilike wildcards the caller didn't write) and `.` (PostgREST
+ * op separator) and backslashes. The pattern mirrors `cleanSearchTerm` in
+ * _shared/crm-router-service.ts but is stricter — we can afford to be
+ * strict because the LLM is the only caller producing these inputs, and it
+ * should not rely on wildcard injection for matches.
+ */
+function sanitizeSearchTerm(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[,%_()\\.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function normalizeSearchInput(
+  input: Record<string, unknown>,
+): NormalizedSearchInput {
+  const query = typeof input.query === "string"
+    ? sanitizeSearchTerm(input.query)
+    : "";
+  const rawTypes = Array.isArray(input.types) ? input.types : [];
+  const types = rawTypes
+    .filter((t): t is string => typeof t === "string")
+    .filter((t) => ALLOWED_SEARCH_TYPES.has(t));
+  const limitRaw = Number(input.limit ?? 10);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), 25)
+    : 10;
+  return { query, types, limit };
+}
+
+// ── propose_move normalization ─────────────────────────────────────────────
+
+export interface NormalizedProposeMove {
+  kind: MoveKind;
+  title: string;
+  rationale: string | null;
+  entityType: MoveEntityType | null;
+  entityId: string | null;
+  priority: number;
+  dueAt: string | null;
+  assignedRepId: string | null;
+}
+
+const ALLOWED_MOVE_KINDS = new Set<MoveKind>([
+  "call_now",
+  "send_quote",
+  "send_follow_up",
+  "schedule_meeting",
+  "escalate",
+  "drop_deal",
+  "reassign",
+  "field_visit",
+  "send_proposal",
+  "pricing_review",
+  "inventory_reserve",
+  "service_escalate",
+  "rescue_offer",
+  "other",
+]);
+
+// Iron is not allowed to propose moves on "activity" or "workspace" entities —
+// those are internal scopes the recommender uses, not operator-facing targets.
+const ALLOWED_PROPOSE_ENTITY_TYPES = new Set<MoveEntityType>([
+  "deal",
+  "contact",
+  "company",
+  "equipment",
+  "rental",
+]);
+
+const MAX_PROPOSE_TITLE_CHARS = 120;
+const MAX_PROPOSE_RATIONALE_CHARS = 280;
+
+function clampText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+  if (cleaned.length === 0) return null;
+  return cleaned.length <= max ? cleaned : cleaned.slice(0, max - 1) + "…";
+}
+
+/**
+ * Validate + normalize the LLM-supplied `propose_move` input before it hits
+ * the DB. Throws on structural problems (unknown kind, missing title) so the
+ * caller can return a clean tool error and Claude can retry. Rep callers
+ * always get `assigned_rep_id` pinned to their own userId — the same checkpoint
+ * used by `normalizeMoveFilters`.
+ */
+export function normalizeProposeMoveInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+): NormalizedProposeMove {
+  const kindRaw = typeof input.kind === "string" ? input.kind : "";
+  if (!ALLOWED_MOVE_KINDS.has(kindRaw as MoveKind)) {
+    throw new Error("VALIDATION_ERROR:kind");
+  }
+  const kind = kindRaw as MoveKind;
+
+  const title = clampText(input.title, MAX_PROPOSE_TITLE_CHARS);
+  if (!title) throw new Error("VALIDATION_ERROR:title");
+
+  const rationale = clampText(input.rationale, MAX_PROPOSE_RATIONALE_CHARS);
+
+  // Entity scope: if `entity_type` is provided it must be in the allowed set,
+  // and `entity_id` must accompany it. We reject mismatches rather than
+  // silently stripping — a half-scoped move is worse than an error because
+  // the operator sees "call about Acme" with no contact attached.
+  let entityType: MoveEntityType | null = null;
+  let entityId: string | null = null;
+  if (typeof input.entity_type === "string" && input.entity_type.length > 0) {
+    if (!ALLOWED_PROPOSE_ENTITY_TYPES.has(input.entity_type as MoveEntityType)) {
+      throw new Error("VALIDATION_ERROR:entity_type");
+    }
+    entityType = input.entity_type as MoveEntityType;
+    if (typeof input.entity_id !== "string" || input.entity_id.length === 0) {
+      throw new Error("VALIDATION_ERROR:entity_id");
+    }
+    entityId = input.entity_id;
+  } else if (
+    typeof input.entity_id === "string" && input.entity_id.length > 0
+  ) {
+    // entity_id without entity_type is ambiguous — reject rather than guess.
+    throw new Error("VALIDATION_ERROR:entity_type");
+  }
+
+  // Priority: clamp 0..100, default 55 (a hair above baseline 50) to reflect
+  // "operator asked for this" weighting without drowning the recommender queue.
+  const priorityRaw = Number(input.priority ?? 55);
+  const priority = Number.isFinite(priorityRaw)
+    ? Math.min(Math.max(Math.trunc(priorityRaw), 0), 100)
+    : 55;
+
+  // due_at: accept if the string parses as a Date and isn't in the past by
+  // more than a minute (small clock-skew tolerance). Reject nonsense quietly
+  // by throwing — better than inserting a bogus timestamp.
+  let dueAt: string | null = null;
+  if (typeof input.due_at === "string" && input.due_at.length > 0) {
+    const parsed = new Date(input.due_at);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("VALIDATION_ERROR:due_at");
+    }
+    if (parsed.getTime() < Date.now() - 60_000) {
+      throw new Error("VALIDATION_ERROR:due_at");
+    }
+    dueAt = parsed.toISOString();
+  }
+
+  // Rep assignment: reps are always pinned to self; elevated callers may
+  // route to another rep id (workspace-membership is validated at insert
+  // time by the DB's RLS/FK, but we could harden here with a profiles lookup
+  // if abuse shows up).
+  const requestedRepId = typeof input.assigned_rep_id === "string" &&
+      input.assigned_rep_id.length > 0
+    ? input.assigned_rep_id
+    : null;
+  let assignedRepId: string | null;
+  if (!ctx.caller.isServiceRole && ctx.caller.role === "rep") {
+    assignedRepId = ctx.caller.userId;
+  } else {
+    assignedRepId = requestedRepId ?? ctx.caller.userId;
+  }
+
+  return { kind, title, rationale, entityType, entityId, priority, dueAt, assignedRepId };
+}
+
+// ── summarize_deal normalization ───────────────────────────────────────────
+
+export interface NormalizedSummarizeDeal {
+  dealId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+export const SUMMARIZE_DEAL_DEFAULT_DAYS = 30;
+export const SUMMARIZE_DEAL_MAX_DAYS = 90;
+export const SUMMARIZE_DEAL_MIN_DAYS = 1;
+/**
+ * Row caps for the two list arms of summarize_deal. These are hard caps to
+ * keep the tool result small enough for Claude's context even on a chatty
+ * deal with a long lookback window — the LLM rarely needs more than the
+ * 10 most recent items to write a useful status paragraph, and fetching
+ * more only inflates token cost without improving the summary.
+ */
+export const SUMMARIZE_DEAL_ACTIVITY_LIMIT = 10;
+export const SUMMARIZE_DEAL_SIGNAL_LIMIT = 10;
+/**
+ * Per-field text truncation applied to activity bodies and signal
+ * descriptions before we hand them to Claude. 240 matches the Slice 8
+ * triage-prompt cap for signal descriptions — same reasoning: the model
+ * needs a hint, not a transcript.
+ */
+export const SUMMARIZE_DEAL_TEXT_CAP = 240;
+
+/**
+ * Validate + normalize the LLM-supplied `summarize_deal` input. Throws
+ * VALIDATION_ERROR when deal_id is missing so the caller returns a clean
+ * tool error Claude can recover from.
+ */
+export function normalizeSummarizeDealInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeDeal {
+  const dealId = typeof input.deal_id === "string" ? input.deal_id.trim() : "";
+  if (!dealId) throw new Error("VALIDATION_ERROR:deal_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { dealId, lookbackDays, sinceIso };
+}
+
+// ── summarize_company normalization (Slice 11) ─────────────────────────────
+
+export interface NormalizedSummarizeCompany {
+  companyId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the `open_deals` list arm of summarize_company. Separate
+ * constant from the activity cap because deals are a different density
+ * signal — a company with 15 deals is a big-account flag, but 15 messages
+ * of prose would blow the context budget.
+ */
+export const SUMMARIZE_COMPANY_DEAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_company` input. Same clamp
+ * window as summarize_deal so operators don't have to remember two
+ * different defaults. Throws on missing/empty company_id so Claude gets
+ * a clean error it can recover from.
+ */
+export function normalizeSummarizeCompanyInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeCompany {
+  const companyId = typeof input.company_id === "string"
+    ? input.company_id.trim()
+    : "";
+  if (!companyId) throw new Error("VALIDATION_ERROR:company_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { companyId, lookbackDays, sinceIso };
+}
+
+// ── summarize_contact normalization (Slice 16) ─────────────────────────────
+
+export interface NormalizedSummarizeContact {
+  contactId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the `related_deals` arm of summarize_contact. Same number as
+ * summarize_company's open_deals cap — a contact's "related deals" list is
+ * computed via their company_id, so the density characteristics match.
+ */
+export const SUMMARIZE_CONTACT_DEAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_contact` input. Throws
+ * VALIDATION_ERROR on missing/empty contact_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run search_entities). Clamps
+ * lookback_days to the same 1..90 window as summarize_deal/company so
+ * operators don't have to remember three defaults.
+ */
+export function normalizeSummarizeContactInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeContact {
+  const contactId = typeof input.contact_id === "string"
+    ? input.contact_id.trim()
+    : "";
+  if (!contactId) throw new Error("VALIDATION_ERROR:contact_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { contactId, lookbackDays, sinceIso };
+}
+
+// ── summarize_signal normalization (Slice 20) ──────────────────────────────
+
+export interface NormalizedSummarizeSignal {
+  signalId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row caps for the two list arms of summarize_signal. The related-signals
+ * arm mirrors the summarize_deal signal cap so the context budget stays
+ * predictable; related_moves is intentionally lower since a single signal
+ * rarely spawns more than a handful of moves directly, and operators will
+ * lose the narrative if the list gets longer than a glance.
+ */
+export const SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT = 10;
+export const SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_signal` input. Throws
+ * VALIDATION_ERROR on missing/empty signal_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run list_recent_signals).
+ * Clamps lookback_days to the same 1..90 window as the other
+ * summarize_* tools so operators don't have to remember four defaults.
+ */
+export function normalizeSummarizeSignalInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeSignal {
+  const signalId = typeof input.signal_id === "string"
+    ? input.signal_id.trim()
+    : "";
+  if (!signalId) throw new Error("VALIDATION_ERROR:signal_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { signalId, lookbackDays, sinceIso };
+}
+
+// ── summarize_equipment normalization (Slice 23) ───────────────────────────
+
+export interface NormalizedSummarizeEquipment {
+  equipmentId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row caps for the list arms of summarize_equipment. A machine rarely
+ * has many concurrent open rentals (1-2 in practice), but the cap
+ * defends against data anomalies where a machine got double-booked in
+ * the source system. Touches + signals share the same caps as the
+ * other summarize_* tools so the context budget is predictable.
+ */
+export const SUMMARIZE_EQUIPMENT_RENTAL_LIMIT = 5;
+export const SUMMARIZE_EQUIPMENT_TOUCH_LIMIT = 10;
+export const SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT = 10;
+
+/**
+ * Rental contract statuses that count as "open" for the synthesizer.
+ * Matches the non-terminal half of the rental_contracts status check —
+ * completed / declined / cancelled are dropped because they're historical,
+ * not "what's going on with this machine right now".
+ */
+export const SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES = [
+  "submitted",
+  "reviewing",
+  "quoted",
+  "approved",
+  "awaiting_payment",
+  "active",
+] as const;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_equipment` input. Throws
+ * VALIDATION_ERROR on missing/empty equipment_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run search_entities with a
+ * type filter). Clamps lookback_days to the same 1..90 window as the
+ * other summarize_* tools so operators don't have to remember five
+ * defaults.
+ */
+export function normalizeSummarizeEquipmentInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeEquipment {
+  const equipmentId = typeof input.equipment_id === "string"
+    ? input.equipment_id.trim()
+    : "";
+  if (!equipmentId) throw new Error("VALIDATION_ERROR:equipment_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { equipmentId, lookbackDays, sinceIso };
+}
+
+// ── summarize_rental normalization (Slice 26) ──────────────────────────────
+
+export interface NormalizedSummarizeRental {
+  rentalId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the signals arm of summarize_rental. Extensions are not
+ * capped — a contract typically has 0–2 extensions, and if one has
+ * dozens that's itself the answer (the operator should see the chaos).
+ */
+export const SUMMARIZE_RENTAL_SIGNAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_rental` input. Throws
+ * VALIDATION_ERROR on missing/empty rental_id so Claude sees a clean
+ * structured error and can recover. Clamps lookback_days to the same
+ * 1..90 window as the other summarize_* tools.
+ */
+export function normalizeSummarizeRentalInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeRental {
+  const rentalId = typeof input.rental_id === "string"
+    ? input.rental_id.trim()
+    : "";
+  if (!rentalId) throw new Error("VALIDATION_ERROR:rental_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { rentalId, lookbackDays, sinceIso };
+}
+
+// ── list_my_touches normalization (Slice 13) ───────────────────────────────
+
+export interface NormalizedTouchFilters {
+  sinceIso: string;
+  limit: number;
+  activityTypes: string[];
+  entityType: "deal" | "company" | "contact" | null;
+  entityId: string | null;
+  /**
+   * When null, the executor returns touches authored by anyone in the
+   * workspace (elevated callers who omit rep_id). For rep callers this is
+   * always pinned to their own userId — the enforcement lives in the
+   * normalizer, not the executor, so the rule is auditable in one place.
+   */
+  repId: string | null;
+}
+
+export const LIST_MY_TOUCHES_DEFAULT_HOURS = 72;
+export const LIST_MY_TOUCHES_DEFAULT_LIMIT = 20;
+export const LIST_MY_TOUCHES_MAX_LIMIT = 50;
+/**
+ * Per-field body truncation for returned touches. Matches the
+ * summarize_deal cap so Claude's context budget is predictable when
+ * Iron bundles list_my_touches with a summarize_* tool.
+ */
+export const LIST_MY_TOUCHES_TEXT_CAP = 240;
+
+const ALLOWED_TOUCH_ENTITY_TYPES = new Set<"deal" | "company" | "contact">([
+  "deal",
+  "company",
+  "contact",
+]);
+
+/**
+ * Validate + normalize the LLM-supplied `list_my_touches` input. This is a
+ * read-only tool, so we prefer "silently widen" over "throw" for
+ * recoverable validation problems — a half-scoped entity filter becomes
+ * "no entity filter" rather than a hard error. The one enforcement that
+ * DOES bite is rep-pinning: rep callers always get `repId = caller.userId`
+ * regardless of what the model passed, same rule as list_my_moves.
+ */
+export function normalizeListMyTouchesInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+  nowMs: number = Date.now(),
+): NormalizedTouchFilters {
+  const hoursRaw = Number(input.since_hours ?? LIST_MY_TOUCHES_DEFAULT_HOURS);
+  const hours = Number.isFinite(hoursRaw)
+    ? Math.min(Math.max(Math.trunc(hoursRaw), 1), 168)
+    : LIST_MY_TOUCHES_DEFAULT_HOURS;
+  const sinceIso = new Date(nowMs - hours * 3_600_000).toISOString();
+
+  const limitRaw = Number(input.limit ?? LIST_MY_TOUCHES_DEFAULT_LIMIT);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(Math.max(Math.trunc(limitRaw), 1), LIST_MY_TOUCHES_MAX_LIMIT)
+    : LIST_MY_TOUCHES_DEFAULT_LIMIT;
+
+  const rawTypes = Array.isArray(input.activity_types) ? input.activity_types : [];
+  const activityTypes = rawTypes
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .map((t) => t.trim());
+
+  // Entity scope: requires BOTH type and id. Unlike propose_move (which
+  // throws on partial scope because the write is destructive), a read with
+  // a half-scope is safely dropped: the LLM gets a wider answer and can
+  // narrow it on the next turn.
+  const rawEntityType = typeof input.entity_type === "string"
+    ? input.entity_type
+    : null;
+  const validEntityType = rawEntityType &&
+      ALLOWED_TOUCH_ENTITY_TYPES.has(
+        rawEntityType as "deal" | "company" | "contact",
+      )
+    ? (rawEntityType as "deal" | "company" | "contact")
+    : null;
+  const rawEntityId = typeof input.entity_id === "string"
+      && input.entity_id.trim().length > 0
+    ? input.entity_id.trim()
+    : null;
+  const entityType = validEntityType && rawEntityId ? validEntityType : null;
+  const entityId = validEntityType && rawEntityId ? rawEntityId : null;
+
+  // Rep pinning — identical rule to normalizeMoveFilters.
+  const requestedRepId =
+    typeof input.rep_id === "string" && input.rep_id.length > 0
+      ? input.rep_id
+      : null;
+  const repId = !ctx.caller.isServiceRole && ctx.caller.role === "rep"
+    ? ctx.caller.userId
+    : requestedRepId;
+
+  return { sinceIso, limit, activityTypes, entityType, entityId, repId };
+}
+
+// ── summarize_day normalization (Slice 14) ─────────────────────────────────
+
+export interface NormalizedSummarizeDay {
+  sinceIso: string;
+  lookbackHours: number;
+  repId: string | null;
+}
+
+export const SUMMARIZE_DAY_DEFAULT_HOURS = 24;
+/**
+ * Hard caps on each list arm of the day-briefing. Kept uniform with the
+ * existing synthesizers so the LLM's context budget is predictable — it
+ * sees at most 10 of each thing regardless of lookback window.
+ */
+export const SUMMARIZE_DAY_MOVE_LIMIT = 10;
+export const SUMMARIZE_DAY_COMPLETED_LIMIT = 10;
+export const SUMMARIZE_DAY_TOUCH_LIMIT = 10;
+export const SUMMARIZE_DAY_SIGNAL_LIMIT = 10;
+
+/**
+ * Validate + normalize the LLM-supplied `summarize_day` input. Rep
+ * callers always get `repId = caller.userId` regardless of what the
+ * model passed — same rule as list_my_moves / list_my_touches.
+ *
+ * No VALIDATION_ERROR cases here: a bad lookback clamps to the default,
+ * an invalid rep_id is either ignored (elevated callers can omit to
+ * default null) or overridden to self (rep callers). The cross-workspace
+ * rep check still runs in the executor.
+ */
+export function normalizeSummarizeDayInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeDay {
+  const hoursRaw = Number(input.lookback_hours ?? SUMMARIZE_DAY_DEFAULT_HOURS);
+  const lookbackHours = Number.isFinite(hoursRaw)
+    ? Math.min(Math.max(Math.trunc(hoursRaw), 1), 168)
+    : SUMMARIZE_DAY_DEFAULT_HOURS;
+  const sinceIso = new Date(nowMs - lookbackHours * 3_600_000).toISOString();
+
+  const requestedRepId =
+    typeof input.rep_id === "string" && input.rep_id.length > 0
+      ? input.rep_id
+      : null;
+  const repId = !ctx.caller.isServiceRole && ctx.caller.role === "rep"
+    ? ctx.caller.userId
+    : requestedRepId;
+
+  return { sinceIso, lookbackHours, repId };
+}
+
+// Shrink a potentially-long free-text field to keep the tool result small.
+// Single place to change the truncation rule so both activity.body and
+// signal.description cap identically.
+function truncateForSummary(raw: unknown, max: number = SUMMARIZE_DEAL_TEXT_CAP): string | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+  if (cleaned.length === 0) return null;
+  return cleaned.length <= max ? cleaned : cleaned.slice(0, max - 1) + "…";
+}
+
+// ── Executor ────────────────────────────────────────────────────────────────
+
+/**
+ * Per-request mutable budget carried through `executeAskIronTool`. A single
+ * Ask Iron HTTP request may fan out multiple tool calls across several Claude
+ * turns — this counter keeps the model from stuffing Today with 10 moves in
+ * one run. The edge function owns the lifecycle (one fresh session per POST);
+ * unit tests can construct their own to exercise the cap directly.
+ */
+export interface AskIronSession {
+  proposedMoveCount: number;
+}
+
+export function createAskIronSession(): AskIronSession {
+  return { proposedMoveCount: 0 };
+}
+
+export const MAX_PROPOSE_MOVES_PER_REQUEST = 3;
+
+export interface AskIronToolResult {
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+/**
+ * Execute a single tool call. Returns a serialized-friendly payload that the
+ * caller hands back to Claude as a `tool_result`.
+ *
+ * Hard contract: every row leaving this function is RLS-filtered through
+ * `ctx.callerDb`. The one exception is `list_my_moves`, which reads from the
+ * `moves` table (no RLS for callerDb yet — moves are admin-managed) and
+ * applies explicit workspace+rep filters before returning.
+ */
+export async function executeAskIronTool(
+  ctx: RouterCtx,
+  name: string,
+  input: Record<string, unknown>,
+  session?: AskIronSession,
+): Promise<AskIronToolResult> {
+  try {
+    switch (name) {
+      case "list_my_moves":
+        return { ok: true, data: await toolListMyMoves(ctx, input) };
+      case "list_recent_signals":
+        return { ok: true, data: await toolListRecentSignals(ctx, input) };
+      case "search_entities":
+        return { ok: true, data: await toolSearchEntities(ctx, input) };
+      case "get_deal_detail":
+        return { ok: true, data: await toolGetDealDetail(ctx, input) };
+      case "get_company_detail":
+        return { ok: true, data: await toolGetCompanyDetail(ctx, input) };
+      case "summarize_deal":
+        return { ok: true, data: await toolSummarizeDeal(ctx, input) };
+      case "summarize_company":
+        return { ok: true, data: await toolSummarizeCompany(ctx, input) };
+      case "summarize_contact":
+        return { ok: true, data: await toolSummarizeContact(ctx, input) };
+      case "summarize_signal":
+        return { ok: true, data: await toolSummarizeSignal(ctx, input) };
+      case "summarize_equipment":
+        return { ok: true, data: await toolSummarizeEquipment(ctx, input) };
+      case "summarize_rental":
+        return { ok: true, data: await toolSummarizeRental(ctx, input) };
+      case "list_my_touches":
+        return { ok: true, data: await toolListMyTouches(ctx, input) };
+      case "summarize_day":
+        return { ok: true, data: await toolSummarizeDay(ctx, input) };
+      case "propose_move": {
+        // Per-request cap. We return a structured error (not throw) so Claude
+        // sees it in the tool result and can apologize to the operator
+        // without retrying — throwing would surface as a generic `tool failed`.
+        if (
+          session &&
+          session.proposedMoveCount >= MAX_PROPOSE_MOVES_PER_REQUEST
+        ) {
+          return {
+            ok: false,
+            error:
+              `propose_move budget exhausted (max ${MAX_PROPOSE_MOVES_PER_REQUEST} per request). Tell the operator to queue additional moves directly on Today.`,
+          };
+        }
+        const data = await toolProposeMove(ctx, input);
+        if (session) session.proposedMoveCount += 1;
+        return { ok: true, data };
+      }
+      default:
+        return { ok: false, error: `Unknown tool: ${name}` };
+    }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
+async function toolListMyMoves(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const f = normalizeMoveFilters(input, ctx);
+  // Moves live in the `moves` table. Migration 310 ships RLS for moves
+  // (moves_service_all + moves_all_elevated + moves_select_rep_scope),
+  // so we read through callerDb — that way RLS is the last line of
+  // defence if a future regression ever lets a caller-supplied rep_id
+  // slip past the normalizer. The explicit workspace_id + assigned_rep
+  // guards below are kept as belt-and-suspenders and for auditability.
+
+  // Defence-in-depth: if an elevated caller passed an `assigned_rep_id`
+  // from LLM input, confirm that rep belongs to the caller's workspace
+  // before we pull their queue. This is a cheap guard against prompt-
+  // injected cross-tenant peeks. Reps are already pinned to their own id
+  // upstream in normalizeMoveFilters, so this only matters for
+  // admin/manager/owner callers.
+  if (
+    f.assignedRepId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    f.assignedRepId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", f.assignedRepId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    // profiles may not be workspace-scoped in the current schema; when the
+    // column is absent we fall through. Once profiles carry workspace_id
+    // this becomes a hard gate.
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  let q = ctx.callerDb
+    .from("moves")
+    .select(
+      "id, kind, status, title, rationale, confidence, priority, entity_type, entity_id, assigned_rep_id, due_at, created_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .in("status", f.statuses);
+
+  if (f.assignedRepId) {
+    q = q.eq("assigned_rep_id", f.assignedRepId);
+  }
+
+  const { data, error } = await q
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(f.limit);
+
+  if (error) throw error;
+  return {
+    moves: (data ?? []).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      status: row.status,
+      title: row.title,
+      rationale: row.rationale,
+      priority: row.priority,
+      entity: row.entity_type && row.entity_id
+        ? { type: row.entity_type, id: row.entity_id }
+        : null,
+      assigned_rep_id: row.assigned_rep_id,
+      due_at: row.due_at,
+    })),
+  };
+}
+
+async function toolListRecentSignals(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const f = normalizeSignalFilters(input);
+
+  let q = ctx.callerDb
+    .from("signals")
+    .select(
+      "id, kind, severity, source, title, description, entity_type, entity_id, occurred_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .gte("occurred_at", f.sinceIso);
+
+  if (f.kinds.length > 0) q = q.in("kind", f.kinds);
+  if (f.severityAtLeast) {
+    const order = { low: 0, medium: 1, high: 2, critical: 3 } as const;
+    const floor = order[f.severityAtLeast];
+    const allowed = (Object.entries(order) as Array<[keyof typeof order, number]>)
+      .filter(([, idx]) => idx >= floor)
+      .map(([k]) => k);
+    q = q.in("severity", allowed);
+  }
+
+  const { data, error } = await q
+    .order("occurred_at", { ascending: false })
+    .limit(f.limit);
+
+  if (error) throw error;
+  return { signals: data ?? [] };
+}
+
+async function toolSearchEntities(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const f = normalizeSearchInput(input);
+  if (!f.query) throw new Error("query required");
+  const like = `%${f.query}%`;
+  const types = f.types.length > 0 ? new Set(f.types) : null;
+
+  const results: Array<{
+    type: string;
+    id: string;
+    title: string;
+    subtitle: string | null;
+  }> = [];
+
+  if (!types || types.has("company")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_companies")
+      .select("id, name, city, state")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .ilike("name", like)
+      .limit(f.limit);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const loc = [row.city, row.state].filter(Boolean).join(", ");
+      results.push({
+        type: "company",
+        id: String(row.id),
+        title: String(row.name ?? "Untitled company"),
+        subtitle: loc || null,
+      });
+    }
+  }
+
+  if (!types || types.has("contact")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_contacts")
+      .select("id, first_name, last_name, email, phone")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .or(
+        `first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like}`,
+      )
+      .limit(f.limit);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const name = `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim();
+      results.push({
+        type: "contact",
+        id: String(row.id),
+        title: name || "Unnamed contact",
+        subtitle: (row.email || row.phone || null) as string | null,
+      });
+    }
+  }
+
+  if (!types || types.has("deal")) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_deals_rep_safe")
+      .select("id, name, amount, expected_close_on")
+      .eq("workspace_id", ctx.workspaceId)
+      .ilike("name", like)
+      .limit(f.limit);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const amt = row.amount != null && Number.isFinite(Number(row.amount))
+        ? `$${Number(row.amount).toLocaleString()}`
+        : null;
+      const close = row.expected_close_on
+        ? `close ${String(row.expected_close_on)}`
+        : null;
+      results.push({
+        type: "deal",
+        id: String(row.id),
+        title: String(row.name ?? "Untitled deal"),
+        subtitle: [amt, close].filter(Boolean).join(" · ") || null,
+      });
+    }
+  }
+
+  return { matches: results.slice(0, f.limit) };
+}
+
+async function toolGetDealDetail(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const dealId = typeof input.deal_id === "string" ? input.deal_id : "";
+  if (!dealId) throw new Error("deal_id required");
+  const { data, error } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, name, amount, expected_close_on, assigned_rep_id, updated_at, company_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", dealId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { found: false };
+  return { found: true, deal: data };
+}
+
+async function toolGetCompanyDetail(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const companyId = typeof input.company_id === "string" ? input.company_id : "";
+  if (!companyId) throw new Error("company_id required");
+  const { data, error } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id, name, city, state, country, industry, updated_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { found: false };
+  return { found: true, company: data };
+}
+
+/**
+ * Slice 10 — synthesizer tool for narrative deal questions.
+ *
+ * Bundles the deal row + recent activities + open signals into one tool
+ * result so Claude can write a 2–4 sentence status paragraph without
+ * chaining multiple tool calls across turns.
+ *
+ * Scoping & RLS:
+ *   - Deal row comes from `crm_deals_rep_safe` — the rep-safe view, same
+ *     surface get_deal_detail / search_entities use. Respects the
+ *     rep-vs-company-deals visibility rules baked into the view.
+ *   - Activities come from `crm_activities` via `ctx.callerDb` with an
+ *     explicit workspace_id + deal_id filter. The `deleted_at is null`
+ *     clause matches every other activity read in this module.
+ *   - Signals use the same `signals` table + query shape as
+ *     toolListRecentSignals, with the added entity_type='deal' filter.
+ *
+ * Returns `{ found: false }` when the deal doesn't exist OR when the rep
+ * can't see it — the view handles the latter by returning an empty row set.
+ */
+async function toolSummarizeDeal(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeDealInput(input);
+
+  // 1) Deal row — workspace-scoped read. If the view filters out a deal
+  // this rep can't see, maybeSingle returns null and we short-circuit
+  // before spending the activity/signal round-trips.
+  const { data: dealRow, error: dealErr } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, name, amount, stage, expected_close_on, assigned_rep_id, company_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.dealId)
+    .maybeSingle();
+  if (dealErr) throw dealErr;
+  if (!dealRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Recent activities on this deal within the lookback window. Hard
+  // cap at SUMMARIZE_DEAL_ACTIVITY_LIMIT regardless of lookback_days.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("deal_id", n.dealId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 3) Signals tied to this deal within the lookback window. The
+  // signals table pairs entity_type='deal' with entity_id=dealId for the
+  // deal-scoped stream; filtering both makes the index work.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "deal")
+    .eq("entity_id", n.dealId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+  }));
+
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    deal: dealRow,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
+ * Slice 11 — account-level synthesizer. Mirror of toolSummarizeDeal, but
+ * scoped to a company rather than a single opportunity. Four parallel-ish
+ * reads (we keep them sequential for readability; individually they're all
+ * ms-scale on indexed columns):
+ *
+ *   1. Company row           — crm_companies
+ *   2. Open deals            — crm_deals_rep_safe filtered by company_id
+ *   3. Recent activities     — crm_activities filtered by company_id
+ *   4. Open signals          — signals filtered by entity_type='company'
+ *
+ * All four queries go through callerDb with explicit workspace_id so RLS
+ * does the tenant work. The company row short-circuits the downstream
+ * reads when it's missing (either deleted or the caller can't see it via
+ * their workspace) — same pattern as summarize_deal.
+ *
+ * Visibility nuance: crm_deals_rep_safe is rep-safe — a rep summarizing
+ * a company sees only the deals they own + unassigned-company deals per
+ * the view's rules. The tool description tells Claude to call open_deals
+ * "deals you can see," not the ground truth of the account.
+ */
+async function toolSummarizeCompany(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeCompanyInput(input);
+
+  // 1) Company row — workspace-scoped + soft-delete guard.
+  const { data: companyRow, error: companyErr } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id, name, city, state, country, industry, updated_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (companyErr) throw companyErr;
+  if (!companyRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Open deals for this company. crm_deals_rep_safe handles the
+  // rep-visibility rule; we just filter by company_id. "Open" is
+  // intentionally fuzzy here — we return all rows the view lets through,
+  // sorted by updated_at so the most-active appear first. If the sales
+  // pipeline ever adds a canonical `is_open` flag, tighten this.
+  const { data: dealRows, error: dealsErr } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, name, amount, stage, expected_close_on, assigned_rep_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", n.companyId)
+    .order("updated_at", { ascending: false })
+    .limit(SUMMARIZE_COMPANY_DEAL_LIMIT);
+  if (dealsErr) throw dealsErr;
+
+  // 3) Recent activities at the company-scope. crm_activities carries
+  // a company_id column directly so we don't need to fan through deals
+  // or contacts to find account-level touches.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by, deal_id, contact_id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", n.companyId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 4) Signals tied to this company. Same entity_type/entity_id shape
+  // as summarize_deal, flipped to 'company'.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "company")
+    .eq("entity_id", n.companyId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const deals = dealRows ?? [];
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    contact_id: row.contact_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    company: companyRow,
+    open_deals: deals,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      deals: deals.length,
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
+ * Slice 16 — contact-level synthesizer. Answers the field rep's "who is
+ * this person before I pick up the phone" question in one round-trip.
+ *
+ * Four reads, sequenced so an invisible/soft-deleted contact short-
+ * circuits the downstream fan-out:
+ *
+ *   1. Contact row        — crm_contacts (soft-delete guarded). When
+ *                           null we return `{ found: false }` and skip
+ *                           the other three arms entirely.
+ *   2. Related deals      — crm_deals_rep_safe filtered by the contact's
+ *                           company_id. The crm_deals schema pins deals
+ *                           to companies, not contacts, so this is the
+ *                           most useful "what's open on them" slice.
+ *                           When the contact has no company_id we skip
+ *                           this arm and return an empty array — the
+ *                           LLM should still see the contact row + touches
+ *                           + signals, just without the deal context.
+ *   3. Recent activities  — crm_activities filtered by contact_id within
+ *                           the lookback window. Bodies truncated at the
+ *                           summarize-cap for context-budget predictability.
+ *   4. Open signals       — signals where entity_type='contact' +
+ *                           entity_id = contactId within the window.
+ *
+ * Scope: everything goes through callerDb with explicit workspace_id so
+ * RLS carries the tenant work. Rep-vs-company-deals visibility is baked
+ * into crm_deals_rep_safe, so a rep summarizing a contact at an account
+ * they don't own will see a filtered related_deals list; the description
+ * tells Claude to phrase that list as "deals you can see on <company>"
+ * rather than a ground-truth count.
+ */
+async function toolSummarizeContact(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeContactInput(input);
+
+  // 1) Contact row — workspace-scoped + soft-delete guard.
+  const { data: contactRow, error: contactErr } = await ctx.callerDb
+    .from("crm_contacts")
+    .select(
+      "id, first_name, last_name, email, phone, title, company_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.contactId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (contactErr) throw contactErr;
+  if (!contactRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  const companyId = (contactRow as { company_id?: string | null }).company_id
+    ?? null;
+
+  // 2) Related deals — only queried when the contact has a company. The
+  // crm_deals schema pins deals to companies, not contacts; pairing the
+  // contact to their company and listing that company's visible open
+  // deals is the most useful "what's open on them" proxy.
+  let dealRows: unknown[] = [];
+  if (companyId) {
+    const { data, error } = await ctx.callerDb
+      .from("crm_deals_rep_safe")
+      .select(
+        "id, name, amount, stage, expected_close_on, assigned_rep_id, updated_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("company_id", companyId)
+      .order("updated_at", { ascending: false })
+      .limit(SUMMARIZE_CONTACT_DEAL_LIMIT);
+    if (error) throw error;
+    dealRows = data ?? [];
+  }
+
+  // 3) Recent activities on this contact within the lookback window.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by, deal_id, company_id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("contact_id", n.contactId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 4) Signals tied to this contact within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "contact")
+    .eq("entity_id", n.contactId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    contact: contactRow,
+    related_deals: dealRows,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      deals: dealRows.length,
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
+ * Slice 20 — summarize_signal executor.
+ *
+ * Fan-out shape: four reads bundled into one tool return —
+ *
+ *   1. Signal row           — signals table, workspace-scoped.
+ *   2. Parent entity        — the deal/company/contact the signal points
+ *                             at. Uses crm_deals_rep_safe so the rep's
+ *                             visibility rules carry through (same
+ *                             pattern as summarize_contact's related
+ *                             deals). Null for equipment/rental/
+ *                             activity/workspace until their detail
+ *                             tables get first-class synthesizers.
+ *   3. Related signals      — other signals on the same entity within
+ *                             the lookback window, excluding the target
+ *                             signal. Iron can frame "is this one of
+ *                             many, or a first event?" without a second
+ *                             tool call.
+ *   4. Related moves        — moves whose signal_ids array contains the
+ *                             target signal id — the direct causal
+ *                             trail. We deliberately do NOT fan out to
+ *                             every move on the entity; that's what
+ *                             summarize_deal/company/contact is for, and
+ *                             a signal triage answer is crisper when
+ *                             scoped to "moves triggered by this".
+ *
+ * Scope: everything goes through callerDb with explicit workspace_id so
+ * RLS carries the tenant work. When the signal isn't found, returns
+ * {found: false} rather than throwing — Claude gets a clean structured
+ * signal it can relay ("that signal no longer exists or was suppressed").
+ */
+async function toolSummarizeSignal(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeSignalInput(input);
+
+  // 1) Signal row — workspace-scoped.
+  const { data: signalRow, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select(
+      "id, kind, severity, source, title, description, entity_type, entity_id, assigned_rep_id, occurred_at, suppressed_until",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.signalId)
+    .maybeSingle();
+  if (signalErr) throw signalErr;
+  if (!signalRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  const entityType = (signalRow as { entity_type?: string | null }).entity_type
+    ?? null;
+  const entityId = (signalRow as { entity_id?: string | null }).entity_id
+    ?? null;
+
+  // 2) Parent entity — conditional on entity_type + entity_id. Uses the
+  // same visibility views as the per-entity synthesizers so a rep reading
+  // a signal on a deal they don't own sees null here (the signal row
+  // still comes back — signals aren't rep-scoped at the row level, but
+  // the parent name is rightly hidden when they can't see the deal).
+  let parentEntity: unknown = null;
+  if (entityType && entityId) {
+    if (entityType === "deal") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_deals_rep_safe")
+        .select(
+          "id, name, amount, stage, company_id, assigned_rep_id, updated_at",
+        )
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    } else if (entityType === "company") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_companies")
+        .select("id, name, city, state, updated_at")
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    } else if (entityType === "contact") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_contacts")
+        .select(
+          "id, first_name, last_name, email, phone, title, company_id, updated_at",
+        )
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    }
+    // equipment / rental / activity / workspace intentionally skipped —
+    // no synthesizer covers them yet. Parent stays null.
+  }
+
+  // 3) Related signals — other events on the same entity within the
+  // window. Skip when the signal has no entity scope (payloads like
+  // workspace-wide "news_mention"), where "related" has no obvious
+  // definition. `neq(id)` keeps the target signal out of its own trail.
+  let relatedSignals: unknown[] = [];
+  if (entityType && entityId) {
+    const { data, error } = await ctx.callerDb
+      .from("signals")
+      .select(
+        "id, kind, severity, source, title, description, occurred_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .neq("id", n.signalId)
+      .gte("occurred_at", n.sinceIso)
+      .order("occurred_at", { ascending: false })
+      .limit(SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT);
+    if (error) throw error;
+    relatedSignals = data ?? [];
+  }
+
+  // 4) Related moves — moves that name this signal in their signal_ids
+  // array. `.contains` on a uuid[] column expresses "array contains the
+  // given element" in supabase-js. Reads go through callerDb so the
+  // moves RLS policies (moves_select_rep_scope / moves_all_elevated)
+  // serve as defence-in-depth over the explicit workspace scope.
+  const { data: moveRows, error: moveErr } = await ctx.callerDb
+    .from("moves")
+    .select(
+      "id, kind, status, title, priority, entity_type, entity_id, assigned_rep_id, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .contains("signal_ids", [n.signalId])
+    .gte("created_at", n.sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT);
+  if (moveErr) throw moveErr;
+
+  const related_signals = (relatedSignals as Array<{
+    id: string;
+    kind: string;
+    severity: string;
+    source: string;
+    title: string;
+    description: string | null;
+    occurred_at: string;
+  }>).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    signal: {
+      id: (signalRow as { id: string }).id,
+      kind: (signalRow as { kind: string }).kind,
+      severity: (signalRow as { severity: string }).severity,
+      source: (signalRow as { source: string }).source,
+      title: (signalRow as { title: string }).title,
+      description: truncateForSummary(
+        (signalRow as { description: string | null }).description,
+      ),
+      entity_type: entityType,
+      entity_id: entityId,
+      assigned_rep_id:
+        (signalRow as { assigned_rep_id: string | null }).assigned_rep_id,
+      occurred_at: (signalRow as { occurred_at: string }).occurred_at,
+      suppressed_until:
+        (signalRow as { suppressed_until: string | null }).suppressed_until,
+    },
+    parent_entity: parentEntity,
+    related_signals,
+    related_moves: moveRows ?? [],
+    counts: {
+      related_signals: related_signals.length,
+      related_moves: (moveRows ?? []).length,
+    },
+  };
+}
+
+/**
+ * Slice 23 — summarize_equipment executor.
+ *
+ * Four-arm fan-out:
+ *
+ *   1. Equipment row     — crm_equipment (compat view from mig 170; the
+ *                           real table is qrm_equipment). Soft-delete
+ *                           guarded.
+ *   2. Open rentals      — rental_contracts tied to this equipment,
+ *                           filtered to the non-terminal half of the
+ *                           status enum. rental_contracts has its own
+ *                           portal-customer RLS, so a rep's visibility
+ *                           may drop some rows — we phrase this as
+ *                           "rentals you can see" in the tool description.
+ *   3. Recent touches    — touches where equipment_id = target within
+ *                           the lookback window. This is where the
+ *                           yard activity trail lives (crm_activities
+ *                           is constrained to contact/deal/company only).
+ *   4. Open signals      — signals where entity_type='equipment' +
+ *                           entity_id = target within the lookback.
+ *
+ * Returns {found: false} rather than throwing when the equipment
+ * isn't visible — same recovery path as summarize_contact when a
+ * record has been soft-deleted.
+ */
+async function toolSummarizeEquipment(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeEquipmentInput(input);
+
+  // 1) Equipment row — workspace-scoped + soft-delete guard.
+  const { data: equipmentRow, error: equipmentErr } = await ctx.callerDb
+    .from("crm_equipment")
+    .select(
+      "id, name, asset_tag, serial_number, company_id, primary_contact_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.equipmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (equipmentErr) throw equipmentErr;
+  if (!equipmentRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Open rentals — non-terminal statuses only. rental_contracts has
+  // no soft-delete column; status is the single gate.
+  const { data: rentalRows, error: rentalErr } = await ctx.callerDb
+    .from("rental_contracts")
+    .select(
+      "id, status, request_type, requested_start_date, requested_end_date, approved_start_date, approved_end_date, portal_customer_id, branch_id, delivery_mode, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("equipment_id", n.equipmentId)
+    .in("status", SUMMARIZE_EQUIPMENT_OPEN_RENTAL_STATUSES)
+    .order("updated_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_RENTAL_LIMIT);
+  if (rentalErr) throw rentalErr;
+
+  // 3) Recent touches on this machine. touches.body is the long-form
+  // field we truncate (summary is already short by design).
+  const { data: touchRows, error: touchErr } = await ctx.callerDb
+    .from("touches")
+    .select(
+      "id, channel, direction, summary, body, occurred_at, actor_user_id, activity_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("equipment_id", n.equipmentId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_TOUCH_LIMIT);
+  if (touchErr) throw touchErr;
+
+  // 4) Signals tied to this equipment within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "equipment")
+    .eq("entity_id", n.equipmentId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_EQUIPMENT_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const touches = (touchRows ?? []).map((row) => ({
+    id: row.id,
+    channel: row.channel,
+    direction: row.direction,
+    summary: row.summary,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    actor_user_id: row.actor_user_id,
+    activity_id: row.activity_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    equipment: equipmentRow,
+    open_rentals: rentalRows ?? [],
+    recent_touches: touches,
+    open_signals: signals,
+    counts: {
+      open_rentals: (rentalRows ?? []).length,
+      touches: touches.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
+ * Slice 26 — summarize_rental executor.
+ *
+ * Four-arm fan-out:
+ *
+ *   1. Rental row        — rental_contracts row. Workspace-scoped +
+ *                           portal-customer RLS. No soft-delete column;
+ *                           status is the lifecycle gate.
+ *   2. Extensions        — rental_contract_extensions for this
+ *                           contract, all statuses. No lookback —
+ *                           extensions are always "current picture".
+ *   3. Equipment         — qrm_equipment via rental.equipment_id when
+ *                           present. Category bookings (no equipment
+ *                           assigned yet) return null here.
+ *   4. Related signals   — signals where entity_type='rental' +
+ *                           entity_id = target within lookback.
+ *
+ * Returns {found: false} rather than throwing when the rental isn't
+ * visible, matching summarize_equipment / summarize_contact.
+ */
+async function toolSummarizeRental(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeRentalInput(input);
+
+  // 1) Rental contract row — workspace-scoped + RLS.
+  const { data: rentalRow, error: rentalErr } = await ctx.callerDb
+    .from("rental_contracts")
+    .select(
+      "id, status, request_type, portal_customer_id, equipment_id, branch_id, requested_category, requested_make, requested_model, delivery_mode, delivery_location, requested_start_date, requested_end_date, approved_start_date, approved_end_date, estimate_daily_rate, estimate_weekly_rate, estimate_monthly_rate, agreed_daily_rate, agreed_weekly_rate, agreed_monthly_rate, deposit_required, deposit_amount, deposit_status, customer_notes, dealer_notes, dealer_response, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.rentalId)
+    .maybeSingle();
+  if (rentalErr) throw rentalErr;
+  if (!rentalRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Extensions — all statuses, no lookback (small set by nature).
+  const { data: extensionRows, error: extensionErr } = await ctx.callerDb
+    .from("rental_contract_extensions")
+    .select(
+      "id, status, requested_end_date, approved_end_date, customer_reason, dealer_response, additional_charge, payment_status, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("rental_contract_id", n.rentalId)
+    .order("created_at", { ascending: false });
+  if (extensionErr) throw extensionErr;
+
+  // 3) Equipment — only when the rental has one assigned.
+  type RentalSelect = {
+    equipment_id: string | null;
+  };
+  const rentalSelect = rentalRow as unknown as RentalSelect;
+  let equipment:
+    | {
+        id: string;
+        name: string | null;
+        asset_tag: string | null;
+        serial_number: string | null;
+        company_id: string | null;
+        primary_contact_id: string | null;
+      }
+    | null = null;
+  if (rentalSelect.equipment_id) {
+    const { data: equipmentRow, error: equipmentErr } = await ctx.callerDb
+      .from("crm_equipment")
+      .select(
+        "id, name, asset_tag, serial_number, company_id, primary_contact_id",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("id", rentalSelect.equipment_id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (equipmentErr) throw equipmentErr;
+    equipment = equipmentRow ?? null;
+  }
+
+  // 4) Signals tied to this rental within the lookback window.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "rental")
+    .eq("entity_id", n.rentalId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_RENTAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    rental: rentalRow,
+    extensions: extensionRows ?? [],
+    equipment,
+    open_signals: signals,
+    counts: {
+      extensions: (extensionRows ?? []).length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
+ * Slice 13 — the rep's own activity trail.
+ *
+ * Reads crm_activities filtered by workspace + soft-delete + caller's
+ * lookback window. Rep callers are pinned to their own userId upstream;
+ * elevated callers may scope to another rep via rep_id (with a workspace
+ * membership guard, same pattern as toolListMyMoves).
+ *
+ * The entity scope is optional. When provided, the normalizer has
+ * already validated that both type and id are present — we just map the
+ * type to the correct column and add an `eq`. If the caller leaves
+ * activity_types empty, we return every type that crm_activities carries
+ * (including system-generated rows like 'enrollment_created' or
+ * 'service_prompt'). Iron's system prompt nudges the LLM toward a
+ * canonical touches subset when the question is "what did I do".
+ */
+async function toolListMyTouches(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const f = normalizeListMyTouchesInput(input, ctx);
+
+  // Cross-tenant read guard. Elevated callers who targeted another rep id
+  // get a workspace-membership check before we pull their activity trail.
+  // Reps are already pinned to their own userId upstream, so this branch
+  // only runs for admin/manager/owner callers.
+  if (
+    f.repId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    f.repId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", f.repId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  let q = ctx.callerDb
+    .from("crm_activities")
+    .select(
+      "id, activity_type, body, occurred_at, created_by, deal_id, company_id, contact_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .gte("occurred_at", f.sinceIso);
+
+  if (f.repId) q = q.eq("created_by", f.repId);
+  if (f.activityTypes.length > 0) q = q.in("activity_type", f.activityTypes);
+  if (f.entityType && f.entityId) {
+    const column = f.entityType === "deal"
+      ? "deal_id"
+      : f.entityType === "company"
+      ? "company_id"
+      : "contact_id";
+    q = q.eq(column, f.entityId);
+  }
+
+  const { data, error } = await q
+    .order("occurred_at", { ascending: false })
+    .limit(f.limit);
+  if (error) throw error;
+
+  const touches = (data ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body, LIST_MY_TOUCHES_TEXT_CAP),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+    contact_id: row.contact_id,
+  }));
+
+  return { touches, count: touches.length };
+}
+
+/**
+ * Slice 14 — morning-briefing synthesizer.
+ *
+ * Bundles four reads into one tool result so Claude can write a day
+ * briefing in a single turn:
+ *
+ *   1. active_moves       moves (suggested + accepted) for this rep,
+ *                         priority-desc. Uses the admin client because
+ *                         moves live outside callerDb's RLS today (same
+ *                         pattern as toolListMyMoves).
+ *   2. completed_today    moves with status=completed whose
+ *                         completed_at falls inside the window. Same
+ *                         table + client as active_moves; the filter
+ *                         swap is the only difference.
+ *   3. recent_touches     crm_activities authored by this rep inside
+ *                         the window, via callerDb. Body text capped.
+ *   4. open_signals       signals in the window at medium+ severity,
+ *                         workspace-wide (NOT rep-scoped). The tool
+ *                         description tells Claude to describe this as
+ *                         workspace-wide so it doesn't undersell the
+ *                         briefing.
+ *
+ * Rep callers are pinned to self upstream; elevated callers who pass
+ * rep_id go through the same profiles workspace-membership check as
+ * list_my_moves / list_my_touches / propose_move.
+ */
+async function toolSummarizeDay(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeDayInput(input, ctx);
+
+  // Cross-tenant read guard. Only elevated callers targeting someone
+  // other than themselves actually hit the profiles check.
+  if (
+    n.repId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    n.repId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", n.repId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  // 1) Active moves for this rep (or everyone, if elevated + repId null).
+  //    Reads go through callerDb so RLS (moves_select_rep_scope /
+  //    moves_all_elevated) is the last line of defence if the
+  //    assigned_rep_id guard ever regresses.
+  let activeQ = ctx.callerDb
+    .from("moves")
+    .select(
+      "id, kind, status, title, rationale, priority, entity_type, entity_id, assigned_rep_id, due_at, created_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .in("status", ["suggested", "accepted"]);
+  if (n.repId) activeQ = activeQ.eq("assigned_rep_id", n.repId);
+  const { data: activeRows, error: activeErr } = await activeQ
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_MOVE_LIMIT);
+  if (activeErr) throw activeErr;
+
+  // 2) Completed inside the window. completed_at is the source of truth
+  // for "closed today" — created_at would double-count stale moves
+  // cleared this morning. Reads go through callerDb so moves RLS is
+  // the backstop if the rep-scope guard ever regresses.
+  let completedQ = ctx.callerDb
+    .from("moves")
+    .select(
+      "id, kind, title, priority, entity_type, entity_id, assigned_rep_id, completed_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("status", "completed")
+    .gte("completed_at", n.sinceIso);
+  if (n.repId) completedQ = completedQ.eq("assigned_rep_id", n.repId);
+  const { data: completedRows, error: completedErr } = await completedQ
+    .order("completed_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_COMPLETED_LIMIT);
+  if (completedErr) throw completedErr;
+
+  // 3) Recent touches. When repId is null (elevated caller + no target),
+  // we widen to workspace-level activity — a workspace briefing is still
+  // useful even if it's not rep-scoped.
+  let touchQ = ctx.callerDb
+    .from("crm_activities")
+    .select(
+      "id, activity_type, body, occurred_at, created_by, deal_id, company_id, contact_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso);
+  if (n.repId) touchQ = touchQ.eq("created_by", n.repId);
+  const { data: touchRows, error: touchErr } = await touchQ
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_TOUCH_LIMIT);
+  if (touchErr) throw touchErr;
+
+  // 4) Open signals (workspace-wide, medium+). Not rep-filtered on
+  // purpose — a rep briefing benefits from knowing what landed on the
+  // yard's radar even if it isn't yet tied to one of their deals.
+  const signalSeverities = ["medium", "high", "critical"];
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select(
+      "id, kind, severity, source, title, description, entity_type, entity_id, occurred_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .gte("occurred_at", n.sinceIso)
+    .in("severity", signalSeverities)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activeMoves = (activeRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    status: row.status,
+    title: row.title,
+    rationale: truncateForSummary(row.rationale),
+    priority: row.priority,
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    assigned_rep_id: row.assigned_rep_id,
+    due_at: row.due_at,
+  }));
+
+  const completedToday = (completedRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    priority: row.priority,
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    assigned_rep_id: row.assigned_rep_id,
+    completed_at: row.completed_at,
+  }));
+
+  const recentTouches = (touchRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+    contact_id: row.contact_id,
+  }));
+
+  const openSignals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    as_of: new Date().toISOString(),
+    lookback_hours: n.lookbackHours,
+    rep_id: n.repId,
+    active_moves: activeMoves,
+    completed_today: completedToday,
+    recent_touches: recentTouches,
+    open_signals: openSignals,
+    counts: {
+      active_moves: activeMoves.length,
+      completed_today: completedToday.length,
+      recent_touches: recentTouches.length,
+      open_signals: openSignals.length,
+    },
+  };
+}
+
+/**
+ * Create a move on behalf of the operator via the normal createMove path.
+ * Provenance is stamped so the Today surface can badge this as "proposed by
+ * Iron" (and a future recommender can weight or deduplicate against these).
+ */
+async function toolProposeMove(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeProposeMoveInput(input, ctx);
+
+  // Cross-tenant write guard. If an elevated caller routed this move to a
+  // rep other than themselves, confirm that rep lives in the caller's
+  // workspace before the insert. Reps are already pinned to `userId` in
+  // normalizeProposeMoveInput, so this branch is admin/manager/owner only.
+  // Mirrors the same defense in toolListMyMoves — more important here
+  // because propose_move writes, whereas list_my_moves only reads.
+  if (
+    n.assignedRepId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    n.assignedRepId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", n.assignedRepId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  const payload: MoveCreatePayload = {
+    kind: n.kind,
+    title: n.title,
+    rationale: n.rationale,
+    priority: n.priority,
+    entityType: n.entityType,
+    entityId: n.entityId,
+    assignedRepId: n.assignedRepId,
+    dueAt: n.dueAt,
+    recommender: "ask_iron",
+    recommenderVersion: "v1",
+    payload: {
+      proposed_via: "ask_iron",
+      proposed_at: new Date().toISOString(),
+      proposer_user_id: ctx.caller.userId,
+    },
+  };
+
+  const row = await createMove(ctx, payload);
+  return {
+    move: {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      status: row.status,
+      priority: row.priority,
+      assigned_rep_id: row.assigned_rep_id,
+      entity: row.entity_type && row.entity_id
+        ? { type: row.entity_type, id: row.entity_id }
+        : null,
+      due_at: row.due_at,
+    },
+  };
+}
+
+// ── System prompt ───────────────────────────────────────────────────────────
+
+export const ASK_IRON_SYSTEM_PROMPT = `You are Iron, the ambient agent for QRM — the operating system for an equipment and parts dealership. You help salesmen, service operators, and dealership managers move work forward.
+
+Your job: answer the operator's question using the tools. These are busy people in trucks, in the yard, between calls. Give them the answer, not your process.
+
+Rules:
+- Use tools. Never guess deal amounts, contact names, move counts, signal kinds, or dates.
+- If the question names a customer or a contact, call search_entities first, then drill in.
+- For "what should I do", call list_my_moves.
+- For "what changed" or "anything new", call list_recent_signals.
+- For questions about the operator's own work — "did I call <customer>", "what did I do yesterday", "any touches on <deal> this week", "how many follow-ups" — call list_my_touches. This is the operator's outbound log; it is NOT the same as list_recent_signals (inbound events). For "what did I do" questions where system-generated activity rows would be noise, filter to the touch types operators actually log (activity_types: ['call','email','meeting','follow_up','note']).
+- For morning-briefing questions — "what's on my plate", "brief me on my day", "where should I start", "catch me up" — call summarize_day. It bundles active moves, moves completed in the window, recent touches, and workspace signals into one round-trip. Do NOT chain list_my_moves + list_my_touches + list_recent_signals for these questions; summarize_day returns all four in a single call. Note: open_signals in the result is workspace-wide, so describe it as "on the yard's radar" or "across the workspace" rather than "on your accounts".
+- For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
+- For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
+- For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
+- For signal-centric triage questions — "triage this signal", "why is this signal hot", "what's going on with this <kind> signal", "brief me on this alert on <entity>" — call summarize_signal with the signal_id (obtain via list_recent_signals if only the kind/title is known). It bundles the signal row, the parent entity, other related signals on that entity, and moves the signal triggered. Do NOT chain list_recent_signals + search_entities + a summarize_* on the parent for triage questions; summarize_signal returns all four in one shot. parent_entity may be null for equipment/rental/activity/workspace signals — say so plainly rather than guessing.
+- For machine-centric questions — "where is <asset tag>", "status of CAT 320", "what's up with serial <serial>", "brief me on this machine", "any activity on <equipment>" — call search_entities to resolve the equipment_id (if only the asset tag or serial is known), then call summarize_equipment. It bundles the equipment row, open (non-terminal) rental contracts tied to the machine, recent touches (yard activity), and open signals on the equipment. Do NOT chain search_entities + list_recent_signals(entity_type='equipment') + a separate rentals read; summarize_equipment returns all four in one shot. open_rentals may be a partial list due to portal-customer visibility — describe it as "rentals you can see on this machine" rather than "all rentals".
+- For rental-centric questions — "where is rental request #7", "status of <customer>'s booking", "what's blocking this rental", "brief me on this rental before I approve", "any extensions pending" — call search_entities to resolve the rental_id, then call summarize_rental. It bundles the rental contract row, all extensions on the contract, the equipment (if assigned; null for category bookings), and related signals in one shot. Do NOT chain get_* + list_recent_signals(entity_type='rental') + a separate extensions read. equipment may be null when the request is still in triage — say so plainly.
+- When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
+- If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
+- Ground every number and name in tool output. If you can't, omit the claim.
+- Reply in 2-6 sentences of tight prose. Only bullet when listing 3+ discrete items.
+- Address the operator directly ("you", "your"). No preamble, no "Great question", no sign-off.
+- Money as "$X" or "$X.XK/$X.XM". No trailing cents on large numbers.
+
+If the question is ambiguous, pick the most-likely interpretation and answer it, then offer to drill further.`;

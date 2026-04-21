@@ -18,6 +18,7 @@ import type {
   QrmDuplicateCandidate,
   QrmEquipment,
   QrmRecordType,
+  QrmSearchEntityType,
   QrmSearchItem,
 } from "./types";
 
@@ -76,6 +77,25 @@ export async function searchCrm(query: string): Promise<QrmSearchItem[]> {
   if (!query.trim()) return [];
   const params = new URLSearchParams({ q: query.trim(), types: "contact,company" });
   const payload = await requestRouter<{ results: QrmSearchItem[] }>(`/qrm/search?${params.toString()}`);
+  return payload.results;
+}
+
+/**
+ * Universal search across the operator graph. Pass `types` to narrow the
+ * lookup, or omit to search every known entity type. Used by the GraphExplorer
+ * surface and the global command-k bar.
+ */
+export async function searchQrmGraph(
+  query: string,
+  types?: QrmSearchEntityType[],
+): Promise<QrmSearchItem[]> {
+  if (!query.trim()) return [];
+  const allTypes: QrmSearchEntityType[] =
+    types && types.length > 0 ? types : ["contact", "company", "deal", "equipment", "rental"];
+  const params = new URLSearchParams({ q: query.trim(), types: allTypes.join(",") });
+  const payload = await requestRouter<{ results: QrmSearchItem[] }>(
+    `/qrm/search?${params.toString()}`,
+  );
   return payload.results;
 }
 
@@ -358,4 +378,179 @@ export async function mergeDuplicateContacts(input: {
     idempotencyKey: crypto.randomUUID(),
     body: input,
   });
+}
+
+// ─── Moves (Slice 2 Today surface) ──────────────────────────────────────────
+// A "move" is a recommended unit of work. The recommender writes them, the
+// operator accepts/dismisses/snoozes them, and the card collapses back to
+// quiet once the move is completed or dismissed.
+
+export type {
+  QrmMove,
+  QrmMoveAction,
+  QrmMoveEntityType,
+  QrmMoveKind,
+  QrmMoveStatus,
+} from "./moves-types";
+import type {
+  QrmMove,
+  QrmMoveEntityType,
+  QrmMoveStatus,
+} from "./moves-types";
+
+export interface ListMovesParams {
+  statuses?: QrmMoveStatus[];
+  assignedRepId?: string | null;
+  entityType?: QrmMoveEntityType | null;
+  entityId?: string | null;
+  limit?: number;
+}
+
+export async function listQrmMoves(params: ListMovesParams = {}): Promise<QrmMove[]> {
+  const q = new URLSearchParams();
+  if (params.statuses && params.statuses.length > 0) {
+    q.set("status", params.statuses.join(","));
+  }
+  if (params.assignedRepId) q.set("assigned_rep_id", params.assignedRepId);
+  if (params.entityType) q.set("entity_type", params.entityType);
+  if (params.entityId) q.set("entity_id", params.entityId);
+  if (params.limit != null) q.set("limit", String(params.limit));
+
+  const qs = q.toString();
+  const payload = await requestRouter<{ moves: QrmMove[] }>(
+    `/qrm/moves${qs ? `?${qs}` : ""}`,
+  );
+  return payload.moves;
+}
+
+/**
+ * Touch channel enum for the move-complete touch composer (Slice 5).
+ * Mirrors the server's `operator_touch_channel` DB enum exactly — keep
+ * these aligned, or the backend will reject "unknown channel".
+ */
+export type QrmTouchChannel =
+  | "call"
+  | "email"
+  | "meeting"
+  | "sms"
+  | "field_visit"
+  | "voice_note"
+  | "chat"
+  | "other";
+
+export interface PatchMoveTouchInput {
+  channel: QrmTouchChannel;
+  summary?: string;
+  body?: string;
+  durationSeconds?: number;
+}
+
+export interface PatchMoveInput {
+  action: import("./moves-types").QrmMoveAction;
+  snoozedUntil?: string;
+  reason?: string;
+  /**
+   * Optional touch payload. Only relevant for action === "complete". The
+   * server also creates a minimal auto-touch when this is omitted, so it's
+   * safe to leave out when the rep just taps Done without filling the
+   * composer.
+   */
+  touch?: PatchMoveTouchInput;
+}
+
+/**
+ * PATCH response shape. `touch_id` is non-null when the server logged a
+ * touch as part of a complete action; `signals_suppressed` is the number
+ * of signals cooled off (usually equal to move.signal_ids.length, unless
+ * some were already suppressed).
+ */
+export interface QrmMovePatchResult {
+  move: QrmMove;
+  touchId: string | null;
+  signalsSuppressed: number;
+}
+
+export async function patchQrmMove(
+  moveId: string,
+  input: PatchMoveInput,
+): Promise<QrmMovePatchResult> {
+  const payload = await requestRouter<{
+    move: QrmMove;
+    touch_id: string | null;
+    signals_suppressed: number;
+  }>(`/qrm/moves/${moveId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return {
+    move: payload.move,
+    touchId: payload.touch_id ?? null,
+    signalsSuppressed: payload.signals_suppressed ?? 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Signals (Slice 3) — the raw event stream backing the Pulse surface. Reads
+// are RLS-scoped by workspace + rep visibility; writes go through dedicated
+// ingest adapters, not this client.
+// ---------------------------------------------------------------------------
+
+export type {
+  QrmSignal,
+  QrmSignalEntityType,
+  QrmSignalKind,
+  QrmSignalSeverity,
+} from "./signals-types";
+import type {
+  QrmSignal,
+  QrmSignalEntityType,
+  QrmSignalKind,
+  QrmSignalSeverity,
+} from "./signals-types";
+
+export interface ListSignalsParams {
+  kinds?: QrmSignalKind[];
+  severityAtLeast?: QrmSignalSeverity | null;
+  entityType?: QrmSignalEntityType | null;
+  entityId?: string | null;
+  assignedRepId?: string | null;
+  /** ISO timestamp. Server floors signals to occurred_at >= since. */
+  since?: string | null;
+  limit?: number;
+}
+
+export async function listQrmSignals(
+  params: ListSignalsParams = {},
+): Promise<QrmSignal[]> {
+  const q = new URLSearchParams();
+  if (params.kinds && params.kinds.length > 0) {
+    q.set("kind", params.kinds.join(","));
+  }
+  if (params.severityAtLeast) q.set("severity_at_least", params.severityAtLeast);
+  if (params.entityType) q.set("entity_type", params.entityType);
+  if (params.entityId) q.set("entity_id", params.entityId);
+  if (params.assignedRepId) q.set("assigned_rep_id", params.assignedRepId);
+  if (params.since) q.set("since", params.since);
+  if (params.limit != null) q.set("limit", String(params.limit));
+
+  const qs = q.toString();
+  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+    `/qrm/signals${qs ? `?${qs}` : ""}`,
+  );
+  return payload.signals;
+}
+
+/**
+ * Fetch a fixed set of signals by id — backs the "Triggered by" panel on
+ * a MoveCard. Returns in the same order as the server (occurred_at desc).
+ * Capped to 20 ids server-side; extras are silently dropped.
+ */
+export async function listQrmSignalsByIds(ids: readonly string[]): Promise<QrmSignal[]> {
+  const filtered = ids.filter((id) => typeof id === "string" && id.length > 0);
+  if (filtered.length === 0) return [];
+  const q = new URLSearchParams({ ids: filtered.join(",") });
+  const payload = await requestRouter<{ signals: QrmSignal[] }>(
+    `/qrm/signals?${q.toString()}`,
+  );
+  return payload.signals;
 }

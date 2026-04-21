@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Building2, Download, Plus, Search, UserRound } from "lucide-react";
+import { Building2, Download, GitMerge, Plus, Search, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
@@ -11,6 +11,7 @@ import { QrmContactEditorSheet } from "../components/QrmContactEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { listCrmContacts } from "../lib/qrm-api";
+import { listDuplicateCandidates } from "../lib/qrm-router-api";
 import { isUuid } from "@/lib/uuid";
 
 export function QrmContactsPage() {
@@ -92,6 +93,27 @@ export function QrmContactsPage() {
   const hasNextPage = contactsQuery.hasNextPage;
   const isFetchingNextPage = contactsQuery.isFetchingNextPage;
 
+  // Slice 0 — anomaly surfacing. Show a hint when the duplicate-candidates
+  // detector has flagged possible merges (e.g. Jordan Blake / Jordon Blake).
+  // We keep this lightweight: a single count + a link to the existing
+  // /qrm/duplicates review page. If the request fails for any reason
+  // (missing function, permissions), we silently swallow — no banner,
+  // no user-visible error, and the rest of the page still renders.
+  const duplicatesQuery = useQuery({
+    queryKey: ["crm", "duplicates", "hint"],
+    queryFn: async () => {
+      try {
+        const rows = await listDuplicateCandidates();
+        return rows;
+      } catch {
+        return [];
+      }
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const duplicateCount = duplicatesQuery.data?.length ?? 0;
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
@@ -111,6 +133,27 @@ export function QrmContactsPage() {
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
             <Link to="/qrm/contacts">Clear company filter</Link>
+          </Button>
+        </Card>
+      )}
+
+      {duplicateCount > 0 && (
+        <Card
+          className="flex flex-col gap-2 border-amber-300/60 bg-amber-50/50 p-4 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
+          aria-label="Duplicate contacts detected"
+        >
+          <div className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-100">
+            <GitMerge className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <p>
+              <span className="font-semibold">
+                {duplicateCount} possible duplicate{duplicateCount === 1 ? "" : "s"}
+              </span>{" "}
+              detected in your contacts. Resolving them keeps activity, deals, and
+              timelines on a single record.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
+            <Link to="/qrm/duplicates">Review merges</Link>
           </Button>
         </Card>
       )}
