@@ -19,6 +19,8 @@ import type { CalibrationDriftReport } from "../calibration-drift";
 import type { FactorDriftReport, FactorDrift } from "../factor-drift";
 import type { ProposalUrgencyResult } from "../proposal-urgency";
 import type { ScorerWhatIfResult } from "../scorer-what-if";
+import type { ProposalConfidenceResult } from "../proposal-confidence";
+import type { ProposalCallFlipReport } from "../proposal-call-flips";
 
 function baseProposal(): ScorerProposal {
   return {
@@ -61,7 +63,14 @@ function baseProposal(): ScorerProposal {
 }
 
 function nullCtx(): ProposalMarkdownContext {
-  return { calibrationDrift: null, factorDrift: null, urgency: null, whatIf: null };
+  return {
+    calibrationDrift: null,
+    factorDrift: null,
+    urgency: null,
+    whatIf: null,
+    confidence: null,
+    callFlips: null,
+  };
 }
 
 describe("renderProposalMarkdownWithContext — degradation to 20m baseline", () => {
@@ -413,5 +422,334 @@ describe("renderProposalMarkdownWithContext — composed output", () => {
     expect(idxFactor).toBeGreaterThan(idxCalib);
     expect(idxWhatIf).toBeGreaterThan(idxFactor);
     expect(idxProposal).toBeGreaterThan(idxWhatIf);
+  });
+});
+
+// ── Slice 20x additions — confidence + call flips in the markdown ────
+
+describe("renderProposalMarkdownWithContext — confidence section (20x)", () => {
+  test("high-band confidence with drivers renders pill, rationale, and per-driver bullets", () => {
+    const confidence: ProposalConfidenceResult = {
+      confidence: 82,
+      band: "high",
+      drivers: [
+        {
+          signal: "what_if",
+          contribution: 25,
+          rationale:
+            "Simulated Brier improves by 0.040 and hit rate lifts +9pp on 30 historical deals — strongest single signal.",
+        },
+        {
+          signal: "sample_size",
+          contribution: 20,
+          rationale: "60 closed-deal audits back this proposal — substantial sample.",
+        },
+      ],
+      rationale:
+        "High confidence (82) — driven by what-if preview (+25) plus sample size (+20).",
+      dampenedByThinSample: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), confidence };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Confidence**: 82/100 · HIGH CONFIDENCE");
+    expect(md).toContain("_High confidence (82) — driven by what-if preview (+25) plus sample size (+20)._");
+    expect(md).toContain("`+25` — Simulated Brier improves by 0.040");
+    expect(md).toContain("`+20` — 60 closed-deal audits back this proposal");
+  });
+
+  test("low-band confidence with negative drivers — signs format correctly", () => {
+    const confidence: ProposalConfidenceResult = {
+      confidence: 28,
+      band: "low",
+      drivers: [
+        {
+          signal: "what_if",
+          contribution: -15,
+          rationale:
+            "Simulated Brier worsens by 0.030 on 20 deals — applying this would hurt accuracy.",
+        },
+        {
+          signal: "sample_size",
+          contribution: -5,
+          rationale: "Only 3 closed-deal audits — below the 11-deal minimum for trustworthy attribution.",
+        },
+      ],
+      rationale:
+        "Low confidence (28) — the dominant drag is what-if preview (-15), with sample size (-5). Hold until signals strengthen.",
+      dampenedByThinSample: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), confidence };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Confidence**: 28/100 · LOW CONFIDENCE");
+    expect(md).toContain("`-15` — Simulated Brier worsens");
+    expect(md).toContain("`-5` — Only 3 closed-deal audits");
+  });
+
+  test("dampened confidence appends italicized '(dampened — thin attribution sample)'", () => {
+    const confidence: ProposalConfidenceResult = {
+      confidence: 55,
+      band: "medium",
+      drivers: [],
+      rationale: "Medium confidence (55) — stub.",
+      dampenedByThinSample: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), confidence };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain(
+      "**Confidence**: 55/100 · MEDIUM CONFIDENCE _(dampened — thin attribution sample)_",
+    );
+  });
+});
+
+describe("renderProposalMarkdownWithContext — call flips section (20x)", () => {
+  test("mixed call-flip report renders corroborating + regressing buckets", () => {
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [
+        {
+          packageId: "pkg_a1",
+          outcome: "won",
+          previousCall: "miss",
+          proposedCall: "win",
+          previous: 42,
+          proposed: 70,
+          delta: 28,
+          kind: "corroborating",
+        },
+      ],
+      regressing: [
+        {
+          packageId: "pkg_r1",
+          outcome: "won",
+          previousCall: "win",
+          proposedCall: "miss",
+          previous: 62,
+          proposed: 40,
+          delta: -22,
+          kind: "regressing",
+        },
+      ],
+      alignedUnchangedCount: 10,
+      misalignedUnchangedCount: 2,
+      expiredCount: 1,
+      resolvedCount: 14,
+      netImprovement: 0,
+      totalFlips: 2,
+      lowConfidence: false,
+      empty: false,
+      noActionableChanges: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), callFlips };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("**Call flips**: 1 corroborating, 1 regressing (net zero).");
+    expect(md).toContain("✅ Corroborating");
+    expect(md).toContain("`pkg_a1` · 42% (miss) → 70% (win) · won");
+    expect(md).toContain("⚠️ Regressing");
+    expect(md).toContain("`pkg_r1` · 62% (win) → 40% (miss) · won");
+  });
+
+  test("all-regressing call-flip report uses the warning headline", () => {
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [],
+      regressing: [
+        {
+          packageId: "pkg_r1",
+          outcome: "won",
+          previousCall: "win",
+          proposedCall: "miss",
+          previous: 62,
+          proposed: 40,
+          delta: -22,
+          kind: "regressing",
+        },
+      ],
+      alignedUnchangedCount: 0,
+      misalignedUnchangedCount: 0,
+      expiredCount: 0,
+      resolvedCount: 1,
+      netImprovement: -1,
+      totalFlips: 1,
+      lowConfidence: false,
+      empty: false,
+      noActionableChanges: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), callFlips };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain("⚠ 1 call would regress, none would corroborate");
+    // No "Corroborating" section should render since bucket is empty.
+    expect(md).not.toContain("✅ Corroborating");
+  });
+
+  test("zero-flip report ('refines without changing verdicts') still renders headline, no buckets", () => {
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [],
+      regressing: [],
+      alignedUnchangedCount: 15,
+      misalignedUnchangedCount: 3,
+      expiredCount: 0,
+      resolvedCount: 18,
+      netImprovement: 0,
+      totalFlips: 0,
+      lowConfidence: false,
+      empty: false,
+      noActionableChanges: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), callFlips };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).toContain(
+      "**Call flips**: No call flips on 18 resolved deals — the proposal refines scores without changing any verdicts.",
+    );
+    expect(md).not.toContain("✅ Corroborating");
+    expect(md).not.toContain("⚠️ Regressing");
+  });
+
+  test("empty call-flip report → section omitted entirely", () => {
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [],
+      regressing: [],
+      alignedUnchangedCount: 0,
+      misalignedUnchangedCount: 0,
+      expiredCount: 0,
+      resolvedCount: 0,
+      netImprovement: 0,
+      totalFlips: 0,
+      lowConfidence: false,
+      empty: true,
+      noActionableChanges: false,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), callFlips };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Call flips**");
+  });
+
+  test("noActionableChanges call-flip report → section omitted entirely", () => {
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [],
+      regressing: [],
+      alignedUnchangedCount: 0,
+      misalignedUnchangedCount: 0,
+      expiredCount: 0,
+      resolvedCount: 0,
+      netImprovement: 0,
+      totalFlips: 0,
+      lowConfidence: false,
+      empty: false,
+      noActionableChanges: true,
+    };
+    const ctx: ProposalMarkdownContext = { ...nullCtx(), callFlips };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    expect(md).not.toContain("**Call flips**");
+  });
+});
+
+describe("renderProposalMarkdownWithContext — full ordering with 20v + 20w", () => {
+  test("composed output reads top-down: urgency → calibration → factors → what-if → call flips → confidence → proposal body", () => {
+    const confidence: ProposalConfidenceResult = {
+      confidence: 75,
+      band: "high",
+      drivers: [
+        {
+          signal: "what_if",
+          contribution: 25,
+          rationale: "Strong what-if gain.",
+        },
+      ],
+      rationale: "High confidence (75) — strong what-if.",
+      dampenedByThinSample: false,
+    };
+    const callFlips: ProposalCallFlipReport = {
+      corroborating: [
+        {
+          packageId: "pkg_a1",
+          outcome: "won",
+          previousCall: "miss",
+          proposedCall: "win",
+          previous: 42,
+          proposed: 70,
+          delta: 28,
+          kind: "corroborating",
+        },
+      ],
+      regressing: [],
+      alignedUnchangedCount: 5,
+      misalignedUnchangedCount: 0,
+      expiredCount: 0,
+      resolvedCount: 6,
+      netImprovement: 1,
+      totalFlips: 1,
+      lowConfidence: false,
+      empty: false,
+      noActionableChanges: false,
+    };
+    const ctx: ProposalMarkdownContext = {
+      urgency: {
+        urgency: "high",
+        rationale: "Scorer dulled -10pp over the last 90 days — open a scorer PR this week.",
+      },
+      calibrationDrift: {
+        referenceDate: "2026-04-01T00:00:00.000Z",
+        windowDays: 90,
+        recentN: 30,
+        priorN: 45,
+        recentAccuracy: 0.55,
+        priorAccuracy: 0.65,
+        accuracyDelta: -0.1,
+        recentBrier: 0.26,
+        priorBrier: 0.21,
+        brierDelta: 0.05,
+        direction: "degrading",
+        lowConfidence: false,
+      },
+      factorDrift: {
+        referenceDate: "2026-04-01T00:00:00.000Z",
+        windowDays: 90,
+        recentN: 30,
+        priorN: 45,
+        drifts: [
+          {
+            label: "Trade in hand",
+            direction: "flipped",
+            drift: -0.25,
+            priorLift: 0.1,
+            recentLift: -0.15,
+            priorPresent: 20,
+            recentPresent: 10,
+            recentAvgWeight: 8,
+            lowConfidence: false,
+          },
+        ],
+        lowConfidence: false,
+      },
+      whatIf: {
+        dealsSimulated: 18,
+        currentBrier: 0.26,
+        simulatedBrier: 0.2,
+        brierDelta: -0.06,
+        currentHitRate: 0.56,
+        simulatedHitRate: 0.72,
+        hitRateDelta: 0.16,
+        perDeal: [],
+        lowConfidence: false,
+        noActionableChanges: false,
+      },
+      callFlips,
+      confidence,
+    };
+    const md = renderProposalMarkdownWithContext(baseProposal(), ctx);
+    const idxContext = md.indexOf("## Context");
+    const idxUrgency = md.indexOf("**Urgency**");
+    const idxCalib = md.indexOf("**Calibration drift**");
+    const idxFactor = md.indexOf("**Factor drift**");
+    const idxWhatIf = md.indexOf("**What-if preview**");
+    const idxCallFlips = md.indexOf("**Call flips**");
+    const idxConfidence = md.indexOf("**Confidence**");
+    const idxProposal = md.indexOf("## Scorer Evolution Proposal");
+    expect(idxContext).toBeGreaterThanOrEqual(0);
+    expect(idxUrgency).toBeGreaterThan(idxContext);
+    expect(idxCalib).toBeGreaterThan(idxUrgency);
+    expect(idxFactor).toBeGreaterThan(idxCalib);
+    expect(idxWhatIf).toBeGreaterThan(idxFactor);
+    expect(idxCallFlips).toBeGreaterThan(idxWhatIf);
+    expect(idxConfidence).toBeGreaterThan(idxCallFlips);
+    expect(idxProposal).toBeGreaterThan(idxConfidence);
   });
 });

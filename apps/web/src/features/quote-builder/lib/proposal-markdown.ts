@@ -29,6 +29,13 @@ import type { CalibrationDriftReport } from "./calibration-drift";
 import type { FactorDriftReport } from "./factor-drift";
 import type { ProposalUrgencyResult } from "./proposal-urgency";
 import type { ScorerWhatIfResult } from "./scorer-what-if";
+import type { ProposalConfidenceResult } from "./proposal-confidence";
+import { describeProposalConfidencePill } from "./proposal-confidence";
+import type { ProposalCallFlipReport } from "./proposal-call-flips";
+import {
+  describeCallFlipsHeadline,
+  formatFlipRow,
+} from "./proposal-call-flips";
 
 export interface ProposalMarkdownContext {
   /** 20s — scorer-wide calibration trend. Null when unavailable. */
@@ -39,6 +46,12 @@ export interface ProposalMarkdownContext {
   urgency: ProposalUrgencyResult | null;
   /** 20p — what-if Brier + hit-rate deltas. Null when no audit sample. */
   whatIf: ScorerWhatIfResult | null;
+  /** 20v — meta-confidence score + per-driver rationale. Null when we
+   *  can't compose signals yet (no proposal, no audits). */
+  confidence: ProposalConfidenceResult | null;
+  /** 20w — per-deal call-flip evidence. Null when no what-if to derive
+   *  flips from, or when the proposal is all-keep. */
+  callFlips: ProposalCallFlipReport | null;
 }
 
 /**
@@ -111,6 +124,51 @@ function renderContextSection(ctx: ProposalMarkdownContext): string {
     lines.push(
       `**What-if preview** (${ctx.whatIf.dealsSimulated} deals): Brier ${brierCur} → ${brierSim}, hit rate ${hitCur} → ${hitSim}${thin}`,
     );
+  }
+
+  // Call flips (20w) — the concrete per-deal evidence. Sits below the
+  // what-if aggregate because that's the reading order: "here's the
+  // average, and here are the specific deals." The headline speaks for
+  // itself; we add the ranked buckets below only when they're non-empty.
+  if (ctx.callFlips && !ctx.callFlips.empty && !ctx.callFlips.noActionableChanges) {
+    const flipHeadline = describeCallFlipsHeadline(ctx.callFlips);
+    if (flipHeadline) {
+      lines.push(`**Call flips**: ${flipHeadline}`);
+      if (ctx.callFlips.corroborating.length > 0) {
+        lines.push(`  - ✅ Corroborating (proposal calls outcome right):`);
+        for (const flip of ctx.callFlips.corroborating) {
+          lines.push(`    - \`${flip.packageId}\` · ${formatFlipRow(flip)}`);
+        }
+      }
+      if (ctx.callFlips.regressing.length > 0) {
+        lines.push(`  - ⚠️ Regressing (proposal would call outcome wrong):`);
+        for (const flip of ctx.callFlips.regressing) {
+          lines.push(`    - \`${flip.packageId}\` · ${formatFlipRow(flip)}`);
+        }
+      }
+    }
+  }
+
+  // Confidence (20v) — surfaces last so the reader has already seen the
+  // raw signals (drift, what-if, flips) and the confidence block reads
+  // as the meta-verdict rather than an unexplained assertion. Drivers
+  // come inline as a bulleted list; bails out if no drivers present
+  // (e.g. base-50 no-signal prior with "Neutral prior" rationale).
+  if (ctx.confidence) {
+    const pill = describeProposalConfidencePill(ctx.confidence.band);
+    const damp = ctx.confidence.dampenedByThinSample
+      ? " _(dampened — thin attribution sample)_"
+      : "";
+    lines.push(
+      `**Confidence**: ${ctx.confidence.confidence}/100 · ${pill}${damp}`,
+    );
+    lines.push(`  - _${ctx.confidence.rationale}_`);
+    if (ctx.confidence.drivers.length > 0) {
+      for (const d of ctx.confidence.drivers) {
+        const sign = d.contribution > 0 ? "+" : "";
+        lines.push(`  - \`${sign}${d.contribution}\` — ${d.rationale}`);
+      }
+    }
   }
 
   if (lines.length === 0) return "";

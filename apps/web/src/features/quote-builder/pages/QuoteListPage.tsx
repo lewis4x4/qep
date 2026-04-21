@@ -1653,8 +1653,9 @@ function ScorerProposalCard({
 
   async function handleCopy() {
     try {
-      // Slice 20u — the clipboard now carries the full evidence chain:
-      // urgency, calibration drift, factor drift, and what-if alongside
+      // Slice 20u/20x — the clipboard carries the full evidence chain:
+      // urgency, calibration drift, factor drift, what-if, per-deal call
+      // flips (20w), and the composed confidence score (20v) alongside
       // the proposal body. The context renderer falls through to the
       // bare 20m output when every section is silent, so nothing bloats
       // the ticket without earning it.
@@ -1663,6 +1664,8 @@ function ScorerProposalCard({
         factorDrift,
         urgency,
         whatIf,
+        confidence,
+        callFlips,
       });
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
