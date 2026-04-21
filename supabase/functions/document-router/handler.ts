@@ -17,17 +17,47 @@ import type {
   MoveFolderInput,
   FolderSummary,
   DownloadUrlResult,
+  ReindexInput,
+  ReindexResult,
+  SearchInput,
+  SearchResult,
+  TwinRerunInput,
+  TwinRerunResult,
+  NeighborsInput,
+  NeighborsResult,
+  AskInput,
+  AskResult,
+  PlaysListInput,
+  PlaysListResult,
+  PlayActionInput,
+  PlayActionResult,
+  PlaysRunInput,
+  PlaysRunResult,
+  PlayDraftInput,
+  PlayDraftResult,
+  KnowledgeGapsListInput,
+  KnowledgeGapsListResult,
 } from "./service.ts";
 import {
+  actionDocumentPlay,
+  askDocument,
   createDocumentRouterContext,
   createDownloadUrl,
   createFolder,
+  draftFromPlay,
   duplicateLink,
   getDocument,
+  getDocumentNeighbors,
+  listDocumentPlays,
   listDocuments,
+  listKnowledgeGaps,
   moveDocument,
   moveFolder,
+  reindexDocument,
   requireDocumentCenterAccess,
+  rerunTwin,
+  runPlaysBatch,
+  searchDocuments,
 } from "./service.ts";
 
 export interface DocumentRouterService {
@@ -39,6 +69,16 @@ export interface DocumentRouterService {
   moveDocument(ctx: DocumentRouterContext, input: MoveDocumentInput): Promise<void>;
   duplicateLink(ctx: DocumentRouterContext, input: DuplicateLinkInput): Promise<void>;
   downloadUrl(ctx: DocumentRouterContext, input: DownloadUrlInput): Promise<DownloadUrlResult>;
+  reindex(ctx: DocumentRouterContext, input: ReindexInput): Promise<ReindexResult>;
+  search(ctx: DocumentRouterContext, input: SearchInput): Promise<SearchResult>;
+  twinRerun(ctx: DocumentRouterContext, input: TwinRerunInput): Promise<TwinRerunResult>;
+  neighbors(ctx: DocumentRouterContext, input: NeighborsInput): Promise<NeighborsResult>;
+  ask(ctx: DocumentRouterContext, input: AskInput): Promise<AskResult>;
+  playsList(ctx: DocumentRouterContext, input: PlaysListInput): Promise<PlaysListResult>;
+  playAction(ctx: DocumentRouterContext, input: PlayActionInput): Promise<PlayActionResult>;
+  playsRun(ctx: DocumentRouterContext, input: PlaysRunInput): Promise<PlaysRunResult>;
+  playDraft(ctx: DocumentRouterContext, input: PlayDraftInput): Promise<PlayDraftResult>;
+  knowledgeGapsList(ctx: DocumentRouterContext, input: KnowledgeGapsListInput): Promise<KnowledgeGapsListResult>;
 }
 
 function normalizeDocumentRouterPath(pathname: string): string {
@@ -132,6 +172,55 @@ function mapError(origin: string | null, error: unknown): Response {
     });
   }
 
+  if (message === "REINDEX_NOT_APPLICABLE") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "REINDEX_NOT_APPLICABLE",
+      message: "Reindex is only available for documents in the Ingest Failed state.",
+    });
+  }
+
+  if (message === "TWIN_UNCONFIGURED") {
+    return crmFail({
+      origin,
+      status: 503,
+      code: "TWIN_UNCONFIGURED",
+      message: "Document twin is not configured on this deployment.",
+    });
+  }
+
+  if (message === "OPENAI_UNCONFIGURED") {
+    return crmFail({
+      origin,
+      status: 503,
+      code: "OPENAI_UNCONFIGURED",
+      message: "OPENAI_API_KEY is not configured for the document-router.",
+    });
+  }
+
+  if (message === "PLAY_NOT_OPEN") {
+    return crmFail({
+      origin,
+      status: 409,
+      code: "PLAY_NOT_OPEN",
+      message: "This play is no longer in the open state.",
+    });
+  }
+
+  if (message.startsWith("TWIN_UPSTREAM:")) {
+    const parts = message.split(":");
+    const upstreamCode = parts[1] ?? "TWIN_UPSTREAM_ERROR";
+    const detail = parts.slice(2).join(":").slice(0, 500);
+    return crmFail({
+      origin,
+      status: 502,
+      code: upstreamCode,
+      message: "Document twin pipeline returned an error.",
+      details: detail.length > 0 ? detail : undefined,
+    });
+  }
+
   if (message === "NOT_FOUND" || message.includes("not found")) {
     return crmFail({
       origin,
@@ -146,6 +235,7 @@ function mapError(origin: string | null, error: unknown): Response {
     status: 500,
     code: "INTERNAL_ERROR",
     message: "Document router request failed.",
+    details: message.length > 0 ? message.slice(0, 500) : undefined,
   });
 }
 
@@ -159,6 +249,16 @@ async function defaultService(): Promise<DocumentRouterService> {
     moveDocument,
     duplicateLink,
     downloadUrl: createDownloadUrl,
+    reindex: reindexDocument,
+    search: searchDocuments,
+    twinRerun: rerunTwin,
+    neighbors: getDocumentNeighbors,
+    ask: askDocument,
+    playsList: listDocumentPlays,
+    playAction: actionDocumentPlay,
+    playsRun: runPlaysBatch,
+    playDraft: draftFromPlay,
+    knowledgeGapsList: listKnowledgeGaps,
   };
 }
 
@@ -179,7 +279,15 @@ export async function handleDocumentRouterRequest(
 
     if (req.method === "GET" && path === "/list") {
       const view = safeText(url.searchParams.get("view")) ?? "all";
-      if (view !== "all" && view !== "recent" && view !== "pinned" && view !== "unfiled" && view !== "folder") {
+      if (
+        view !== "all" &&
+        view !== "recent" &&
+        view !== "pinned" &&
+        view !== "unfiled" &&
+        view !== "folder" &&
+        view !== "pending_review" &&
+        view !== "ingest_failed"
+      ) {
         throw new Error("VALIDATION_ERROR");
       }
 
@@ -246,6 +354,108 @@ export async function handleDocumentRouterRequest(
       if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
       const payload = await service.downloadUrl(ctx, {
         documentId: body.documentId,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/reindex") {
+      const body = await readJsonBody<ReindexInput>(req);
+      if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.reindex(ctx, {
+        documentId: body.documentId,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/search") {
+      const body = await readJsonBody<SearchInput>(req);
+      const query = safeText(body.query);
+      if (!query) throw new Error("VALIDATION_ERROR");
+      const matchCount =
+        typeof body.matchCount === "number" && Number.isFinite(body.matchCount)
+          ? Math.trunc(body.matchCount)
+          : undefined;
+      const payload = await service.search(ctx, { query, matchCount });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/twin-rerun") {
+      const body = await readJsonBody<TwinRerunInput>(req);
+      if (!safeText(body.documentId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.twinRerun(ctx, {
+        documentId: body.documentId,
+        force: body.force === true,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/neighbors") {
+      const documentId = safeText(url.searchParams.get("document_id"));
+      if (!documentId) throw new Error("VALIDATION_ERROR");
+      const payload = await service.neighbors(ctx, { documentId });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/ask") {
+      const body = await readJsonBody<AskInput>(req);
+      const documentId = safeText(body.documentId);
+      const question = safeText(body.question);
+      if (!documentId || !question) throw new Error("VALIDATION_ERROR");
+      const payload = await service.ask(ctx, { documentId, question });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/plays") {
+      const status = safeText(url.searchParams.get("status")) ?? undefined;
+      const ownerUserId = safeText(url.searchParams.get("owner")) ?? null;
+      const documentIdFilter = safeText(url.searchParams.get("document_id")) ?? null;
+      const limitRaw = url.searchParams.get("limit");
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const payload = await service.playsList(ctx, {
+        status,
+        ownerUserId,
+        documentId: documentIdFilter,
+        limit: Number.isFinite(limit) ? (limit as number) : undefined,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/action") {
+      const body = await readJsonBody<PlayActionInput>(req);
+      if (!safeText(body.playId) || !safeText(body.action)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.playAction(ctx, {
+        playId: body.playId,
+        action: body.action,
+        note: typeof body.note === "string" ? body.note.slice(0, 500) : null,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/run") {
+      const body = await readJsonBody<PlaysRunInput>(req);
+      const payload = await service.playsRun(ctx, {
+        documentId: safeText(body.documentId),
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "POST" && path === "/plays/draft") {
+      const body = await readJsonBody<PlayDraftInput>(req);
+      if (!safeText(body.playId)) throw new Error("VALIDATION_ERROR");
+      const payload = await service.playDraft(ctx, {
+        playId: body.playId,
+        flow: body.flow,
+      });
+      return crmOk(payload, { origin });
+    }
+
+    if (req.method === "GET" && path === "/knowledge-gaps") {
+      const documentIdFilter = safeText(url.searchParams.get("document_id")) ?? null;
+      const limitRaw = url.searchParams.get("limit");
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const payload = await service.knowledgeGapsList(ctx, {
+        documentId: documentIdFilter,
+        limit: Number.isFinite(limit) ? (limit as number) : undefined,
       });
       return crmOk(payload, { origin });
     }

@@ -61,6 +61,7 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       memberships: [],
       auditEvents: [],
       breadcrumbs: [],
+      facts: [],
     })),
     createFolder: overrides.createFolder ?? (async (): Promise<FolderSummary> => ({
       id: "folder-1",
@@ -88,6 +89,74 @@ function makeService(overrides: Partial<DocumentRouterService> = {}): DocumentRo
       url: "https://example.com/signed",
       expiresAt: new Date(Date.now() + 30_000).toISOString(),
     })),
+    reindex: overrides.reindex ?? (async () => ({
+      documentId: "doc-1",
+      previousStatus: "ingest_failed",
+      nextStatus: "pending_review",
+    })),
+    search: overrides.search ?? (async () => ({
+      query: "test",
+      traceId: "00000000-0000-0000-0000-000000000000",
+      results: [],
+    })),
+    twinRerun: overrides.twinRerun ?? (async () => ({
+      documentId: "doc-1",
+      jobId: "job-1",
+      status: "succeeded",
+      factCount: 3,
+      traceId: "22222222-2222-2222-2222-222222222222",
+      modelVersion: "test",
+    })),
+    neighbors: overrides.neighbors ?? (async () => ({
+      documentId: "doc-1",
+      neighbors: [],
+    })),
+    ask: overrides.ask ?? (async () => ({
+      documentId: "doc-1",
+      traceId: "44444444-4444-4444-4444-444444444444",
+      question: "test",
+      answer: "",
+      citations: [],
+      gapCaptured: false,
+    })),
+    playsList: overrides.playsList ?? (async () => ({ plays: [] })),
+    playAction: overrides.playAction ?? (async (_ctx, input) => ({
+      play: {
+        id: input.playId,
+        documentId: "doc-1",
+        businessKey: "bk",
+        playKind: "expiring_rental",
+        status: input.action,
+        projectionWindow: "14d",
+        projectedDueDate: null,
+        probability: 0.8,
+        reason: "test",
+        signalType: "obligation.expires_on",
+        recommendedAction: {},
+        suggestedOwnerUserId: null,
+        actionedBy: null,
+        actionedAt: new Date().toISOString(),
+        actionNote: input.note ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        documentTitle: null,
+      },
+    })),
+    playsRun: overrides.playsRun ?? (async () => ({
+      batchId: "66666666-6666-6666-6666-666666666666",
+      plays: [],
+      expiredCount: 0,
+      fulfilledCount: 0,
+      exceptionsPushed: 0,
+    })),
+    playDraft: overrides.playDraft ?? (async (_ctx, input) => ({
+      draftDocumentId: "draft-doc-1",
+      draftTitle: "Renewal — Test",
+      flow: input.flow ?? "renewal_draft",
+      playId: input.playId,
+      elapsedMs: 42,
+    })),
+    knowledgeGapsList: overrides.knowledgeGapsList ?? (async () => ({ gaps: [] })),
   };
 }
 
@@ -181,4 +250,312 @@ Deno.test("document-router enforces admin+ access", async () => {
   assertEquals(res.status, 403);
   const payload = await parseJson(res);
   assertEquals((payload.error as { code?: string }).code, "FORBIDDEN");
+});
+
+Deno.test("document-router surfaces unmapped error messages as details for diagnosis", async () => {
+  const service = makeService({
+    list: async () => {
+      throw new Error("function get_my_workspace() does not exist");
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/list?view=all");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 500);
+  const payload = await parseJson(res);
+  const err = payload.error as { code?: string; message?: string; details?: string };
+  assertEquals(err.code, "INTERNAL_ERROR");
+  assertEquals(
+    typeof err.details === "string" && err.details.includes("get_my_workspace"),
+    true,
+  );
+});
+
+Deno.test("document-router reindex endpoint flips ingest_failed documents to pending_review", async () => {
+  const captured: { documentId: string | null } = { documentId: null };
+  const service = makeService({
+    reindex: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      return { documentId: input.documentId, previousStatus: "ingest_failed", nextStatus: "pending_review" };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/reindex", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-42" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.documentId, "doc-42");
+  assertEquals(payload.previousStatus, "ingest_failed");
+  assertEquals(payload.nextStatus, "pending_review");
+  assertEquals(captured.documentId, "doc-42");
+});
+
+Deno.test("document-router list accepts pending_review and ingest_failed views", async () => {
+  const captured: Array<string> = [];
+  const service = makeService({
+    list: async (_ctx, input) => {
+      captured.push(input.view);
+      return {
+        view: input.view,
+        currentFolder: null,
+        breadcrumbs: [],
+        folders: [],
+        folderTree: [],
+        documents: [],
+        nextCursor: null,
+      };
+    },
+  });
+
+  for (const view of ["pending_review", "ingest_failed"]) {
+    const req = new Request(`https://example.com/document-router/list?view=${view}`);
+    const res = await handleDocumentRouterRequest(req, service);
+    assertEquals(res.status, 200, `expected 200 for view=${view}`);
+  }
+  assertEquals(captured, ["pending_review", "ingest_failed"]);
+});
+
+Deno.test("document-router search endpoint rejects empty queries and normalizes results", async () => {
+  const captured: { query: string | null } = { query: null };
+  const service = makeService({
+    search: async (_ctx, input) => {
+      captured.query = input.query;
+      return {
+        query: input.query,
+        traceId: "11111111-1111-1111-1111-111111111111",
+        results: [
+          {
+            documentId: "doc-9",
+            chunkId: "chunk-1",
+            title: "Rental Agreement #482",
+            excerpt: "The lessee shall…",
+            confidence: 0.87,
+            accessClass: "company_wide",
+            chunkKind: "paragraph",
+            sectionTitle: "§7 Return Conditions",
+            pageNumber: 4,
+            sourceType: "document",
+          },
+        ],
+      };
+    },
+  });
+
+  const badReq = new Request("https://example.com/document-router/search", {
+    method: "POST",
+    body: JSON.stringify({ query: "   " }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const badRes = await handleDocumentRouterRequest(badReq, service);
+  assertEquals(badRes.status, 400);
+
+  const okReq = new Request("https://example.com/document-router/search", {
+    method: "POST",
+    body: JSON.stringify({ query: "return inspection" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const okRes = await handleDocumentRouterRequest(okReq, service);
+  assertEquals(okRes.status, 200);
+  const payload = await parseJson(okRes);
+  assertEquals(captured.query, "return inspection");
+  assertEquals(payload.query, "return inspection");
+  assertEquals((payload.results as unknown[]).length, 1);
+});
+
+Deno.test("document-router twin-rerun forwards documentId and returns twin result", async () => {
+  const captured: { documentId: string | null; force: boolean | null } = { documentId: null, force: null };
+  const service = makeService({
+    twinRerun: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      captured.force = input.force ?? false;
+      return {
+        documentId: input.documentId,
+        jobId: "job-99",
+        status: "succeeded",
+        factCount: 7,
+        traceId: "33333333-3333-3333-3333-333333333333",
+        modelVersion: "2026-04-21.1",
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/twin-rerun", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-twin", force: true }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(captured.documentId, "doc-twin");
+  assertEquals(captured.force, true);
+  assertEquals(payload.jobId, "job-99");
+  assertEquals(payload.status, "succeeded");
+  assertEquals(payload.factCount, 7);
+});
+
+Deno.test("document-router neighbors endpoint returns outbound + inbound edges", async () => {
+  const captured: { documentId: string | null } = { documentId: null };
+  const service = makeService({
+    neighbors: async (_ctx, input) => {
+      captured.documentId = input.documentId;
+      return {
+        documentId: input.documentId,
+        neighbors: [
+          {
+            id: "edge-1",
+            direction: "outbound",
+            edgeType: "expires_on",
+            status: "at_risk",
+            validFrom: null,
+            validUntil: "2026-05-01T00:00:00.000Z",
+            toDocumentId: null,
+            toEntityType: "commitment",
+            toEntityId: null,
+            toEntityLabel: "2026-05-01",
+            fromDocumentId: input.documentId,
+            confidence: 0.92,
+            sourceFactIds: ["fact-1"],
+          },
+        ],
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/neighbors?document_id=doc-graph");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(captured.documentId, "doc-graph");
+  assertEquals((payload.neighbors as unknown[]).length, 1);
+});
+
+Deno.test("document-router ask endpoint forwards question and returns citations", async () => {
+  const service = makeService({
+    ask: async (_ctx, input) => ({
+      documentId: input.documentId,
+      traceId: "55555555-5555-5555-5555-555555555555",
+      question: input.question,
+      answer: "Section 7.2 requires a return inspection with no more than 200 hours added.",
+      citations: [
+        {
+          chunkId: "chunk-7",
+          chunkIndex: 7,
+          excerpt: "The lessee shall return the equipment with no more than 200 hours added",
+          sectionTitle: "§7.2 Return Conditions",
+          pageNumber: 4,
+          confidence: 0.93,
+        },
+      ],
+      gapCaptured: false,
+    }),
+  });
+
+  const req = new Request("https://example.com/document-router/ask", {
+    method: "POST",
+    body: JSON.stringify({ documentId: "doc-ask", question: "What does §7 require?" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.documentId, "doc-ask");
+  assertEquals((payload.citations as unknown[]).length, 1);
+});
+
+Deno.test("document-router plays list forwards status filter and owner='me'", async () => {
+  const captured: { status: string | undefined; ownerUserId: string | null | undefined } = {
+    status: undefined,
+    ownerUserId: undefined,
+  };
+  const service = makeService({
+    playsList: async (_ctx, input) => {
+      captured.status = input.status;
+      captured.ownerUserId = input.ownerUserId;
+      return { plays: [] };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/plays?status=open&owner=me");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  assertEquals(captured.status, "open");
+  assertEquals(captured.ownerUserId, "me");
+});
+
+Deno.test("document-router play action requires playId + action", async () => {
+  const service = makeService();
+  const badReq = new Request("https://example.com/document-router/plays/action", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p1" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const badRes = await handleDocumentRouterRequest(badReq, service);
+  assertEquals(badRes.status, 400);
+
+  const goodReq = new Request("https://example.com/document-router/plays/action", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p1", action: "actioned", note: "drafted renewal" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const goodRes = await handleDocumentRouterRequest(goodReq, service);
+  assertEquals(goodRes.status, 200);
+  const payload = await parseJson(goodRes);
+  const play = payload.play as { status: string; actionNote: string | null };
+  assertEquals(play.status, "actioned");
+  assertEquals(play.actionNote, "drafted renewal");
+});
+
+Deno.test("document-router plays draft returns draftDocumentId and forwards flow", async () => {
+  const captured: { playId: string | null; flow: string | null } = { playId: null, flow: null };
+  const service = makeService({
+    playDraft: async (_ctx, input) => {
+      captured.playId = input.playId;
+      captured.flow = input.flow ?? null;
+      return {
+        draftDocumentId: "draft-xyz",
+        draftTitle: "Renewal — ACME Rental",
+        flow: input.flow ?? "renewal_draft",
+        playId: input.playId,
+        elapsedMs: 123,
+      };
+    },
+  });
+
+  const req = new Request("https://example.com/document-router/plays/draft", {
+    method: "POST",
+    body: JSON.stringify({ playId: "p-42", flow: "renewal_draft" }),
+    headers: { "Content-Type": "application/json" },
+  });
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 200);
+  const payload = await parseJson(res);
+  assertEquals(payload.draftDocumentId, "draft-xyz");
+  assertEquals(captured.playId, "p-42");
+  assertEquals(captured.flow, "renewal_draft");
+});
+
+Deno.test("document-router fails closed when caller has no userId", async () => {
+  const service = makeService({
+    createContext: async () => ({
+      ...baseContext,
+      caller: {
+        authHeader: null,
+        userId: null,
+        role: null,
+        isServiceRole: false,
+        workspaceId: null,
+      },
+    }),
+  });
+
+  const req = new Request("https://example.com/document-router/list?view=all");
+  const res = await handleDocumentRouterRequest(req, service);
+  assertEquals(res.status, 401);
+  const payload = await parseJson(res);
+  assertEquals((payload.error as { code?: string }).code, "UNAUTHORIZED");
 });

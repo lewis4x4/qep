@@ -1,6 +1,13 @@
 import { supabase } from "@/lib/supabase";
 
-export type DocumentCenterView = "all" | "recent" | "pinned" | "unfiled" | "folder";
+export type DocumentCenterView =
+  | "all"
+  | "recent"
+  | "pinned"
+  | "unfiled"
+  | "folder"
+  | "pending_review"
+  | "ingest_failed";
 
 export interface DocumentCenterFolder {
   id: string;
@@ -52,6 +59,20 @@ export interface DocumentCenterAuditEvent {
   metadata: Record<string, unknown>;
 }
 
+export interface DocumentCenterFact {
+  id: string;
+  chunkId: string | null;
+  factType: string;
+  value: Record<string, unknown>;
+  confidence: number;
+  audience: string;
+  extractedByModel: string;
+  extractedAt: string;
+  traceId: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+}
+
 export interface DocumentCenterDocument {
   id: string;
   title: string;
@@ -85,6 +106,45 @@ export interface DocumentCenterGetResponse {
   memberships: DocumentCenterMembership[];
   auditEvents: DocumentCenterAuditEvent[];
   breadcrumbs: DocumentCenterBreadcrumb[];
+  facts: DocumentCenterFact[];
+}
+
+export interface DocumentCenterNeighbor {
+  id: string;
+  direction: "inbound" | "outbound";
+  edgeType: string;
+  status: string;
+  validFrom: string | null;
+  validUntil: string | null;
+  toDocumentId: string | null;
+  toEntityType: string | null;
+  toEntityId: string | null;
+  toEntityLabel: string | null;
+  fromDocumentId: string | null;
+  confidence: number;
+  sourceFactIds: string[];
+}
+
+export interface DocumentCenterNeighborsResponse {
+  documentId: string;
+  neighbors: DocumentCenterNeighbor[];
+}
+
+export interface DocumentAskCitation {
+  chunkId: string;
+  chunkIndex: number | null;
+  excerpt: string;
+  sectionTitle: string | null;
+  pageNumber: number | null;
+  confidence: number;
+}
+
+export interface DocumentAskResponse {
+  documentId: string;
+  traceId: string;
+  question: string;
+  answer: string;
+  citations: DocumentAskCitation[];
 }
 
 export interface DocumentCenterDownloadResponse {
@@ -122,12 +182,25 @@ async function documentRouterFetch<T>(path: string, options: {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      (payload as { error?: { message?: string } | string }).error &&
-      typeof (payload as { error?: { message?: string } | string }).error === "object"
-        ? ((payload as { error?: { message?: string } }).error?.message ?? "Document Center request failed")
-        : ((payload as { error?: string }).error ?? "Document Center request failed");
-    throw new Error(message);
+    const errorField = (payload as { error?: unknown }).error;
+    let code: string | null = null;
+    let message = "Document Center request failed";
+    let details: string | null = null;
+    if (errorField && typeof errorField === "object") {
+      const errObj = errorField as { code?: unknown; message?: unknown; details?: unknown };
+      if (typeof errObj.code === "string") code = errObj.code;
+      if (typeof errObj.message === "string" && errObj.message.length > 0) message = errObj.message;
+      if (typeof errObj.details === "string" && errObj.details.length > 0) details = errObj.details;
+    } else if (typeof errorField === "string") {
+      message = errorField;
+    }
+    const parts = [
+      `${response.status}`,
+      code,
+      message,
+      details && details !== message ? details : null,
+    ].filter((part): part is string => Boolean(part));
+    throw new Error(parts.join(" · "));
   }
   return payload as T;
 }
@@ -216,5 +289,79 @@ export async function createDownloadUrlViaRouter(documentId: string): Promise<Do
   return await documentRouterFetch<DocumentCenterDownloadResponse>("/download-url", {
     method: "POST",
     body: { documentId },
+  });
+}
+
+export interface DocumentReindexResponse {
+  documentId: string;
+  previousStatus: string;
+  nextStatus: string;
+}
+
+export async function reindexDocumentViaRouter(documentId: string): Promise<DocumentReindexResponse> {
+  return await documentRouterFetch<DocumentReindexResponse>("/reindex", {
+    method: "POST",
+    body: { documentId },
+  });
+}
+
+export interface DocumentSearchResultItem {
+  documentId: string;
+  chunkId: string | null;
+  title: string;
+  excerpt: string;
+  confidence: number;
+  accessClass: string;
+  chunkKind: string;
+  sectionTitle: string | null;
+  pageNumber: number | null;
+  sourceType: string;
+}
+
+export interface DocumentSearchResponse {
+  query: string;
+  traceId: string;
+  results: DocumentSearchResultItem[];
+}
+
+export async function searchDocumentsViaRouter(input: {
+  query: string;
+  matchCount?: number;
+}): Promise<DocumentSearchResponse> {
+  return await documentRouterFetch<DocumentSearchResponse>("/search", {
+    method: "POST",
+    body: { query: input.query, matchCount: input.matchCount ?? 8 },
+  });
+}
+
+export async function getDocumentNeighborsViaRouter(documentId: string): Promise<DocumentCenterNeighborsResponse> {
+  return await documentRouterFetch<DocumentCenterNeighborsResponse>("/neighbors", {
+    query: { document_id: documentId },
+  });
+}
+
+export async function askDocumentViaRouter(input: {
+  documentId: string;
+  question: string;
+}): Promise<DocumentAskResponse> {
+  return await documentRouterFetch<DocumentAskResponse>("/ask", {
+    method: "POST",
+    body: { documentId: input.documentId, question: input.question },
+  });
+}
+
+export async function rerunTwinViaRouter(input: {
+  documentId: string;
+  force?: boolean;
+}): Promise<{ documentId: string; jobId: string; status: string; factCount: number; traceId: string }> {
+  return await documentRouterFetch<{
+    documentId: string;
+    jobId: string;
+    status: string;
+    factCount: number;
+    traceId: string;
+  }>("/twin-rerun", {
+    method: "POST",
+    body: { documentId: input.documentId, force: input.force === true },
   });
 }

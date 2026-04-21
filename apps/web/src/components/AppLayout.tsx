@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
 import { Menu, Lock } from "lucide-react";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
+import { OmniCommand } from "@/components/OmniCommand";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/database.types";
@@ -364,6 +365,9 @@ export function AppLayout({
       <main className="flex-1 pt-20 pb-16 lg:pt-[104px] lg:pb-8 min-h-screen">
         {children}
       </main>
+
+      {/* Global Cmd-K command palette */}
+      <OmniCommand role={profile.role} />
     </div>
   );
 }
