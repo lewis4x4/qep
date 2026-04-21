@@ -20,9 +20,9 @@ describe("hrefForGraphResult", () => {
       .toBe("/qrm/contacts/c-1");
   });
 
-  it("routes company to /qrm/companies/:id", () => {
+  it("routes company to the account command center (Track 7A default drill-down)", () => {
     expect(hrefForGraphResult(makeItem({ type: "company", id: "co-1" })))
-      .toBe("/qrm/companies/co-1");
+      .toBe("/qrm/accounts/co-1/command");
   });
 
   it("routes deal to /qrm/deals/:id", () => {

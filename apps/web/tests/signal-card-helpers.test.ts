@@ -90,10 +90,10 @@ describe("hrefForSignalEntity", () => {
     ).toBe("/qrm/contacts/c-1");
   });
 
-  it("routes company signals to /qrm/companies/:id", () => {
+  it("routes company signals to the account command center (Track 7A default drill-down)", () => {
     expect(
       hrefForSignalEntity(makeSignal({ entity_type: "company", entity_id: "co-1" })),
-    ).toBe("/qrm/companies/co-1");
+    ).toBe("/qrm/accounts/co-1/command");
   });
 
   it("routes equipment signals to inventory-pressure with query", () => {

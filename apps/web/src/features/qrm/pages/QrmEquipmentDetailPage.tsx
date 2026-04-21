@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { useToast } from "@/hooks/use-toast";
 import { getEquipmentById, patchEquipment } from "../lib/qrm-router-api";
+import { accountCommandUrl } from "../lib/account-links";
 import { QrmEquipmentFormSheet, draftToPayload } from "../components/QrmEquipmentFormSheet";
 import { EquipmentVision } from "@/components/EquipmentVision";
 import { MachineLifecycleCard } from "../../equipment/components/MachineLifecycleCard";
@@ -209,7 +210,7 @@ export function QrmEquipmentDetailPage({ userId: _userId, userRole: _userRole }:
             {eq.companyId && (
               <InfoRow
                 label="Company"
-                value={<Link to={`/qrm/companies/${eq.companyId}`} className="text-primary hover:underline">View company</Link>}
+                value={<Link to={accountCommandUrl(eq.companyId)} className="text-primary hover:underline">View company</Link>}
               />
             )}
           </div>

@@ -4,6 +4,7 @@
  */
 
 import type { QrmSearchItem } from "../lib/types";
+import { accountCommandUrl } from "../lib/account-links";
 
 /**
  * Map a search result to the canonical detail route. Exported for unit
@@ -14,8 +15,9 @@ export function hrefForGraphResult(item: QrmSearchItem): string {
   switch (item.type) {
     case "contact":
       return `/qrm/contacts/${item.id}`;
+    // Track 7A: account command center is the default drill-down system-wide.
     case "company":
-      return `/qrm/companies/${item.id}`;
+      return accountCommandUrl(item.id);
     case "deal":
       return `/qrm/deals/${item.id}`;
     case "equipment":

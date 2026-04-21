@@ -44,6 +44,7 @@ import {
   summarizeToolTrace,
 } from "./askIronHelpers";
 import { isAskIronSeedState } from "./askIronHandoff";
+import { accountCommandUrl } from "../lib/account-links";
 
 export function AskIronSurface() {
   const queryClient = useQueryClient();
@@ -316,8 +317,9 @@ function ProposedMoveChip({ move }: { move: AskIronProposedMove }) {
         return `/qrm/deals/${move.entity.id}`;
       case "contact":
         return `/qrm/contacts/${move.entity.id}`;
+      // Track 7A: account command center is the default drill-down system-wide.
       case "company":
-        return `/qrm/companies/${move.entity.id}`;
+        return accountCommandUrl(move.entity.id);
       default:
         return "/qrm/activities";
     }

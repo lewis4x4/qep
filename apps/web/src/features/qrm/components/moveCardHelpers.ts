@@ -4,6 +4,7 @@
  */
 
 import type { QrmMove, QrmMoveKind } from "../lib/moves-types";
+import { accountCommandUrl } from "../lib/account-links";
 
 /**
  * Derive the canonical deep-link for the entity behind this move. Mirrors
@@ -14,8 +15,9 @@ export function hrefForMoveEntity(move: QrmMove): string | null {
   switch (move.entity_type) {
     case "contact":
       return `/qrm/contacts/${move.entity_id}`;
+    // Track 7A: account command center is the default drill-down system-wide.
     case "company":
-      return `/qrm/companies/${move.entity_id}`;
+      return accountCommandUrl(move.entity_id);
     case "deal":
       return `/qrm/deals/${move.entity_id}`;
     case "equipment":

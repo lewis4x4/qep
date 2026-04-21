@@ -9,6 +9,7 @@ import type {
   QrmSignalKind,
   QrmSignalSeverity,
 } from "../lib/signals-types";
+import { accountCommandUrl } from "../lib/account-links";
 
 /**
  * Human label for each signal kind. Shown as the top-left tag on a card.
@@ -73,7 +74,8 @@ export function hrefForSignalEntity(signal: QrmSignal): string | null {
   switch (signal.entity_type) {
     case "deal": return `/qrm/deals/${signal.entity_id}`;
     case "contact": return `/qrm/contacts/${signal.entity_id}`;
-    case "company": return `/qrm/companies/${signal.entity_id}`;
+    // Track 7A: account command center is the default drill-down system-wide.
+    case "company": return accountCommandUrl(signal.entity_id);
     case "equipment":
       return `/qrm/inventory-pressure?equipment=${signal.entity_id}`;
     case "rental":

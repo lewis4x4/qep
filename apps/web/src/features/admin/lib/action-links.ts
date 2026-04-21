@@ -1,3 +1,5 @@
+import { accountCommandUrl } from "@/features/qrm/lib/account-links";
+
 export interface ActionLink {
   label: string;
   href: string;
@@ -29,7 +31,8 @@ export function resolveEntityAction(item: BaseQueueItem): ActionLink | null {
     return { label: "Open equipment", href: `/qrm/equipment/${entityId}` };
   }
   if ((table === "qrm_companies" || table === "crm_companies") && entityId) {
-    return { label: "Open company", href: `/qrm/companies/${entityId}` };
+    // Track 7A: account command center is the default drill-down system-wide.
+    return { label: "Open company", href: accountCommandUrl(entityId) };
   }
   if ((table === "qrm_contacts" || table === "crm_contacts") && entityId) {
     return { label: "Open contact", href: `/qrm/contacts/${entityId}` };

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, GitMerge, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { CompanyMergeDialog } from "../components/CompanyMergeDialog";
+import { accountCommandUrl } from "../lib/account-links";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -301,7 +302,7 @@ function DuplicateCompaniesSection() {
           {dupes.slice(0, 25).map((d, i) => (
             <div key={`${d.company_a_id}-${d.company_b_id}-${i}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2 text-xs border-b border-border/50 pb-1.5 last:border-b-0 last:pb-0">
               <a
-                href={`/qrm/companies/${d.company_a_id}`}
+                href={accountCommandUrl(d.company_a_id)}
                 className="truncate text-foreground hover:text-qep-orange"
               >
                 {d.company_a_name}
@@ -310,7 +311,7 @@ function DuplicateCompaniesSection() {
                 {(d.similarity_score * 100).toFixed(0)}%
               </span>
               <a
-                href={`/qrm/companies/${d.company_b_id}`}
+                href={accountCommandUrl(d.company_b_id)}
                 className="truncate text-foreground hover:text-qep-orange"
               >
                 {d.company_b_name}

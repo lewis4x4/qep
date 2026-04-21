@@ -15,6 +15,7 @@ import { useCustomerDetail } from "../hooks/useCustomerDetail";
 import { EquipmentFleet } from "../components/EquipmentFleet";
 import { InteractionTimeline } from "../components/InteractionTimeline";
 import type { RepPipelineDeal } from "../lib/types";
+import { accountCommandUrl } from "@/features/qrm/lib/account-links";
 
 /* ── Avatar ─────────────────────────────────────────────── */
 function CustomerAvatar({
@@ -332,7 +333,7 @@ export function CustomerDetailPage() {
         {/* Link to Iron Manager */}
         <div className="pt-2 pb-4">
           <button
-            onClick={() => navigate(`/qrm/companies/${companyId}`)}
+            onClick={() => navigate(accountCommandUrl(companyId))}
             className="w-full py-3 rounded-[10px] border border-white/[0.06] bg-transparent text-muted-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:border-white/20 transition-colors"
           >
             View full history in Iron Manager

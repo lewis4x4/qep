@@ -46,9 +46,9 @@ describe("hrefForMoveEntity", () => {
       .toBe("/qrm/contacts/c-1");
   });
 
-  it("routes company moves to /qrm/companies/:id", () => {
+  it("routes company moves to the account command center (Track 7A default drill-down)", () => {
     expect(hrefForMoveEntity(makeMove({ entity_type: "company", entity_id: "co-1" })))
-      .toBe("/qrm/companies/co-1");
+      .toBe("/qrm/accounts/co-1/command");
   });
 
   it("routes equipment moves to inventory-pressure query param", () => {

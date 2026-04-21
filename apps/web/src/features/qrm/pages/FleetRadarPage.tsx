@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchFleetRadar, type FleetRadarLensItem, type FleetRadarResponse } from "../lib/account-360-api";
+import { accountCommandUrl } from "../lib/account-links";
 import { supabase } from "@/lib/supabase";
 
 type LensKey = "aging" | "expensive" | "trade_up" | "underutilized" | "attachment_upsell";
@@ -126,7 +127,7 @@ export function FleetRadarPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <Button asChild variant="ghost" size="sm" className="h-7 text-[11px] mb-2">
-            <Link to={`/qrm/companies/${companyId}`}>
+            <Link to={companyId ? accountCommandUrl(companyId) : "/qrm/companies"}>
               <ArrowLeft className="mr-1 h-3 w-3" aria-hidden />
               Back to account
             </Link>
