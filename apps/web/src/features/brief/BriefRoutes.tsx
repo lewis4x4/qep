@@ -11,6 +11,7 @@ import { BriefFeedbackPage } from "./pages/BriefFeedbackPage";
 import { BriefDecisionsPage } from "./pages/BriefDecisionsPage";
 import { BriefAskPage } from "./pages/BriefAskPage";
 import { FeedbackButton } from "./components/FeedbackButton";
+import { NotificationBell } from "./components/NotificationBell";
 
 export interface BriefRoutesProps {
   userId: string;
@@ -27,7 +28,7 @@ export function BriefRoutes({
 }: BriefRoutesProps) {
   return (
     <div className="min-h-[100dvh] bg-background">
-      <BriefNav />
+      <BriefNav userId={userId} />
       <Routes>
         <Route
           index
@@ -57,7 +58,7 @@ const NAV_ITEMS: Array<{ to: string; label: string; end?: boolean }> = [
   { to: "/brief/ask", label: "Ask" },
 ];
 
-function BriefNav() {
+function BriefNav({ userId }: { userId: string }) {
   return (
     <nav className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-1 overflow-x-auto px-4 py-2 sm:gap-2">
@@ -77,7 +78,8 @@ function BriefNav() {
             {item.label}
           </NavLink>
         ))}
-        <div className="ml-auto flex-shrink-0">
+        <div className="ml-auto flex flex-shrink-0 items-center gap-2">
+          <NotificationBell userId={userId} />
           <FeedbackButton />
         </div>
       </div>

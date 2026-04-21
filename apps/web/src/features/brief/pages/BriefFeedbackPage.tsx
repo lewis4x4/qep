@@ -20,6 +20,7 @@ import {
   type FeedbackStatus,
   type HubFeedbackRow,
 } from "../lib/brief-api";
+import { FeedbackTimeline } from "../components/FeedbackTimeline";
 
 interface BriefFeedbackPageProps {
   userId: string;
@@ -204,6 +205,11 @@ function FeedbackCard({ row, canAdminister }: { row: HubFeedbackRow; canAdminist
           </a>
         </div>
       )}
+
+      {/* v2.1 submitter loop-back — event ledger for this row. Compact view
+          keeps the inbox scannable; full list is visible when the card is
+          open (Build Hub v3 will add a disclosure). */}
+      <FeedbackTimeline feedbackId={row.id} compact />
 
       {canAdminister && (row.status === "triaged" || row.status === "drafting") && (
         <div className="mt-4 flex gap-2 border-t border-border pt-3">

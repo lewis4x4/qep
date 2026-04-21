@@ -37,6 +37,37 @@ export interface HubFeedbackRow {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  last_seen_events_at: string | null;
+}
+
+/**
+ * Build Hub v2.1 submitter loop-back event types. Mirrors the check
+ * constraint in migration 321_hub_feedback_events.sql. Keep in sync.
+ */
+export type FeedbackEventType =
+  | "submitted"
+  | "triaged"
+  | "drafting_started"
+  | "pr_opened"
+  | "awaiting_merge"
+  | "merged"
+  | "shipped"
+  | "wont_fix"
+  | "reopened"
+  | "admin_note";
+
+export interface HubFeedbackEventRow {
+  id: string;
+  feedback_id: string;
+  workspace_id: string;
+  event_type: FeedbackEventType;
+  from_status: FeedbackStatus | null;
+  to_status: FeedbackStatus | null;
+  actor_id: string | null;
+  actor_role: string;
+  payload: Record<string, unknown>;
+  notified_submitter_at: string | null;
+  created_at: string;
 }
 
 export interface IntakePayload {
@@ -296,7 +327,7 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
   let q = supabase
     .from("hub_feedback")
     .select(
-      "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, created_at, updated_at, resolved_at",
+      "id, workspace_id, build_item_id, submitted_by, feedback_type, body, voice_transcript, voice_audio_url, screenshot_url, priority, status, ai_summary, ai_suggested_action, claude_branch_name, claude_pr_url, created_at, updated_at, resolved_at, last_seen_events_at",
     )
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -309,4 +340,108 @@ export async function listHubFeedback(opts: ListFeedbackOpts): Promise<HubFeedba
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data ?? []) as HubFeedbackRow[];
+}
+
+// ── V2.1 submitter loop-back ────────────────────────────────────────────────
+
+/**
+ * Load the event ledger for a single feedback row (newest first). RLS
+ * enforces that only the submitter + internal admin/owner/manager see
+ * events; stakeholders see only their own.
+ */
+export async function listFeedbackEvents(feedbackId: string, limit = 50): Promise<HubFeedbackEventRow[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 200);
+  const { data, error } = await supabase
+    .from("hub_feedback_events")
+    .select(
+      "id, feedback_id, workspace_id, event_type, from_status, to_status, actor_id, actor_role, payload, notified_submitter_at, created_at",
+    )
+    .eq("feedback_id", feedbackId)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HubFeedbackEventRow[];
+}
+
+export interface UnseenEventsSummary {
+  /** Total events across all of the caller's feedback newer than their bookmark. */
+  total: number;
+  /** Feedback-id → unseen-count for bell hover-detail. */
+  perFeedback: Record<string, number>;
+  /** Most recent event timestamp (drives "last activity" display). */
+  latestAt: string | null;
+}
+
+/**
+ * Count unseen events across everything the caller submitted. Used by the
+ * NotificationBell. Performs two round-trips: (1) caller's feedback rows
+ * with last_seen_events_at, (2) recent events joined by feedback_id. The
+ * join is done client-side to sidestep a cross-table RPC and because
+ * Supabase's nested select doesn't express "greater than foreign column."
+ */
+export async function countUnseenFeedbackEvents(userId: string): Promise<UnseenEventsSummary> {
+  const { data: rows, error: feedbackErr } = await supabase
+    .from("hub_feedback")
+    .select("id, last_seen_events_at")
+    .eq("submitted_by", userId)
+    .is("deleted_at", null);
+  if (feedbackErr) throw new Error(feedbackErr.message);
+
+  const feedbackRows = (rows ?? []) as Array<{ id: string; last_seen_events_at: string | null }>;
+  if (feedbackRows.length === 0) {
+    return { total: 0, perFeedback: {}, latestAt: null };
+  }
+  const ids = feedbackRows.map((r) => r.id);
+  const bookmarks = new Map(
+    feedbackRows.map((r) => [r.id, r.last_seen_events_at ? new Date(r.last_seen_events_at).getTime() : 0]),
+  );
+
+  // Cap event scan — a user with 200 feedback rows × 10 events each is still
+  // only ~2k rows. Anything pathological gets clamped by limit().
+  const { data: events, error: eventsErr } = await supabase
+    .from("hub_feedback_events")
+    .select("id, feedback_id, created_at")
+    .in("feedback_id", ids)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (eventsErr) throw new Error(eventsErr.message);
+
+  const eventRows = (events ?? []) as Array<{ id: string; feedback_id: string; created_at: string }>;
+
+  const perFeedback: Record<string, number> = {};
+  let total = 0;
+  let latestAt: string | null = null;
+  for (const ev of eventRows) {
+    const ts = new Date(ev.created_at).getTime();
+    const bookmark = bookmarks.get(ev.feedback_id) ?? 0;
+    if (ts > bookmark) {
+      total += 1;
+      perFeedback[ev.feedback_id] = (perFeedback[ev.feedback_id] ?? 0) + 1;
+    }
+    if (!latestAt || ts > new Date(latestAt).getTime()) {
+      latestAt = ev.created_at;
+    }
+  }
+
+  return { total, perFeedback, latestAt };
+}
+
+/**
+ * Stamp last_seen_events_at = now() on every feedback row owned by the
+ * caller. Called by the NotificationBell click handler to clear the dot.
+ *
+ * Uses the SECURITY DEFINER RPC `public.hub_feedback_mark_seen()` defined
+ * in migration 321. That RPC bypasses the internal-only
+ * hub_feedback_admin_update policy but validates auth.uid() inline, so
+ * stakeholders only stamp their own rows.
+ */
+export async function markFeedbackEventsSeen(): Promise<number> {
+  const { data, error } = await supabase.rpc("hub_feedback_mark_seen");
+  if (error) {
+    // Non-fatal. Bell staying lit is annoying but not broken; next load
+    // will re-query. Swallow so a transient failure doesn't break the UI.
+    console.warn("markFeedbackEventsSeen failed:", error.message);
+    return 0;
+  }
+  return typeof data === "number" ? data : 0;
 }
