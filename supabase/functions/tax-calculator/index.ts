@@ -12,7 +12,8 @@
  * Auth: rep/admin/manager/owner
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface TaxLine {
@@ -49,33 +50,17 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe + rep/admin/manager/owner role gate.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const supabase = auth.supabase;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
+    // tax_treatments, tax_exemption_certificates, section_179_scenarios are
+    // admin-managed tables — keep a service-role client for those reads/inserts.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
-
-    // Role check: tax calculator requires authenticated user with deal access
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return safeJsonError("Insufficient permissions", 403, origin);
-    }
 
     const body = await req.json();
     if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);

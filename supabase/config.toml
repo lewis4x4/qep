@@ -76,6 +76,9 @@ verify_jwt = false
 [functions.crm-auth-audit]
 verify_jwt = false
 
+[functions.document-router]
+verify_jwt = false
+
 # Quote Builder V2 validates JWT directly against GoTrue's /auth/v1/user endpoint
 # because the project signs with ES256 and supabase-js v2's local verifier rejects
 # ES256 ("Unsupported JWT algorithm"). Gateway verify_jwt MUST be false — otherwise
@@ -249,4 +252,83 @@ verify_jwt = false
 # Looks up rebate deadlines within ALERT_DAYS_AHEAD and fans out notifications
 # to workspace admins. Same gateway contract as the other cron fns.
 [functions.qb-rebate-deadlines-cron]
+verify_jwt = false
+
+# Point-Shoot-Trade flow (Slice 20b). Each function authenticates via
+# _shared/service-auth.ts (requireServiceUser). Gateway verify_jwt is off
+# so ES256-signed user sessions reach the function — the gateway's
+# built-in verifier rejects ES256 with UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM
+# (same reason as the quote-builder-v2 and parts-intelligence blocks above).
+[functions.equipment-vision]
+verify_jwt = false
+
+[functions.trade-book-value-range]
+verify_jwt = false
+
+[functions.trade-valuation]
+verify_jwt = false
+
+# Quote Builder adjacent (legacy migration batch 1). Each function authenticates
+# via _shared/service-auth.ts::requireServiceUser. Same ES256 reasoning as the
+# Point-Shoot-Trade block above — gateway verify_jwt must be false so the
+# function's own auth runs against GoTrue (which handles ES256 correctly).
+[functions.quote-incentive-resolver]
+verify_jwt = false
+
+[functions.tax-calculator]
+verify_jwt = false
+
+[functions.requote-drafts]
+verify_jwt = false
+
+# draft-email also accepts service-role callers for cron-driven drafting
+# (price-file watchdog, nightly scanners); the function itself short-circuits
+# the user-JWT path when authHeader === Bearer <service_role_key>.
+[functions.draft-email]
+verify_jwt = false
+
+[functions.price-file-import]
+verify_jwt = false
+
+# Flare feedback + Customer Digital Twin (legacy migration batch 2). Each
+# function authenticates via _shared/service-auth.ts::requireServiceUser.
+# health-score-refresh and deal-timing-scan also accept service-role / cron
+# callers via _shared/cron-auth.ts::isServiceRoleCaller; both branches are
+# gated internally so gateway verify_jwt must stay off.
+[functions.flare-submit]
+verify_jwt = false
+
+[functions.flare-notify-fixed]
+verify_jwt = false
+
+[functions.health-score-refresh]
+verify_jwt = false
+
+[functions.health-score-single]
+verify_jwt = false
+
+[functions.deal-timing-scan]
+verify_jwt = false
+
+# QRM cohort (legacy migration batch 3). Mixed auth shapes:
+#   - qrm-command-center / qrm-prediction-trace use _shared/dge-auth.ts
+#     (validateUserToken hits GoTrue → ES256-safe)
+#   - qrm-router re-imports crm-router, which uses dge-auth::resolveCallerContext
+#   - qrm-reminder-dispatcher re-imports crm-reminder-dispatcher (cron-only,
+#     CRON_SECRET via timing-safe compare)
+#   - qrm-honesty-scan is service-role-only via cron-auth::isServiceRoleCaller
+# All five authenticate inside the function, so gateway verify_jwt must be off.
+[functions.qrm-router]
+verify_jwt = false
+
+[functions.qrm-command-center]
+verify_jwt = false
+
+[functions.qrm-prediction-trace]
+verify_jwt = false
+
+[functions.qrm-honesty-scan]
+verify_jwt = false
+
+[functions.qrm-reminder-dispatcher]
 verify_jwt = false

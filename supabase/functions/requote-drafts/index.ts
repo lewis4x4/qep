@@ -17,7 +17,8 @@
  * Auth: rep/admin/manager/owner (workspace-scoped)
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { draftEmail } from "../_shared/draft-email.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
@@ -27,22 +28,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return optionsResponse(origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe + rep/admin/manager/owner role gate.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const user = { id: auth.userId };
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
+    // price_change_impact (view), quote_packages cross-workspace reads, and
+    // email_drafts writes need service-role to skip RLS — keep an admin client.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
 
     const url = new URL(req.url);
     const action = url.pathname.split("/").pop() || "";

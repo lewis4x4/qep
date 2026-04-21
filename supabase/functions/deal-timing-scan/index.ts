@@ -28,9 +28,10 @@
  * main roadmap §15 Q3.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -63,22 +64,11 @@ Deno.serve(async (req) => {
     );
 
     if (!isServiceRole) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader! } } },
-      );
-
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) return safeJsonError("Unauthorized", 401, origin);
-
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile || !["manager", "owner"].includes(profile.role)) {
+      // User path — canonical ES256-safe JWT auth. Narrow to manager/owner
+      // since deal timing scans mutate workspace-wide alert state.
+      const auth = await requireServiceUser(authHeader, origin);
+      if (!auth.ok) return auth.response;
+      if (!["manager", "owner"].includes(auth.role)) {
         return safeJsonError("Deal timing requires manager or owner role", 403, origin);
       }
     }

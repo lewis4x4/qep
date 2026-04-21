@@ -14,6 +14,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 Deno.serve(async (req) => {
@@ -22,32 +23,21 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe. requireServiceUser handles rep/admin/
+    // manager/owner; this endpoint tightens to manager+ (no reps marking
+    // flares fixed).
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    if (!["manager", "owner", "admin"].includes(auth.role)) {
+      return safeJsonError("forbidden", 403, origin);
+    }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    // flare_reports cross-workspace reads + side-channel dispatch need
+    // service-role to bypass RLS.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) return safeJsonError("unauthorized", 401, origin);
-
-    // Manager+ gate
-    const { data: callerProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    const callerRole = (callerProfile as { role?: string } | null)?.role;
-    if (!callerRole || !["manager", "owner", "admin"].includes(callerRole)) {
-      return safeJsonError("forbidden", 403, origin);
-    }
 
     const body = await req.json().catch(() => ({}));
     const reportId: string | undefined = body.report_id;

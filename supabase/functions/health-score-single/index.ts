@@ -12,6 +12,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 
 Deno.serve(async (req) => {
@@ -24,26 +25,16 @@ Deno.serve(async (req) => {
       return safeJsonError("Method not allowed", 405, origin);
     }
 
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
+    // Canonical JWT auth — ES256-safe, gates rep/admin/manager/owner.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
+    // Service-role admin client for compute_customer_health_score +
+    // get_health_score_with_deltas RPCs (they span workspaces).
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
 
     const body = await req.json();
     const profileId = body.customer_profile_id;

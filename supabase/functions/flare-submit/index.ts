@@ -20,6 +20,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import { generateReproducerSteps, detectHypothesisPattern } from "./intelligence.ts";
@@ -75,21 +76,17 @@ Deno.serve(async (req) => {
 
   try {
     // ── Auth ────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe. Gates rep/admin/manager/owner which
+    // matches the app shell audience; flare UI isn't exposed to customer
+    // portal users, so the narrower role gate is a deliberate tighten.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const user = { id: auth.userId, email: undefined as string | undefined };
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) return safeJsonError("unauthorized", 401, origin);
 
     // ── Parse ─────────────────────────────────────────────────────
     let body: SubmitBody;

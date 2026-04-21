@@ -35,6 +35,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -143,32 +144,19 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("POST only", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
+    // Canonical JWT auth — requireServiceUser validates against GoTrue
+    // (ES256-safe), gates on the rep/admin/manager/owner roles, and
+    // returns a supabase client bound to the caller's JWT.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
+    // Book-value sources live in admin-only tables (market_valuations,
+    // auction_results, competitor_listings) that RLS locks down — we
+    // keep a service-role client strictly for those read-only comps.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
-
-    // Role gate — trade valuations are rep+ operations.
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    const role = (profile as { role?: string } | null)?.role;
-    if (!role || !["rep", "admin", "manager", "owner"].includes(role)) {
-      return safeJsonError("Insufficient permissions", 403, origin);
-    }
 
     const body = (await req.json().catch(() => ({}))) as BookValueInput;
     if (!body.make || !body.model) {
@@ -353,7 +341,7 @@ Deno.serve(async (req) => {
 
     return safeJsonOk(response, origin);
   } catch (err) {
-    captureEdgeException(err);
+    captureEdgeException(err, { fn: "trade-book-value-range", req });
     console.error("trade-book-value-range error:", err);
     return safeJsonError("Book-value lookup failed", 500, origin);
   }

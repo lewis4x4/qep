@@ -9,19 +9,8 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { captureEdgeException } from "../_shared/sentry.ts";
-
-const ALLOWED_ORIGINS = [
-  "https://qualityequipmentparts.netlify.app",
-  "https://qep.blackrockai.co",
-  "http://localhost:5173",
-];
-function corsHeaders(origin: string | null) {
-  return {
-    "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : "",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Vary": "Origin",
-  };
-}
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 const VISION_MODEL = "gpt-5.4-mini";
 
@@ -48,42 +37,18 @@ interface VisionAnalysis {
 }
 
 Deno.serve(async (req) => {
-  const ch = corsHeaders(req.headers.get("origin"));
+  const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: ch });
+    return optionsResponse(origin);
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return jsonError("Unauthorized", 401, ch);
-    }
+    // Canonical JWT auth — validates against GoTrue (ES256-safe) and
+    // returns a supabase client bound to the caller's JWT + their role.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const user = { id: auth.userId };
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return jsonError("Unauthorized", 401, ch);
-    }
-
-    // Role check: equipment vision requires authenticated user
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!profile || !["rep", "admin", "manager", "owner"].includes(profile.role)) {
-      return jsonError("Insufficient permissions", 403, ch);
-    }
     const contentType = req.headers.get("content-type") ?? "";
     let imageBase64: string;
     let imageMimeType: string;
@@ -92,10 +57,10 @@ Deno.serve(async (req) => {
       const formData = await req.formData();
       const imageFile = formData.get("image") as File | null;
       if (!imageFile || imageFile.size === 0) {
-        return jsonError("image field is required", 400, ch);
+        return safeJsonError("image field is required", 400, origin);
       }
       if (imageFile.size > 20 * 1024 * 1024) {
-        return jsonError("Image exceeds 20MB limit", 400, ch);
+        return safeJsonError("Image exceeds 20MB limit", 400, origin);
       }
       imageMimeType = imageFile.type || "image/jpeg";
       const buffer = await imageFile.arrayBuffer();
@@ -105,17 +70,17 @@ Deno.serve(async (req) => {
     } else if (contentType.includes("application/json")) {
       const body = await req.json();
       if (!body.image_base64) {
-        return jsonError("image_base64 field is required", 400, ch);
+        return safeJsonError("image_base64 field is required", 400, origin);
       }
       imageBase64 = body.image_base64;
       imageMimeType = body.mime_type || "image/jpeg";
     } else {
-      return jsonError("Expected multipart/form-data or application/json with image_base64", 400, ch);
+      return safeJsonError("Expected multipart/form-data or application/json with image_base64", 400, origin);
     }
 
     const openAiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openAiKey) {
-      return jsonError("OPENAI_API_KEY not configured", 503, ch);
+      return safeJsonError("OPENAI_API_KEY not configured", 503, origin);
     }
 
     // Vision analysis
@@ -181,13 +146,13 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
     if (!visionRes.ok) {
       const errText = await visionRes.text();
       console.error("OpenAI vision error:", errText);
-      return jsonError("Equipment analysis failed. Please try again.", 500, ch);
+      return safeJsonError("Equipment analysis failed. Please try again.", 500, origin);
     }
 
     const visionData = await visionRes.json();
     const rawContent = visionData.choices?.[0]?.message?.content?.trim();
     if (!rawContent) {
-      return jsonError("No analysis returned", 500, ch);
+      return safeJsonError("No analysis returned", 500, origin);
     }
 
     let analysis: VisionAnalysis;
@@ -195,7 +160,7 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       const cleaned = rawContent.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
       analysis = JSON.parse(cleaned);
     } catch {
-      return jsonError("Failed to parse equipment analysis", 500, ch);
+      return safeJsonError("Failed to parse equipment analysis", 500, origin);
     }
 
     // Cross-reference with QRM equipment and market data
@@ -321,27 +286,17 @@ Be specific about make/model when identifiable. Note any brand logos, model numb
       marketValuations = valuationResult.data ?? [];
     }
 
-    return new Response(JSON.stringify({
+    return safeJsonOk({
       analysis,
       image_url: savedImageUrl,
       crm_matches: {
         inventory: matchingInventory,
         valuations: marketValuations,
       },
-    }), {
-      status: 200,
-      headers: { ...ch, "Content-Type": "application/json" },
-    });
+    }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "equipment-vision", req });
     console.error("equipment-vision error:", err);
-    return jsonError("Internal server error", 500, ch);
+    return safeJsonError("Internal server error", 500, origin);
   }
 });
-
-function jsonError(message: string, status: number, headers: Record<string, string>): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { ...headers, "Content-Type": "application/json" },
-  });
-}

@@ -26,7 +26,7 @@
  *     cannot leak cross-rep deals via the rep-safe views.
  */
 
-import { createAdminClient, createCallerClient } from "../_shared/dge-auth.ts";
+import { createAdminClient, createCallerClient, validateUserToken } from "../_shared/dge-auth.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { publishFlowEvent } from "../_shared/flow-bus/publish.ts";
@@ -310,14 +310,14 @@ Deno.serve(async (req) => {
     const adminClient = createAdminClient();
     const callerClient = createCallerClient(authHeader);
 
-    // Verify the JWT explicitly per the iron auth pattern (memory:
-    // "Always pass JWT explicitly to auth.getUser(token) in edge functions").
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const { data: authData, error: authError } = await callerClient.auth.getUser(token);
-    if (authError || !authData?.user?.id) {
+    // ES256-safe token validation via GoTrue. supabase-js's local verifier
+    // rejects this project's ES256-signed tokens; validateUserToken side-
+    // steps it by hitting /auth/v1/user directly.
+    const validated = await validateUserToken(authHeader);
+    if (!validated.ok) {
       return safeJsonError("Unauthorized", 401, origin);
     }
-    const userId = authData.user.id;
+    const userId = validated.userId;
 
     // Phase 0 P0.5 — parallel profile + blend reads.
     //

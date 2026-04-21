@@ -36,6 +36,7 @@
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
@@ -200,30 +201,17 @@ Deno.serve(async (req) => {
     let workspace = "default";
 
     if (isServiceRole) {
+      // Service-role path for cron callers (price-file watchdogs, nightly
+      // scanners) — they bypass per-user role gating because there is no user.
       supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey!);
     } else {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) return safeJsonError("Unauthorized", 401, origin);
+      // User path — canonical JWT auth (ES256-safe, gates rep/admin/manager/owner).
+      const auth = await requireServiceUser(authHeader, origin);
+      if (!auth.ok) return auth.response;
 
       supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey!);
-
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (!profile || !["rep", "manager", "owner", "admin"].includes(profile.role)) {
-        return safeJsonError("draft-email requires rep/manager/owner/admin role", 403, origin);
-      }
-
-      userId = user.id;
-      workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
+      userId = auth.userId;
+      workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, auth.userId);
     }
 
     if (!supabaseAdmin) return safeJsonError("Server misconfiguration", 500, origin);

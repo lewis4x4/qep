@@ -1,3 +1,22 @@
+/**
+ * DGE/QRM auth helpers.
+ *
+ * ────────────────────────────────────────────────────────────────────────
+ * ES256 note (same issue as _shared/service-auth.ts)
+ * ────────────────────────────────────────────────────────────────────────
+ * This project signs JWTs with ES256. supabase-js v2's built-in verifier
+ * rejects ES256 ("Unsupported JWT algorithm ES256"), so
+ * `callerClient.auth.getUser()` / `.getUser(token)` both 401 every legit
+ * user session in production.
+ *
+ * Fix: validate tokens against GoTrue's /auth/v1/user endpoint directly.
+ * GoTrue knows the project's signing key and handles any algorithm the
+ * project is on (HS256, ES256, RS256). One extra HTTP round-trip, <50ms.
+ *
+ * `validateUserToken()` below is the canonical path. `resolveCallerContext`
+ * and direct callers (qrm-command-center, qrm-prediction-trace) use it
+ * instead of supabase-js's local verifier.
+ */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 export type UserRole = "rep" | "admin" | "manager" | "owner";
@@ -162,6 +181,47 @@ async function resolveServiceWorkspaceId(authHeader: string | null): Promise<str
   return data.trim() === workspaceId ? workspaceId : null;
 }
 
+/**
+ * Validate a user JWT against GoTrue's /auth/v1/user endpoint.
+ *
+ * This is the canonical ES256-safe path — side-steps supabase-js v2's
+ * local verifier (which rejects ES256). Returns `{ ok: true, userId, email }`
+ * on success, or `{ ok: false, reason }` with an explanatory code.
+ *
+ * `authHeader` is required because GoTrue expects it as-is on the
+ * Authorization header alongside the anon key in the apikey header.
+ */
+export async function validateUserToken(
+  authHeader: string | null,
+): Promise<
+  | { ok: true; userId: string; email: string | null }
+  | { ok: false; reason: "missing_header" | "malformed" | "unauthorized" | "network" }
+> {
+  if (!authHeader) return { ok: false, reason: "missing_header" };
+  const token = parseBearerToken(authHeader);
+  if (!token) return { ok: false, reason: "malformed" };
+
+  try {
+    const supabaseUrl = getSupabaseUrl();
+    const anonKey = getSupabaseAnonKey();
+    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: anonKey,
+      },
+    });
+    if (!res.ok) return { ok: false, reason: "unauthorized" };
+    const body = await res.json();
+    if (!body || typeof body.id !== "string") {
+      return { ok: false, reason: "unauthorized" };
+    }
+    const email = typeof body.email === "string" ? body.email : null;
+    return { ok: true, userId: body.id, email };
+  } catch {
+    return { ok: false, reason: "network" };
+  }
+}
+
 function isServiceRoleRequest(req: Request): boolean {
   const internalServiceSecret = getDgeInternalServiceSecret();
   if (!internalServiceSecret) return false;
@@ -199,9 +259,12 @@ export async function resolveCallerContext(
   }
 
   const callerClient = createCallerClient(authHeader);
-  const { data: authData, error: authError } = await callerClient.auth
-    .getUser();
-  const userId = authData.user?.id ?? readUserIdClaim(claims);
+
+  // ES256-safe token validation via GoTrue. supabase-js's local verifier
+  // rejects the project's ES256-signed tokens, so we validate server-side.
+  const validated = await validateUserToken(authHeader);
+  const authError = validated.ok ? null : new Error(validated.reason);
+  const userId = validated.ok ? validated.userId : readUserIdClaim(claims);
   const useLocalClaimFallback = shouldUseLocalClaimFallback(
     userId,
     Boolean(authError),

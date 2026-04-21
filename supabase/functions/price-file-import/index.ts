@@ -12,7 +12,8 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import XLSX from "npm:xlsx@0.18.5";
-import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 function parseCsvRows(csvText: string): Record<string, string>[] {
@@ -68,36 +69,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) {
-      return safeJsonError("Unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe. requireServiceUser gates on
+    // rep/admin/manager/owner; this endpoint narrows further to admin/owner.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    if (!["admin", "owner"].includes(auth.role)) {
+      return safeJsonError("Price file import requires admin or owner role", 403, origin);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
+    // catalog_entries cross-workspace writes need service-role bypass on RLS.
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
-
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !["admin", "owner"].includes(profile.role)) {
-      return safeJsonError("Price file import requires admin or owner role", 403, origin);
-    }
 
     // Parse multipart form data with CSV/XLSX/XLS file
     const contentType = req.headers.get("content-type") || "";

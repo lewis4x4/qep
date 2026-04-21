@@ -14,8 +14,8 @@
  *
  * Auth: rep/admin/manager/owner
  */
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface Incentive {
@@ -34,17 +34,12 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
+    // Canonical JWT auth — ES256-safe via GoTrue, gates rep/admin/manager/owner,
+    // returns a user-scoped supabase client so RLS sees caller identity on writes.
+    const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+    if (!auth.ok) return auth.response;
+    const supabase = auth.supabase;
+    const user = { id: auth.userId };
 
     const body = await req.json().catch(() => ({}));
     const quoteId: string | undefined = body.quote_package_id;

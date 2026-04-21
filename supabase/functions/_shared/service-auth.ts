@@ -1,9 +1,35 @@
 /**
- * Service engine edge functions: JWT-only auth (no service_role impersonation).
- * Aligns with RLS — callers use anon key + user JWT.
+ * Canonical JWT auth for edge functions.
  *
  * ────────────────────────────────────────────────────────────────────────
- * TWO BUGS THIS HELPER HAS HAD, BOTH RELATED TO auth.getUser()
+ * HOW TO USE (every frontend-called edge function should do this):
+ * ────────────────────────────────────────────────────────────────────────
+ *
+ *   import { requireServiceUser } from "../_shared/service-auth.ts";
+ *   import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+ *
+ *   Deno.serve(async (req) => {
+ *     const origin = req.headers.get("origin");
+ *     if (req.method === "OPTIONS") return optionsResponse(origin);
+ *
+ *     const auth = await requireServiceUser(req.headers.get("Authorization"), origin);
+ *     if (!auth.ok) return auth.response;
+ *     // auth.supabase  → user-scoped client (RLS sees caller identity)
+ *     // auth.userId    → string
+ *     // auth.role      → "rep" | "admin" | "manager" | "owner"
+ *
+ *     // ...your business logic...
+ *   });
+ *
+ * AND register the function in supabase/config.toml with verify_jwt=false
+ * (gateway verifier rejects ES256; this helper does the auth internally).
+ *
+ * The `scripts/check-edge-function-auth.mjs` audit (run in `bun run build`)
+ * enforces BOTH — frontend-called functions that aren't registered or that
+ * use argless `auth.getUser()` fail the build.
+ *
+ * ────────────────────────────────────────────────────────────────────────
+ * TWO BUGS THIS HELPER SOLVES, BOTH RELATED TO auth.getUser()
  * ────────────────────────────────────────────────────────────────────────
  *
  * 1. Argless variant silently 401s on JSR/Deno supabase-js builds
@@ -27,6 +53,12 @@
  * verification. Acceptable — GoTrue is co-located with the edge
  * function runtime, so the round-trip is <50ms typically, and it's
  * strictly more correct (server validates what server minted).
+ *
+ * Canonical live examples:
+ *   - supabase/functions/equipment-vision/index.ts
+ *   - supabase/functions/trade-book-value-range/index.ts
+ *   - supabase/functions/trade-valuation/index.ts
+ *   - supabase/functions/parts-bulk-import/index.ts
  * ────────────────────────────────────────────────────────────────────────
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";

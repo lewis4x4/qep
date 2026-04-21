@@ -11,7 +11,7 @@
 
 import {
   createAdminClient,
-  createCallerClient,
+  validateUserToken,
   type UserRole,
 } from "../_shared/dge-auth.ts";
 import { corsHeaders, fail, ok, optionsResponse } from "../_shared/dge-http.ts";
@@ -92,14 +92,15 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createAdminClient();
-    const callerClient = createCallerClient(authHeader);
 
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    const { data: authData, error: authError } = await callerClient.auth.getUser(token);
-    if (authError || !authData?.user?.id) {
+    // ES256-safe token validation via GoTrue. supabase-js's local verifier
+    // rejects this project's ES256-signed tokens; validateUserToken side-
+    // steps it by hitting /auth/v1/user directly.
+    const validated = await validateUserToken(authHeader);
+    if (!validated.ok) {
       return fail({ origin, status: 401, code: "unauthorized", message: "Invalid token" });
     }
-    const userId = authData.user.id;
+    const userId = validated.userId;
 
     // Role check — manager-gated
     const { data: profile, error: profileError } = await adminClient

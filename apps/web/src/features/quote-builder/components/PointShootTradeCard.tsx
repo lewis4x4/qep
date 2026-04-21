@@ -39,8 +39,10 @@ import {
   identifyEquipmentFromPhoto,
   fetchBookValueRange,
   applyPointShootTrade,
+  TradeApiError,
   type PointShootIdentification,
   type BookValueRange,
+  type TradeApiErrorKind,
 } from "../lib/point-shoot-trade-api";
 
 export interface PointShootTradeCardProps {
@@ -63,7 +65,16 @@ type Phase =
   | { kind: "valuing";    ident: PointShootIdentification; photoPreview: string }
   | { kind: "valued";     ident: PointShootIdentification; photoPreview: string; range: BookValueRange }
   | { kind: "applying";   ident: PointShootIdentification; photoPreview: string; range: BookValueRange }
-  | { kind: "error"; message: string };
+  /** Photo preserved on error so the rep can retry or fall back to manual entry without re-shooting. */
+  | { kind: "error"; message: string; errorKind: TradeApiErrorKind | "unknown"; photoPreview: string | null };
+
+function toErrorPhase(err: unknown, photoPreview: string | null): Extract<Phase, { kind: "error" }> {
+  if (err instanceof TradeApiError) {
+    return { kind: "error", message: err.userMessage, errorKind: err.kind, photoPreview };
+  }
+  const msg = err instanceof Error ? err.message : "Something went wrong.";
+  return { kind: "error", message: msg, errorKind: "unknown", photoPreview };
+}
 
 export function PointShootTradeCard({
   dealId,
@@ -104,7 +115,9 @@ export function PointShootTradeCard({
       if (!ident.make || !ident.model) {
         setPhase({
           kind: "error",
-          message: "Couldn't identify the equipment from that photo. Try a cleaner angle of the side/decal.",
+          message: "Couldn't identify the equipment from that photo. Try a cleaner angle of the side/decal, or enter it manually below.",
+          errorKind: "validation",
+          photoPreview,
         });
         return;
       }
@@ -112,7 +125,7 @@ export function PointShootTradeCard({
       // Auto-run the range lookup — saves a tap.
       await runValuation(ident, photoPreview);
     } catch (err) {
-      setPhase({ kind: "error", message: (err as Error).message ?? "Vision request failed." });
+      setPhase(toErrorPhase(err, photoPreview));
     }
   }
 
@@ -127,7 +140,7 @@ export function PointShootTradeCard({
       });
       setPhase({ kind: "valued", ident, photoPreview, range });
     } catch (err) {
-      setPhase({ kind: "error", message: (err as Error).message ?? "Book-value lookup failed." });
+      setPhase(toErrorPhase(err, photoPreview));
     }
   }
 
@@ -155,8 +168,30 @@ export function PointShootTradeCard({
       blobUrlsRef.current.clear();
       setPhase({ kind: "idle" });
     } catch (err) {
-      setPhase({ kind: "error", message: (err as Error).message ?? "Apply failed." });
+      // At this point `phase` is still the "valued" phase captured in closure
+      // (setPhase is async), so we can safely preserve its photo across the error.
+      setPhase(toErrorPhase(err, phase.photoPreview));
     }
+  }
+
+  /** Drop the rep straight into manual entry with the current photo preserved.
+   *  Treats the manual entries as "identified" so the existing edit form and
+   *  re-run-valuation flow take over without any error-state branching. */
+  function enterManually(photoPreview: string | null) {
+    const ident: PointShootIdentification = {
+      make: null, model: null, year: null, category: null,
+      conditionOverall: "unknown", conditionSummary: "", confidence: "low",
+      hoursEstimate: null, potentialIssues: [], photoUrl: null,
+    };
+    const preview = photoPreview ?? "";
+    setPhase({ kind: "identified", ident, photoPreview: preview });
+    setEdit({ make: "", model: "", year: "", hours: "" });
+  }
+
+  async function retryFromError() {
+    if (phase.kind !== "error") return;
+    setPhase({ kind: "idle" });
+    fileRef.current?.click();
   }
 
   async function handleEditApply() {
@@ -265,11 +300,17 @@ export function PointShootTradeCard({
       {(phase.kind === "identified" || phase.kind === "valuing" || phase.kind === "valued" || phase.kind === "applying") && (
         <div className="space-y-3">
           <div className="flex gap-3">
-            <img
-              src={phase.photoPreview}
-              alt="Trade equipment"
-              className="h-20 w-28 shrink-0 rounded-md object-cover ring-1 ring-border"
-            />
+            {phase.photoPreview ? (
+              <img
+                src={phase.photoPreview}
+                alt="Trade equipment"
+                className="h-20 w-28 shrink-0 rounded-md object-cover ring-1 ring-border"
+              />
+            ) : (
+              <div className="flex h-20 w-28 shrink-0 items-center justify-center rounded-md bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground ring-1 ring-border">
+                Manual entry
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="truncate text-sm font-semibold text-foreground">
@@ -350,14 +391,37 @@ export function PointShootTradeCard({
         </div>
       )}
 
-      {/* Error */}
+      {/* Error — friendly classification + manual fallback so the rep is never stuck. */}
       {phase.kind === "error" && (
-        <div className="space-y-2">
-          <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-sm text-red-600 dark:text-red-400">
+        <div className="space-y-3">
+          {phase.photoPreview && (
+            <img
+              src={phase.photoPreview}
+              alt="Trade equipment"
+              className="h-20 w-28 rounded-md object-cover ring-1 ring-border"
+            />
+          )}
+          <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p className="min-w-0">{phase.message}</p>
+            <div className="min-w-0 space-y-1">
+              <p className="font-medium">
+                {phase.errorKind === "auth" && "Session needs a refresh"}
+                {phase.errorKind === "service" && "Service temporarily unavailable"}
+                {phase.errorKind === "network" && "Connection issue"}
+                {phase.errorKind === "validation" && "Couldn't process that"}
+                {phase.errorKind === "unknown" && "Something went wrong"}
+              </p>
+              <p className="opacity-90">{phase.message}</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" onClick={reset} className="w-full">Try again</Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" onClick={retryFromError}>
+              <Camera className="mr-1 h-3.5 w-3.5" /> Retake photo
+            </Button>
+            <Button variant="default" size="sm" onClick={() => enterManually(phase.photoPreview)}>
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Enter manually
+            </Button>
+          </div>
         </div>
       )}
     </Card>

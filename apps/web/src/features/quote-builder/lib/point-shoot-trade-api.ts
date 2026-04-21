@@ -23,8 +23,69 @@ const TRADE_VALUATION_URL       = `${SUPABASE_URL}/functions/v1/trade-valuation`
 async function authHeader(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("Not authenticated");
+  if (!token) throw new TradeApiError("auth", 401, "Not signed in", "Your session expired. Sign in again to continue.");
   return `Bearer ${token}`;
+}
+
+/**
+ * Typed error class so the UI can distinguish auth failures, server outages,
+ * and validation issues without string-matching. The UI shows a rep-friendly
+ * message; the raw detail is kept for Sentry / console.
+ */
+export type TradeApiErrorKind =
+  | "auth"        // 401/403 — gateway JWT reject, role denied, expired session
+  | "service"    // 5xx — function or upstream API broke
+  | "validation"  // 400 — payload bad (rare given we control the payload)
+  | "network";    // fetch threw (offline, DNS, etc.)
+
+export class TradeApiError extends Error {
+  constructor(
+    public readonly kind: TradeApiErrorKind,
+    public readonly status: number,
+    public readonly detail: string,
+    public readonly userMessage: string,
+  ) {
+    super(userMessage);
+    this.name = "TradeApiError";
+  }
+}
+
+function classify(status: number, detail: string): TradeApiErrorKind {
+  if (status === 401 || status === 403) return "auth";
+  if (status >= 500) return "service";
+  if (status === 0) return "network";
+  return "validation";
+}
+
+function userMessageFor(kind: TradeApiErrorKind, step: string): string {
+  switch (kind) {
+    case "auth":
+      return "Your session needs a refresh — sign out and back in, then try again. You can also enter the trade manually below.";
+    case "service":
+      return `The ${step} service is temporarily unavailable. Try again in a moment, or enter the trade manually below.`;
+    case "network":
+      return "No connection — check your signal and try again. Your photo is preserved.";
+    case "validation":
+      return `The ${step} request was rejected. Try a different angle of the equipment, or enter manually.`;
+  }
+}
+
+async function parseError(res: Response, step: string): Promise<TradeApiError> {
+  const detail = await res.text().catch(() => "");
+  const kind = classify(res.status, detail);
+  return new TradeApiError(kind, res.status, detail || `HTTP ${res.status}`, userMessageFor(kind, step));
+}
+
+async function fetchWithClassify(url: string, init: RequestInit, step: string): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new TradeApiError("network", 0, detail, userMessageFor("network", step));
+  }
+  if (!res.ok) throw await parseError(res, step);
+  return res;
 }
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -110,18 +171,14 @@ export async function identifyEquipmentFromPhoto(file: File): Promise<PointShoot
   }
   const { base64, mime } = await fileToBase64(file);
 
-  const res = await fetch(EQUIPMENT_VISION_URL, {
+  const res = await fetchWithClassify(EQUIPMENT_VISION_URL, {
     method: "POST",
     headers: {
       Authorization: await authHeader(),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ image_base64: base64, mime_type: mime }),
-  });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => "");
-    throw new Error(`Equipment identification failed: ${msg || res.status}`);
-  }
+  }, "equipment identification");
   const payload = await res.json() as {
     analysis?: {
       equipment?: { make?: string | null; model?: string | null; year?: string | null; category?: string | null };
@@ -162,18 +219,14 @@ export async function fetchBookValueRange(input: {
   year?: number | null;
   hours?: number | null;
 }): Promise<BookValueRange> {
-  const res = await fetch(BOOK_VALUE_RANGE_URL, {
+  const res = await fetchWithClassify(BOOK_VALUE_RANGE_URL, {
     method: "POST",
     headers: {
       Authorization: await authHeader(),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(input),
-  });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => "");
-    throw new Error(`Book-value lookup failed: ${msg || res.status}`);
-  }
+  }, "book-value lookup");
   const p = await res.json() as {
     make: string;
     model: string;
@@ -231,7 +284,7 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
       ? "operational"
       : "daily_use";
 
-  const res = await fetch(TRADE_VALUATION_URL, {
+  const res = await fetchWithClassify(TRADE_VALUATION_URL, {
     method: "POST",
     headers: {
       Authorization: await authHeader(),
@@ -248,11 +301,7 @@ export async function applyPointShootTrade(input: ApplyTradeInput): Promise<Appl
         : [],
       operational_status: operationalStatus,
     }),
-  });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => "");
-    throw new Error(`Create trade valuation failed: ${msg || res.status}`);
-  }
+  }, "trade apply");
   const payload = await res.json() as {
     valuation?: {
       id: string;
