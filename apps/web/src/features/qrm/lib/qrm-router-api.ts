@@ -4,6 +4,9 @@ import type {
   QrmActivityPatchInput,
   QrmActivityTaskPatchInput,
   QrmActivityItem,
+  QrmCampaign,
+  QrmCampaignInput,
+  QrmCampaignRecipient,
   QrmCompanySummary,
   QrmCompanyShipToAddress,
   QrmCompanyShipToInput,
@@ -195,6 +198,53 @@ export async function patchCrmCompanyViaRouter(
     body: input,
   });
   return payload.company;
+}
+
+export async function listCrmCampaignsViaRouter(): Promise<QrmCampaign[]> {
+  const payload = await requestRouter<{ campaigns: QrmCampaign[] }>("/qrm/campaigns");
+  return payload.campaigns;
+}
+
+export async function createCrmCampaignViaRouter(
+  input: QrmCampaignInput,
+): Promise<QrmCampaign> {
+  const payload = await requestRouter<{ campaign: QrmCampaign }>("/qrm/campaigns", {
+    method: "POST",
+    body: input,
+  });
+  return payload.campaign;
+}
+
+export async function patchCrmCampaignViaRouter(
+  campaignId: string,
+  input: QrmCampaignInput,
+): Promise<QrmCampaign> {
+  const payload = await requestRouter<{ campaign: QrmCampaign }>(`/qrm/campaigns/${campaignId}`, {
+    method: "PATCH",
+    body: input,
+  });
+  return payload.campaign;
+}
+
+export async function executeCrmCampaignViaRouter(
+  campaignId: string,
+): Promise<{ campaignId: string; state: string; executionSummary: Record<string, unknown> }> {
+  const payload = await requestRouter<{ result: { campaignId: string; state: string; executionSummary: Record<string, unknown> } }>(
+    `/qrm/campaigns/${campaignId}/execute`,
+    {
+      method: "POST",
+    },
+  );
+  return payload.result;
+}
+
+export async function listCrmCampaignRecipientsViaRouter(
+  campaignId: string,
+): Promise<QrmCampaignRecipient[]> {
+  const payload = await requestRouter<{ recipients: QrmCampaignRecipient[] }>(
+    `/qrm/campaigns/${campaignId}/recipients`,
+  );
+  return payload.recipients;
 }
 
 export async function createCrmDealViaRouter(

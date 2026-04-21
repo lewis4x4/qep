@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   UsersRound,
   Building2,
+  Megaphone,
   Timer,
   AlertTriangle,
   Truck,
@@ -41,6 +42,7 @@ interface SubNavItem {
 
 const CRM_SUB_NAV_ITEMS: SubNavItem[] = [
   { label: "Activities", href: "/qrm/activities", icon: MessageCircleMore },
+  { label: "Campaigns", href: "/qrm/campaigns", icon: Megaphone, roles: ["admin", "manager", "owner"] },
   { label: "Deals", href: "/qrm/deals", icon: LayoutGrid },
   { label: "Contacts", href: "/qrm/contacts", icon: UsersRound },
   { label: "Companies", href: "/qrm/companies", icon: Building2 },

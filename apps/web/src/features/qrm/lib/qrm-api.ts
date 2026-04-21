@@ -300,6 +300,25 @@ export async function getCrmContact(contactId: string): Promise<QrmContactSummar
   return data ? toContactSummary(data as QrmContactRow) : null;
 }
 
+export async function listCrmContactsByIds(contactIds: string[]): Promise<QrmContactSummary[]> {
+  const ids = Array.from(new Set(contactIds.map((id) => id.trim()).filter((id) => id.length > 0)));
+  if (ids.length === 0) return [];
+
+  const { data, error } = await crmSupabase
+    .from("crm_contacts")
+    .select(
+      "id, workspace_id, dge_customer_profile_id, first_name, last_name, email, phone, title, primary_company_id, assigned_rep_id, merged_into_contact_id, created_at, updated_at"
+    )
+    .in("id", ids)
+    .is("deleted_at", null);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as QrmContactRow[]).map(toContactSummary);
+}
+
 export async function listCrmCompanies(search: string, cursor?: string | null): Promise<QrmPageResult<QrmCompanySummary>> {
   const decodedCursor = decodeCursor<CompanyListCursor>(cursor);
   const { data, error } = await (crmSupabase as typeof crmSupabase & {

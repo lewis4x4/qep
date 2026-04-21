@@ -17,6 +17,18 @@ export interface CampaignPayload {
   archive?: boolean;
 }
 
+interface CampaignRecipientRow {
+  id: string;
+  campaign_id: string;
+  contact_id: string;
+  status: "pending" | "sent" | "delivered" | "failed" | "ineligible";
+  ineligibility_reason: string | null;
+  error_code: string | null;
+  attempted_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 interface CampaignRow {
   id: string;
   name: string;
@@ -81,6 +93,21 @@ function toCommunicationContact(row: ContactRow): CommunicationContact {
   };
 }
 
+function mapCampaignRow(row: CampaignRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    name: row.name,
+    channel: row.channel,
+    templateId: row.template_id,
+    audienceSnapshot: row.audience_snapshot,
+    state: row.state,
+    executionSummary: row.execution_summary,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 async function fetchCampaignContacts(ctx: RouterCtx, contactIds: string[]): Promise<CommunicationContact[]> {
   if (contactIds.length === 0) return [];
   const { data, error } = await ctx.admin
@@ -103,7 +130,7 @@ export async function listCampaigns(ctx: RouterCtx): Promise<unknown[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data ?? [];
+  return ((data ?? []) as CampaignRow[]).map(mapCampaignRow);
 }
 
 export async function createCampaign(ctx: RouterCtx, payload: CampaignPayload): Promise<unknown> {
@@ -126,7 +153,7 @@ export async function createCampaign(ctx: RouterCtx, payload: CampaignPayload): 
     .single<CampaignRow>();
 
   if (error) throw error;
-  return data;
+  return mapCampaignRow(data);
 }
 
 export async function patchCampaign(ctx: RouterCtx, campaignId: string, payload: CampaignPayload): Promise<unknown> {
@@ -136,6 +163,7 @@ export async function patchCampaign(ctx: RouterCtx, campaignId: string, payload:
     if (!name) throw new Error("VALIDATION_CAMPAIGN_REQUIRED_FIELDS");
     updates.name = name;
   }
+  if (payload.channel !== undefined) updates.channel = payload.channel;
   if (payload.templateId !== undefined) updates.template_id = cleanText(payload.templateId ?? null);
   if (payload.audienceContactIds !== undefined) updates.audience_snapshot = toAudienceSnapshot(payload.audienceContactIds);
   if (payload.archive === true) updates.deleted_at = new Date().toISOString();
@@ -152,7 +180,7 @@ export async function patchCampaign(ctx: RouterCtx, campaignId: string, payload:
 
   if (error) throw error;
   if (!data) throw new Error("NOT_FOUND");
-  return data;
+  return mapCampaignRow(data);
 }
 
 export async function executeCampaign(ctx: RouterCtx, campaignId: string): Promise<unknown> {
@@ -298,4 +326,53 @@ export async function executeCampaign(ctx: RouterCtx, campaignId: string): Promi
   if (completeError) throw completeError;
 
   return { campaignId: campaign.id, state: "completed", executionSummary: { ...summary, completedAt } };
+}
+
+export async function listCampaignRecipients(
+  ctx: RouterCtx,
+  campaignId: string,
+): Promise<unknown[]> {
+  const { data: campaign, error: campaignError } = await ctx.admin
+    .from("crm_campaigns")
+    .select("id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", campaignId)
+    .is("deleted_at", null)
+    .maybeSingle<{ id: string }>();
+
+  if (campaignError) throw campaignError;
+  if (!campaign) throw new Error("NOT_FOUND");
+
+  const { data: recipients, error: recipientError } = await ctx.admin
+    .from("crm_campaign_recipients")
+    .select("id, campaign_id, contact_id, status, ineligibility_reason, error_code, attempted_at, completed_at, created_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false });
+
+  if (recipientError) throw recipientError;
+
+  const rows = (recipients ?? []) as CampaignRecipientRow[];
+  const contactIds = Array.from(new Set(rows.map((row) => row.contact_id)));
+  const contacts = await fetchCampaignContacts(ctx, contactIds);
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+
+  return rows.map((row) => {
+    const contact = contactById.get(row.contact_id);
+    return {
+      id: row.id,
+      campaignId: row.campaign_id,
+      contactId: row.contact_id,
+      contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown contact",
+      companyName: contact?.companyName ?? null,
+      email: contact?.email ?? null,
+      phone: contact?.phone ?? null,
+      status: row.status,
+      ineligibilityReason: row.ineligibility_reason,
+      errorCode: row.error_code,
+      attemptedAt: row.attempted_at,
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+    };
+  });
 }

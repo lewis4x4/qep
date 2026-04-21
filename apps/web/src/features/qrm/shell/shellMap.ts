@@ -35,6 +35,7 @@ interface RouteRule {
 const ROUTE_RULES: RouteRule[] = [
   // --- TODAY (what to do now) -----------------------------------------------
   { prefix: "/qrm/activities", surface: "today", lens: "activities" },
+  { prefix: "/qrm/campaigns", surface: "today", lens: "campaigns" },
   { prefix: "/qrm/time-bank", surface: "today", lens: "time-bank" },
   { prefix: "/qrm/replacement-prediction", surface: "today", lens: "replace" },
   { prefix: "/qrm/seasonal-opportunity-map", surface: "today", lens: "seasonal" },
@@ -148,6 +149,7 @@ export interface LensDefinition {
 export const SURFACE_LENSES: Record<SurfaceId, LensDefinition[]> = {
   today: [
     { id: "activities", label: "Activities", href: "/qrm/activities", surface: "today" },
+    { id: "campaigns", label: "Campaigns", href: "/qrm/campaigns", surface: "today" },
     { id: "time-bank", label: "Time Bank", href: "/qrm/time-bank", surface: "today" },
     { id: "approvals", label: "Approvals", href: "/qrm/command/approvals", surface: "today" },
     { id: "blockers", label: "Blockers", href: "/qrm/command/blockers", surface: "today" },

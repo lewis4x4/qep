@@ -502,6 +502,9 @@ const QrmContactDetailPage = lazy(() =>
 const QrmCompaniesPage = lazy(() =>
   import("./features/qrm/pages/QrmCompaniesPage").then((m) => ({ default: m.QrmCompaniesPage }))
 );
+const QrmCampaignsPage = lazy(() =>
+  import("./features/qrm/pages/QrmCampaignsPage").then((m) => ({ default: m.QrmCampaignsPage }))
+);
 const QrmCompanyDetailPage = lazy(() =>
   import("./features/qrm/pages/QrmCompanyDetailPage").then((m) => ({
     default: m.QrmCompanyDetailPage,
@@ -2117,6 +2120,16 @@ function App() {
                 }
               />
               <Route path="/qrm/companies/:companyId/command" element={<LegacyCompanyCommandRedirect />} />
+              <Route
+                path="/qrm/campaigns"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <QrmCampaignsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               <Route
                 path="/qrm/companies"
                 element={

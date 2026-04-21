@@ -94,6 +94,47 @@ export interface QrmCompanyShipToInput {
   archive?: boolean;
 }
 
+export type QrmCampaignChannel = "email" | "sms";
+export type QrmCampaignState = "draft" | "running" | "completed" | "cancelled";
+export type QrmCampaignRecipientStatus = "pending" | "sent" | "delivered" | "failed" | "ineligible";
+
+export interface QrmCampaign {
+  id: string;
+  name: string;
+  channel: QrmCampaignChannel;
+  templateId: string | null;
+  audienceSnapshot: Record<string, unknown>;
+  state: QrmCampaignState;
+  executionSummary: Record<string, unknown>;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QrmCampaignInput {
+  name?: string;
+  channel?: QrmCampaignChannel;
+  templateId?: string | null;
+  audienceContactIds?: string[];
+  archive?: boolean;
+}
+
+export interface QrmCampaignRecipient {
+  id: string;
+  campaignId: string;
+  contactId: string;
+  contactName: string;
+  companyName: string | null;
+  email: string | null;
+  phone: string | null;
+  status: QrmCampaignRecipientStatus;
+  ineligibilityReason: string | null;
+  errorCode: string | null;
+  attemptedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 export interface QrmActivityItem {
   id: string;
   workspaceId: string;

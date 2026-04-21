@@ -22,6 +22,7 @@ import {
 import {
   createCampaign,
   executeCampaign,
+  listCampaignRecipients,
   listCampaigns,
   patchCampaign,
   type CampaignPayload,
@@ -552,6 +553,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const body = await readJsonBody<CampaignPayload>(req);
         const campaign = await patchCampaign(ctx, segments[2], body);
         return crmOk({ campaign }, { origin });
+      }
+
+      if (req.method === "GET" && segments.length === 4 && segments[3] === "recipients") {
+        const recipients = await listCampaignRecipients(ctx, segments[2]);
+        return crmOk({ recipients }, { origin });
       }
 
       if (req.method === "POST" && segments.length === 4 && segments[3] === "execute") {
