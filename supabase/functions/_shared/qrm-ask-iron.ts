@@ -429,6 +429,52 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
       required: ["company_id"],
     },
   },
+  {
+    // Slice 20: signal-centric mirror of summarize_deal/company/contact.
+    // The Pulse → Ask Iron handoff (Slice 8) asks Iron to "triage this
+    // signal" — before this tool, the only path was list_recent_signals
+    // (list, not deep-dive) + search_entities + a summarize_* on the
+    // parent entity, which required three turns to give one answer.
+    // summarize_signal bundles four reads in one shot:
+    //
+    //   1. Signal row         — signals (kind/severity/source/title/desc)
+    //   2. Parent entity      — the deal/company/contact row the signal
+    //                           points at, pulled via the same visibility
+    //                           view as the per-entity synthesizers so a
+    //                           rep's rep-vs-company rules carry through.
+    //   3. Related signals    — other signals on the same entity within
+    //                           the lookback window, excluding this one,
+    //                           so Iron can frame the signal as a single
+    //                           event or part of a cluster.
+    //   4. Related moves      — moves whose signal_ids array contains
+    //                           this signal's id — direct causal trail,
+    //                           tight scope (no entity-wide fan-out).
+    //
+    // Parent entity is null for equipment/rental/activity/workspace
+    // signals since those synthesizers don't exist yet; when they ship,
+    // this is the one place to wire them in.
+    name: "summarize_signal",
+    description:
+      "Bundle a signal's row, the entity it points at, other signals on the same entity, and moves triggered by it into one call. Use for triage questions — 'why is this signal hot', 'what's the story on this signal', 'triage this <kind> signal on <entity>'. Distinguish from list_recent_signals (which lists many signals, shallow) and summarize_deal/company/contact (which center on the entity, not the event). Do NOT use for single-field lookups on a signal. Returns structured data — write the triage note yourself in 2–4 sentences. parent_entity may be null for equipment/rental/activity/workspace signals; say so plainly rather than inventing a name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        signal_id: {
+          type: "string",
+          description:
+            "UUID of the signal to summarize. Obtain from list_recent_signals if only the kind/title is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of related signals and moves to pull. Default 30 — enough to cover recent clustering without blowing context.",
+        },
+      },
+      required: ["signal_id"],
+    },
+  },
 ];
 
 // ── Input normalization (pure, testable) ────────────────────────────────────
@@ -864,6 +910,52 @@ export function normalizeSummarizeContactInput(
   return { contactId, lookbackDays, sinceIso };
 }
 
+// ── summarize_signal normalization (Slice 20) ──────────────────────────────
+
+export interface NormalizedSummarizeSignal {
+  signalId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row caps for the two list arms of summarize_signal. The related-signals
+ * arm mirrors the summarize_deal signal cap so the context budget stays
+ * predictable; related_moves is intentionally lower since a single signal
+ * rarely spawns more than a handful of moves directly, and operators will
+ * lose the narrative if the list gets longer than a glance.
+ */
+export const SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT = 10;
+export const SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_signal` input. Throws
+ * VALIDATION_ERROR on missing/empty signal_id so Claude sees a clean
+ * structured error and can recover (e.g. re-run list_recent_signals).
+ * Clamps lookback_days to the same 1..90 window as the other
+ * summarize_* tools so operators don't have to remember four defaults.
+ */
+export function normalizeSummarizeSignalInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeSignal {
+  const signalId = typeof input.signal_id === "string"
+    ? input.signal_id.trim()
+    : "";
+  if (!signalId) throw new Error("VALIDATION_ERROR:signal_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { signalId, lookbackDays, sinceIso };
+}
+
 // ── list_my_touches normalization (Slice 13) ───────────────────────────────
 
 export interface NormalizedTouchFilters {
@@ -1077,6 +1169,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeCompany(ctx, input) };
       case "summarize_contact":
         return { ok: true, data: await toolSummarizeContact(ctx, input) };
+      case "summarize_signal":
+        return { ok: true, data: await toolSummarizeSignal(ctx, input) };
       case "list_my_touches":
         return { ok: true, data: await toolListMyTouches(ctx, input) };
       case "summarize_day":
@@ -1693,6 +1787,197 @@ async function toolSummarizeContact(
 }
 
 /**
+ * Slice 20 — summarize_signal executor.
+ *
+ * Fan-out shape: four reads bundled into one tool return —
+ *
+ *   1. Signal row           — signals table, workspace-scoped.
+ *   2. Parent entity        — the deal/company/contact the signal points
+ *                             at. Uses crm_deals_rep_safe so the rep's
+ *                             visibility rules carry through (same
+ *                             pattern as summarize_contact's related
+ *                             deals). Null for equipment/rental/
+ *                             activity/workspace until their detail
+ *                             tables get first-class synthesizers.
+ *   3. Related signals      — other signals on the same entity within
+ *                             the lookback window, excluding the target
+ *                             signal. Iron can frame "is this one of
+ *                             many, or a first event?" without a second
+ *                             tool call.
+ *   4. Related moves        — moves whose signal_ids array contains the
+ *                             target signal id — the direct causal
+ *                             trail. We deliberately do NOT fan out to
+ *                             every move on the entity; that's what
+ *                             summarize_deal/company/contact is for, and
+ *                             a signal triage answer is crisper when
+ *                             scoped to "moves triggered by this".
+ *
+ * Scope: everything goes through callerDb with explicit workspace_id so
+ * RLS carries the tenant work. When the signal isn't found, returns
+ * {found: false} rather than throwing — Claude gets a clean structured
+ * signal it can relay ("that signal no longer exists or was suppressed").
+ */
+async function toolSummarizeSignal(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeSignalInput(input);
+
+  // 1) Signal row — workspace-scoped.
+  const { data: signalRow, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select(
+      "id, kind, severity, source, title, description, entity_type, entity_id, assigned_rep_id, occurred_at, suppressed_until",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.signalId)
+    .maybeSingle();
+  if (signalErr) throw signalErr;
+  if (!signalRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  const entityType = (signalRow as { entity_type?: string | null }).entity_type
+    ?? null;
+  const entityId = (signalRow as { entity_id?: string | null }).entity_id
+    ?? null;
+
+  // 2) Parent entity — conditional on entity_type + entity_id. Uses the
+  // same visibility views as the per-entity synthesizers so a rep reading
+  // a signal on a deal they don't own sees null here (the signal row
+  // still comes back — signals aren't rep-scoped at the row level, but
+  // the parent name is rightly hidden when they can't see the deal).
+  let parentEntity: unknown = null;
+  if (entityType && entityId) {
+    if (entityType === "deal") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_deals_rep_safe")
+        .select(
+          "id, name, amount, stage, company_id, assigned_rep_id, updated_at",
+        )
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    } else if (entityType === "company") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_companies")
+        .select("id, name, city, state, updated_at")
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    } else if (entityType === "contact") {
+      const { data, error } = await ctx.callerDb
+        .from("crm_contacts")
+        .select(
+          "id, first_name, last_name, email, phone, title, company_id, updated_at",
+        )
+        .eq("workspace_id", ctx.workspaceId)
+        .eq("id", entityId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      parentEntity = data ?? null;
+    }
+    // equipment / rental / activity / workspace intentionally skipped —
+    // no synthesizer covers them yet. Parent stays null.
+  }
+
+  // 3) Related signals — other events on the same entity within the
+  // window. Skip when the signal has no entity scope (payloads like
+  // workspace-wide "news_mention"), where "related" has no obvious
+  // definition. `neq(id)` keeps the target signal out of its own trail.
+  let relatedSignals: unknown[] = [];
+  if (entityType && entityId) {
+    const { data, error } = await ctx.callerDb
+      .from("signals")
+      .select(
+        "id, kind, severity, source, title, description, occurred_at",
+      )
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .neq("id", n.signalId)
+      .gte("occurred_at", n.sinceIso)
+      .order("occurred_at", { ascending: false })
+      .limit(SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT);
+    if (error) throw error;
+    relatedSignals = data ?? [];
+  }
+
+  // 4) Related moves — moves that name this signal in their signal_ids
+  // array. `.contains` on a uuid[] column expresses "array contains the
+  // given element" in supabase-js. We go through admin here because the
+  // moves table has no RLS for callerDb yet (same pattern as
+  // toolListMyMoves), and we enforce workspace scoping explicitly.
+  const { data: moveRows, error: moveErr } = await ctx.admin
+    .from("moves")
+    .select(
+      "id, kind, status, title, priority, entity_type, entity_id, assigned_rep_id, created_at, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .contains("signal_ids", [n.signalId])
+    .gte("created_at", n.sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT);
+  if (moveErr) throw moveErr;
+
+  const related_signals = (relatedSignals as Array<{
+    id: string;
+    kind: string;
+    severity: string;
+    source: string;
+    title: string;
+    description: string | null;
+    occurred_at: string;
+  }>).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    signal: {
+      id: (signalRow as { id: string }).id,
+      kind: (signalRow as { kind: string }).kind,
+      severity: (signalRow as { severity: string }).severity,
+      source: (signalRow as { source: string }).source,
+      title: (signalRow as { title: string }).title,
+      description: truncateForSummary(
+        (signalRow as { description: string | null }).description,
+      ),
+      entity_type: entityType,
+      entity_id: entityId,
+      assigned_rep_id:
+        (signalRow as { assigned_rep_id: string | null }).assigned_rep_id,
+      occurred_at: (signalRow as { occurred_at: string }).occurred_at,
+      suppressed_until:
+        (signalRow as { suppressed_until: string | null }).suppressed_until,
+    },
+    parent_entity: parentEntity,
+    related_signals,
+    related_moves: moveRows ?? [],
+    counts: {
+      related_signals: related_signals.length,
+      related_moves: (moveRows ?? []).length,
+    },
+  };
+}
+
+/**
  * Slice 13 — the rep's own activity trail.
  *
  * Reads crm_activities filtered by workspace + soft-delete + caller's
@@ -2045,6 +2330,7 @@ Rules:
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - For person-centric narrative questions — "who is <name>", "brief me on <person>", "before I call <contact>", "what's the status with <person>", "anything new on <name>" — call search_entities to get the contact_id, then call summarize_contact. Disambiguation rule: if the operator names a person (not a company), prefer summarize_contact over summarize_company even when both match in search. related_deals in the result is computed from the contact's company, so describe it as "deals you can see on their company" rather than "their deals".
+- For signal-centric triage questions — "triage this signal", "why is this signal hot", "what's going on with this <kind> signal", "brief me on this alert on <entity>" — call summarize_signal with the signal_id (obtain via list_recent_signals if only the kind/title is known). It bundles the signal row, the parent entity, other related signals on that entity, and moves the signal triggered. Do NOT chain list_recent_signals + search_entities + a summarize_* on the parent for triage questions; summarize_signal returns all four in one shot. parent_entity may be null for equipment/rental/activity/workspace signals — say so plainly rather than guessing.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.

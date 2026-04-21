@@ -18,6 +18,7 @@ import {
   normalizeSummarizeContactInput,
   normalizeSummarizeDayInput,
   normalizeSummarizeDealInput,
+  normalizeSummarizeSignalInput,
   SUMMARIZE_COMPANY_DEAL_LIMIT,
   SUMMARIZE_CONTACT_DEAL_LIMIT,
   SUMMARIZE_DAY_COMPLETED_LIMIT,
@@ -30,6 +31,8 @@ import {
   SUMMARIZE_DEAL_MAX_DAYS,
   SUMMARIZE_DEAL_SIGNAL_LIMIT,
   SUMMARIZE_DEAL_TEXT_CAP,
+  SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT,
+  SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT,
 } from "./qrm-ask-iron.ts";
 import type { RouterCtx } from "./crm-router-service.ts";
 
@@ -74,8 +77,16 @@ function makeStubClient(
         capture.filters.push({ op: "eq", column, value });
         return builder;
       },
+      neq: (column: string, value: unknown) => {
+        capture.filters.push({ op: "neq", column, value });
+        return builder;
+      },
       in: (column: string, value: unknown) => {
         capture.filters.push({ op: "in", column, value });
+        return builder;
+      },
+      contains: (column: string, value: unknown) => {
+        capture.filters.push({ op: "contains", column, value });
         return builder;
       },
       gte: (column: string, value: unknown) => {
@@ -160,7 +171,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the eleven tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the twelve tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -174,6 +185,7 @@ Deno.test("ASK_IRON_TOOLS exposes the eleven tools", () => {
     "summarize_contact",
     "summarize_day",
     "summarize_deal",
+    "summarize_signal",
   ]);
 });
 
@@ -2881,6 +2893,466 @@ Deno.test(
     const { client } = makeStubClient({});
     const ctx = makeCtx(client, { role: "rep" });
     const res = await executeAskIronTool(ctx, "summarize_contact", {});
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
+  },
+);
+
+// ── normalizeSummarizeSignalInput (Slice 20) ───────────────────────────────
+
+Deno.test("normalizeSummarizeSignalInput defaults lookback_days to the shared window", () => {
+  const now = new Date("2026-04-20T12:00:00Z").getTime();
+  const n = normalizeSummarizeSignalInput({ signal_id: "s-1" }, now);
+  assertEquals(n.signalId, "s-1");
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeSignalInput clamps lookback above max", () => {
+  const n = normalizeSummarizeSignalInput(
+    { signal_id: "s-1", lookback_days: 1000 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_MAX_DAYS);
+});
+
+Deno.test("normalizeSummarizeSignalInput clamps lookback below 1", () => {
+  const n = normalizeSummarizeSignalInput(
+    { signal_id: "s-1", lookback_days: 0 },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, 1);
+});
+
+Deno.test("normalizeSummarizeSignalInput falls back to default when lookback is non-numeric", () => {
+  const n = normalizeSummarizeSignalInput(
+    { signal_id: "s-1", lookback_days: "nope" },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.lookbackDays, SUMMARIZE_DEAL_DEFAULT_DAYS);
+});
+
+Deno.test("normalizeSummarizeSignalInput trims whitespace from signal_id", () => {
+  const n = normalizeSummarizeSignalInput(
+    { signal_id: "  s-1  " },
+    new Date("2026-04-20T12:00:00Z").getTime(),
+  );
+  assertEquals(n.signalId, "s-1");
+});
+
+Deno.test("normalizeSummarizeSignalInput throws VALIDATION_ERROR when signal_id is missing", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeSignalInput({});
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+  assertEquals(caught?.message.includes("signal_id"), true);
+});
+
+Deno.test("normalizeSummarizeSignalInput throws when signal_id is whitespace-only", () => {
+  let caught: Error | null = null;
+  try {
+    normalizeSummarizeSignalInput({ signal_id: "   " });
+  } catch (err) {
+    caught = err as Error;
+  }
+  assertEquals(caught?.message.includes("VALIDATION_ERROR"), true);
+});
+
+// ── executor: summarize_signal (Slice 20) ──────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool summarize_signal returns found:false for unknown signal",
+  async () => {
+    const { client } = makeStubClient({
+      signals: { data: null, error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "ghost",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as { found: boolean; lookback_days: number };
+    assertEquals(payload.found, false);
+    assertEquals(payload.lookback_days, SUMMARIZE_DEAL_DEFAULT_DAYS);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal bundles signal + parent deal + related signals + moves",
+  async () => {
+    const { client, captures } = makeStubClient({
+      signals: [
+        // 1) target signal row (maybeSingle)
+        {
+          data: {
+            id: "s-1",
+            kind: "quote_viewed",
+            severity: "high",
+            source: "hubspot",
+            title: "Acme viewed the quote again",
+            description: "Viewed at 10:04am ET",
+            entity_type: "deal",
+            entity_id: "d-42",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T10:04:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        // 3) related signals list
+        {
+          data: [{
+            id: "s-2",
+            kind: "inbound_email",
+            severity: "medium",
+            source: "gmail",
+            title: "Buyer replied",
+            description: "Short reply",
+            occurred_at: "2026-04-19T14:00:00Z",
+          }],
+          error: null,
+        },
+      ],
+      crm_deals_rep_safe: {
+        data: {
+          id: "d-42",
+          name: "Acme Materials — 12k excavator",
+          amount: 140000,
+          stage: "proposal",
+          company_id: "co-7",
+          assigned_rep_id: "user-1",
+          updated_at: "2026-04-20T08:00:00Z",
+        },
+        error: null,
+      },
+      moves: {
+        data: [{
+          id: "m-1",
+          kind: "call_now",
+          status: "suggested",
+          title: "Call Acme buyer back",
+          priority: 74,
+          entity_type: "deal",
+          entity_id: "d-42",
+          assigned_rep_id: "user-1",
+          created_at: "2026-04-20T10:05:00Z",
+          updated_at: "2026-04-20T10:05:00Z",
+        }],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-1",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      found: boolean;
+      signal: { id: string; entity_type: string | null; entity_id: string | null };
+      parent_entity: { id: string; name: string } | null;
+      related_signals: Array<{ id: string }>;
+      related_moves: Array<{ id: string }>;
+      counts: { related_signals: number; related_moves: number };
+    };
+    assertEquals(payload.found, true);
+    assertEquals(payload.signal.id, "s-1");
+    assertEquals(payload.signal.entity_type, "deal");
+    assertEquals(payload.parent_entity?.id, "d-42");
+    assertEquals(payload.parent_entity?.name, "Acme Materials — 12k excavator");
+    assertEquals(payload.related_signals[0].id, "s-2");
+    assertEquals(payload.related_moves[0].id, "m-1");
+    assertEquals(payload.counts.related_signals, 1);
+    assertEquals(payload.counts.related_moves, 1);
+
+    // Parent goes through the rep-safe view so the rep's visibility rules
+    // carry through; the signal arm is workspace-scoped but does NOT rep-
+    // filter (signals surface via Pulse regardless of rep assignment).
+    const dealCapture = captures.find((c) => c.table === "crm_deals_rep_safe");
+    assertEquals(dealCapture !== undefined, true);
+    const filters = dealCapture!.filters;
+    const ws = filters.find((f) => f.op === "eq" && f.column === "workspace_id");
+    assertEquals(ws?.value, "ws-1");
+    const id = filters.find((f) => f.op === "eq" && f.column === "id");
+    assertEquals(id?.value, "d-42");
+
+    // Moves arm uses .contains on signal_ids with the target signal id.
+    const moveCapture = captures.find((c) => c.table === "moves");
+    assertEquals(moveCapture !== undefined, true);
+    const moveFilters = moveCapture!.filters;
+    const containsFilter = moveFilters.find((f) => f.op === "contains");
+    assertEquals(containsFilter?.column, "signal_ids");
+    assertEquals(containsFilter?.value, ["s-1"]);
+    assertEquals(moveCapture!.limit, SUMMARIZE_SIGNAL_RELATED_MOVE_LIMIT);
+
+    // Related-signals arm excludes the target signal id via .neq.
+    // Two signals queries were captured (target row + related list); the
+    // second one is the list.
+    const signalCaptures = captures.filter((c) => c.table === "signals");
+    assertEquals(signalCaptures.length, 2);
+    const relatedFilters = signalCaptures[1].filters;
+    const neqFilter = relatedFilters.find((f) => f.op === "neq");
+    assertEquals(neqFilter?.column, "id");
+    assertEquals(neqFilter?.value, "s-1");
+    assertEquals(
+      signalCaptures[1].limit,
+      SUMMARIZE_SIGNAL_RELATED_SIGNAL_LIMIT,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal loads a company parent when the signal is tied to a company",
+  async () => {
+    const { client, captures } = makeStubClient({
+      signals: [
+        {
+          data: {
+            id: "s-9",
+            kind: "news_mention",
+            severity: "low",
+            source: "news",
+            title: "Acme in the news",
+            description: null,
+            entity_type: "company",
+            entity_id: "co-7",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T12:00:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        { data: [], error: null },
+      ],
+      crm_companies: {
+        data: {
+          id: "co-7",
+          name: "Acme Materials",
+          city: "Boise",
+          state: "ID",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      moves: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-9",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      parent_entity: { id: string; name: string } | null;
+    };
+    assertEquals(payload.parent_entity?.id, "co-7");
+    assertEquals(payload.parent_entity?.name, "Acme Materials");
+    const companyCapture = captures.find((c) => c.table === "crm_companies");
+    assertEquals(companyCapture !== undefined, true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal loads a contact parent when the signal is tied to a contact",
+  async () => {
+    const { client, captures } = makeStubClient({
+      signals: [
+        {
+          data: {
+            id: "s-11",
+            kind: "inbound_email",
+            severity: "medium",
+            source: "gmail",
+            title: "Jane replied",
+            description: null,
+            entity_type: "contact",
+            entity_id: "c-1",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T12:00:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        { data: [], error: null },
+      ],
+      crm_contacts: {
+        data: {
+          id: "c-1",
+          first_name: "Jane",
+          last_name: "Doe",
+          email: "jane@acme.com",
+          phone: null,
+          title: "Fleet manager",
+          company_id: "co-7",
+          updated_at: "2026-04-20T12:00:00Z",
+        },
+        error: null,
+      },
+      moves: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-11",
+    });
+    assertEquals(res.ok, true);
+    const payload = res.data as {
+      parent_entity: { id: string; first_name: string } | null;
+    };
+    assertEquals(payload.parent_entity?.id, "c-1");
+    assertEquals(payload.parent_entity?.first_name, "Jane");
+    const contactCapture = captures.find((c) => c.table === "crm_contacts");
+    assertEquals(contactCapture !== undefined, true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal returns null parent for equipment signals",
+  async () => {
+    const { client, captures } = makeStubClient({
+      signals: [
+        {
+          data: {
+            id: "s-21",
+            kind: "telematics_fault",
+            severity: "high",
+            source: "telematics",
+            title: "Fault 4017 on CAT 320 #42",
+            description: null,
+            entity_type: "equipment",
+            entity_id: "eq-42",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T12:00:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        { data: [], error: null },
+      ],
+      moves: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-21",
+    });
+    const payload = res.data as { parent_entity: unknown };
+    assertEquals(payload.parent_entity, null);
+    // No deal/company/contact table should have been touched when the
+    // signal is equipment-scoped (there's no synthesizer-backed parent).
+    const parentTables = captures
+      .map((c) => c.table)
+      .filter((t) =>
+        t === "crm_deals_rep_safe" || t === "crm_companies" ||
+        t === "crm_contacts"
+      );
+    assertEquals(parentTables.length, 0);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal returns null parent + skips related-signals when signal has no entity scope",
+  async () => {
+    const { client, captures } = makeStubClient({
+      // No related-signals second call needed — executor short-circuits
+      // when entity_type / entity_id are null on the target signal.
+      signals: {
+        data: {
+          id: "s-99",
+          kind: "news_mention",
+          severity: "low",
+          source: "news",
+          title: "Industry note",
+          description: null,
+          entity_type: null,
+          entity_id: null,
+          assigned_rep_id: null,
+          occurred_at: "2026-04-20T12:00:00Z",
+          suppressed_until: null,
+        },
+        error: null,
+      },
+      moves: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-99",
+    });
+    const payload = res.data as {
+      parent_entity: unknown;
+      related_signals: unknown[];
+    };
+    assertEquals(payload.parent_entity, null);
+    assertEquals(payload.related_signals.length, 0);
+    // Only ONE signals query should have fired (the target row). The
+    // related-signals list is guarded by entity scope, so no second call.
+    const signalCaptures = captures.filter((c) => c.table === "signals");
+    assertEquals(signalCaptures.length, 1);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal truncates long descriptions in payload",
+  async () => {
+    const longText = "x".repeat(400);
+    const { client } = makeStubClient({
+      signals: [
+        {
+          data: {
+            id: "s-1",
+            kind: "news_mention",
+            severity: "low",
+            source: "news",
+            title: "t",
+            description: longText,
+            entity_type: "deal",
+            entity_id: "d-1",
+            assigned_rep_id: null,
+            occurred_at: "2026-04-20T12:00:00Z",
+            suppressed_until: null,
+          },
+          error: null,
+        },
+        {
+          data: [{
+            id: "s-2",
+            kind: "inbound_email",
+            severity: "low",
+            source: "gmail",
+            title: "t",
+            description: longText,
+            occurred_at: "2026-04-19T12:00:00Z",
+          }],
+          error: null,
+        },
+      ],
+      crm_deals_rep_safe: { data: { id: "d-1", name: "n" }, error: null },
+      moves: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {
+      signal_id: "s-1",
+    });
+    const payload = res.data as {
+      signal: { description: string | null };
+      related_signals: Array<{ description: string | null }>;
+    };
+    assertEquals(
+      payload.signal.description!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+    assertEquals(payload.signal.description!.endsWith("…"), true);
+    assertEquals(
+      payload.related_signals[0].description!.length <= SUMMARIZE_DEAL_TEXT_CAP,
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_signal returns VALIDATION_ERROR for missing signal_id",
+  async () => {
+    const { client } = makeStubClient({});
+    const ctx = makeCtx(client, { role: "rep" });
+    const res = await executeAskIronTool(ctx, "summarize_signal", {});
     assertEquals(res.ok, false);
     assertEquals(res.error?.includes("VALIDATION_ERROR"), true);
   },
