@@ -23,7 +23,7 @@ export function CustomerSearchBar({
         type="text"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
-        placeholder="Search customers, contacts, cities, equipment..."
+        placeholder="Search customers, contacts, cities, Search 1/2..."
         className="w-full py-[11px] pl-10 pr-10 rounded-xl border border-white/[0.06] bg-[hsl(var(--card))] text-foreground text-sm font-medium placeholder:text-muted-foreground/40 outline-none focus:border-qep-orange transition-colors"
       />
       {local && (

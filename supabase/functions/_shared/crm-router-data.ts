@@ -159,6 +159,8 @@ export interface ContactUpsertPayload {
 
 export interface CompanyUpsertPayload {
   name?: string;
+  search1?: string | null;
+  search2?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
   city?: string | null;
@@ -1110,6 +1112,8 @@ export async function createCompany(
       workspace_id: ctx.workspaceId,
       name,
       assigned_rep_id: ctx.caller.userId,
+      search_1: cleanText(payload.search1 ?? null),
+      search_2: cleanText(payload.search2 ?? null),
       address_line_1: cleanText(payload.addressLine1 ?? null),
       address_line_2: cleanText(payload.addressLine2 ?? null),
       city: cleanText(payload.city ?? null),
@@ -1118,7 +1122,7 @@ export async function createCompany(
       country: cleanText(payload.country ?? null),
     })
     .select(
-      "id, workspace_id, name, parent_company_id, assigned_rep_id, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
     )
     .single();
 
@@ -1129,6 +1133,8 @@ export async function createCompany(
     name: data.name,
     parentCompanyId: data.parent_company_id,
     assignedRepId: data.assigned_rep_id,
+    search1: data.search_1,
+    search2: data.search_2,
     addressLine1: data.address_line_1,
     addressLine2: data.address_line_2,
     city: data.city,
@@ -1156,6 +1162,12 @@ export async function patchCompany(
 
   if (payload.addressLine1 !== undefined) {
     updates.address_line_1 = cleanText(payload.addressLine1 ?? null);
+  }
+  if (payload.search1 !== undefined) {
+    updates.search_1 = cleanText(payload.search1 ?? null);
+  }
+  if (payload.search2 !== undefined) {
+    updates.search_2 = cleanText(payload.search2 ?? null);
   }
   if (payload.addressLine2 !== undefined) {
     updates.address_line_2 = cleanText(payload.addressLine2 ?? null);
@@ -1192,7 +1204,7 @@ export async function patchCompany(
     .eq("id", companyId)
     .is("deleted_at", null)
     .select(
-      "id, workspace_id, name, parent_company_id, assigned_rep_id, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
+      "id, workspace_id, name, parent_company_id, assigned_rep_id, search_1, search_2, address_line_1, address_line_2, city, state, postal_code, country, created_at, updated_at",
     )
     .maybeSingle();
 
@@ -1204,6 +1216,8 @@ export async function patchCompany(
     name: data.name,
     parentCompanyId: data.parent_company_id,
     assignedRepId: data.assigned_rep_id,
+    search1: data.search_1,
+    search2: data.search_2,
     addressLine1: data.address_line_1,
     addressLine2: data.address_line_2,
     city: data.city,

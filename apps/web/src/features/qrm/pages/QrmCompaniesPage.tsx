@@ -164,7 +164,7 @@ export function QrmCompaniesPage() {
           ref={searchRef}
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search company · city · state"
+          placeholder="Search company · Search 1/2 · city · state"
           className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
         />
       </div>
@@ -232,6 +232,11 @@ export function QrmCompaniesPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-foreground">{company.name}</p>
+                      {(company.search1 || company.search2) && (
+                        <p className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+                          {[company.search1, company.search2].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
                       <p className="truncate text-[11px] text-muted-foreground sm:hidden">
                         {location}
                       </p>

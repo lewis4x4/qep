@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchRepCustomers } from "../lib/sales-api";
+import { matchesRepCustomerSearch } from "../lib/customer-search";
 
 export function useCustomers() {
   const [search, setSearch] = useState("");
@@ -14,14 +15,7 @@ export function useCustomers() {
   const customers = customersQuery.data ?? [];
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return customers;
-    const q = search.toLowerCase();
-    return customers.filter(
-      (c) =>
-        c.company_name?.toLowerCase().includes(q) ||
-        c.primary_contact_name?.toLowerCase().includes(q) ||
-        c.city?.toLowerCase().includes(q),
-    );
+    return customers.filter((customer) => matchesRepCustomerSearch(customer, search));
   }, [customers, search]);
 
   return {

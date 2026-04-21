@@ -46,6 +46,8 @@ export interface QrmCompanySummary {
   name: string;
   parentCompanyId: string | null;
   assignedRepId: string | null;
+  search1: string | null;
+  search2: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -248,6 +250,8 @@ export interface QrmContactUpsertInput {
 
 export interface QrmCompanyUpsertInput {
   name: string;
+  search1?: string | null;
+  search2?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
   city?: string | null;

@@ -70,6 +70,8 @@ function mapCompanyFromJson(j: Record<string, unknown>): QrmCompanySummary {
     name: j.name as string,
     parentCompanyId: (j.parent_company_id as string | null) ?? null,
     assignedRepId: (j.assigned_rep_id as string | null) ?? null,
+    search1: (j.search_1 as string | null) ?? null,
+    search2: (j.search_2 as string | null) ?? null,
     addressLine1: (j.address_line_1 as string | null) ?? null,
     addressLine2: (j.address_line_2 as string | null) ?? null,
     city: (j.city as string | null) ?? null,

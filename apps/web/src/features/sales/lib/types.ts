@@ -75,6 +75,8 @@ export interface RepPipelineDeal {
 export interface RepCustomer {
   customer_id: string;
   company_name: string;
+  search_1: string | null;
+  search_2: string | null;
   primary_contact_name: string | null;
   primary_contact_phone: string | null;
   primary_contact_email: string | null;

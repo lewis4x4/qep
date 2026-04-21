@@ -26,6 +26,8 @@ export function QrmCompanyEditorSheet({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [name, setName] = useState("");
+  const [search1, setSearch1] = useState("");
+  const [search2, setSearch2] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
@@ -37,6 +39,8 @@ export function QrmCompanyEditorSheet({
   useEffect(() => {
     if (!open) return;
     setName(company?.name ?? "");
+    setSearch1(company?.search1 ?? "");
+    setSearch2(company?.search2 ?? "");
     setAddressLine1(company?.addressLine1 ?? "");
     setAddressLine2(company?.addressLine2 ?? "");
     setCity(company?.city ?? "");
@@ -57,6 +61,8 @@ export function QrmCompanyEditorSheet({
 
       const payload = {
         name,
+        search1: search1.trim() || null,
+        search2: search2.trim() || null,
         addressLine1: addressLine1.trim() || null,
         addressLine2: addressLine2.trim() || null,
         city: city.trim() || null,
@@ -135,6 +141,27 @@ export function QrmCompanyEditorSheet({
               placeholder="Quality Equipment & Parts"
               required
             />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="crm-company-search-1">Search 1</Label>
+              <Input
+                id="crm-company-search-1"
+                value={search1}
+                onChange={(event) => setSearch1(event.target.value)}
+                placeholder="Legacy starts-with code"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="crm-company-search-2">Search 2</Label>
+              <Input
+                id="crm-company-search-2"
+                value={search2}
+                onChange={(event) => setSearch2(event.target.value)}
+                placeholder="Second starts-with code"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
