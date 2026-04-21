@@ -68,23 +68,39 @@ of truth. `version` values match the 3-digit prefix of the filename
 (`293`, `304`, `335`). The script only writes a row after its SQL
 successfully runs.
 
-If a migration was applied out-of-band without a stamp, the script
-will try to re-apply it. Most migrations in this repo are idempotent
-(`create table if not exists`, `alter table ... add column if not
-exists`, `create policy if not exists`, `drop policy if exists` +
-`create policy`), so the re-run is a no-op that just writes the stamp.
-For migrations that would conflict on re-apply (e.g. bare
-`create table foo`), hand-stamp first:
+### Recovering from out-of-band drift
 
-```bash
-SUPABASE_ACCESS_TOKEN=... curl -s -X POST \
-  "https://api.supabase.com/v1/projects/$REF/database/query" \
-  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query":"insert into supabase_migrations.schema_migrations (version) values ('\''NNN'\'') on conflict do nothing"}'
-```
+If a migration was applied out-of-band without a stamp, `db:push:apply`
+will try to re-apply it and typically fail on the first bare
+`create table` / `create type` (most migrations in this repo use
+`if not exists` guards, but some older ones don't).
 
-...or add `if not exists` guards to the migration and push normally.
+The recovery drill:
+
+1. **Diagnose** — probe the remote for each signature object to
+   classify the pending list into "already there" vs "genuinely
+   missing". Query `to_regclass`, `to_regprocedure`, `pg_indexes`,
+   `pg_type`, `cron.job`, etc. per-migration.
+
+2. **Stamp the already-applied ones** — record them as applied without
+   running their SQL:
+
+   ```bash
+   bun run db:push -- --stamp=304,305,306,310,311,312,313
+   ```
+
+   The flag accepts a comma-separated list of 3-digit versions. The
+   script validates every version matches an existing local migration,
+   skips any already-stamped, and bails on typos.
+
+3. **Apply the real pending list** — `bun run db:push:apply` will now
+   see only the genuinely-missing migrations and run each inside a
+   BEGIN/COMMIT as usual.
+
+This is exactly the drill used to recover 2026-04-20 when
+`supabase migration list` showed 32 pending but 17 of them were
+already materialized on remote (result of earlier out-of-band applies
+when `supabase db push` was blocked by the filename-pattern issue).
 
 ## Troubleshooting
 

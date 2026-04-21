@@ -192,7 +192,10 @@ begin
   if v_actor_id is null then
     v_actor_role := 'service';
   else
-    select coalesce(role, 'service')
+    -- Cast role to text first: profiles.role is the `user_role` enum
+    -- which doesn't include 'service', so the coalesce's common type
+    -- would otherwise fail with "invalid input value for enum user_role".
+    select coalesce(role::text, 'service')
       into v_actor_role
       from public.profiles
       where id = v_actor_id;
@@ -316,7 +319,7 @@ select
   null,
   'open',
   f.submitted_by,
-  coalesce((select role from public.profiles where id = f.submitted_by), 'service'),
+  coalesce((select role::text from public.profiles where id = f.submitted_by), 'service'),
   jsonb_strip_nulls(jsonb_build_object(
     'ai_summary', f.ai_summary,
     'feedback_type', f.feedback_type,
