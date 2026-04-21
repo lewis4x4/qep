@@ -11,7 +11,6 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { fetchFleetRadar, type FleetRadarLensItem, type FleetRadarResponse } from "../lib/account-360-api";
 import { accountCommandUrl } from "../lib/account-links";
 import { supabase } from "@/lib/supabase";
-import { DeckSurface } from "../components/command-deck";
 
 type LensKey = "aging" | "expensive" | "trade_up" | "underutilized" | "attachment_upsell";
 
