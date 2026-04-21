@@ -1,17 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Building2, Download, Plus, Search } from "lucide-react";
+import { Building2, ChevronRight, Download, MapPin, Plus, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
-import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { QrmCompanyEditorSheet } from "../components/QrmCompanyEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import {
+  DeckSurface,
+  SignalChip,
+  StatusDot,
+  type StatusTone,
+} from "../components/command-deck";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { listCrmCompanies } from "../lib/qrm-api";
+
+function toneFromHealth(score: number | null | undefined): StatusTone {
+  if (score == null) return "cool";
+  if (score >= 80) return "hot";
+  if (score >= 60) return "active";
+  if (score >= 40) return "warm";
+  return "cool";
+}
 
 export function QrmCompaniesPage() {
   const navigate = useNavigate();
@@ -51,7 +63,10 @@ export function QrmCompaniesPage() {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
           select: (columns: string) => {
-            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
+            in: (
+              column: string,
+              values: string[],
+            ) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
           };
         };
       })
@@ -78,121 +93,199 @@ export function QrmCompaniesPage() {
   const hasNextPage = companiesQuery.hasNextPage;
   const isFetchingNextPage = companiesQuery.isFetchingNextPage;
 
+  // Derived metrics
+  const loaded = companies.length;
+  const scores = companies
+    .map((c) => healthProfileByCompanyId.get(c.id)?.score ?? null)
+    .filter((s): s is number => typeof s === "number");
+  const hot = scores.filter((s) => s >= 80).length;
+  const cool = scores.filter((s) => s < 40).length;
+  const states = new Set(companies.map((c) => c.state).filter(Boolean));
+
+  const ironHeadline =
+    hot > 0
+      ? `${hot} account${hot === 1 ? "" : "s"} running hot across ${states.size} state${states.size === 1 ? "" : "s"}. ${cool} account${cool === 1 ? "" : "s"} have gone cold.`
+      : `${loaded} account${loaded === 1 ? "" : "s"} across ${states.size} state${states.size === 1 ? "" : "s"}. No breach signal today.`;
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="QRM Companies"
-        subtitle="Browse accounts and log activities by organization."
+        title="Companies"
+        subtitle="Every account and sub-account — rolled up by territory, rep, and health."
+        crumb={{ surface: "GRAPH", lens: "COMPANIES", count: loaded }}
+        metrics={[
+          { label: "Loaded", value: loaded.toLocaleString() },
+          { label: "States", value: states.size },
+          { label: "Hot (≥80)", value: hot, tone: hot > 0 ? "hot" : undefined },
+          { label: "Cool (<40)", value: cool, tone: cool > 0 ? "warm" : undefined },
+          { label: "Tracked", value: scores.length },
+        ]}
+        ironBriefing={{
+          headline: ironHeadline,
+        }}
+        rightRail={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]"
+              onClick={() => {
+                import("@/lib/csv-export").then(({ exportCompanies }) => {
+                  exportCompanies(
+                    companies.map((c) => ({
+                      ...c,
+                      assignedRepName: null,
+                    })),
+                  );
+                });
+              }}
+            >
+              <Download className="mr-1 h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 px-3 font-mono text-[11px] uppercase tracking-[0.1em]"
+              onClick={() => setEditorOpen(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New
+            </Button>
+          </div>
+        }
       />
       <QrmSubNav />
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => {
-          import("@/lib/csv-export").then(({ exportCompanies }) => {
-            exportCompanies(companies.map((c) => ({
-              ...c,
-              assignedRepName: null,
-            })));
-          });
-        }}>
-          <Download className="mr-1 h-4 w-4" />
-          Export CSV
-        </Button>
-        <Button onClick={() => setEditorOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New company
-        </Button>
+      {/* Search */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          id="crm-companies-search"
+          ref={searchRef}
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Search company · city · state"
+          className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+        />
       </div>
 
-      <Card className="border-border bg-card p-3 sm:p-4">
-        <label htmlFor="crm-companies-search" className="sr-only">
-          Search companies
-        </label>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            id="crm-companies-search"
-            ref={searchRef}
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search by company, city, or state"
-            className="h-11 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </div>
-      </Card>
-
       {companiesQuery.isLoading && (
-        <div className="space-y-3" role="status" aria-label="Loading companies">
-          {Array.from({ length: 5 }).map((_, index) => (
+        <div className="space-y-1.5" role="status" aria-label="Loading companies">
+          {Array.from({ length: 8 }).map((_, index) => (
             <div
               key={index}
-              className="h-24 animate-pulse rounded-xl border border-border bg-muted/40"
+              className="h-14 animate-pulse rounded-sm border border-qep-deck-rule/50 bg-muted/20"
             />
           ))}
         </div>
       )}
 
       {companiesQuery.isError && (
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            Failed to load companies. Please refresh and try again.
+            Failed to load companies. Refresh and try again.
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!companiesQuery.isLoading && !companiesQuery.isError && companies.length === 0 && (
-        <Card className="border-border bg-card p-6 text-center">
-          <p className="text-sm text-muted-foreground">
+        <DeckSurface className="p-8 text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            No results
+          </p>
+          <p className="mt-2 text-sm text-foreground/80">
             No companies found. Try a different search term.
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!companiesQuery.isLoading && !companiesQuery.isError && companies.length > 0 && (
         <div className="space-y-4">
-          <div className="space-y-3" aria-label="Company results">
-            {companies.map((company) => (
-              <Link
-                key={company.id}
-                to={buildAccountCommandHref(company.id)}
-                className="block min-h-[44px] rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Building2 className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{company.name}</p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {[company.city, company.state, company.country].filter(Boolean).join(", ") ||
-                        "Location not specified"}
-                    </p>
-                  </div>
-                  {healthProfileByCompanyId.get(company.id) && (
-                    <HealthScorePill
-                      score={healthProfileByCompanyId.get(company.id)?.score ?? null}
-                      onClick={() => setHealthDrawerProfileId(healthProfileByCompanyId.get(company.id)?.profileId ?? null)}
-                    />
-                  )}
-                </div>
-              </Link>
-            ))}
+          {/* Column legend */}
+          <div className="grid grid-cols-12 gap-3 border-b border-qep-deck-rule/50 px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+            <div className="col-span-6 sm:col-span-5">Account</div>
+            <div className="col-span-6 hidden sm:block">Location</div>
+            <div className="col-span-3 text-right sm:col-span-1">Health</div>
           </div>
 
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-muted-foreground">{companies.length} companies loaded</p>
+          <div className="divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40">
+            {companies.map((company) => {
+              const entry = healthProfileByCompanyId.get(company.id);
+              const score = entry?.score ?? null;
+              const tone = toneFromHealth(score);
+              const hasHealth = entry !== undefined;
+              const location =
+                [company.city, company.state, company.country].filter(Boolean).join(", ") ||
+                "—";
+
+              return (
+                <Link
+                  key={company.id}
+                  to={buildAccountCommandHref(company.id)}
+                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04]"
+                >
+                  {/* Account */}
+                  <div className="col-span-6 flex min-w-0 items-center gap-2.5 sm:col-span-5">
+                    <StatusDot tone={tone} pulse={tone === "hot"} />
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-qep-deck-rule bg-qep-deck-elevated">
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">{company.name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground sm:hidden">
+                        {location}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Location */}
+                  <div className="col-span-6 hidden min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground sm:flex">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate font-mono">{location}</span>
+                  </div>
+
+                  {/* Health */}
+                  <div className="col-span-3 flex items-center justify-end gap-1 sm:col-span-1">
+                    {hasHealth ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setHealthDrawerProfileId(entry.profileId);
+                        }}
+                        className="inline-flex"
+                      >
+                        <SignalChip label="H" value={score ?? "—"} tone={tone} />
+                      </button>
+                    ) : (
+                      <span className="font-mono text-[11px] text-muted-foreground/50">—</span>
+                    )}
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              {companies.length.toLocaleString()} loaded
+            </p>
             {hasNextPage ? (
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
+                className="h-8 font-mono text-[11px] uppercase tracking-[0.1em]"
                 onClick={() => void companiesQuery.fetchNextPage()}
                 disabled={isFetchingNextPage}
               >
-                {isFetchingNextPage ? "Loading more..." : "Load more companies"}
+                {isFetchingNextPage ? "Loading…" : "Load more"}
               </Button>
             ) : (
-              <p className="text-xs text-muted-foreground/80">
-                You&apos;re at the end of the company list.
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
+                end of list
               </p>
             )}
           </div>

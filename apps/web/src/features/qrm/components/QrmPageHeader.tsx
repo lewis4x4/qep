@@ -9,10 +9,44 @@ import {
   pulseFromLastSync,
   synthesizeSyncPulsePoints,
 } from "./PulseSparkline";
+import {
+  IronBar,
+  MetricStrip,
+  SectionCrumb,
+  type IronBarAction,
+} from "./command-deck";
+import type { MetricCell } from "./command-deck";
 
 interface QrmPageHeaderProps {
   title: string;
   subtitle: string;
+  /**
+   * Optional monospaced surface/lens crumb, e.g. { surface: "GRAPH", lens: "CONTACTS", count: 847 }.
+   * When supplied, replaces the default generic `QRM / OPERATOR DECK` eyebrow.
+   */
+  crumb?: {
+    surface: string;
+    lens?: string;
+    count?: number | string;
+  };
+  /**
+   * Optional metric cells rendered as a horizontal rail beneath the header.
+   * Keep to 3–5 cells so the rail reads as a single scan-line.
+   */
+  metrics?: React.ComponentProps<typeof MetricCell>[];
+  /**
+   * Optional AI briefing — the pinned "Iron" ribbon at the top of the page.
+   * Callers pass a short narrative + 1–2 actions. When null, the ribbon is
+   * hidden entirely.
+   */
+  ironBriefing?: {
+    headline: React.ReactNode;
+    actions?: IronBarAction[];
+  } | null;
+  /**
+   * Optional right-side action rail (buttons, toggles, etc.).
+   */
+  rightRail?: React.ReactNode;
 }
 
 interface HubSpotIntegrationStatusRow {
@@ -70,7 +104,14 @@ async function fetchCrmDataSource(): Promise<CrmDataSourceSnapshot> {
   return { state: "Demo", lastSyncAt: null };
 }
 
-export function QrmPageHeader({ title, subtitle }: QrmPageHeaderProps) {
+export function QrmPageHeader({
+  title,
+  subtitle,
+  crumb,
+  metrics,
+  ironBriefing,
+  rightRail,
+}: QrmPageHeaderProps) {
   const dataSourceQuery = useQuery({
     queryKey: ["crm", "hubspot-data-source-state"],
     queryFn: fetchCrmDataSource,
@@ -90,10 +131,6 @@ export function QrmPageHeader({ title, subtitle }: QrmPageHeaderProps) {
     });
   }, [dataSourceState]);
 
-  // When the data is "Stale", replace the cold yellow pill with a pulse
-  // sparkline that communicates "this pulse is fading" instead of shouting
-  // a static label. Other states keep the pill for now; Slice 3 replaces
-  // every one of them with a signal-backed pulse.
   const renderStatusIndicator = () => {
     if (dataSourceState === "Stale") {
       const pulse = pulseFromLastSync(lastSyncAt);
@@ -117,13 +154,37 @@ export function QrmPageHeader({ title, subtitle }: QrmPageHeaderProps) {
 
   return (
     <header className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-[28px] font-bold leading-8 text-foreground">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+      {/* Iron briefing ribbon — the AI narrative that frames the page */}
+      {ironBriefing && (
+        <IronBar headline={ironBriefing.headline} actions={ironBriefing.actions} />
+      )}
+
+      {/* Title block */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          {crumb ? (
+            <SectionCrumb
+              surface={crumb.surface}
+              lens={crumb.lens}
+              count={crumb.count}
+              className="mb-1.5"
+            />
+          ) : (
+            <SectionCrumb surface="QRM" lens="Operator Deck" className="mb-1.5" />
+          )}
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-foreground">
+            {title}
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        <div className="self-start sm:self-auto">{renderStatusIndicator()}</div>
+        <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+          {rightRail}
+          {renderStatusIndicator()}
+        </div>
       </div>
+
+      {/* Metric strip */}
+      {metrics && metrics.length > 0 && <MetricStrip cells={metrics} />}
     </header>
   );
 }

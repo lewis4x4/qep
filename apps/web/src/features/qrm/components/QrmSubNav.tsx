@@ -74,8 +74,9 @@ export function QrmSubNav() {
 
   // Slice 0 cutover: when the 4-surface shell flag is on, every page that
   // used to render the 25-tab horizontal strip renders the new shell instead.
-  // When off, behaviour is identical to pre-flag.
-  if (isFeatureEnabled(FLAGS.SHELL_V2)) {
+  // Default is now ON — the 26-tab legacy strip is only reachable by
+  // explicitly setting localStorage.qep_flag_shell_v2=0 (for QA fallback).
+  if (isFeatureEnabled(FLAGS.SHELL_V2, true)) {
     return <QrmShellV2 />;
   }
 

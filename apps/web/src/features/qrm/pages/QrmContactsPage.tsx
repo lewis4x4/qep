@@ -1,18 +1,56 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Building2, Download, GitMerge, Plus, Search, UserRound } from "lucide-react";
+import {
+  Building2,
+  ChevronRight,
+  Download,
+  GitMerge,
+  Mail,
+  Phone,
+  Plus,
+  Search,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDrawer";
-import { HealthScorePill } from "../../nervous-system/components/HealthScorePill";
 import { QrmContactEditorSheet } from "../components/QrmContactEditorSheet";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import {
+  DeckSurface,
+  SignalChip,
+  StatusDot,
+  type StatusTone,
+} from "../components/command-deck";
 import { listCrmContacts } from "../lib/qrm-api";
 import { listDuplicateCandidates } from "../lib/qrm-router-api";
 import { isUuid } from "@/lib/uuid";
+
+/**
+ * Map a raw health score (0–100) to a command-deck status tone.
+ * Mirrors the band the existing HealthScorePill uses so the vocabulary stays
+ * consistent across the app.
+ */
+function toneFromHealth(score: number | null | undefined): StatusTone {
+  if (score == null) return "cool";
+  if (score >= 80) return "hot";
+  if (score >= 60) return "active";
+  if (score >= 40) return "warm";
+  return "cool";
+}
+
+function formatAge(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms) || ms < 0) return null;
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days < 1) return "today";
+  if (days < 7) return `${days}d`;
+  if (days < 30) return `${Math.floor(days / 7)}w`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
 
 export function QrmContactsPage() {
   const navigate = useNavigate();
@@ -39,7 +77,6 @@ export function QrmContactsPage() {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(searchInput.trim());
     }, 250);
-
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
@@ -59,7 +96,10 @@ export function QrmContactsPage() {
 
   const contacts = contactsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const profileIds = useMemo(
-    () => contacts.map((contact) => contact.dgeCustomerProfileId).filter((value): value is string => Boolean(value)),
+    () =>
+      contacts
+        .map((contact) => contact.dgeCustomerProfileId)
+        .filter((value): value is string => Boolean(value)),
     [contacts],
   );
   const { data: healthProfiles = [] } = useQuery({
@@ -69,7 +109,10 @@ export function QrmContactsPage() {
       const { data, error } = await (supabase as unknown as {
         from: (table: string) => {
           select: (columns: string) => {
-            in: (column: string, values: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
+            in: (
+              column: string,
+              values: string[],
+            ) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>;
           };
         };
       })
@@ -93,18 +136,12 @@ export function QrmContactsPage() {
   const hasNextPage = contactsQuery.hasNextPage;
   const isFetchingNextPage = contactsQuery.isFetchingNextPage;
 
-  // Slice 0 — anomaly surfacing. Show a hint when the duplicate-candidates
-  // detector has flagged possible merges (e.g. Jordan Blake / Jordon Blake).
-  // We keep this lightweight: a single count + a link to the existing
-  // /qrm/duplicates review page. If the request fails for any reason
-  // (missing function, permissions), we silently swallow — no banner,
-  // no user-visible error, and the rest of the page still renders.
+  // Duplicate-candidate surfacing (unchanged contract — see prior comment).
   const duplicatesQuery = useQuery({
     queryKey: ["crm", "duplicates", "hint"],
     queryFn: async () => {
       try {
-        const rows = await listDuplicateCandidates();
-        return rows;
+        return await listDuplicateCandidates();
       } catch {
         return [];
       }
@@ -114,164 +151,275 @@ export function QrmContactsPage() {
   });
   const duplicateCount = duplicatesQuery.data?.length ?? 0;
 
+  // Derived pulse metrics for the header strip.
+  const loaded = contacts.length;
+  const healthScores = contacts
+    .map((c) => (c.dgeCustomerProfileId ? healthProfileById.get(c.dgeCustomerProfileId) ?? null : null))
+    .filter((s): s is number => typeof s === "number");
+  const hot = healthScores.filter((s) => s >= 80).length;
+  const cool = healthScores.filter((s) => s < 40).length;
+  const newThisWeek = contacts.filter((c) => {
+    if (!c.createdAt) return false;
+    return Date.now() - new Date(c.createdAt).getTime() < 7 * 24 * 60 * 60 * 1000;
+  }).length;
+
+  const ironHeadline =
+    duplicateCount > 0
+      ? `${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} detected across ${loaded} contacts — resolving keeps activity, deals, and timelines on one record.`
+      : hot > 0
+        ? `${hot} hot contact${hot === 1 ? "" : "s"} in scope. Newest touch ${newThisWeek} this week.`
+        : `${loaded} contact${loaded === 1 ? "" : "s"} loaded. No urgent signal from this cohort.`;
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8 lg:pb-8">
       <QrmPageHeader
-        title="QRM Contacts"
-        subtitle="Search and open contact timelines quickly from the field."
+        title="Contacts"
+        subtitle="Every person in the field — rep, operator, buyer — reachable in one keystroke."
+        crumb={{ surface: "GRAPH", lens: "CONTACTS", count: loaded }}
+        metrics={[
+          { label: "Loaded", value: loaded.toLocaleString() },
+          { label: "Hot (≥80)", value: hot, tone: hot > 0 ? "hot" : undefined },
+          { label: "Cool (<40)", value: cool, tone: cool > 0 ? "warm" : undefined },
+          {
+            label: "New 7d",
+            value: newThisWeek,
+            delta: newThisWeek > 0 ? { value: `+${newThisWeek}`, direction: "up" } : undefined,
+          },
+          {
+            label: "Duplicates",
+            value: duplicateCount,
+            tone: duplicateCount > 0 ? "warm" : undefined,
+          },
+        ]}
+        ironBriefing={{
+          headline: ironHeadline,
+          actions:
+            duplicateCount > 0
+              ? [{ label: "Review merges →", href: "/qrm/duplicates" }]
+              : undefined,
+        }}
+        rightRail={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2 font-mono text-[11px] uppercase tracking-[0.1em]"
+              onClick={() => {
+                import("@/lib/csv-export").then(({ exportContacts }) => {
+                  exportContacts(
+                    contacts.map((c) => ({
+                      ...c,
+                      companyName: null,
+                      assignedRepName: null,
+                    })),
+                  );
+                });
+              }}
+            >
+              <Download className="mr-1 h-3.5 w-3.5" />
+              CSV
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 px-3 font-mono text-[11px] uppercase tracking-[0.1em]"
+              onClick={() => setEditorOpen(true)}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New
+            </Button>
+          </div>
+        }
       />
       <QrmSubNav />
 
       {treeRootCompanyId && (
-        <Card className="flex flex-col gap-2 border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <DeckSurface className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 text-sm text-muted-foreground">
-            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-qep-orange" aria-hidden />
             <p>
-              Showing contacts linked to this company and its child companies (same scope as the hierarchy
-              roll-up on the company detail page).
+              Scoped to this company and its child companies — same roll-up as the
+              company detail page.
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
-            <Link to="/qrm/contacts">Clear company filter</Link>
+            <Link to="/qrm/contacts">Clear filter</Link>
           </Button>
-        </Card>
+        </DeckSurface>
       )}
 
       {duplicateCount > 0 && (
-        <Card
-          className="flex flex-col gap-2 border-amber-300/60 bg-amber-50/50 p-4 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
+        <DeckSurface
+          className="flex flex-col gap-2 border-qep-warm/40 bg-qep-warm/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           aria-label="Duplicate contacts detected"
         >
-          <div className="flex items-start gap-2 text-sm text-amber-900 dark:text-amber-100">
-            <GitMerge className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <p>
-              <span className="font-semibold">
+          <div className="flex items-start gap-2 text-sm">
+            <GitMerge className="mt-0.5 h-4 w-4 shrink-0 text-qep-warm" aria-hidden />
+            <p className="text-foreground/90">
+              <span className="font-mono font-semibold text-qep-warm">
                 {duplicateCount} possible duplicate{duplicateCount === 1 ? "" : "s"}
               </span>{" "}
-              detected in your contacts. Resolving them keeps activity, deals, and
-              timelines on a single record.
+              detected. Resolving keeps activity, deals, and timelines on one record.
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="shrink-0 self-start sm:self-auto">
             <Link to="/qrm/duplicates">Review merges</Link>
           </Button>
-        </Card>
+        </DeckSurface>
       )}
 
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => {
-          import("@/lib/csv-export").then(({ exportContacts }) => {
-            exportContacts(contacts.map((c) => ({
-              ...c,
-              companyName: null,
-              assignedRepName: null,
-            })));
-          });
-        }}>
-          <Download className="mr-1 h-4 w-4" />
-          Export CSV
-        </Button>
-        <Button onClick={() => setEditorOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          New contact
-        </Button>
+      {/* Search rail */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          id="crm-contacts-search"
+          ref={searchRef}
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Search name · email · phone · role"
+          className="h-10 w-full rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/60 pl-9 pr-3 font-mono text-[13px] text-foreground placeholder:text-muted-foreground/80 focus:border-qep-orange focus:outline-none focus:ring-1 focus:ring-qep-orange/50"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-sm border border-qep-deck-rule px-1 font-mono text-[10px] text-muted-foreground md:inline">
+          /
+        </span>
       </div>
 
-      <Card className="border-border bg-card p-3 sm:p-4">
-        <label htmlFor="crm-contacts-search" className="sr-only">
-          Search contacts
-        </label>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            id="crm-contacts-search"
-            ref={searchRef}
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search by name, email, or phone"
-            className="h-11 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40"
-          />
-        </div>
-      </Card>
-
       {contactsQuery.isLoading && (
-        <div className="space-y-3" role="status" aria-label="Loading contacts">
-          {Array.from({ length: 5 }).map((_, index) => (
+        <div className="space-y-1.5" role="status" aria-label="Loading contacts">
+          {Array.from({ length: 8 }).map((_, index) => (
             <div
               key={index}
-              className="h-24 animate-pulse rounded-xl border border-border bg-muted/40"
+              className="h-14 animate-pulse rounded-sm border border-qep-deck-rule/50 bg-muted/20"
             />
           ))}
         </div>
       )}
 
       {contactsQuery.isError && (
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            Failed to load contacts. Please refresh and try again.
+            Failed to load contacts. Refresh and try again.
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!contactsQuery.isLoading && !contactsQuery.isError && contacts.length === 0 && (
-        <Card className="border-border bg-card p-6 text-center">
-          <p className="text-sm text-muted-foreground">
+        <DeckSurface className="p-8 text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            No results
+          </p>
+          <p className="mt-2 text-sm text-foreground/80">
             {treeRootCompanyId
               ? "No contacts linked to this company tree with the current search."
               : "No contacts found. Try a different search term."}
           </p>
-        </Card>
+        </DeckSurface>
       )}
 
       {!contactsQuery.isLoading && !contactsQuery.isError && contacts.length > 0 && (
         <div className="space-y-4">
-          <div className="space-y-3" aria-label="Contact results">
-            {contacts.map((contact) => (
-              <Link
-                key={contact.id}
-                to={`/qrm/contacts/${contact.id}`}
-                className="block min-h-[44px] rounded-xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/50 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                    <UserRound className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {contact.firstName} {contact.lastName}
-                    </p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {contact.title || "Sales contact"}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-muted-foreground/90">
-                      {contact.email || contact.phone || "No contact details"}
-                    </p>
-                  </div>
-                  {contact.dgeCustomerProfileId && healthProfileById.has(contact.dgeCustomerProfileId) && (
-                    <HealthScorePill
-                      score={healthProfileById.get(contact.dgeCustomerProfileId) ?? null}
-                      onClick={() => setHealthDrawerProfileId(contact.dgeCustomerProfileId)}
-                    />
-                  )}
-                </div>
-              </Link>
-            ))}
+          {/* Column legend */}
+          <div className="grid grid-cols-12 gap-3 border-b border-qep-deck-rule/50 px-3 pb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+            <div className="col-span-5 sm:col-span-4">Contact</div>
+            <div className="col-span-4 hidden sm:block">Reach</div>
+            <div className="col-span-2 hidden md:block">Role</div>
+            <div className="col-span-3 text-right sm:col-span-1">Age</div>
+            <div className="col-span-4 text-right sm:col-span-1">Health</div>
           </div>
 
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-muted-foreground">{contacts.length} contacts loaded</p>
+          <div className="divide-y divide-qep-deck-rule/40 overflow-hidden rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40">
+            {contacts.map((contact) => {
+              const score = contact.dgeCustomerProfileId
+                ? healthProfileById.get(contact.dgeCustomerProfileId) ?? null
+                : null;
+              const tone = toneFromHealth(score);
+              const age = formatAge(contact.createdAt);
+              const hasHealth =
+                contact.dgeCustomerProfileId &&
+                healthProfileById.has(contact.dgeCustomerProfileId);
+              const reach = contact.email || contact.phone;
+              const ReachIcon = contact.email ? Mail : contact.phone ? Phone : null;
+
+              return (
+                <Link
+                  key={contact.id}
+                  to={`/qrm/contacts/${contact.id}`}
+                  className="group grid grid-cols-12 items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-qep-orange/[0.04]"
+                >
+                  {/* Contact */}
+                  <div className="col-span-5 flex min-w-0 items-center gap-2.5 sm:col-span-4">
+                    <StatusDot tone={tone} pulse={tone === "hot"} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">
+                        {contact.firstName} {contact.lastName}
+                      </p>
+                      <p className="truncate text-[11px] text-muted-foreground sm:hidden">
+                        {contact.title || "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Reach */}
+                  <div className="col-span-4 hidden min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground sm:flex">
+                    {ReachIcon && <ReachIcon className="h-3 w-3 shrink-0" />}
+                    <span className="truncate font-mono">{reach || "—"}</span>
+                  </div>
+
+                  {/* Role */}
+                  <div className="col-span-2 hidden min-w-0 text-[12px] text-muted-foreground md:block">
+                    <span className="truncate">{contact.title || "—"}</span>
+                  </div>
+
+                  {/* Age */}
+                  <div className="col-span-3 text-right font-mono text-[11px] tabular-nums text-muted-foreground sm:col-span-1">
+                    {age || "—"}
+                  </div>
+
+                  {/* Health */}
+                  <div className="col-span-4 flex items-center justify-end gap-1 sm:col-span-1">
+                    {hasHealth ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setHealthDrawerProfileId(contact.dgeCustomerProfileId);
+                        }}
+                        className="inline-flex"
+                      >
+                        <SignalChip
+                          label="H"
+                          value={score ?? "—"}
+                          tone={tone}
+                        />
+                      </button>
+                    ) : (
+                      <span className="font-mono text-[11px] text-muted-foreground/50">—</span>
+                    )}
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-qep-orange" />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              {contacts.length.toLocaleString()} loaded
+            </p>
             {hasNextPage ? (
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
+                className="h-8 font-mono text-[11px] uppercase tracking-[0.1em]"
                 onClick={() => void contactsQuery.fetchNextPage()}
                 disabled={isFetchingNextPage}
               >
-                {isFetchingNextPage ? "Loading more..." : "Load more contacts"}
+                {isFetchingNextPage ? "Loading…" : "Load more"}
               </Button>
             ) : (
-              <p className="text-xs text-muted-foreground/80">
-                You&apos;re at the end of the contact list.
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
+                end of list
               </p>
             )}
           </div>

@@ -65,6 +65,26 @@ export default {
         "qep-success": "hsl(var(--success) / <alpha-value>)",
         "qep-error": "hsl(var(--qep-error) / <alpha-value>)",
         "qep-info": "hsl(var(--qep-info) / <alpha-value>)",
+        // Command-deck signal palette
+        "qep-live": "hsl(var(--qep-live) / <alpha-value>)",
+        "qep-live-soft": "hsl(var(--qep-live-soft) / <alpha-value>)",
+        "qep-hot": "hsl(var(--qep-hot) / <alpha-value>)",
+        "qep-warm": "hsl(var(--qep-warm) / <alpha-value>)",
+        "qep-cold": "hsl(var(--qep-cold) / <alpha-value>)",
+        "qep-deck": "hsl(var(--qep-deck) / <alpha-value>)",
+        "qep-deck-elevated": "hsl(var(--qep-deck-elevated) / <alpha-value>)",
+        "qep-deck-rule": "hsl(var(--qep-deck-rule) / <alpha-value>)",
+      },
+      fontFamily: {
+        mono: [
+          "JetBrains Mono",
+          "SF Mono",
+          "ui-monospace",
+          "Menlo",
+          "Monaco",
+          "Consolas",
+          "monospace",
+        ],
       },
       borderRadius: {
         lg: "var(--radius)",

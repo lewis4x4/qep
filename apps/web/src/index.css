@@ -70,6 +70,19 @@
     --qep-info: 209 62% 50%;
     --qep-error: 0 76% 57%;
     --qep-warning: 26 81% 52%;
+
+    /* Command-deck signal palette — "live" is the AI/realtime accent */
+    --qep-live: 186 96% 44%;           /* electric cyan — AI signal */
+    --qep-live-soft: 186 92% 94%;
+    --qep-hot: 14 89% 55%;             /* crimson-orange — breach/urgent */
+    --qep-warm: 38 96% 58%;            /* amber — attention */
+    --qep-cold: 216 15% 62%;           /* slate — cold/inactive */
+
+    /* Deep surfaces for command-deck layering */
+    --qep-deck: 220 25% 97%;
+    --qep-deck-elevated: 0 0% 100%;
+    --qep-deck-rule: 216 22% 85%;      /* hairline rule */
+    --qep-deck-grid: 216 22% 93%;      /* faint grid */
   }
 
   .dark {
@@ -121,8 +134,58 @@
     --qep-info: 209 58% 56%;
     --qep-error: 0 68% 56%;
     --qep-warning: 28 90% 55%;
+
+    /* Command-deck signal palette — electric cyan pops hardest on deep navy */
+    --qep-live: 186 96% 52%;
+    --qep-live-soft: 186 60% 18%;
+    --qep-hot: 14 92% 60%;
+    --qep-warm: 38 96% 58%;
+    --qep-cold: 215 14% 48%;
+
+    /* Deep surfaces for command-deck layering */
+    --qep-deck: 222 47% 6%;
+    --qep-deck-elevated: 222 38% 11%;
+    --qep-deck-rule: 217 28% 22%;
+    --qep-deck-grid: 217 28% 14%;
   }
 }
+
+/* Command-deck grid background — faint crosshair grid for operator surfaces */
+.deck-grid {
+  background-image:
+    linear-gradient(to right, hsl(var(--qep-deck-grid) / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--qep-deck-grid) / 0.5) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Soft inner glow for surfaces that carry live signal */
+.deck-glow {
+  box-shadow:
+    inset 0 1px 0 hsl(var(--qep-deck-rule) / 0.6),
+    0 0 0 1px hsl(var(--qep-deck-rule) / 0.4),
+    0 12px 48px -24px hsl(var(--qep-orange) / 0.25);
+}
+
+.deck-glow-live {
+  box-shadow:
+    inset 0 1px 0 hsl(var(--qep-live) / 0.35),
+    0 0 0 1px hsl(var(--qep-live) / 0.25),
+    0 12px 48px -24px hsl(var(--qep-live) / 0.4);
+}
+
+/* Pulsing dot for live/realtime states */
+@keyframes deck-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.15); }
+}
+.deck-pulse { animation: deck-pulse 2s ease-in-out infinite; }
+
+/* Subtle horizontal ticker motion for the Iron bar */
+@keyframes deck-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.deck-ticker { animation: deck-ticker 40s linear infinite; }
 
 @layer base {
   * {
