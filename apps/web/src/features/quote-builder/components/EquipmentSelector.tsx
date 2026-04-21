@@ -14,7 +14,7 @@ interface CatalogEntry {
   list_price: number | null;
   stock_number: string | null;
   condition: string | null;
-  attachments: Array<{ name: string; price: number }>;
+  attachments: Array<{ id: string; name: string; price: number }>;
 }
 
 interface EquipmentSelectorProps {
@@ -87,6 +87,9 @@ export function EquipmentSelector({ onSelect, onRecommendation }: EquipmentSelec
                   <div className="text-xs text-muted-foreground">
                     {entry.category} {entry.condition && `• ${entry.condition}`}
                     {entry.stock_number && ` • Stock #${entry.stock_number}`}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {entry.attachments.length} compatible option{entry.attachments.length === 1 ? "" : "s"}
                   </div>
                   {entry.list_price && (
                     <div className="mt-1 font-medium text-qep-orange">

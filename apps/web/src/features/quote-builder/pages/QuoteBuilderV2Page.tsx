@@ -102,6 +102,7 @@ interface CatalogEntryMatch {
   model: string;
   year: number | null;
   list_price?: number;
+  attachments?: Array<{ id: string; name: string; price: number }>;
 }
 
 /**
@@ -209,6 +210,8 @@ export function QuoteBuilderV2Page() {
   const [signerName, setSignerName] = useState("");
   const [dealerMessage, setDealerMessage] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
+  const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
+  const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
   const sigRef = useRef<PortalSignaturePadHandle>(null);
   const queryClient = useQueryClient();
 
@@ -1034,6 +1037,8 @@ export function QuoteBuilderV2Page() {
 
           <EquipmentSelector
             onSelect={(entry) => {
+              setAvailableOptions(entry.attachments ?? []);
+              setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
               setDraft((current) => ({
                 ...current,
                 equipment: [
@@ -1079,6 +1084,61 @@ export function QuoteBuilderV2Page() {
                   <span className="font-semibold text-foreground">${equipment.unitPrice.toLocaleString()}</span>
                 </div>
               ))}
+            </Card>
+          )}
+
+          {availableOptions.length > 0 && (
+            <Card className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Base &amp; Options</p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Compatible options for {availableOptionsLabel ?? "the selected base"}.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {availableOptions.map((option) => {
+                  const selected = draft.attachments.some((attachment) => attachment.id === option.id);
+                  return (
+                    <div
+                      key={option.id}
+                      className="flex items-center justify-between rounded-lg border border-border/70 bg-card/50 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{option.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          ${option.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={selected ? "outline" : "default"}
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            attachments: selected
+                              ? current.attachments.filter((attachment) => attachment.id !== option.id)
+                              : [
+                                  ...current.attachments,
+                                  {
+                                    kind: "attachment",
+                                    id: option.id,
+                                    title: option.name,
+                                    quantity: 1,
+                                    unitPrice: option.price,
+                                  },
+                                ],
+                          }))
+                        }
+                      >
+                        {selected ? "Remove" : "Add"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </Card>
           )}
 

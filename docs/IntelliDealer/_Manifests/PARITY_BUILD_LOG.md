@@ -48,3 +48,19 @@
 - `supabase/functions/crm-router/index.ts`
 **Verification:** `deno check supabase/functions/crm-router/index.ts supabase/functions/_shared/crm-campaigns.ts`, `bun test apps/web/src/features/qrm/lib/campaign-utils.test.ts apps/web/src/features/sales/lib/customer-search.test.ts apps/web/src/features/qrm/components/__tests__/QrmCompanyShipToSection.integration.test.tsx`, and `bun run build` all passed on the working branch. Existing segment gate runner behavior still blocks on the repo-level KB eval leg and was not used as closure evidence for this slice.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-21 — Base & Options (Phase-2_Sales-Intelligence) — CLOSED
+**Gap row:** Base & Options configuration for equipment quotes needs parity check.
+**Change type:** UI + Existing Catalog Wiring
+**Files:**
+- `apps/web/src/features/admin/pages/BaseOptionsPage.tsx`
+- `apps/web/src/features/admin/lib/base-options-api.ts`
+- `apps/web/src/features/admin/lib/base-options-utils.ts`
+- `apps/web/src/features/admin/lib/base-options-utils.test.ts`
+- `apps/web/src/features/admin/pages/PriceSheetsPage.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/features/quote-builder/lib/quote-api.ts`
+- `apps/web/src/features/quote-builder/components/EquipmentSelector.tsx`
+- `apps/web/src/features/quote-builder/pages/QuoteBuilderV2Page.tsx`
+**Verification:** `bun test apps/web/src/features/admin/lib/base-options-utils.test.ts apps/web/src/features/qrm/lib/campaign-utils.test.ts apps/web/src/features/sales/lib/customer-search.test.ts`, file-level TypeScript diagnostics on the new admin/quote-builder surfaces, and `bun run build` all passed on the working branch. No new migrations or edge functions were required for this slice because the underlying `qb_equipment_models`, `qb_attachments`, and price-sheet ingestion stack already existed.
+**Parity status update:** REVIEW → BUILT

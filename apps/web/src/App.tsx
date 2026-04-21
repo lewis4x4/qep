@@ -226,6 +226,9 @@ const CoachPerformancePage = lazy(() =>
 const PriceSheetsPage = lazy(() =>
   import("./features/admin/pages/PriceSheetsPage").then((m) => ({ default: m.PriceSheetsPage }))
 );
+const BaseOptionsPage = lazy(() =>
+  import("./features/admin/pages/BaseOptionsPage").then((m) => ({ default: m.BaseOptionsPage }))
+);
 const FleetRadarPage = lazy(() =>
   import("./features/qrm/pages/FleetRadarPage").then((m) => ({ default: m.FleetRadarPage }))
 );
@@ -2442,6 +2445,16 @@ function App() {
                 element={
                   ["admin", "manager", "owner"].includes(profile.role) ? (
                     <BranchManagementPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/base-options"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <BaseOptionsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

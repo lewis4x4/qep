@@ -546,9 +546,47 @@ export async function searchCatalog(query: string) {
     .limit(20);
   if (error) throw error;
 
-  return (data ?? []).map((row) => {
+  const models = data ?? [];
+  const brandIds = Array.from(
+    new Set(
+      models
+        .map((row) => {
+          const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
+          return brand?.id ?? null;
+        })
+        .filter(Boolean),
+    ),
+  );
+
+  const { data: attachmentData, error: attachmentError } = brandIds.length
+    ? await supabase
+        .from("qb_attachments")
+        .select("id, brand_id, name, list_price_cents, compatible_model_ids, universal")
+        .in("brand_id", brandIds)
+        .eq("active", true)
+        .is("deleted_at", null)
+        .limit(500)
+    : { data: [], error: null };
+
+  if (attachmentError) throw attachmentError;
+
+  const attachments = attachmentData ?? [];
+
+  return models.map((row) => {
     const brand = Array.isArray(row.brand) ? row.brand[0] : row.brand;
     const make = brand?.name ?? row.name_display?.split(" ")[0] ?? "";
+    const compatibleAttachments = attachments
+      .filter((attachment) => {
+        const compatibleIds = Array.isArray(attachment.compatible_model_ids)
+          ? attachment.compatible_model_ids
+          : [];
+        return attachment.universal || compatibleIds.includes(row.id);
+      })
+      .map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        price: attachment.list_price_cents != null ? Number(attachment.list_price_cents) / 100 : 0,
+      }));
     return {
       id: row.id,
       make,
@@ -558,7 +596,7 @@ export async function searchCatalog(query: string) {
       list_price: row.list_price_cents != null ? Number(row.list_price_cents) / 100 : null,
       stock_number: null as string | null,
       condition: "new" as const,
-      attachments: [] as Array<{ name: string; price: number }>,
+      attachments: compatibleAttachments,
     };
   });
 }

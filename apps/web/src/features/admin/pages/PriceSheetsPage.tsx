@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RequireAdmin } from "@/components/RequireAdmin";
 import { supabase } from "@/lib/supabase";
 import { BrandFreshnessTable } from "../components/BrandFreshnessTable";
@@ -87,6 +89,13 @@ function PriceSheetsPageInner() {
           Manage brand price sheet uploads, freight zones, Deal Engine configuration, and the
           auto-watchdog that monitors manufacturer URLs for new books.
         </p>
+        <div className="mt-3">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/base-options">
+              Open Base &amp; Options
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="dashboard">
