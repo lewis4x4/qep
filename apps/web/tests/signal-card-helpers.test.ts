@@ -270,4 +270,91 @@ describe("formatIronTriagePrompt", () => {
     );
     expect(p.split("\n").length).toBeGreaterThanOrEqual(4);
   });
+
+  // Slice 18 — synthesizer tool-naming per entity type. Mirrors the
+  // Slice 17 Graph update: each signal whose entity type has a dedicated
+  // synthesizer tool should name it explicitly in the closer.
+  it("names summarize_deal when the signal is tied to a deal", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "deal", entity_id: "d-1" }),
+      now,
+    );
+    expect(p).toContain("summarize_deal");
+  });
+
+  it("names summarize_company when the signal is tied to a company", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "company", entity_id: "co-1" }),
+      now,
+    );
+    expect(p).toContain("summarize_company");
+  });
+
+  it("names summarize_contact when the signal is tied to a contact", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "contact", entity_id: "c-1" }),
+      now,
+    );
+    expect(p).toContain("summarize_contact");
+  });
+
+  it("omits any summarize_* hint for equipment-scoped signals (no synthesizer yet)", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "equipment", entity_id: "eq-1" }),
+      now,
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+  });
+
+  it("omits any summarize_* hint for rental-scoped signals (no synthesizer yet)", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "rental", entity_id: "r-1" }),
+      now,
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+  });
+
+  it("omits any summarize_* hint for workspace-scoped signals", () => {
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "workspace", entity_id: "ws-1" }),
+      now,
+    );
+    expect(p).not.toContain("summarize_deal");
+    expect(p).not.toContain("summarize_company");
+    expect(p).not.toContain("summarize_contact");
+  });
+
+  it("omits the synthesizer hint when entity_id is missing even with entity_type set", () => {
+    // A named tool requires an id to be useful. If the signal has a type
+    // but no id, drop the hint — Iron should fall back to search_entities.
+    const p = formatIronTriagePrompt(
+      makeSignal({ entity_type: "deal", entity_id: null }),
+      now,
+    );
+    expect(p).not.toContain("summarize_deal");
+  });
+
+  it("still closes with propose_move across every entity type", () => {
+    for (
+      const type of [
+        "deal",
+        "company",
+        "contact",
+        "equipment",
+        "rental",
+        "workspace",
+        "activity",
+      ] as const
+    ) {
+      const p = formatIronTriagePrompt(
+        makeSignal({ entity_type: type, entity_id: "x-1" }),
+        now,
+      );
+      expect(p).toContain("propose_move");
+    }
+  });
 });

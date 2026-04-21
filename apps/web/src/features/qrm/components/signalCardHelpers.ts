@@ -6,6 +6,7 @@
 
 import type {
   QrmSignal,
+  QrmSignalEntityType,
   QrmSignalKind,
   QrmSignalSeverity,
 } from "../lib/signals-types";
@@ -86,6 +87,33 @@ export function hrefForSignalEntity(signal: QrmSignal): string | null {
 }
 
 /**
+ * Per-entity synthesizer hint. Slice 18 mirror of Slice 17's Graph update
+ * — when the signal is tied to a deal/company/contact, name Iron's
+ * dedicated synthesizer tool in the closer so the LLM reaches for the
+ * bundled read instead of chaining get_*_detail + list_recent_signals
+ * across multiple turns. Equipment / rental / activity / workspace
+ * signals keep the generic closer because no synthesizer covers them
+ * yet; when one ships, this is the single spot to wire it in.
+ */
+function toolHintForSignalEntity(
+  entityType: QrmSignalEntityType,
+): string | null {
+  switch (entityType) {
+    case "deal":
+      return "Then call summarize_deal with the deal_id to pull the deal row + recent activities + open signals in one shot.";
+    case "company":
+      return "Then call summarize_company with the company_id to pull the account row + open deals + recent activities + signals in one shot.";
+    case "contact":
+      return "Then call summarize_contact with the contact_id to pull the person + related deals at their company + recent activities + open signals in one shot.";
+    case "equipment":
+    case "rental":
+    case "activity":
+    case "workspace":
+      return null;
+  }
+}
+
+/**
  * Slice 8 — Pulse → Ask Iron triage handoff.
  *
  * Build a well-scoped seed question for Ask Iron when the operator clicks
@@ -139,6 +167,14 @@ export function formatIronTriagePrompt(
   if (signal.entity_type && signal.entity_id) {
     parts.push(`• Entity: ${signal.entity_type} (${signal.entity_id})`);
   }
+
+  // Slice 18 — synthesizer tool-naming. Only emitted when the signal
+  // carries BOTH an entity_type and an entity_id, since without the id
+  // the named tool would be stuck back at search_entities anyway.
+  const toolHint = signal.entity_type && signal.entity_id
+    ? toolHintForSignalEntity(signal.entity_type)
+    : null;
+  if (toolHint) parts.push(toolHint);
 
   parts.push(
     "If there's a clear follow-up, call propose_move. Otherwise explain what you'd want to know before queueing anything.",
