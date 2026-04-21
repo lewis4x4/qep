@@ -37,6 +37,11 @@ import {
 } from "./moveProvenance";
 import { ASK_IRON_PATH, type AskIronSeedState } from "./askIronHandoff";
 import { formatIronMovePrompt } from "./moveHandoffHelpers";
+import {
+  formatIronDayBriefPrompt,
+  type IronDayBriefScope,
+  labelForDayBriefScope,
+} from "./dayHandoffHelpers";
 
 type Scope = "mine" | "team";
 
@@ -180,6 +185,34 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
     [navigate],
   );
 
+  // Slice 15 — Today → Iron day-brief handoff. Mirrors the per-move
+  // handoff (Slice 12) but carries a surface-level prompt keyed to the
+  // current scope. The seed lands Iron on the summarize_day synthesizer
+  // (Slice 14), which already knows how to pin reps to self and keep
+  // elevated callers workspace-wide. Using sourceId="day-brief" so
+  // downstream analytics can distinguish the morning briefing from a
+  // per-move defend-or-challenge without growing the source enum.
+  const handleBriefDay = useCallback(
+    (briefScope: IronDayBriefScope) => {
+      const question = formatIronDayBriefPrompt(briefScope);
+      const state: AskIronSeedState = {
+        askIronSeed: {
+          question,
+          source: "today",
+          sourceId: "day-brief",
+        },
+      };
+      navigate(ASK_IRON_PATH, { state });
+    },
+    [navigate],
+  );
+
+  // The chip reflects the current scope so the copy matches what the
+  // handoff will actually do. Reps never reach the "team" branch
+  // because the scope toggle is gated on role.
+  const briefScope: IronDayBriefScope =
+    scope === "team" && isElevated ? "team" : "mine";
+
   // Group: accepted moves ("in flight") first, then suggestions ranked by
   // priority. The recommender already returns them priority-desc, so we only
   // need a stable partition here.
@@ -194,20 +227,45 @@ export function TodaySurface({ defaultScope = "mine", className }: TodaySurfaceP
             <Sparkles className="h-5 w-5 text-primary" />
             <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
           </div>
-          {isElevated && (
-            <nav
-              aria-label="Today scope"
-              className="inline-flex items-center gap-1 rounded-full border bg-card p-0.5 text-xs"
+          <div className="flex items-center gap-2">
+            {/*
+              Slice 15 — day-brief chip. Matches the Iron-orange palette
+              used on MoveCard's "Ask Iron" chip so the Today surface has
+              a single visual language for Iron handoffs. Sits to the
+              left of the scope toggle when elevated; stands alone on
+              the right otherwise.
+            */}
+            <button
+              type="button"
+              onClick={() => handleBriefDay(briefScope)}
+              disabled={movesQuery.isLoading}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full border border-qep-orange/30 bg-qep-orange/5 px-3 py-1 text-xs font-medium text-qep-orange",
+                "transition-colors hover:border-qep-orange/60 hover:bg-qep-orange/10",
+                "focus:outline-none focus:ring-2 focus:ring-qep-orange/40",
+                "disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+              aria-label={`${labelForDayBriefScope(briefScope)} with Ask Iron`}
+              title="Hand today's queue to Ask Iron for a morning briefing"
             >
-              <ScopeButton active={scope === "mine"} onClick={() => setScope("mine")}>
-                My queue
-              </ScopeButton>
-              <ScopeButton active={scope === "team"} onClick={() => setScope("team")}>
-                <Users className="h-3 w-3" />
-                Team
-              </ScopeButton>
-            </nav>
-          )}
+              <Sparkles className="h-3 w-3" aria-hidden />
+              {labelForDayBriefScope(briefScope)}
+            </button>
+            {isElevated && (
+              <nav
+                aria-label="Today scope"
+                className="inline-flex items-center gap-1 rounded-full border bg-card p-0.5 text-xs"
+              >
+                <ScopeButton active={scope === "mine"} onClick={() => setScope("mine")}>
+                  My queue
+                </ScopeButton>
+                <ScopeButton active={scope === "team"} onClick={() => setScope("team")}>
+                  <Users className="h-3 w-3" />
+                  Team
+                </ScopeButton>
+              </nav>
+            )}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
           Ranked plays pulled from your signals and deal state. Accept to pick one up; snooze to
