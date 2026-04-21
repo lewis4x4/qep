@@ -2,68 +2,74 @@
 // ============================================================================
 // scripts/db-push.mjs
 //
-// Applies pending migrations to the remote Supabase Postgres, using direct
-// psql execution so the NNN_snake_case.sql convention keeps working without
-// renaming every file to the `<timestamp>_name.sql` format that recent
-// `supabase db push` versions require.
+// Applies pending migrations to the remote Supabase Postgres via the
+// Supabase Management API (POST /v1/projects/{ref}/database/query), so the
+// repo's `NNN_snake_case.sql` convention keeps working without renaming
+// every file to `<timestamp>_name.sql` (which recent `supabase db push`
+// versions require) AND without needing the raw Postgres password.
 //
 // Why this exists:
 //   * The repo has used 3-digit sequential migration numbers since day one
 //     (336 files and counting), guarded by scripts/check-migration-order.mjs.
-//   * Supabase CLI 2.84+ rejects non-timestamp filenames at `db push` time
-//     with "file name must match pattern <timestamp>_name.sql". Renaming the
-//     whole history would churn every open PR and break all the ticket
-//     references to "migration 293" etc.
+//   * Supabase CLI 2.84+ rejects non-timestamp filenames at `db push`.
+//     Renaming the whole history would churn every open PR and break the
+//     ticket references to "migration 293" etc.
 //   * Prior to this script, committers have worked around the CLI by
-//     applying SQL out-of-band (direct psql, SQL editor, etc.), which left
-//     the remote schema_migrations table out of sync with the repo. That's
-//     why `supabase migration list` currently shows 30+ pending rows.
+//     applying SQL out-of-band, leaving the remote's schema_migrations
+//     table chronically out of sync with the repo.
 //
 // What this does:
-//   1. Resolves the connection URL (SUPABASE_DB_URL, or builds one from
-//      SUPABASE_PROJECT_REF + SUPABASE_DB_PASSWORD against the project's
-//      pooler endpoint).
+//   1. Resolves an access token (env SUPABASE_ACCESS_TOKEN, or the
+//      macOS keychain entry the `supabase` CLI stores after `supabase login`).
 //   2. Reads every NNN_name.sql in supabase/migrations/.
 //   3. Queries supabase_migrations.schema_migrations on the remote to see
-//      which version strings ("293", "304", ...) are already applied.
-//   4. In ascending order, for each pending migration:
-//        a. Opens a transaction via psql --single-transaction.
-//        b. Runs the migration file.
-//        c. Inserts/upserts the NNN into schema_migrations within the same
-//           transaction so a rollback removes the stamp too.
-//      Stops on the first failure (ON_ERROR_STOP=1).
-//   5. Prints a compact report.
+//      which NNN versions are already applied.
+//   4. For each pending migration, in ascending order, POSTs one request:
+//        begin;
+//        <file contents>;
+//        insert into supabase_migrations.schema_migrations (version)
+//          values ('NNN') on conflict do nothing;
+//        commit;
+//      Any failure inside rolls everything back — the stamp and the
+//      migration land together or not at all.
+//   5. Stops at the first failure, reports which file broke, and exits 2.
 //
 // Usage:
-//   # Dry-run (no writes):
-//   SUPABASE_DB_URL='postgresql://...' bun run db:push
+//   # Dry-run (no writes). Uses the same access token Supabase CLI uses:
+//   bun run db:push
 //
 //   # Apply:
-//   SUPABASE_DB_URL='postgresql://...' bun run db:push -- --apply
+//   bun run db:push:apply
 //
-//   # Or using password + project ref:
-//   SUPABASE_PROJECT_REF=iciddijgonywtxoelous \
-//   SUPABASE_DB_PASSWORD='...' \
-//     bun run db:push -- --apply
+//   # Or pass the token explicitly (e.g. CI):
+//   SUPABASE_ACCESS_TOKEN='sbp_...' bun run db:push:apply
+//
+// Why Management API instead of psql:
+//   * No Postgres password needed. The token is already cached by the
+//     Supabase CLI after `supabase login`, so anyone who can run
+//     `supabase projects list` can push migrations.
+//   * HTTP is easier to wrap around than forking psql + handling
+//     stderr parsing + encoding the password into a URL.
+//   * Transaction semantics are identical — the endpoint forwards
+//     multi-statement SQL to Postgres as-is.
 //
 // Safety:
-//   * Dry-run is the default. --apply is required to mutate the database.
-//   * Every migration file runs inside a single transaction; partial apply
-//     is impossible (modulo DDL that can't run in a transaction — there
-//     are none in this repo).
-//   * The script bails at the first failure. Already-applied migrations
-//     in the run are kept; the failing one is rolled back.
+//   * Dry-run is the default. --apply is required to mutate.
+//   * Every migration runs inside an explicit BEGIN/COMMIT.
+//   * Bail at first failure. Already-applied migrations earlier in the
+//     run stay applied (their stamp is durable); the failing one is
+//     rolled back cleanly.
 // ============================================================================
 
-import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { execSync } from "node:child_process";
 
 const REPO_ROOT = process.cwd();
 const MIGRATIONS_DIR = join(REPO_ROOT, "supabase", "migrations");
 const CONFIG_TOML = join(REPO_ROOT, "supabase", "config.toml");
 const FILENAME_PATTERN = /^(\d{3})_[a-z0-9_]+\.sql$/;
+const API_ROOT = "https://api.supabase.com";
 
 const args = new Set(process.argv.slice(2));
 const APPLY = args.has("--apply");
@@ -73,50 +79,60 @@ function die(msg, code = 1) {
   console.error(`db-push: ${msg}`);
   process.exit(code);
 }
+function info(msg) { console.log(`db-push: ${msg}`); }
+function vinfo(msg) { if (VERBOSE) console.log(`db-push: ${msg}`); }
 
-function info(msg) {
-  console.log(`db-push: ${msg}`);
+// ── 1. Resolve project ref + access token ─────────────────────────────────
+function resolveProjectRef() {
+  const envRef = process.env.SUPABASE_PROJECT_REF;
+  if (envRef) return envRef;
+  try {
+    const toml = readFileSync(CONFIG_TOML, "utf8");
+    const m = toml.match(/^project_id\s*=\s*"([a-z0-9]+)"/m);
+    if (m) return m[1];
+  } catch { /* fall through */ }
+  die("no project ref — set SUPABASE_PROJECT_REF or put project_id in supabase/config.toml");
 }
 
-function vinfo(msg) {
-  if (VERBOSE) console.log(`db-push: ${msg}`);
-}
-
-// ── 1. Resolve connection URL ──────────────────────────────────────────────
-function resolveConnUrl() {
-  const direct = process.env.SUPABASE_DB_URL;
-  if (direct && direct.startsWith("postgresql://")) {
-    vinfo("using SUPABASE_DB_URL from environment");
-    return direct;
+function resolveAccessToken() {
+  const envToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (envToken) {
+    vinfo("using SUPABASE_ACCESS_TOKEN from environment");
+    return envToken;
   }
 
-  const pw = process.env.SUPABASE_DB_PASSWORD;
-  if (!pw) {
-    die(
-      "missing connection. Set SUPABASE_DB_URL='postgresql://...' OR " +
-      "(SUPABASE_PROJECT_REF + SUPABASE_DB_PASSWORD). " +
-      "Project ref is read from supabase/config.toml when not passed.",
-    );
-  }
-
-  let ref = process.env.SUPABASE_PROJECT_REF;
-  if (!ref) {
+  // The Supabase CLI stores its token in the OS keyring under
+  // service="Supabase CLI", account="supabase". On macOS we can read
+  // it via `security find-generic-password`. Linux is a TODO (libsecret
+  // via `secret-tool` works similarly).
+  if (process.platform === "darwin") {
     try {
-      const toml = readFileSync(CONFIG_TOML, "utf8");
-      const m = toml.match(/^project_id\s*=\s*"([a-z0-9]+)"/m);
-      if (m) ref = m[1];
+      const raw = execSync(
+        "security find-generic-password -s 'Supabase CLI' -a 'supabase' -w",
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      // go-keyring wraps values as `go-keyring-base64:<base64>` or
+      // `go-keyring-encrypted:<aes>`. We only decode the base64 form here;
+      // the encrypted form requires the CLI's keyring key (not exposed).
+      if (raw.startsWith("go-keyring-base64:")) {
+        const decoded = Buffer.from(raw.slice("go-keyring-base64:".length), "base64").toString("utf8");
+        vinfo("loaded access token from macOS keychain (Supabase CLI)");
+        return decoded;
+      }
+      // Legacy plain-string storage.
+      if (raw.length > 20 && !raw.startsWith("go-keyring-")) {
+        vinfo("loaded access token from macOS keychain (plain)");
+        return raw;
+      }
     } catch {
-      /* fall through */
+      /* keychain miss is fine — fall through to the helpful error */
     }
   }
-  if (!ref) die("no project ref — set SUPABASE_PROJECT_REF or ensure supabase/config.toml has project_id");
 
-  // Direct-connection URL. The Supabase pooler also works but session-pinned
-  // migrations (DDL with advisory locks) are safer on the direct endpoint.
-  const encoded = encodeURIComponent(pw);
-  const url = `postgresql://postgres:${encoded}@db.${ref}.supabase.co:5432/postgres?sslmode=require`;
-  vinfo(`built URL for project ref ${ref}`);
-  return url;
+  die(
+    "no access token. Either run `supabase login` first (we'll read the " +
+    "CLI's keychain entry automatically) or export SUPABASE_ACCESS_TOKEN.",
+  );
 }
 
 // ── 2. Local migrations ────────────────────────────────────────────────────
@@ -133,102 +149,80 @@ function readLocalMigrations() {
   return out;
 }
 
-// ── 3. Remote schema_migrations ────────────────────────────────────────────
-function psqlBin() {
-  // Prefer Homebrew libpq's psql (18.x); fall back to PATH.
-  const homebrew = "/opt/homebrew/opt/libpq/bin/psql";
-  if (existsSync(homebrew)) return homebrew;
-  return "psql";
-}
-
-function runPsqlQuery(url, sql) {
-  const res = spawnSync(
-    psqlBin(),
-    ["--no-psqlrc", "--quiet", "--tuples-only", "--no-align", "--set=ON_ERROR_STOP=1", "--command", sql, url],
-    { encoding: "utf8" },
-  );
-  if (res.status !== 0) {
-    const stderr = res.stderr?.trim() ?? "";
-    throw new Error(`psql query failed: ${stderr || "no stderr"}`);
+// ── 3. Management API client ──────────────────────────────────────────────
+async function runSql(token, projectRef, query) {
+  const url = `${API_ROOT}/v1/projects/${projectRef}/database/query`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query }),
+  });
+  const text = await res.text();
+  let body;
+  try { body = JSON.parse(text); } catch { body = text; }
+  if (!res.ok) {
+    const msg = typeof body === "object" && body?.message ? body.message : text;
+    throw new Error(`HTTP ${res.status}: ${msg}`);
   }
-  return res.stdout.trim();
+  // The API returns 2xx + a `{ message }` body on some SQL errors too
+  // (e.g. "Failed to run sql query: ERROR: …"). Surface those as failures.
+  if (body && typeof body === "object" && !Array.isArray(body) && body.message) {
+    throw new Error(body.message);
+  }
+  return body;
 }
 
-function fetchRemoteVersions(url) {
-  // supabase_migrations.schema_migrations exists on any project created
-  // via the Supabase Dashboard; the CLI also creates it on first push.
+async function fetchRemoteVersions(token, projectRef) {
   try {
-    const out = runPsqlQuery(
-      url,
+    const rows = await runSql(
+      token,
+      projectRef,
       "select version from supabase_migrations.schema_migrations order by version;",
     );
-    if (!out) return new Set();
-    return new Set(out.split("\n").map((s) => s.trim()).filter(Boolean));
+    if (!Array.isArray(rows)) return new Set();
+    return new Set(rows.map((r) => String(r.version)));
   } catch (e) {
-    if (String(e.message).includes('relation "supabase_migrations.schema_migrations" does not exist')) {
-      info("remote schema_migrations table not found — treating as fresh project");
+    if (String(e.message).includes("does not exist")) {
+      info("remote supabase_migrations table not found — treating as fresh project");
       return new Set();
     }
     throw e;
   }
 }
 
-// ── 4. Apply a single migration atomically ────────────────────────────────
-function applyOne(url, mig) {
-  // Compose the migration SQL + the schema_migrations stamp into one script
-  // so psql --single-transaction makes the whole thing atomic. A failure
-  // either in the migration or in the stamp rolls back everything, which
-  // means dry-run-like safety even when applying.
+// ── 4. Apply one migration atomically ─────────────────────────────────────
+async function applyOne(token, projectRef, mig) {
   const body = readFileSync(mig.path, "utf8");
-  const stamp =
-    `-- db-push stamp for ${mig.filename}\n` +
-    `insert into supabase_migrations.schema_migrations (version) values ('${mig.version}')\n` +
-    `  on conflict (version) do nothing;\n`;
-
-  const tmp = join(tmpdir(), `db-push-${mig.version}-${Date.now()}.sql`);
-  writeFileSync(tmp, body + "\n" + stamp);
-
-  try {
-    const res = spawnSync(
-      psqlBin(),
-      [
-        "--no-psqlrc",
-        "--quiet",
-        "--set=ON_ERROR_STOP=1",
-        "--single-transaction",
-        "--file",
-        tmp,
-        url,
-      ],
-      { encoding: "utf8" },
-    );
-    if (res.status !== 0) {
-      const stderr = (res.stderr ?? "").trim();
-      const stdout = (res.stdout ?? "").trim();
-      throw new Error(
-        `psql exit ${res.status} applying ${mig.filename}\n` +
-        (stderr ? `--- stderr ---\n${stderr}\n` : "") +
-        (VERBOSE && stdout ? `--- stdout ---\n${stdout}\n` : ""),
-      );
-    }
-    vinfo(`applied ${mig.filename}`);
-  } finally {
-    try { rmSync(tmp); } catch { /* ignore */ }
-  }
+  // Wrap the file + the stamp in a single BEGIN/COMMIT. The Management
+  // API forwards multi-statement SQL to Postgres as-is; a failure in
+  // either part rolls back the other. `on conflict do nothing` guards
+  // against a pre-existing stamp (manual out-of-band apply).
+  const sql =
+    "begin;\n" +
+    body.trimEnd() + "\n;\n" +
+    `insert into supabase_migrations.schema_migrations (version) values ('${mig.version}') on conflict do nothing;\n` +
+    "commit;\n";
+  await runSql(token, projectRef, sql);
 }
 
 // ── 5. Orchestrate ─────────────────────────────────────────────────────────
-function main() {
+async function main() {
   if (!existsSync(MIGRATIONS_DIR)) die(`migrations dir not found: ${MIGRATIONS_DIR}`);
 
   const local = readLocalMigrations();
   if (local.length === 0) die("no local migrations");
 
-  const url = resolveConnUrl();
+  const projectRef = resolveProjectRef();
+  const token = resolveAccessToken();
+
+  vinfo(`project ref: ${projectRef}`);
 
   let remote;
   try {
-    remote = fetchRemoteVersions(url);
+    remote = await fetchRemoteVersions(token, projectRef);
   } catch (e) {
     die(`cannot reach remote: ${e.message}`);
   }
@@ -236,9 +230,9 @@ function main() {
   const pending = local.filter((m) => !remote.has(m.version));
   const extraRemote = [...remote].filter((v) => !local.some((m) => m.version === v));
 
-  info(`local migrations: ${local.length}`);
-  info(`already applied on remote: ${remote.size}`);
-  info(`pending to apply: ${pending.length}`);
+  info(`local migrations:       ${local.length}`);
+  info(`already applied remote: ${remote.size}`);
+  info(`pending to apply:       ${pending.length}`);
   if (extraRemote.length > 0) {
     info(`remote has ${extraRemote.length} version(s) not in repo: ${extraRemote.join(", ")}`);
   }
@@ -255,12 +249,12 @@ function main() {
     return;
   }
 
-  info("applying in order (single-transaction per file, ON_ERROR_STOP=1)");
+  info("applying in order (single BEGIN/COMMIT per file via Management API)");
   let applied = 0;
   for (const mig of pending) {
     process.stdout.write(`  → ${mig.filename} ... `);
     try {
-      applyOne(url, mig);
+      await applyOne(token, projectRef, mig);
       applied += 1;
       process.stdout.write("ok\n");
     } catch (e) {
@@ -273,4 +267,4 @@ function main() {
   info(`applied ${applied} migration${applied === 1 ? "" : "s"} successfully`);
 }
 
-main();
+main().catch((e) => die(e.message, 1));

@@ -12,47 +12,54 @@ file name must match pattern "<timestamp>_name.sql"
 
 Renaming 336 migrations to `YYYYMMDDHHMMSS_*` would churn every open PR,
 break ticket references ("see migration 293"), and invalidate
-`scripts/check-migration-order.mjs`. So we bypass `supabase db push` and
-apply via direct `psql` — the same mechanism committers were already
-using out-of-band — but wrapped in a script so it's repeatable, atomic,
-and keeps `supabase_migrations.schema_migrations` in sync.
+`scripts/check-migration-order.mjs`. So we bypass `supabase db push`
+entirely and call the **Supabase Management API**
+(`POST /v1/projects/{ref}/database/query`) with the access token the
+CLI already has cached — no Postgres password required.
 
 ## Usage
 
-**Dry-run (default):**
+No Postgres password needed — the script uses the same access token
+`supabase login` cached in your OS keychain.
 
 ```bash
-SUPABASE_DB_URL='postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres?sslmode=require' \
-  bun run db:push
+# Dry-run (default):
+bun run db:push
+
+# Apply:
+bun run db:push:apply
 ```
 
-Prints the list of pending migrations and exits without writing anything.
+### CI / headless runners
 
-**Apply:**
+Export the token explicitly (Supabase → Account → Access Tokens):
 
 ```bash
-SUPABASE_DB_URL='postgresql://...' bun run db:push:apply
+SUPABASE_ACCESS_TOKEN=sbp_... bun run db:push:apply
 ```
 
-Or use the split form (password + project ref; script builds the URL):
+### Different project
+
+Override the project ref (default is read from `supabase/config.toml`):
 
 ```bash
-SUPABASE_PROJECT_REF=iciddijgonywtxoelous \
-SUPABASE_DB_PASSWORD='<postgres-password>' \
-  bun run db:push:apply
+SUPABASE_PROJECT_REF=abcd1234 bun run db:push:apply
 ```
 
 ## Safety model
 
-- **Every migration runs in a single `psql --single-transaction`.** If
-  any statement fails, the entire migration rolls back — no half-applied
-  files.
-- The `schema_migrations` stamp is appended **inside the same
-  transaction**, so a failing migration leaves no ghost row behind.
-- The script stops at the **first failure** and reports which migration
-  broke so you can inspect and retry without reapplying earlier files.
-- Already-applied migrations (already in `schema_migrations`) are
-  skipped.
+- **Every migration runs inside an explicit `begin; ...; commit;`.** A
+  failure anywhere in the file — or in the `schema_migrations` stamp
+  that's appended to the same request — rolls the whole thing back.
+- The `schema_migrations` stamp (`insert ... on conflict do nothing`)
+  is the same transaction as the migration body, so a successful
+  migration is always stamped and a rolled-back migration is never
+  stamped.
+- The script bails at the **first failure** and reports which file
+  broke. Already-applied migrations earlier in the run keep their
+  stamp; the failing one leaves no ghost state.
+- Dry-run is the default. `--apply` (or the `db:push:apply` script)
+  is required to mutate.
 
 ## What counts as "applied"
 
@@ -61,34 +68,42 @@ of truth. `version` values match the 3-digit prefix of the filename
 (`293`, `304`, `335`). The script only writes a row after its SQL
 successfully runs.
 
-If a migration was applied out-of-band without a stamp, the script will
-try to re-apply it — most migrations in this repo are idempotent
-(`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT
-EXISTS`, `CREATE POLICY IF NOT EXISTS`), so the re-run is a no-op that
-ends by writing the stamp. For migrations that would conflict on
-re-apply (e.g. `CREATE TABLE foo`), either hand-stamp it first:
+If a migration was applied out-of-band without a stamp, the script
+will try to re-apply it. Most migrations in this repo are idempotent
+(`create table if not exists`, `alter table ... add column if not
+exists`, `create policy if not exists`, `drop policy if exists` +
+`create policy`), so the re-run is a no-op that just writes the stamp.
+For migrations that would conflict on re-apply (e.g. bare
+`create table foo`), hand-stamp first:
 
-```sql
-insert into supabase_migrations.schema_migrations (version)
-values ('NNN') on conflict do nothing;
+```bash
+SUPABASE_ACCESS_TOKEN=... curl -s -X POST \
+  "https://api.supabase.com/v1/projects/$REF/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"insert into supabase_migrations.schema_migrations (version) values ('\''NNN'\'') on conflict do nothing"}'
 ```
 
-...or edit the migration to add `IF NOT EXISTS` guards and push normally.
+...or add `if not exists` guards to the migration and push normally.
 
 ## Troubleshooting
 
-- **"missing connection"** — set `SUPABASE_DB_URL` (preferred) or both
-  `SUPABASE_PROJECT_REF` + `SUPABASE_DB_PASSWORD`.
-- **"psql query failed: ... does not exist"** — `supabase_migrations`
-  schema hasn't been initialized on the target. The script creates a
-  fresh project handling: it treats that as "no versions applied yet"
-  and applies everything.
-- **Password has special chars (`@`, `:`, `/`, `?`)** — use the split
-  form (`SUPABASE_DB_PASSWORD`); the script URL-encodes it. If you pass
-  `SUPABASE_DB_URL` directly, encode the password yourself.
-- **Script uses `/opt/homebrew/opt/libpq/bin/psql` if present** (Mac
-  Homebrew default); otherwise falls back to `psql` on `PATH`. Linux
-  runners should just have `postgresql-client` installed.
+- **"no access token"** — run `supabase login` once; the CLI stores the
+  token in your OS keychain. Alternatively export
+  `SUPABASE_ACCESS_TOKEN` in the shell.
+- **macOS keychain returns `go-keyring-encrypted:...`** — the CLI
+  encrypted the token with a local key we don't have access to.
+  Re-run `supabase login` (newer CLI versions default to
+  base64 storage), or export `SUPABASE_ACCESS_TOKEN` directly.
+- **"HTTP 404" with project ref mismatch** — confirm
+  `supabase/config.toml`'s `project_id` matches the dashboard project
+  you want to push to.
+- **Management API rate limits** — around 60 calls/minute. The script
+  does at most one per pending migration plus one list query, so it
+  fits comfortably under the limit.
+- **Linux keychain support** — not yet. Either export
+  `SUPABASE_ACCESS_TOKEN` or add a `secret-tool` branch to
+  `resolveAccessToken()` (TODO).
 
 ## When to retire this wrapper
 
