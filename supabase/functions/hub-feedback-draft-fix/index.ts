@@ -96,10 +96,13 @@ Deno.serve(async (req) => {
     const feedbackId = typeof body?.feedback_id === "string" ? body.feedback_id : "";
     if (!feedbackId) return safeJsonError("feedback_id required", 400, origin);
 
+    // Workspace belt-and-braces: even if RLS permits admin cross-workspace reads,
+    // every lookup and write is scoped to the caller's active workspace.
     const { data: feedback, error: fetchErr } = await auth.supabase
       .from("hub_feedback")
       .select("*")
       .eq("id", feedbackId)
+      .eq("workspace_id", auth.workspaceId)
       .is("deleted_at", null)
       .single();
     if (fetchErr || !feedback) {
@@ -113,7 +116,8 @@ Deno.serve(async (req) => {
     await auth.supabase
       .from("hub_feedback")
       .update({ status: "drafting" })
-      .eq("id", feedbackId);
+      .eq("id", feedbackId)
+      .eq("workspace_id", auth.workspaceId);
 
     // 2. Ask Claude for a structured proposal.
     const proposal = await generateProposal({
@@ -186,6 +190,7 @@ Deno.serve(async (req) => {
       .from("hub_feedback")
       .update(update)
       .eq("id", feedbackId)
+      .eq("workspace_id", auth.workspaceId)
       .select("*")
       .single();
 
@@ -206,7 +211,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-feedback-draft-fix" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-feedback-draft-fix]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

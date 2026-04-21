@@ -129,6 +129,12 @@ export interface QuoteScenario {
 export interface RebateDeadline {
   dealId: string;
   dealNumber: string;
+  /**
+   * Workspace that owns the deal. Required so the rebate-deadlines cron can
+   * fan out notifications only to admins in the same workspace (prevents
+   * cross-tenant leakage of deal numbers, company names, rebate amounts).
+   */
+  workspaceId: string;
   companyName: string;
   salesmanName: string;
   programs: Array<{

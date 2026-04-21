@@ -40,6 +40,13 @@ export type ServiceAuthResult =
     supabase: SupabaseClient;
     userId: string;
     role: string;
+    /**
+     * Caller's active workspace. Required by admin endpoints that need
+     * to gate cross-workspace access even for admin users (e.g. price-
+     * sheet watchdog manual trigger). Falls back to `"default"` when the
+     * profile row has no active_workspace_id set.
+     */
+    workspaceId: string;
   }
   | { ok: false; response: Response };
 
@@ -126,7 +133,7 @@ export async function requireServiceUser(
 
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, active_workspace_id")
     .eq("id", user.id)
     .single();
 
@@ -139,5 +146,6 @@ export async function requireServiceUser(
     return { ok: false, response: safeJsonError("Forbidden", 403, origin) };
   }
 
-  return { ok: true, supabase, userId: user.id, role };
+  const workspaceId = (profile.active_workspace_id as string | null) ?? "default";
+  return { ok: true, supabase, userId: user.id, role, workspaceId };
 }

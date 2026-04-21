@@ -93,6 +93,9 @@ Deno.serve(async (req: Request) => {
   // path would 401 them needlessly.
   const cronCaller = isServiceRoleCaller(req);
   let userIdForAudit: string | null = null;
+  // Non-null only when cronCaller is false — used to gate user-initiated
+  // single-source triggers to the caller's own workspace.
+  let callerWorkspaceId: string | null = null;
   if (!cronCaller) {
     const auth = await requireServiceUser(req.headers.get("authorization"), origin);
     if (!auth.ok) return auth.response;
@@ -100,6 +103,7 @@ Deno.serve(async (req: Request) => {
       return safeJsonError("Watchdog requires admin, manager, or owner role", 403, origin);
     }
     userIdForAudit = auth.userId;
+    callerWorkspaceId = auth.workspaceId;
   }
 
   const parsed = await parseJsonBody(req, origin);
@@ -120,6 +124,12 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (error) return safeJsonError(`Load source failed: ${error.message}`, 500, origin);
     if (!data)  return safeJsonError("Source not found", 404, origin);
+    // Workspace isolation: user-initiated triggers must be confined to the
+    // caller's own workspace even though the service-role client bypasses RLS.
+    // Cron callers skip this check (cron runs globally).
+    if (!cronCaller && callerWorkspaceId && (data as SourceRow).workspace_id !== callerWorkspaceId) {
+      return safeJsonError("Source not found", 404, origin);
+    }
     sources = [data as SourceRow];
   } else {
     const { data, error } = await service

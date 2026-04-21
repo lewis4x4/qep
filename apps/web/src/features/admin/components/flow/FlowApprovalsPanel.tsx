@@ -109,6 +109,7 @@ export function FlowApprovalsPanel() {
                 <div className="mt-2 flex items-center gap-2">
                   <input
                     type="text"
+                    aria-label={`Decision reason for ${a.subject}`}
                     value={reasonById[a.id] ?? ""}
                     onChange={(e) => setReasonById((p) => ({ ...p, [a.id]: e.target.value }))}
                     placeholder="Decision reason (optional)"
@@ -131,6 +132,11 @@ export function FlowApprovalsPanel() {
                     <X className="mr-1 h-2.5 w-2.5" /> Reject
                   </Button>
                 </div>
+                {decide.isError && decide.variables?.id === a.id && (
+                  <p className="mt-1 text-[11px] text-red-400">
+                    {(decide.error as Error)?.message ?? "Decision failed"}
+                  </p>
+                )}
               </div>
             );
           })}

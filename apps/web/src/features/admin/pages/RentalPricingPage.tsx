@@ -306,6 +306,12 @@ export function RentalPricingPage() {
                 Cancel edit
               </Button>
             ) : null}
+            {(saveMutation.isError || toggleRuleMutation.isError || deleteRuleMutation.isError) && (
+              <p className="text-xs text-destructive">
+                {((saveMutation.error ?? toggleRuleMutation.error ?? deleteRuleMutation.error) as Error)?.message ??
+                  "Pricing rule update failed"}
+              </p>
+            )}
           </div>
         </Card>
 

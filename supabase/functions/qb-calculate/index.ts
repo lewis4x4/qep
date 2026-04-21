@@ -165,7 +165,7 @@ Deno.serve(async (req: Request) => {
     // ── 3. Active programs for this brand ─────────────────────────────────
     // F1 fix: qb_programs uses `active` (not `is_active`), `effective_from`/`effective_to` (not start_date/end_date).
     // F4 fix: add date-window filter so expired or future programs are excluded from quotes.
-    const today = new Date().toISOString().slice(0, 10);
+    // `today` is already declared above for the freight-zone window; reuse it.
     const { data: programRows, error: progErr } = await supabase
       .from("qb_programs")
       .select("id, program_type, name, brand_id, active, effective_from, effective_to, details")
@@ -251,7 +251,7 @@ Deno.serve(async (req: Request) => {
         },
       },
       freightCents: freightCents as number,
-      freightZone: freightZone.zone_code as string,
+      freightZone: freightZone.zone_name as string,
       taxRatePct: FL_TAX_RATE_PCT,
       programs,
       catalogAttachments,

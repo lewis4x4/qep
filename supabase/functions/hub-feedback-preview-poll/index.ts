@@ -166,7 +166,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-feedback-preview-poll" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-feedback-preview-poll]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

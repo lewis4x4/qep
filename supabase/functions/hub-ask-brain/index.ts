@@ -192,7 +192,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-ask-brain" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-ask-brain]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

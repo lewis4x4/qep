@@ -219,3 +219,34 @@ verify_jwt = false
 # inside the fn.
 [functions.hub-ask-brain]
 verify_jwt = false
+
+# Cron-invoked every 1 min via x-internal-service-secret (migration 322).
+# Gateway verify_jwt MUST be false — cron ticks carry no Authorization bearer,
+# so the gateway's JWT check would reject the request before isServiceRoleCaller
+# runs. Sends Resend emails to submitters on status changes.
+[functions.hub-feedback-notify]
+verify_jwt = false
+
+# Cron-invoked every 2 min via x-internal-service-secret (migration 327).
+# Polls Netlify for preview_url of recently shipped PRs and stamps back onto
+# hub_feedback. Same gateway contract as hub-feedback-notify.
+[functions.hub-feedback-preview-poll]
+verify_jwt = false
+
+# Voice-capture ingest for the stakeholder feedback UI. Uses requireHubUser
+# (ES256 user JWT) — gateway verifier rejects ES256 unless verify_jwt=false
+# forwards the raw token to the function's own GoTrue /auth/v1/user check.
+[functions.hub-feedback-transcribe]
+verify_jwt = false
+
+# Cron-invoked via x-internal-service-secret (migration 307). Sweeps brand
+# sheet sources past their next_check_at and fetches for change detection.
+# Admin users may also trigger via the UI. cron-auth gate inside fn.
+[functions.qb-price-sheet-watchdog]
+verify_jwt = false
+
+# Cron-invoked daily 11:00 UTC via x-internal-service-secret (migration 293).
+# Looks up rebate deadlines within ALERT_DAYS_AHEAD and fans out notifications
+# to workspace admins. Same gateway contract as the other cron fns.
+[functions.qb-rebate-deadlines-cron]
+verify_jwt = false

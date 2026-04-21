@@ -125,7 +125,8 @@ Deno.serve(async (req) => {
     return safeJsonOk(result, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "hub-feedback-transcribe" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-feedback-transcribe]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

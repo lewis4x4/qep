@@ -296,7 +296,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-changelog-from-commit" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-changelog-from-commit]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

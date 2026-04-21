@@ -151,7 +151,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-knowledge-sync" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-knowledge-sync]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 
@@ -366,11 +367,14 @@ async function syncOne(
     sourceId = ins.id as string;
   }
 
-  // Wipe existing chunks then re-insert.
-  await supabase.from("hub_knowledge_chunk").delete().eq("source_id", sourceId);
-
+  // Prepare replacement chunks BEFORE wiping old ones. Otherwise an embedding
+  // failure (e.g. OpenAI 429) would leave the source with zero chunks and
+  // Ask-the-Brain would silently drop this source from retrieval until the
+  // next 4h sync tick. Build the full rows array first, then swap atomically.
   const chunks = chunkMarkdown(cand.body);
   if (chunks.length === 0) {
+    // Empty body: wipe and return without inserting.
+    await supabase.from("hub_knowledge_chunk").delete().eq("source_id", sourceId);
     return {
       key: cand.key,
       action: existing ? "updated" : "inserted",
@@ -379,42 +383,39 @@ async function syncOne(
     };
   }
 
+  let rows: Array<Record<string, unknown>>;
   if (!opts.embeddingEnabled) {
-    // Insert chunks without embeddings — a future run will backfill.
-    const rows = chunks.map((body, i) => ({
+    rows = chunks.map((body, i) => ({
       source_id: sourceId,
       workspace_id: cand.workspace_id,
       chunk_index: i,
       body,
       embedding_model: OPENAI_EMBEDDING_MODEL,
     }));
-    const { error } = await supabase.from("hub_knowledge_chunk").insert(rows);
-    if (error) throw new Error(`chunk insert (no embed): ${error.message}`);
-    return {
-      key: cand.key,
-      action: "embed_skipped",
-      chunks: chunks.length,
-      drive_file_id: realDriveFileId,
-    };
+  } else {
+    // Embed first — if this throws, the existing chunks stay intact.
+    const vectors = await embedTexts(chunks);
+    rows = chunks.map((body, i) => ({
+      source_id: sourceId,
+      workspace_id: cand.workspace_id,
+      chunk_index: i,
+      body,
+      embedding: formatVectorLiteral(vectors[i]),
+      embedding_model: OPENAI_EMBEDDING_MODEL,
+      token_count: approximateTokenCount(body),
+    }));
   }
 
-  const vectors = await embedTexts(chunks);
-  const rows = chunks.map((body, i) => ({
-    source_id: sourceId,
-    workspace_id: cand.workspace_id,
-    chunk_index: i,
-    body,
-    embedding: formatVectorLiteral(vectors[i]),
-    embedding_model: OPENAI_EMBEDDING_MODEL,
-    token_count: approximateTokenCount(body),
-  }));
-
+  // Now it's safe to swap: delete old chunks, then insert fresh ones.
+  await supabase.from("hub_knowledge_chunk").delete().eq("source_id", sourceId);
   const { error } = await supabase.from("hub_knowledge_chunk").insert(rows);
   if (error) throw new Error(`chunk insert: ${error.message}`);
 
   return {
     key: cand.key,
-    action: existing ? "updated" : "inserted",
+    action: opts.embeddingEnabled
+      ? existing ? "updated" : "inserted"
+      : "embed_skipped",
     chunks: chunks.length,
     drive_file_id: realDriveFileId,
   };

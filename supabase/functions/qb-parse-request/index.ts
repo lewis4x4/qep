@@ -192,21 +192,27 @@ Deno.serve(async (req: Request) => {
   const confidence = { brand: 0, model: 0, state: 0, customerType: 0 };
 
   if (parsedIntent && !parseError) {
-    // Resolve brand by code or name (case-insensitive)
+    // Resolve brand by code or name (case-insensitive).
+    // The `.or()` string is PostgREST DSL — commas/parens/stars in the keyword
+    // would let a crafted prompt re-scope the filter, so we strip those meta
+    // chars before interpolation (a filter-injection, not SQL injection).
     if (parsedIntent.brandKeyword) {
-      const brandQuery = parsedIntent.brandKeyword.toUpperCase();
-      const { data: brandRows } = await auth.supabase
-        .from("qb_brands")
-        .select("id, code, name")
-        .or(`code.eq.${brandQuery},name.ilike.${parsedIntent.brandKeyword}`)
-        .limit(1)
-        .maybeSingle();
+      const kwSafe = parsedIntent.brandKeyword.trim().replace(/[(),*]/g, "");
+      if (kwSafe.length > 0) {
+        const brandQuery = kwSafe.toUpperCase();
+        const { data: brandRows } = await auth.supabase
+          .from("qb_brands")
+          .select("id, code, name")
+          .or(`code.eq.${brandQuery},name.ilike.%${kwSafe}%`)
+          .limit(1)
+          .maybeSingle();
 
-      if (brandRows?.id) {
-        resolvedBrandId = brandRows.id as string;
-        confidence.brand = 0.90;
-      } else {
-        confidence.brand = 0.20; // keyword present but no catalog match
+        if (brandRows?.id) {
+          resolvedBrandId = brandRows.id as string;
+          confidence.brand = 0.90;
+        } else {
+          confidence.brand = 0.20; // keyword present but no catalog match
+        }
       }
     }
 

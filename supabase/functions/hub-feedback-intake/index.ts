@@ -283,7 +283,13 @@ Deno.serve(async (req) => {
         linked_to: dedupMatch
           ? {
               feedback_id: dedupMatch.feedback_id,
-              similarity: Number(dedupMatch.similarity.toFixed(3)),
+              // Guard: match_hub_feedback_dedup can legally return null on a
+              // near-zero cosine; toFixed(3) on null throws and the whole
+              // intake 500s even though the insert already landed.
+              similarity:
+                typeof dedupMatch.similarity === "number"
+                  ? Number(dedupMatch.similarity.toFixed(3))
+                  : null,
               ai_summary: dedupMatch.ai_summary,
             }
           : null,
@@ -292,7 +298,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-feedback-intake" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-feedback-intake]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 

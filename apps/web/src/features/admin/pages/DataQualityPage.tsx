@@ -118,6 +118,12 @@ export function DataQualityPage() {
         </div>
       </div>
 
+      {(runAuditMutation.isError || updateMutation.isError) && (
+        <p className="text-xs text-destructive">
+          {((runAuditMutation.error ?? updateMutation.error) as Error)?.message ?? "Operation failed"}
+        </p>
+      )}
+
       {isLoading && (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}

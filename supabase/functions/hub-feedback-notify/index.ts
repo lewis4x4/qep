@@ -168,7 +168,8 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-feedback-notify" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-feedback-notify]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });
 
@@ -216,16 +217,48 @@ async function processEvent(
 
   const { subject, text } = await renderEmail(event, feedback, submitter);
 
-  const result = await sendResendEmail({
+  // Three outcomes we need to distinguish:
+  //   1. skipped=true  → no RESEND_API_KEY / bad email → stamp, never retry.
+  //   2. ok=true       → sent → stamp.
+  //   3. ok=false,
+  //      skipped=false → transient (HTTP non-ok, network throw) → do NOT stamp,
+  //                       next cron tick picks it up again.
+  // Previously the .catch swallowed throws as skipped=true, so a Resend 503
+  // stamped the event as notified and the email was permanently lost.
+  type SendOutcome =
+    | { kind: "sent" }
+    | { kind: "skipped" }
+    | { kind: "transient"; reason: string };
+
+  const outcome: SendOutcome = await sendResendEmail({
     to: submitter.email,
     subject,
     text,
-  }).catch(() => ({ ok: false, skipped: true as const }));
+  })
+    .then((r): SendOutcome => {
+      if (r.skipped) return { kind: "skipped" };
+      if (r.ok)      return { kind: "sent" };
+      return { kind: "transient", reason: "resend returned non-ok" };
+    })
+    .catch((err): SendOutcome => ({
+      kind: "transient",
+      reason: err instanceof Error ? err.message : String(err),
+    }));
 
-  // Zero-blocking: skipped (no API key) still stamps to prevent loops.
+  if (outcome.kind === "transient") {
+    // Don't stamp — let the next cron tick retry.
+    return {
+      event_id: event.id,
+      event_type: event.event_type,
+      feedback_id: event.feedback_id,
+      action: "error",
+      error: outcome.reason,
+    };
+  }
+
   await stamp(supabase, event.id);
 
-  if (result.skipped) {
+  if (outcome.kind === "skipped") {
     return {
       event_id: event.id,
       event_type: event.event_type,
@@ -238,8 +271,7 @@ async function processEvent(
     event_id: event.id,
     event_type: event.event_type,
     feedback_id: event.feedback_id,
-    action: result.ok ? "emailed" : "error",
-    error: result.ok ? undefined : "resend send returned non-ok",
+    action: "emailed",
   };
 }
 

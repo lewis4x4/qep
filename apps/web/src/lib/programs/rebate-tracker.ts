@@ -42,12 +42,14 @@ export async function getUpcomingRebateDeadlines(
   const todayIso  = new Date().toISOString().split("T")[0];
 
   // Fetch deals within the window (include overdue — past due_date but unfiled)
+  // workspace_id is required so the cron can scope fan-out to the owning tenant.
   let query = supabase
     .from("qb_deals")
     .select(
       `
       id,
       deal_number,
+      workspace_id,
       salesman_id,
       applied_program_ids,
       warranty_registration_date,
@@ -100,6 +102,7 @@ export async function getUpcomingRebateDeadlines(
     results.push({
       dealId: deal.id,
       dealNumber: deal.deal_number,
+      workspaceId: (deal.workspace_id as string | null) ?? "default",
       companyName,
       salesmanName,
       programs: programIds.map((id) => ({

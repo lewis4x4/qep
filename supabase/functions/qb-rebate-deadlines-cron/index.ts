@@ -75,13 +75,24 @@ Deno.serve(async (req: Request) => {
     return safeJsonOk({ notified: 0, deadlines: [] }, origin);
   }
 
-  // ── Find Angela (admin/manager users) to notify ─────────────────────────────
-  const { data: adminUsers } = await supabase
-    .from("profiles")
-    .select("id")
-    .in("role", ["admin", "manager", "owner"]);
-
-  const adminIds: string[] = (adminUsers ?? []).map((u: { id: string }) => u.id);
+  // ── Admin fan-out, scoped per workspace (SECURITY) ─────────────────────────
+  // Prior behavior fetched every admin profile globally and pushed every deal's
+  // notification to every admin — leaking deal numbers, company names, and
+  // rebate amounts across tenants. Now: resolve admins per the deal's own
+  // workspace_id (denormalized onto RebateDeadline by getUpcomingRebateDeadlines).
+  const workspaceAdminCache = new Map<string, string[]>();
+  async function adminsForWorkspace(workspaceId: string): Promise<string[]> {
+    const cached = workspaceAdminCache.get(workspaceId);
+    if (cached) return cached;
+    const { data } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("active_workspace_id", workspaceId)
+      .in("role", ["admin", "manager", "owner"]);
+    const ids = (data ?? []).map((u: { id: string }) => u.id);
+    workspaceAdminCache.set(workspaceId, ids);
+    return ids;
+  }
 
   // ── Insert notifications ─────────────────────────────────────────────────────
   const notifications: Array<{
@@ -109,6 +120,7 @@ Deno.serve(async (req: Request) => {
     const metadata = {
       dealId: d.dealId,
       dealNumber: d.dealNumber,
+      workspaceId: d.workspaceId,
       companyName: d.companyName,
       filingDueDate: d.filingDueDate,
       daysRemaining: d.daysRemaining,
@@ -116,7 +128,8 @@ Deno.serve(async (req: Request) => {
       programs: d.programs,
     };
 
-    // Notify all admins/managers/owners
+    // Notify admins in *this deal's* workspace only.
+    const adminIds = await adminsForWorkspace(d.workspaceId);
     for (const adminId of adminIds) {
       notifications.push({ user_id: adminId, type: "rebate_deadline_warning", title, body, metadata });
     }

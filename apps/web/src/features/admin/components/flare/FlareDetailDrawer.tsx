@@ -345,6 +345,7 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
               <div className="mt-3 flex gap-2">
                 <input
                   type="text"
+                  aria-label="Deploy SHA for fix"
                   value={deploySha}
                   onChange={(e) => setDeploySha(e.target.value)}
                   placeholder="Deploy SHA (optional)"
@@ -357,6 +358,11 @@ export function FlareDetailDrawer({ report, onClose }: FlareDetailDrawerProps) {
                   Mark fixed
                 </Button>
               </div>
+              {updateMutation.isError && (
+                <p className="mt-2 text-xs text-destructive">
+                  {(updateMutation.error as Error)?.message ?? "Update failed"}
+                </p>
+              )}
             </Card>
           )}
 

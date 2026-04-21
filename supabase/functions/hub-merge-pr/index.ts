@@ -50,10 +50,13 @@ Deno.serve(async (req) => {
     const mergeMethod: "merge" | "squash" | "rebase" =
       raw?.merge_method === "merge" || raw?.merge_method === "rebase" ? raw.merge_method : "squash";
 
+    // Workspace belt-and-braces: merge is confined to the caller's own workspace
+    // even if RLS policy would otherwise allow admin cross-workspace visibility.
     const { data: feedback, error: fetchErr } = await auth.supabase
       .from("hub_feedback")
       .select("id, status, claude_pr_url, ai_summary, body")
       .eq("id", feedbackId)
+      .eq("workspace_id", auth.workspaceId)
       .is("deleted_at", null)
       .single();
     if (fetchErr || !feedback) {
@@ -95,6 +98,7 @@ Deno.serve(async (req) => {
         resolved_at: new Date().toISOString(),
       })
       .eq("id", feedbackId)
+      .eq("workspace_id", auth.workspaceId)
       .select("*")
       .single();
 
@@ -113,6 +117,7 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     captureEdgeException(err, { fn: "hub-merge-pr" });
-    return safeJsonError((err as Error).message, 500, origin);
+    console.error("[hub-merge-pr]", err);
+    return safeJsonError("Internal error", 500, origin);
   }
 });

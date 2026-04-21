@@ -303,10 +303,16 @@ export function IncentiveCatalogPage() {
                     variant="ghost"
                     className="h-7 text-[10px]"
                     onClick={() => deleteMutation.mutate(i.id)}
+                    aria-label="Delete incentive"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
+                {deleteMutation.isError && deleteMutation.variables === i.id && (
+                  <p className="mt-1 text-[11px] text-red-400">
+                    {(deleteMutation.error as Error)?.message ?? "Delete failed"}
+                  </p>
+                )}
               </Card>
             );
           })}

@@ -225,6 +225,11 @@ export function ExceptionInboxPage() {
                         <Check className="mr-1 h-3 w-3" /> Resolve
                       </Button>
                     </div>
+                    {updateMutation.isError && updateMutation.variables?.id === e.id && (
+                      <p className="mt-1 text-xs text-destructive">
+                        {(updateMutation.error as Error)?.message ?? "Update failed"}
+                      </p>
+                    )}
                   </div>
                 )}
               </Card>

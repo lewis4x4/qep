@@ -358,8 +358,25 @@ export function FlowAdminPage() {
   const failed = last24h.filter((r) => r.status === "dead_lettered" || r.status === "cancelled").length;
   const awaiting = recentRuns.filter((r) => r.status === "awaiting_approval").length;
 
+  // Shared error banner — any admin mutation that fails surfaces here so
+  // operators get explicit feedback instead of a silent no-op. The button
+  // you clicked stays available; the banner shows the reason.
+  const adminMutError =
+    runNow.error ?? replayDeadLetter.error ?? toggleEnabled.error ??
+    runPatternMining.error ?? dismissSuggestion.error ??
+    synthesize.error ?? promoteSuggestion.error ?? null;
+  const adminMutErrored =
+    runNow.isError || replayDeadLetter.isError || toggleEnabled.isError ||
+    runPatternMining.isError || dismissSuggestion.isError ||
+    synthesize.isError || promoteSuggestion.isError;
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+      {adminMutErrored && (
+        <div className="rounded border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {(adminMutError as Error)?.message ?? "Admin action failed"}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">

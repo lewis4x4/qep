@@ -389,6 +389,11 @@ function BranchManagementPageInner() {
 
       {!editing ? (
         <>
+          {deleteMut.isError && (
+            <p className="text-sm text-destructive">
+              {(deleteMut.error as Error)?.message ?? "Archive failed"}
+            </p>
+          )}
           {branches.length === 0 ? (
             <Card className="p-8 text-center text-sm text-muted-foreground">
               No branches configured. Add your first store location.

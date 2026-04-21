@@ -126,7 +126,7 @@ export function CatalogImportPage() {
       if (error) throw new Error(error.message);
       return rows.length;
     },
-    onSuccess: (count) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["catalog"] });
     },
   });

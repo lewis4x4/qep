@@ -188,16 +188,21 @@ Deno.serve(async (req: Request) => {
         // ── Stage 2: Resolve brand + model ─────────────────────────────────
         emit({ type: "status", message: "Searching the machine catalog…" });
 
-        // Brand resolution (if not already provided)
+        // Brand resolution (if not already provided).
+        // Sanitize PostgREST .or() meta chars — see qb-parse-request for the
+        // same guard; Claude-produced keywords can carry commas/parens.
         if (!resolvedBrandId && parsed.brandKeyword) {
-          const brandQuery = parsed.brandKeyword.toUpperCase();
-          const { data: brandRow } = await auth.supabase
-            .from("qb_brands")
-            .select("id, code, name")
-            .or(`code.eq.${brandQuery},name.ilike.${parsed.brandKeyword}`)
-            .limit(1)
-            .maybeSingle();
-          resolvedBrandId = (brandRow as { id: string } | null)?.id ?? null;
+          const kwSafe = parsed.brandKeyword.trim().replace(/[(),*]/g, "");
+          if (kwSafe.length > 0) {
+            const brandQuery = kwSafe.toUpperCase();
+            const { data: brandRow } = await auth.supabase
+              .from("qb_brands")
+              .select("id, code, name")
+              .or(`code.eq.${brandQuery},name.ilike.%${kwSafe}%`)
+              .limit(1)
+              .maybeSingle();
+            resolvedBrandId = (brandRow as { id: string } | null)?.id ?? null;
+          }
         }
 
         // Model fuzzy search (if not already provided)
@@ -217,27 +222,34 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Log telemetry (fire-and-forget)
-        svcClient.from("qb_ai_request_log").insert({
-          user_id:           auth.userId,
-          raw_prompt:        prompt,
-          resolved_brand_id: resolvedBrandId,
-          resolved_model_id: resolvedModelId,
-          model_candidates:  modelCandidates.length ? modelCandidates.slice(0, 5) : null,
-          confidence: {
-            brand: resolvedBrandId ? 0.85 : 0.10,
-            model: resolvedModelId ? 0.85 : 0.10,
-            state: deliveryState ? 0.80 : 0.30,
-            customerType: 0.80,
-          },
-          delivery_state: deliveryState,
-          customer_type:  customerType,
-          latency_ms:     Date.now() - startMs,
-          error:          null,
-          prompt_source:  promptSource,
-        }).select("id").single().then(({ data }) => {
-          logId = (data as { id: string } | null)?.id ?? null;
-        }).catch(() => { /* telemetry failure must not affect response */ });
+        // Log telemetry — awaited so the row is durable before the streaming
+        // response starts tearing down the isolate. Worth the ~30ms: Deno
+        // aggressively kills fire-and-forget promises on response close, which
+        // leaves logs missing rows and makes debugging a guessing game.
+        try {
+          const { data: logRow } = await svcClient.from("qb_ai_request_log").insert({
+            user_id:           auth.userId,
+            raw_prompt:        prompt,
+            resolved_brand_id: resolvedBrandId,
+            resolved_model_id: resolvedModelId,
+            model_candidates:  modelCandidates.length ? modelCandidates.slice(0, 5) : null,
+            confidence: {
+              brand: resolvedBrandId ? 0.85 : 0.10,
+              model: resolvedModelId ? 0.85 : 0.10,
+              state: deliveryState ? 0.80 : 0.30,
+              customerType: 0.80,
+            },
+            delivery_state: deliveryState,
+            customer_type:  customerType,
+            latency_ms:     Date.now() - startMs,
+            error:          null,
+            prompt_source:  promptSource,
+          }).select("id").single();
+          logId = (logRow as { id: string } | null)?.id ?? null;
+        } catch (telemetryErr) {
+          // Telemetry failure must not affect response — log and continue.
+          console.warn("[qb-ai-scenarios] telemetry insert failed:", telemetryErr);
+        }
 
         // ── No model found — return partial results ─────────────────────────
         if (!resolvedModelId) {
