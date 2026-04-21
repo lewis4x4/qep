@@ -255,6 +255,48 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
     },
   },
   {
+    // Slice 14: the morning-briefing synthesizer. Pulls four arms into one
+    // round-trip so Claude can answer "what's on my plate" / "brief me on
+    // my day" without chaining list_my_moves + list_my_touches +
+    // list_recent_signals + a completed-moves query across four turns.
+    //
+    //   1. active_moves      — suggested + accepted, priority desc
+    //   2. completed_today   — moves the rep closed inside the window
+    //   3. recent_touches    — the rep's outbound log (same shape as
+    //                           list_my_touches)
+    //   4. open_signals      — medium+ severity signals in the window
+    //
+    // Rep callers are always pinned to their own userId; managers may
+    // target a specific rep via rep_id (with the same cross-workspace
+    // guard used by list_my_moves / list_my_touches / propose_move).
+    //
+    // Scope note: open_signals is workspace-wide, not rep-scoped — a rep
+    // briefing also wants to know if something signal-worthy hit the
+    // workspace even if it isn't pinned to one of their deals yet. The
+    // returned payload labels this explicitly so the LLM doesn't claim
+    // "no signals on your accounts".
+    name: "summarize_day",
+    description:
+      "Morning-briefing bundle for the caller. Returns active moves (suggested + accepted), moves completed in the window, the rep's recent outbound touches, and workspace signals at medium+ severity — all scoped to the last lookback_hours. Use for 'what's on my plate this morning', 'brief me on my day', 'where should I start', 'catch me up'. Do NOT use for narrower questions — for just moves call list_my_moves, for just touches call list_my_touches, for just signals call list_recent_signals. Returns structured data — write the briefing yourself in 2–4 sentences. open_signals is workspace-wide (not just this rep's accounts).",
+    input_schema: {
+      type: "object",
+      properties: {
+        lookback_hours: {
+          type: "integer",
+          minimum: 1,
+          maximum: 168,
+          description:
+            "Window to pull completed moves, recent touches, and signals from. Default 24 (one day). Use 72 for 'what happened while I was out Friday'.",
+        },
+        rep_id: {
+          type: "string",
+          description:
+            "UUID of a rep. Admins/managers use this to answer 'how's Jim's day looking'. Reps are always scoped to themselves.",
+        },
+      },
+    },
+  },
+  {
     // Slice 13: the rep's own activity trail. Before this tool, Iron could
     // see moves (recommender output) and signals (inbound events) but had
     // zero visibility into what the rep actually did. "Did I call Acme this
@@ -825,6 +867,57 @@ export function normalizeListMyTouchesInput(
   return { sinceIso, limit, activityTypes, entityType, entityId, repId };
 }
 
+// ── summarize_day normalization (Slice 14) ─────────────────────────────────
+
+export interface NormalizedSummarizeDay {
+  sinceIso: string;
+  lookbackHours: number;
+  repId: string | null;
+}
+
+export const SUMMARIZE_DAY_DEFAULT_HOURS = 24;
+/**
+ * Hard caps on each list arm of the day-briefing. Kept uniform with the
+ * existing synthesizers so the LLM's context budget is predictable — it
+ * sees at most 10 of each thing regardless of lookback window.
+ */
+export const SUMMARIZE_DAY_MOVE_LIMIT = 10;
+export const SUMMARIZE_DAY_COMPLETED_LIMIT = 10;
+export const SUMMARIZE_DAY_TOUCH_LIMIT = 10;
+export const SUMMARIZE_DAY_SIGNAL_LIMIT = 10;
+
+/**
+ * Validate + normalize the LLM-supplied `summarize_day` input. Rep
+ * callers always get `repId = caller.userId` regardless of what the
+ * model passed — same rule as list_my_moves / list_my_touches.
+ *
+ * No VALIDATION_ERROR cases here: a bad lookback clamps to the default,
+ * an invalid rep_id is either ignored (elevated callers can omit to
+ * default null) or overridden to self (rep callers). The cross-workspace
+ * rep check still runs in the executor.
+ */
+export function normalizeSummarizeDayInput(
+  input: Record<string, unknown>,
+  ctx: RouterCtx,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeDay {
+  const hoursRaw = Number(input.lookback_hours ?? SUMMARIZE_DAY_DEFAULT_HOURS);
+  const lookbackHours = Number.isFinite(hoursRaw)
+    ? Math.min(Math.max(Math.trunc(hoursRaw), 1), 168)
+    : SUMMARIZE_DAY_DEFAULT_HOURS;
+  const sinceIso = new Date(nowMs - lookbackHours * 3_600_000).toISOString();
+
+  const requestedRepId =
+    typeof input.rep_id === "string" && input.rep_id.length > 0
+      ? input.rep_id
+      : null;
+  const repId = !ctx.caller.isServiceRole && ctx.caller.role === "rep"
+    ? ctx.caller.userId
+    : requestedRepId;
+
+  return { sinceIso, lookbackHours, repId };
+}
+
 // Shrink a potentially-long free-text field to keep the tool result small.
 // Single place to change the truncation rule so both activity.body and
 // signal.description cap identically.
@@ -893,6 +986,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolSummarizeCompany(ctx, input) };
       case "list_my_touches":
         return { ok: true, data: await toolListMyTouches(ctx, input) };
+      case "summarize_day":
+        return { ok: true, data: await toolSummarizeDay(ctx, input) };
       case "propose_move": {
         // Per-request cap. We return a structured error (not throw) so Claude
         // sees it in the tool result and can apologize to the operator
@@ -1453,6 +1548,190 @@ async function toolListMyTouches(
 }
 
 /**
+ * Slice 14 — morning-briefing synthesizer.
+ *
+ * Bundles four reads into one tool result so Claude can write a day
+ * briefing in a single turn:
+ *
+ *   1. active_moves       moves (suggested + accepted) for this rep,
+ *                         priority-desc. Uses the admin client because
+ *                         moves live outside callerDb's RLS today (same
+ *                         pattern as toolListMyMoves).
+ *   2. completed_today    moves with status=completed whose
+ *                         completed_at falls inside the window. Same
+ *                         table + client as active_moves; the filter
+ *                         swap is the only difference.
+ *   3. recent_touches     crm_activities authored by this rep inside
+ *                         the window, via callerDb. Body text capped.
+ *   4. open_signals       signals in the window at medium+ severity,
+ *                         workspace-wide (NOT rep-scoped). The tool
+ *                         description tells Claude to describe this as
+ *                         workspace-wide so it doesn't undersell the
+ *                         briefing.
+ *
+ * Rep callers are pinned to self upstream; elevated callers who pass
+ * rep_id go through the same profiles workspace-membership check as
+ * list_my_moves / list_my_touches / propose_move.
+ */
+async function toolSummarizeDay(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeDayInput(input, ctx);
+
+  // Cross-tenant read guard. Only elevated callers targeting someone
+  // other than themselves actually hit the profiles check.
+  if (
+    n.repId &&
+    !ctx.caller.isServiceRole &&
+    ctx.caller.role !== "rep" &&
+    n.repId !== ctx.caller.userId
+  ) {
+    const { data: repRow } = await ctx.admin
+      .from("profiles")
+      .select("id, workspace_id")
+      .eq("id", n.repId)
+      .maybeSingle();
+    const repWorkspace = (repRow as { workspace_id?: string } | null)
+      ?.workspace_id;
+    if (repWorkspace && repWorkspace !== ctx.workspaceId) {
+      throw new Error("rep not in workspace");
+    }
+  }
+
+  // 1) Active moves for this rep (or everyone, if elevated + repId null).
+  let activeQ = ctx.admin
+    .from("moves")
+    .select(
+      "id, kind, status, title, rationale, priority, entity_type, entity_id, assigned_rep_id, due_at, created_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .in("status", ["suggested", "accepted"]);
+  if (n.repId) activeQ = activeQ.eq("assigned_rep_id", n.repId);
+  const { data: activeRows, error: activeErr } = await activeQ
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_MOVE_LIMIT);
+  if (activeErr) throw activeErr;
+
+  // 2) Completed inside the window. completed_at is the source of truth
+  // for "closed today" — created_at would double-count stale moves
+  // cleared this morning.
+  let completedQ = ctx.admin
+    .from("moves")
+    .select(
+      "id, kind, title, priority, entity_type, entity_id, assigned_rep_id, completed_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("status", "completed")
+    .gte("completed_at", n.sinceIso);
+  if (n.repId) completedQ = completedQ.eq("assigned_rep_id", n.repId);
+  const { data: completedRows, error: completedErr } = await completedQ
+    .order("completed_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_COMPLETED_LIMIT);
+  if (completedErr) throw completedErr;
+
+  // 3) Recent touches. When repId is null (elevated caller + no target),
+  // we widen to workspace-level activity — a workspace briefing is still
+  // useful even if it's not rep-scoped.
+  let touchQ = ctx.callerDb
+    .from("crm_activities")
+    .select(
+      "id, activity_type, body, occurred_at, created_by, deal_id, company_id, contact_id",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso);
+  if (n.repId) touchQ = touchQ.eq("created_by", n.repId);
+  const { data: touchRows, error: touchErr } = await touchQ
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_TOUCH_LIMIT);
+  if (touchErr) throw touchErr;
+
+  // 4) Open signals (workspace-wide, medium+). Not rep-filtered on
+  // purpose — a rep briefing benefits from knowing what landed on the
+  // yard's radar even if it isn't yet tied to one of their deals.
+  const signalSeverities = ["medium", "high", "critical"];
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select(
+      "id, kind, severity, source, title, description, entity_type, entity_id, occurred_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .gte("occurred_at", n.sinceIso)
+    .in("severity", signalSeverities)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DAY_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const activeMoves = (activeRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    status: row.status,
+    title: row.title,
+    rationale: truncateForSummary(row.rationale),
+    priority: row.priority,
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    assigned_rep_id: row.assigned_rep_id,
+    due_at: row.due_at,
+  }));
+
+  const completedToday = (completedRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    priority: row.priority,
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    assigned_rep_id: row.assigned_rep_id,
+    completed_at: row.completed_at,
+  }));
+
+  const recentTouches = (touchRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    company_id: row.company_id,
+    contact_id: row.contact_id,
+  }));
+
+  const openSignals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    entity: row.entity_type && row.entity_id
+      ? { type: row.entity_type, id: row.entity_id }
+      : null,
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    as_of: new Date().toISOString(),
+    lookback_hours: n.lookbackHours,
+    rep_id: n.repId,
+    active_moves: activeMoves,
+    completed_today: completedToday,
+    recent_touches: recentTouches,
+    open_signals: openSignals,
+    counts: {
+      active_moves: activeMoves.length,
+      completed_today: completedToday.length,
+      recent_touches: recentTouches.length,
+      open_signals: openSignals.length,
+    },
+  };
+}
+
+/**
  * Create a move on behalf of the operator via the normal createMove path.
  * Provenance is stamped so the Today surface can badge this as "proposed by
  * Iron" (and a future recommender can weight or deduplicate against these).
@@ -1534,6 +1813,7 @@ Rules:
 - For "what should I do", call list_my_moves.
 - For "what changed" or "anything new", call list_recent_signals.
 - For questions about the operator's own work — "did I call <customer>", "what did I do yesterday", "any touches on <deal> this week", "how many follow-ups" — call list_my_touches. This is the operator's outbound log; it is NOT the same as list_recent_signals (inbound events). For "what did I do" questions where system-generated activity rows would be noise, filter to the touch types operators actually log (activity_types: ['call','email','meeting','follow_up','note']).
+- For morning-briefing questions — "what's on my plate", "brief me on my day", "where should I start", "catch me up" — call summarize_day. It bundles active moves, moves completed in the window, recent touches, and workspace signals into one round-trip. Do NOT chain list_my_moves + list_my_touches + list_recent_signals for these questions; summarize_day returns all four in a single call. Note: open_signals in the result is workspace-wide, so describe it as "on the yard's radar" or "across the workspace" rather than "on your accounts".
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
 - For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.

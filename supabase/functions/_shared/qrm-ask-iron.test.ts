@@ -15,8 +15,14 @@ import {
   normalizeSearchInput,
   normalizeSignalFilters,
   normalizeSummarizeCompanyInput,
+  normalizeSummarizeDayInput,
   normalizeSummarizeDealInput,
   SUMMARIZE_COMPANY_DEAL_LIMIT,
+  SUMMARIZE_DAY_COMPLETED_LIMIT,
+  SUMMARIZE_DAY_DEFAULT_HOURS,
+  SUMMARIZE_DAY_MOVE_LIMIT,
+  SUMMARIZE_DAY_SIGNAL_LIMIT,
+  SUMMARIZE_DAY_TOUCH_LIMIT,
   SUMMARIZE_DEAL_ACTIVITY_LIMIT,
   SUMMARIZE_DEAL_DEFAULT_DAYS,
   SUMMARIZE_DEAL_MAX_DAYS,
@@ -152,7 +158,7 @@ function makeCtx(
 
 // ── Catalog ────────────────────────────────────────────────────────────────
 
-Deno.test("ASK_IRON_TOOLS exposes the nine tools", () => {
+Deno.test("ASK_IRON_TOOLS exposes the ten tools", () => {
   const names = ASK_IRON_TOOLS.map((t) => t.name).sort();
   assertEquals(names, [
     "get_company_detail",
@@ -163,6 +169,7 @@ Deno.test("ASK_IRON_TOOLS exposes the nine tools", () => {
     "propose_move",
     "search_entities",
     "summarize_company",
+    "summarize_day",
     "summarize_deal",
   ]);
 });
@@ -1948,3 +1955,443 @@ Deno.test(
     );
   },
 );
+
+// ── normalizeSummarizeDayInput (Slice 14) ──────────────────────────────────
+
+Deno.test("normalizeSummarizeDayInput defaults lookback_hours to 24", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const fixedNow = Date.parse("2026-04-20T12:00:00Z");
+  const n = normalizeSummarizeDayInput({}, ctx, fixedNow);
+  assertEquals(n.lookbackHours, SUMMARIZE_DAY_DEFAULT_HOURS);
+  const expected = new Date(
+    fixedNow - SUMMARIZE_DAY_DEFAULT_HOURS * 3_600_000,
+  ).toISOString();
+  assertEquals(n.sinceIso, expected);
+});
+
+Deno.test("normalizeSummarizeDayInput clamps lookback above 168 hours", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const n = normalizeSummarizeDayInput({ lookback_hours: 999 }, ctx);
+  assertEquals(n.lookbackHours, 168);
+});
+
+Deno.test("normalizeSummarizeDayInput clamps lookback below 1", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const n = normalizeSummarizeDayInput({ lookback_hours: 0 }, ctx);
+  assertEquals(n.lookbackHours, 1);
+});
+
+Deno.test("normalizeSummarizeDayInput falls back to default when lookback is non-numeric", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep" });
+  const n = normalizeSummarizeDayInput({ lookback_hours: "foo" }, ctx);
+  assertEquals(n.lookbackHours, SUMMARIZE_DAY_DEFAULT_HOURS);
+});
+
+Deno.test("normalizeSummarizeDayInput pins rep callers to self regardless of rep_id input", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+  const n = normalizeSummarizeDayInput({ rep_id: "rep-other" }, ctx);
+  assertEquals(n.repId, "rep-me");
+});
+
+Deno.test("normalizeSummarizeDayInput lets managers target a specific rep_id", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "manager", userId: "mgr-1" });
+  const n = normalizeSummarizeDayInput({ rep_id: "rep-42" }, ctx);
+  assertEquals(n.repId, "rep-42");
+});
+
+Deno.test("normalizeSummarizeDayInput leaves repId null for elevated callers who omit rep_id", () => {
+  const { client } = makeStubClient({});
+  const ctx = makeCtx(client, { role: "admin", userId: "admin-1" });
+  const n = normalizeSummarizeDayInput({}, ctx);
+  assertEquals(n.repId, null);
+});
+
+// ── executeAskIronTool summarize_day ───────────────────────────────────────
+
+Deno.test(
+  "executeAskIronTool summarize_day bundles active + completed + touches + signals for a rep caller",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        {
+          data: [
+            {
+              id: "m-a",
+              kind: "call_now",
+              status: "suggested",
+              title: "Call Acme",
+              rationale: "Quote opened twice",
+              priority: 85,
+              entity_type: "deal",
+              entity_id: "d-1",
+              assigned_rep_id: "rep-me",
+              due_at: null,
+              created_at: "2026-04-20T09:00:00Z",
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            {
+              id: "m-c",
+              kind: "send_quote",
+              title: "Sent Acme quote",
+              priority: 60,
+              entity_type: "deal",
+              entity_id: "d-1",
+              assigned_rep_id: "rep-me",
+              completed_at: "2026-04-20T11:00:00Z",
+            },
+          ],
+          error: null,
+        },
+      ],
+      crm_activities: {
+        data: [
+          {
+            id: "a-1",
+            activity_type: "call",
+            body: "Short call.",
+            occurred_at: "2026-04-20T11:30:00Z",
+            created_by: "rep-me",
+            deal_id: "d-1",
+            company_id: null,
+            contact_id: null,
+          },
+        ],
+        error: null,
+      },
+      signals: {
+        data: [
+          {
+            id: "s-1",
+            kind: "quote_viewed",
+            severity: "high",
+            source: "email",
+            title: "Quote viewed again",
+            description: "Buyer opened PDF.",
+            entity_type: "deal",
+            entity_id: "d-1",
+            occurred_at: "2026-04-20T10:30:00Z",
+          },
+        ],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    const res = await executeAskIronTool(ctx, "summarize_day", {});
+    assertEquals(res.ok, true);
+
+    const payload = res.data as {
+      lookback_hours: number;
+      rep_id: string | null;
+      active_moves: Array<unknown>;
+      completed_today: Array<unknown>;
+      recent_touches: Array<unknown>;
+      open_signals: Array<unknown>;
+      counts: Record<string, number>;
+    };
+    assertEquals(payload.lookback_hours, SUMMARIZE_DAY_DEFAULT_HOURS);
+    assertEquals(payload.rep_id, "rep-me");
+    assertEquals(payload.active_moves.length, 1);
+    assertEquals(payload.completed_today.length, 1);
+    assertEquals(payload.recent_touches.length, 1);
+    assertEquals(payload.open_signals.length, 1);
+    assertEquals(payload.counts.active_moves, 1);
+    assertEquals(payload.counts.open_signals, 1);
+
+    // Four distinct queries hit: moves (twice), crm_activities, signals.
+    const tables = captures.map((c) => c.table);
+    assertEquals(tables.filter((t) => t === "moves").length, 2);
+    assertEquals(tables.includes("crm_activities"), true);
+    assertEquals(tables.includes("signals"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day scopes every query to the workspace",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    for (const cap of captures) {
+      assertEquals(
+        cap.filters.some(
+          (f) =>
+            f.op === "eq" && f.column === "workspace_id" && f.value === "ws-1",
+        ),
+        true,
+        `table ${cap.table} missing workspace_id filter`,
+      );
+    }
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day filters active moves by assigned_rep_id for rep callers",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    const moveCaptures = captures.filter((c) => c.table === "moves");
+    assertEquals(moveCaptures.length, 2);
+    // Both queries should carry assigned_rep_id = rep-me
+    for (const cap of moveCaptures) {
+      assertEquals(
+        cap.filters.some(
+          (f) =>
+            f.op === "eq" && f.column === "assigned_rep_id" &&
+            f.value === "rep-me",
+        ),
+        true,
+      );
+    }
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day scopes completed moves to status=completed + gte(completed_at)",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    // Second moves capture is the completed-arm.
+    const moveCaps = captures.filter((c) => c.table === "moves");
+    const completedCap = moveCaps[1];
+    assertEquals(
+      completedCap.filters.some(
+        (f) => f.op === "eq" && f.column === "status" && f.value === "completed",
+      ),
+      true,
+    );
+    assertEquals(
+      completedCap.filters.some(
+        (f) => f.op === "gte" && f.column === "completed_at",
+      ),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day filters signals to medium+ severities",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    const sigCap = captures.find((c) => c.table === "signals");
+    const sevFilter = sigCap?.filters.find(
+      (f) => f.op === "in" && f.column === "severity",
+    );
+    assertEquals(sevFilter?.value, ["medium", "high", "critical"]);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day does NOT filter signals by rep (workspace-wide)",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    const sigCap = captures.find((c) => c.table === "signals");
+    // No created_by / assigned_rep_id filter on signals — workspace-wide
+    assertEquals(
+      sigCap?.filters.some(
+        (f) =>
+          (f.column === "assigned_rep_id" || f.column === "created_by"),
+      ),
+      false,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day skips rep filters entirely when elevated caller omits rep_id",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "admin", userId: "admin-1" });
+    await executeAskIronTool(ctx, "summarize_day", {});
+    const moveCaps = captures.filter((c) => c.table === "moves");
+    for (const cap of moveCaps) {
+      assertEquals(
+        cap.filters.some(
+          (f) => f.op === "eq" && f.column === "assigned_rep_id",
+        ),
+        false,
+      );
+    }
+    const touchCap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(
+      touchCap?.filters.some(
+        (f) => f.op === "eq" && f.column === "created_by",
+      ),
+      false,
+    );
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day hard-caps each list arm to 10 rows",
+  async () => {
+    const { client, captures } = makeStubClient({
+      moves: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+      crm_activities: { data: [], error: null },
+      signals: { data: [], error: null },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    await executeAskIronTool(ctx, "summarize_day", { lookback_hours: 168 });
+    const moveCaps = captures.filter((c) => c.table === "moves");
+    assertEquals(moveCaps[0].limit, SUMMARIZE_DAY_MOVE_LIMIT);
+    assertEquals(moveCaps[1].limit, SUMMARIZE_DAY_COMPLETED_LIMIT);
+    const touchCap = captures.find((c) => c.table === "crm_activities");
+    assertEquals(touchCap?.limit, SUMMARIZE_DAY_TOUCH_LIMIT);
+    const sigCap = captures.find((c) => c.table === "signals");
+    assertEquals(sigCap?.limit, SUMMARIZE_DAY_SIGNAL_LIMIT);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day blocks elevated cross-workspace rep targeting",
+  async () => {
+    const { client } = makeStubClient({
+      profiles: {
+        data: { id: "rep-other", workspace_id: "ws-OTHER" },
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, {
+      role: "manager",
+      userId: "mgr-1",
+      workspaceId: "ws-1",
+    });
+    const res = await executeAskIronTool(ctx, "summarize_day", {
+      rep_id: "rep-other",
+    });
+    assertEquals(res.ok, false);
+    assertEquals(res.error?.includes("rep not in workspace"), true);
+  },
+);
+
+Deno.test(
+  "executeAskIronTool summarize_day truncates long rationale + body + description fields",
+  async () => {
+    const long = "z".repeat(500);
+    const { client } = makeStubClient({
+      moves: [
+        {
+          data: [
+            {
+              id: "m-1",
+              kind: "call_now",
+              status: "suggested",
+              title: "t",
+              rationale: long,
+              priority: 70,
+              entity_type: null,
+              entity_id: null,
+              assigned_rep_id: "rep-me",
+              due_at: null,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+          ],
+          error: null,
+        },
+        { data: [], error: null },
+      ],
+      crm_activities: {
+        data: [
+          {
+            id: "a-1",
+            activity_type: "note",
+            body: long,
+            occurred_at: "2026-04-20T10:00:00Z",
+            created_by: "rep-me",
+            deal_id: null,
+            company_id: null,
+            contact_id: null,
+          },
+        ],
+        error: null,
+      },
+      signals: {
+        data: [
+          {
+            id: "s-1",
+            kind: "other",
+            severity: "high",
+            source: "news",
+            title: "t",
+            description: long,
+            entity_type: null,
+            entity_id: null,
+            occurred_at: "2026-04-20T10:00:00Z",
+          },
+        ],
+        error: null,
+      },
+    });
+    const ctx = makeCtx(client, { role: "rep", userId: "rep-me" });
+    const res = await executeAskIronTool(ctx, "summarize_day", {});
+    const payload = res.data as {
+      active_moves: Array<{ rationale: string | null }>;
+      recent_touches: Array<{ body: string | null }>;
+      open_signals: Array<{ description: string | null }>;
+    };
+    assertEquals(payload.active_moves[0].rationale!.endsWith("…"), true);
+    assertEquals(payload.recent_touches[0].body!.endsWith("…"), true);
+    assertEquals(payload.open_signals[0].description!.endsWith("…"), true);
+  },
+);
+
