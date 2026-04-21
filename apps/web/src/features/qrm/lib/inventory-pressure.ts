@@ -33,11 +33,35 @@ function ageDays(createdAt: string, nowTime: number): number {
 }
 
 function isInventoryUnit(asset: InventoryPressureAsset): boolean {
-  return (
-    asset.ownership !== "customer_owned" &&
-    asset.availability !== "sold" &&
-    asset.availability !== "decommissioned"
-  );
+  // Every non-terminal unit is a potential pressure surface.
+  //   - "sold" / "decommissioned" are out of play.
+  //   - Owned, leased, rental-fleet units carry sales/inventory pressure.
+  //   - Customer-owned units carry relationship pressure (aged since touch,
+  //     missing photos for field ID, no valuation for trade-in quoting).
+  // Ownership is reflected in the pressure reasons, not in the filter.
+  return asset.availability !== "sold" && asset.availability !== "decommissioned";
+}
+
+function frameAge(days: number, ownership: InventoryPressureAsset["ownership"]): string {
+  if (ownership === "customer_owned") return `${days} days since last touch`;
+  if (ownership === "rental_fleet") return `${days} days on the lot`;
+  return `${days} days in inventory`;
+}
+
+function frameUnderMerchandised(ownership: InventoryPressureAsset["ownership"]): {
+  missingPhotos: string;
+  missingPrice: string;
+} {
+  if (ownership === "customer_owned") {
+    return {
+      missingPhotos: "no photos — can't identify in field",
+      missingPrice: "no valuation — can't quote trade-in",
+    };
+  }
+  return {
+    missingPhotos: "no photos on file",
+    missingPrice: "no market price set",
+  };
 }
 
 export function buildInventoryPressureBoard(
@@ -59,7 +83,7 @@ export function buildInventoryPressureBoard(
       : null;
 
     if (days >= 90 && (asset.availability === "available" || asset.availability === "reserved")) {
-      reasons.push(`${days} days in inventory`);
+      reasons.push(frameAge(days, asset.ownership));
       aged.push({ ...asset, pressureReasons: [...reasons] });
     }
 
@@ -71,29 +95,29 @@ export function buildInventoryPressureBoard(
     }
 
     if ((asset.photoUrls.length === 0 || asset.currentMarketValue == null) && asset.availability === "available") {
+      const frames = frameUnderMerchandised(asset.ownership);
       const underReasons = [];
-      if (asset.photoUrls.length === 0) underReasons.push("no photos on file");
-      if (asset.currentMarketValue == null) underReasons.push("no market price set");
+      if (asset.photoUrls.length === 0) underReasons.push(frames.missingPhotos);
+      if (asset.currentMarketValue == null) underReasons.push(frames.missingPrice);
       underMarketed.push({ ...asset, pressureReasons: underReasons });
     }
 
+    // Price-misaligned is an OPINION lane — we only flag it when we have
+    // enough data to form a real price judgment. Missing market value or
+    // missing FMV is captured under under-marketed instead, so this lane
+    // stays high-signal.
     if (
       asset.availability === "available" &&
-      (
-        asset.currentMarketValue == null ||
-        asset.latestEstimatedFmv == null ||
-        (marketDeltaPct != null && marketDeltaPct >= 0.15)
-      )
+      asset.currentMarketValue != null &&
+      asset.latestEstimatedFmv != null &&
+      marketDeltaPct != null &&
+      marketDeltaPct >= 0.15
     ) {
-      const priceReasons = [];
-      if (asset.currentMarketValue == null) {
-        priceReasons.push("current market value missing");
-      } else if (asset.latestEstimatedFmv == null) {
-        priceReasons.push("no recent market valuation");
-      } else {
-        priceReasons.push(`FMV delta ${Math.round(marketDeltaPct! * 100)}%`);
-      }
-      priceMisaligned.push({ ...asset, pressureReasons: priceReasons });
+      const direction = asset.currentMarketValue > asset.latestEstimatedFmv ? "over" : "under";
+      priceMisaligned.push({
+        ...asset,
+        pressureReasons: [`${direction} FMV by ${Math.round(marketDeltaPct * 100)}%`],
+      });
     }
   }
 

@@ -212,12 +212,12 @@ export function MetricCell({
         : "text-muted-foreground";
 
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
+    <div className={cn("flex flex-col gap-0.5", className)}>
       <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </p>
       <div className="flex items-baseline gap-2">
-        <span className={cn("font-mono text-2xl font-semibold tabular-nums leading-none", toneCls)}>
+        <span className={cn("font-mono text-xl font-semibold tabular-nums leading-none", toneCls)}>
           {value}
         </span>
         {delta && (
@@ -245,14 +245,14 @@ export function MetricStrip({
   return (
     <div
       className={cn(
-        "grid gap-4 rounded-md border border-qep-deck-rule bg-qep-deck-elevated/60 px-5 py-4",
+        "grid gap-3 rounded-md border border-qep-deck-rule bg-qep-deck-elevated/60 px-4 py-2.5",
         "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
         "divide-x divide-qep-deck-rule/50",
         className,
       )}
     >
       {cells.map((cell, i) => (
-        <div key={`${cell.label}-${i}`} className={cn(i > 0 && "pl-4")}>
+        <div key={`${cell.label}-${i}`} className={cn(i > 0 && "pl-3")}>
           <MetricCell {...cell} />
         </div>
       ))}
