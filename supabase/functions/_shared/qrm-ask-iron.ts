@@ -254,6 +254,41 @@ export const ASK_IRON_TOOLS: AskIronTool[] = [
       required: ["deal_id"],
     },
   },
+  {
+    // Slice 11: account-centric mirror of summarize_deal. Equipment/parts
+    // dealerships run on accounts (territories = companies, not deals), so
+    // "what's going on at Acme?" is the single most common narrative
+    // question from a rep pulling into a yard. This tool answers it in one
+    // round-trip instead of chaining get_company_detail + search_entities
+    // (for open deals) + list_recent_signals.
+    //
+    // Visibility note: open_deals comes from crm_deals_rep_safe, which
+    // applies the rep-vs-company-deals RLS rules. A rep summarizing a
+    // company may see a partial list — the prompt tells Claude not to
+    // claim "no other deals" since what's visible is a slice, not the
+    // ground truth.
+    name: "summarize_company",
+    description:
+      "Bundle a company's row, open deals, recent activities across all of its contacts, and active signals into one call. Use for narrative account questions — 'what's going on at <company>', 'brief me on <company>', 'status at <company>', 'what's happening at Acme'. Distinguish from summarize_deal: deal = one opportunity, company = whole account. Do NOT use for single-field lookups (call get_company_detail instead). Returns structured data — write the summary yourself in 2–4 sentences. Note: open_deals may be a partial list for rep callers due to deal visibility rules; describe it as 'deals you can see' not 'all deals'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        company_id: {
+          type: "string",
+          description:
+            "UUID of the company to summarize. Obtain from search_entities if only the name is known.",
+        },
+        lookback_days: {
+          type: "integer",
+          minimum: 1,
+          maximum: 90,
+          description:
+            "How many days of activities and signals to pull. Default 30.",
+        },
+      },
+      required: ["company_id"],
+    },
+  },
 ];
 
 // ── Input normalization (pure, testable) ────────────────────────────────────
@@ -603,6 +638,49 @@ export function normalizeSummarizeDealInput(
   return { dealId, lookbackDays, sinceIso };
 }
 
+// ── summarize_company normalization (Slice 11) ─────────────────────────────
+
+export interface NormalizedSummarizeCompany {
+  companyId: string;
+  lookbackDays: number;
+  sinceIso: string;
+}
+
+/**
+ * Row cap for the `open_deals` list arm of summarize_company. Separate
+ * constant from the activity cap because deals are a different density
+ * signal — a company with 15 deals is a big-account flag, but 15 messages
+ * of prose would blow the context budget.
+ */
+export const SUMMARIZE_COMPANY_DEAL_LIMIT = 10;
+
+/**
+ * Validate + normalize LLM-supplied `summarize_company` input. Same clamp
+ * window as summarize_deal so operators don't have to remember two
+ * different defaults. Throws on missing/empty company_id so Claude gets
+ * a clean error it can recover from.
+ */
+export function normalizeSummarizeCompanyInput(
+  input: Record<string, unknown>,
+  nowMs: number = Date.now(),
+): NormalizedSummarizeCompany {
+  const companyId = typeof input.company_id === "string"
+    ? input.company_id.trim()
+    : "";
+  if (!companyId) throw new Error("VALIDATION_ERROR:company_id");
+
+  const raw = Number(input.lookback_days ?? SUMMARIZE_DEAL_DEFAULT_DAYS);
+  const lookbackDays = Number.isFinite(raw)
+    ? Math.min(
+        Math.max(Math.trunc(raw), SUMMARIZE_DEAL_MIN_DAYS),
+        SUMMARIZE_DEAL_MAX_DAYS,
+      )
+    : SUMMARIZE_DEAL_DEFAULT_DAYS;
+
+  const sinceIso = new Date(nowMs - lookbackDays * 24 * 3_600_000).toISOString();
+  return { companyId, lookbackDays, sinceIso };
+}
+
 // Shrink a potentially-long free-text field to keep the tool result small.
 // Single place to change the truncation rule so both activity.body and
 // signal.description cap identically.
@@ -667,6 +745,8 @@ export async function executeAskIronTool(
         return { ok: true, data: await toolGetCompanyDetail(ctx, input) };
       case "summarize_deal":
         return { ok: true, data: await toolSummarizeDeal(ctx, input) };
+      case "summarize_company":
+        return { ok: true, data: await toolSummarizeCompany(ctx, input) };
       case "propose_move": {
         // Per-request cap. We return a structured error (not throw) so Claude
         // sees it in the tool result and can apologize to the operator
@@ -1023,6 +1103,127 @@ async function toolSummarizeDeal(
 }
 
 /**
+ * Slice 11 — account-level synthesizer. Mirror of toolSummarizeDeal, but
+ * scoped to a company rather than a single opportunity. Four parallel-ish
+ * reads (we keep them sequential for readability; individually they're all
+ * ms-scale on indexed columns):
+ *
+ *   1. Company row           — crm_companies
+ *   2. Open deals            — crm_deals_rep_safe filtered by company_id
+ *   3. Recent activities     — crm_activities filtered by company_id
+ *   4. Open signals          — signals filtered by entity_type='company'
+ *
+ * All four queries go through callerDb with explicit workspace_id so RLS
+ * does the tenant work. The company row short-circuits the downstream
+ * reads when it's missing (either deleted or the caller can't see it via
+ * their workspace) — same pattern as summarize_deal.
+ *
+ * Visibility nuance: crm_deals_rep_safe is rep-safe — a rep summarizing
+ * a company sees only the deals they own + unassigned-company deals per
+ * the view's rules. The tool description tells Claude to call open_deals
+ * "deals you can see," not the ground truth of the account.
+ */
+async function toolSummarizeCompany(
+  ctx: RouterCtx,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const n = normalizeSummarizeCompanyInput(input);
+
+  // 1) Company row — workspace-scoped + soft-delete guard.
+  const { data: companyRow, error: companyErr } = await ctx.callerDb
+    .from("crm_companies")
+    .select("id, name, city, state, country, industry, updated_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("id", n.companyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (companyErr) throw companyErr;
+  if (!companyRow) {
+    return {
+      found: false,
+      lookback_days: n.lookbackDays,
+    };
+  }
+
+  // 2) Open deals for this company. crm_deals_rep_safe handles the
+  // rep-visibility rule; we just filter by company_id. "Open" is
+  // intentionally fuzzy here — we return all rows the view lets through,
+  // sorted by updated_at so the most-active appear first. If the sales
+  // pipeline ever adds a canonical `is_open` flag, tighten this.
+  const { data: dealRows, error: dealsErr } = await ctx.callerDb
+    .from("crm_deals_rep_safe")
+    .select(
+      "id, name, amount, stage, expected_close_on, assigned_rep_id, updated_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", n.companyId)
+    .order("updated_at", { ascending: false })
+    .limit(SUMMARIZE_COMPANY_DEAL_LIMIT);
+  if (dealsErr) throw dealsErr;
+
+  // 3) Recent activities at the company-scope. crm_activities carries
+  // a company_id column directly so we don't need to fan through deals
+  // or contacts to find account-level touches.
+  const { data: activityRows, error: activityErr } = await ctx.callerDb
+    .from("crm_activities")
+    .select("id, activity_type, body, occurred_at, created_by, deal_id, contact_id")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("company_id", n.companyId)
+    .is("deleted_at", null)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_ACTIVITY_LIMIT);
+  if (activityErr) throw activityErr;
+
+  // 4) Signals tied to this company. Same entity_type/entity_id shape
+  // as summarize_deal, flipped to 'company'.
+  const { data: signalRows, error: signalErr } = await ctx.callerDb
+    .from("signals")
+    .select("id, kind, severity, source, title, description, occurred_at")
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("entity_type", "company")
+    .eq("entity_id", n.companyId)
+    .gte("occurred_at", n.sinceIso)
+    .order("occurred_at", { ascending: false })
+    .limit(SUMMARIZE_DEAL_SIGNAL_LIMIT);
+  if (signalErr) throw signalErr;
+
+  const deals = dealRows ?? [];
+  const activities = (activityRows ?? []).map((row) => ({
+    id: row.id,
+    activity_type: row.activity_type,
+    body: truncateForSummary(row.body),
+    occurred_at: row.occurred_at,
+    created_by: row.created_by,
+    deal_id: row.deal_id,
+    contact_id: row.contact_id,
+  }));
+  const signals = (signalRows ?? []).map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity,
+    source: row.source,
+    title: row.title,
+    description: truncateForSummary(row.description),
+    occurred_at: row.occurred_at,
+  }));
+
+  return {
+    found: true,
+    lookback_days: n.lookbackDays,
+    company: companyRow,
+    open_deals: deals,
+    recent_activities: activities,
+    open_signals: signals,
+    counts: {
+      deals: deals.length,
+      activities: activities.length,
+      signals: signals.length,
+    },
+  };
+}
+
+/**
  * Create a move on behalf of the operator via the normal createMove path.
  * Provenance is stamped so the Today surface can badge this as "proposed by
  * Iron" (and a future recommender can weight or deduplicate against these).
@@ -1104,6 +1305,7 @@ Rules:
 - For "what should I do", call list_my_moves.
 - For "what changed" or "anything new", call list_recent_signals.
 - For narrative deal questions — "what's the story on X", "where does this deal stand", "brief me on X", "status of X" — call search_entities to get the deal_id, then call summarize_deal. Do not chain get_deal_detail + list_recent_signals for narrative questions; summarize_deal bundles both in one round trip.
+- For narrative account questions — "what's going on at <company>", "brief me on <company>", "status at <company>", "anything happening at Acme" — call search_entities to get the company_id, then call summarize_company. Disambiguation rule: if search_entities returns both a deal and a company matching the name, pick by the operator's phrasing — "deal" / "quote" / "pipeline" → summarize_deal; "account" / "at Acme" / "with Acme" / bare company name → summarize_company. When a rep asks about a company, describe open_deals as "deals you can see" — the list may be filtered by your visibility rules.
 - When the operator explicitly asks to queue an action — "add a follow-up", "remind me to call", "put a field visit on Wednesday" — call propose_move. Look up the entity with search_entities first so the move is scoped correctly. Do NOT propose moves proactively; only when explicitly requested. You may propose at most 3 moves per turn.
 - If a tool returns zero results, say so plainly ("No open moves on your queue") — don't invent.
 - Ground every number and name in tool output. If you can't, omit the claim.
