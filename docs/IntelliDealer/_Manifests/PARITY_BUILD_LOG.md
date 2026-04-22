@@ -167,3 +167,24 @@
 **Verification:** file-level TypeScript diagnostics on `ServiceWorkInProcessPage.tsx`, `ServiceSubNav.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/service-wip-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceWorkInProcessPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-work-in-process --ui` all passed. Gate report: `test-results/agent-gates/20260422T025038Z-phase4-work-in-process.json`.
 **Deployment:** `supabase db push` applied `350_service_work_in_process.sql`; `supabase migration list` confirms remote migration `350`.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Labor Pricing Tier Logic (Phase-4_Service) — CLOSED
+**Gap row:** `21`
+**Gap description:** Labor Pricing may have tiered rate logic not obvious in current schema.
+**Change type:** Schema + UI + Quote Engine Wiring
+**Files:**
+- `supabase/migrations/351_service_labor_pricing.sql`
+- `supabase/functions/_shared/service-labor-pricing.ts`
+- `supabase/functions/_shared/service-labor-pricing.test.ts`
+- `supabase/functions/service-quote-engine/index.ts`
+- `apps/web/src/features/service/lib/service-labor-pricing-utils.ts`
+- `apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts`
+- `apps/web/src/features/service/components/ServiceQuoteBuilder.tsx`
+- `apps/web/src/features/service/pages/ServiceLaborPricingPage.tsx`
+- `apps/web/src/features/service/pages/__tests__/ServiceLaborPricingPage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceSubNav.tsx`
+- `apps/web/src/features/service/pages/ServiceCommandCenterPage.tsx`
+- `apps/web/src/App.tsx`
+**Verification:** file-level TypeScript diagnostics on `ServiceLaborPricingPage.tsx`, `ServiceQuoteBuilder.tsx`, and `App.tsx`, `deno test supabase/functions/_shared/service-labor-pricing.test.ts --allow-read`, `deno check supabase/functions/service-quote-engine/index.ts supabase/functions/_shared/service-labor-pricing.ts`, `bun test apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceLaborPricingPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-labor-pricing --ui` all passed. Gate report: `test-results/agent-gates/20260422T120227Z-phase4-labor-pricing.json`.
+**Deployment:** `supabase db push` applied `351_service_labor_pricing.sql`; remote migration verification completed.
+**Parity status update:** GAP → BUILT

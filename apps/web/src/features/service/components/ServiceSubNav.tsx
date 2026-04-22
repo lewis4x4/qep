@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   FileText,
   ChartColumnIncreasing,
+  Banknote,
   BarChart3,
   GitBranch,
   Boxes,
@@ -32,6 +33,7 @@ const SUB_NAV_LINKS = [
 
 const ADMIN_LINKS = [
   { to: "/service/branches", label: "Branches", icon: GitBranch },
+  { to: "/service/labor-pricing", label: "Labor Pricing", icon: Banknote },
   { to: "/parts/inventory", label: "Inventory", icon: Boxes },
   { to: "/service/job-code-suggestions", label: "Job Codes", icon: Lightbulb },
   { to: "/service/scheduler-health", label: "Cron health", icon: Activity },

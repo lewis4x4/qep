@@ -11,6 +11,12 @@ import {
   safeJsonOk,
 } from "../_shared/safe-cors.ts";
 import { notifyAfterStageChange } from "../_shared/service-lifecycle-notify.ts";
+import {
+  deriveWorkOrderStatus,
+  resolveLaborRate,
+  selectApplicableLaborPricingRule,
+  type ServiceLaborPricingRule,
+} from "../_shared/service-labor-pricing.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface QuoteRequest {
@@ -29,6 +35,9 @@ interface QuoteRequest {
   signature_url?: string;
   notes?: string;
   labor_rate?: number;
+  labor_type_code?: string;
+  premium_code?: string;
+  customer_group_label?: string;
 }
 
 Deno.serve(async (req) => {
@@ -78,7 +87,7 @@ async function handleGenerate(
 
   const { data: job } = await supabase
     .from("service_jobs")
-    .select("id, workspace_id, haul_required, selected_job_code_id")
+    .select("id, workspace_id, haul_required, selected_job_code_id, branch_id, customer_id, status_flags")
     .eq("id", body.job_id)
     .single();
   if (!job) return safeJsonError("Job not found", 404, origin);
@@ -101,7 +110,30 @@ async function handleGenerate(
     .eq("job_id", body.job_id)
     .neq("status", "cancelled");
 
-  const laborRate = body.labor_rate ?? 150;
+  const { data: branchConfig } = await supabase
+    .from("service_branch_config")
+    .select("default_labor_rate")
+    .eq("branch_id", job.branch_id)
+    .maybeSingle();
+
+  const { data: rules } = await supabase
+    .from("service_labor_pricing_rules")
+    .select("id, location_code, customer_id, customer_group_label, work_order_status, labor_type_code, premium_code, default_premium_code, pricing_code, pricing_value, effective_start_on, effective_end_on, active, created_at");
+
+  const baseLaborRate = Number(branchConfig?.default_labor_rate ?? 150);
+  const selectedRule = selectApplicableLaborPricingRule(
+    ((rules ?? []) as ServiceLaborPricingRule[]),
+    {
+      locationCode: (job.branch_id as string | null) ?? null,
+      customerId: (job.customer_id as string | null) ?? null,
+      customerGroupLabel: body.customer_group_label ?? null,
+      workOrderStatus: deriveWorkOrderStatus((job.status_flags as string[] | null) ?? []),
+      laborTypeCode: body.labor_type_code ?? null,
+      premiumCode: body.premium_code ?? null,
+    },
+  );
+
+  const laborRate = body.labor_rate ?? resolveLaborRate(baseLaborRate, selectedRule);
   const shopSuppliesRate = 0.08;
 
   const lines: Array<Record<string, unknown>> = [];
@@ -222,7 +254,12 @@ async function handleGenerate(
     .update({ quote_total: total })
     .eq("id", body.job_id);
 
-  return safeJsonOk({ quote, lines: lineInserts }, origin, 201);
+  return safeJsonOk({
+    quote,
+    lines: lineInserts,
+    labor_rate: laborRate,
+    labor_rate_source: body.labor_rate != null ? "manual_override" : selectedRule?.id ?? "branch_default",
+  }, origin, 201);
 }
 
 async function handleUpdate(

@@ -9,12 +9,16 @@ interface Props {
 
 export function ServiceQuoteBuilder({ jobId, existingQuoteId }: Props) {
   const qc = useQueryClient();
-  const [laborRate, setLaborRate] = useState(150);
+  const [laborRate, setLaborRate] = useState("");
 
   const generate = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("service-quote-engine", {
-        body: { action: "generate", job_id: jobId, labor_rate: laborRate },
+        body: {
+          action: "generate",
+          job_id: jobId,
+          ...(laborRate.trim() ? { labor_rate: Number(laborRate) } : {}),
+        },
       });
       if (error) throw error;
       return data;
@@ -59,13 +63,17 @@ export function ServiceQuoteBuilder({ jobId, existingQuoteId }: Props) {
 
       <div className="flex items-center gap-3">
         <div>
-          <label className="text-xs text-muted-foreground">Labor Rate ($/hr)</label>
+          <label className="text-xs text-muted-foreground">Labor Rate Override ($/hr)</label>
           <input
             type="number"
             value={laborRate}
-            onChange={(e) => setLaborRate(Number(e.target.value))}
+            onChange={(e) => setLaborRate(e.target.value)}
             className="w-24 rounded-md border px-2 py-1 text-sm bg-background"
+            placeholder="Auto"
           />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Leave blank to use Labor Pricing rules.
+          </p>
         </div>
         <button
           onClick={() => generate.mutate()}
