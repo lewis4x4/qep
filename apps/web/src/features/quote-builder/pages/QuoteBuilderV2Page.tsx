@@ -21,6 +21,7 @@ import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicke
 import { SelectedCustomerChip } from "../components/SelectedCustomerChip";
 import { CustomerIntelPanel } from "../components/CustomerIntelPanel";
 import { PointShootTradeCard } from "../components/PointShootTradeCard";
+import { TradeInInputCard } from "../components/TradeInInputCard";
 import { WinProbabilityStrip } from "../components/WinProbabilityStrip";
 import { getMarginBaseline } from "../lib/coach-api";
 import { computeWinProbability } from "../lib/win-probability-scorer";
@@ -48,7 +49,6 @@ import { SendQuoteSection } from "../components/SendQuoteSection";
 import {
   buildPortalRevisionQuoteData,
   buildQuoteSavePayload,
-  calculateFinancing,
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getFactorVerdicts,
@@ -61,11 +61,14 @@ import {
   searchCatalog,
   submitPortalRevision,
   type QuotePackageSaveResponse,
+  type QuoteFinancingRequest,
 } from "../lib/quote-api";
 import { computeQuoteWorkspace } from "../lib/quote-workspace";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
+import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
+import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
@@ -83,8 +86,8 @@ import {
 import type {
   QuoteEntryMode,
   QuoteFinanceScenario,
-  QuoteFinancingPreview,
   QuoteLineItemDraft,
+  QuoteTaxProfile,
   QuoteWorkspaceDraft,
 } from "../../../../../../shared/qep-moonshot-contracts";
 
@@ -94,7 +97,7 @@ import type {
 // equipment — so reps submitting via AI chat were jumping past customer
 // selection entirely. Splitting the step makes "who is this quote for?"
 // explicit and is the anchor for the Customer Digital Twin intel panel.
-type Step = "entry" | "customer" | "equipment" | "financing" | "review";
+type Step = "entry" | "customer" | "equipment" | "tradeIn" | "financing" | "review";
 
 interface CatalogEntryMatch {
   id?: string;
@@ -181,6 +184,16 @@ function buildEquipmentLineFromRecommendation(
   };
 }
 
+function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "make" | "model" | "year">): string {
+  return [
+    item.id ?? "",
+    item.title ?? "",
+    item.make ?? "",
+    item.model ?? "",
+    item.year ?? "",
+  ].join("|");
+}
+
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
@@ -197,6 +210,13 @@ export function QuoteBuilderV2Page() {
     attachments: [],
     tradeAllowance: 0,
     tradeValuationId: null,
+    commercialDiscountType: "flat",
+    commercialDiscountValue: 0,
+    cashDown: 0,
+    taxProfile: "standard",
+    taxTotal: 0,
+    amountFinanced: 0,
+    selectedFinanceScenario: null,
     customerName: "",
     customerCompany: "",
     customerPhone: "",
@@ -204,7 +224,6 @@ export function QuoteBuilderV2Page() {
     customerSignals: null,
     customerWarmth: null,
   });
-  const [financeScenarios, setFinanceScenarios] = useState<QuoteFinanceScenario[]>([]);
   const [aiPrompt, setAiPrompt] = useState("");
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
   const [signerName, setSignerName] = useState("");
@@ -222,7 +241,13 @@ export function QuoteBuilderV2Page() {
     equipmentTotal,
     attachmentTotal,
     subtotal,
+    discountTotal,
+    discountedSubtotal,
     netTotal,
+    taxTotal,
+    customerTotal,
+    cashDown,
+    amountFinanced,
     dealerCost,
     marginAmount,
     marginPct,
@@ -322,9 +347,72 @@ export function QuoteBuilderV2Page() {
     [marginPct, marginBaselineMedianPct],
   );
 
+  const taxProfiles: Array<{ value: QuoteTaxProfile; label: string; detail: string }> = [
+    { value: "standard", label: "Standard taxable", detail: "Calculate estimated sales tax normally." },
+    { value: "agriculture_exempt", label: "Agriculture exempt", detail: "Use when the quoted application is agricultural." },
+    { value: "fire_mitigation_exempt", label: "Fire mitigation exempt", detail: "Use when the quoted application is fire suppression or mitigation." },
+    { value: "government_exempt", label: "Government exempt", detail: "Use for exempt public-sector entities." },
+    { value: "resale_exempt", label: "Resale exempt", detail: "Use when the customer is buying for resale." },
+  ];
+
   useEffect(() => {
-    setFinanceScenarios([]);
-  }, [draft.equipment, draft.attachments, draft.tradeAllowance]);
+    if (draft.branchSlug || branches.length !== 1) return;
+    setDraft((current) => current.branchSlug
+      ? current
+      : { ...current, branchSlug: branches[0]!.slug });
+  }, [branches, draft.branchSlug]);
+
+  const financingInput = useMemo<QuoteFinancingRequest>(() => ({
+    packageSubtotal: subtotal,
+    discountTotal,
+    tradeAllowance: draft.tradeAllowance,
+    taxTotal,
+    cashDown,
+    amountFinanced,
+    marginPct,
+    manufacturer: draft.equipment[0]?.make,
+  }), [
+    subtotal,
+    discountTotal,
+    draft.tradeAllowance,
+    taxTotal,
+    cashDown,
+    amountFinanced,
+    marginPct,
+    draft.equipment,
+  ]);
+
+  const financingPreviewQuery = useQuoteFinancingPreview(financingInput);
+  const financeScenarios: QuoteFinanceScenario[] = financingPreviewQuery.data?.scenarios ?? [];
+
+  const taxPreviewQuery = useQuoteTaxPreview({
+    dealId: draft.dealId,
+    companyId: draft.companyId,
+    branchSlug: draft.branchSlug || undefined,
+    subtotal,
+    discountTotal,
+    tradeAllowance: draft.tradeAllowance,
+    taxProfile: draft.taxProfile,
+  });
+
+  useEffect(() => {
+    const nextTaxTotal = draft.branchSlug ? Math.round((taxPreviewQuery.data?.total_tax ?? 0) * 100) / 100 : 0;
+    setDraft((current) => current.taxTotal === nextTaxTotal
+      ? current
+      : { ...current, taxTotal: nextTaxTotal });
+  }, [draft.branchSlug, taxPreviewQuery.data?.total_tax]);
+
+  useEffect(() => {
+    if (financeScenarios.length === 0) {
+      setDraft((current) => current.selectedFinanceScenario == null
+        ? current
+        : { ...current, selectedFinanceScenario: null });
+      return;
+    }
+    const hasSelected = financeScenarios.some((scenario) => scenario.label === draft.selectedFinanceScenario);
+    if (hasSelected) return;
+    setDraft((current) => ({ ...current, selectedFinanceScenario: financeScenarios[0]!.label }));
+  }, [financeScenarios, draft.selectedFinanceScenario]);
 
   // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
   // ?deal_id=, hydrate the customer from CRM so the Customer step renders
@@ -413,10 +501,35 @@ export function QuoteBuilderV2Page() {
       return saveQuotePackage(
         buildQuoteSavePayload(
           draft,
-          { equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct },
+          {
+            equipmentTotal,
+            attachmentTotal,
+            subtotal,
+            discountTotal,
+            discountedSubtotal,
+            netTotal,
+            taxTotal,
+            customerTotal,
+            cashDown,
+            amountFinanced,
+            marginAmount,
+            marginPct,
+          },
+          financeScenarios,
           snapshot,
         ),
       );
+    },
+    onSuccess: (result) => {
+      const resolvedDealId =
+        (result.quote as { deal_id?: string } | undefined)?.deal_id
+        ?? (result as { deal_id?: string }).deal_id
+        ?? draft.dealId
+        ?? undefined;
+      if (!resolvedDealId) return;
+      setDraft((current) => current.dealId === resolvedDealId
+        ? current
+        : { ...current, dealId: resolvedDealId });
     },
   });
 
@@ -500,24 +613,14 @@ export function QuoteBuilderV2Page() {
         throw new Error("Voice note did not return a usable transcript.");
       }
       const recommendation = await getAiEquipmentRecommendation(voiceResult.transcript);
-      const catalogMatches = await searchCatalog(recommendation.machine || voiceResult.transcript);
-      return { voiceResult, recommendation, catalogMatches };
+      return { voiceResult, recommendation };
     },
-    onSuccess: ({ voiceResult, recommendation, catalogMatches }) => {
-      setDraft((current) => {
-        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
-        const seededEquipment = catalogMatches.length > 0
-          ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : fallback
-            ? [fallback]
-            : current.equipment;
-        return {
-          ...current,
-          recommendation,
-          voiceSummary: voiceResult.transcript,
-          equipment: seededEquipment,
-        };
-      });
+    onSuccess: ({ voiceResult, recommendation }) => {
+      setDraft((current) => ({
+        ...current,
+        recommendation,
+        voiceSummary: voiceResult.transcript,
+      }));
       // Slice 20a: land on the Customer step instead of Equipment. The AI
       // has picked a machine, but we still don't know who the quote is
       // for — rep confirms/picks customer next.
@@ -528,31 +631,16 @@ export function QuoteBuilderV2Page() {
   const aiIntakeMutation = useMutation({
     mutationFn: async (prompt: string) => {
       const recommendation = await getAiEquipmentRecommendation(prompt);
-      const catalogMatches = await searchCatalog(recommendation.machine || prompt);
-      return { recommendation, catalogMatches, prompt };
+      return { recommendation, prompt };
     },
-    onSuccess: ({ recommendation, catalogMatches, prompt }) => {
-      setDraft((current) => {
-        const fallback = buildEquipmentLineFromRecommendation(recommendation.machine);
-        const seededEquipment = catalogMatches.length > 0
-          ? [buildEquipmentLine(catalogMatches[0] as CatalogEntryMatch)]
-          : fallback
-            ? [fallback]
-            : current.equipment;
-        return {
-          ...current,
-          recommendation,
-          voiceSummary: prompt,
-          equipment: seededEquipment,
-        };
-      });
+    onSuccess: ({ recommendation, prompt }) => {
+      setDraft((current) => ({
+        ...current,
+        recommendation,
+        voiceSummary: prompt,
+      }));
       setStep("customer");
     },
-  });
-
-  const financingMutation = useMutation({
-    mutationFn: () => calculateFinancing(netTotal, marginPct, draft.equipment[0]?.make),
-    onSuccess: (preview: QuoteFinancingPreview) => setFinanceScenarios(preview.scenarios ?? []),
   });
 
   const signMutation = useMutation({
@@ -579,7 +667,15 @@ export function QuoteBuilderV2Page() {
         quote_package_id: savedQuotePackageId,
         quote_data: buildPortalRevisionQuoteData(
           draft,
-          { subtotal, netTotal },
+          {
+            subtotal,
+            discountTotal,
+            netTotal,
+            taxTotal,
+            customerTotal,
+            cashDown,
+            amountFinanced,
+          },
           financeScenarios,
           dealerMessage,
           revisionSummary,
@@ -664,7 +760,41 @@ export function QuoteBuilderV2Page() {
     setStep("customer");
   };
 
-  const equipmentKey = draft.equipment.map((e) => `${e.make}-${e.model}-${e.unitPrice}`).join("|");
+  async function addRecommendedMachine(machine: string) {
+    const fallback = buildEquipmentLineFromRecommendation(machine);
+    try {
+      const matches = await searchCatalog(machine);
+      const firstMatch = matches[0] as CatalogEntryMatch | undefined;
+      const line = firstMatch ? buildEquipmentLine(firstMatch) : fallback;
+      if (!line) return;
+      if (firstMatch) {
+        setAvailableOptions(firstMatch.attachments ?? []);
+        setAvailableOptionsLabel(`${firstMatch.make} ${firstMatch.model}`);
+      }
+      const nextKey = equipmentKeyForLine(line);
+      setDraft((current) => {
+        const alreadyAdded = current.equipment.some((item) => equipmentKeyForLine(item) === nextKey);
+        if (alreadyAdded) return current;
+        return {
+          ...current,
+          equipment: [...current.equipment, line],
+        };
+      });
+    } catch {
+      if (!fallback) return;
+      const nextKey = equipmentKeyForLine(fallback);
+      setDraft((current) => {
+        const alreadyAdded = current.equipment.some((item) => equipmentKeyForLine(item) === nextKey);
+        if (alreadyAdded) return current;
+        return {
+          ...current,
+          equipment: [...current.equipment, fallback],
+        };
+      });
+    }
+    setStep("equipment");
+  }
+
   const firstEquipment = draft.equipment[0];
 
   // Gate for advancing off the Customer step — any of name, company,
@@ -683,37 +813,14 @@ export function QuoteBuilderV2Page() {
       voiceSummary={draft.voiceSummary}
       onSelectPrimary={() => {
         if (!draft.recommendation?.machine) return;
-        const alreadyAdded = draft.equipment.some((e) => e.title === draft.recommendation!.machine);
-        if (!alreadyAdded) {
-          setDraft((current) => ({
-            ...current,
-            equipment: [
-              ...current.equipment,
-              { kind: "equipment", title: current.recommendation!.machine, quantity: 1, unitPrice: 0 },
-            ],
-          }));
-        }
-        setStep("equipment");
+        void addRecommendedMachine(draft.recommendation.machine);
       }}
       onSelectAlternative={draft.recommendation?.alternative?.machine ? () => {
-        const alt = draft.recommendation!.alternative!;
-        setDraft((current) => ({
-          ...current,
-          equipment: [
-            ...current.equipment,
-            { kind: "equipment", title: alt.machine, quantity: 1, unitPrice: 0 },
-          ],
-        }));
-        setStep("equipment");
+        void addRecommendedMachine(draft.recommendation!.alternative!.machine);
       } : undefined}
       onBrowseCatalog={() => setStep("equipment")}
-      netTotal={netTotal}
-      marginPct={marginPct}
+      financingInput={financingInput}
       equipmentMake={firstEquipment?.make}
-      equipmentKey={equipmentKey}
-      hasDeal={Boolean(dealId)}
-      tradeAllowance={draft.tradeAllowance}
-      onTradeChange={(value) => setDraft((current) => ({ ...current, tradeAllowance: value }))}
       userRole={userRoleQuery.data ?? null}
       equipmentModel={firstEquipment?.model}
     />
@@ -771,17 +878,24 @@ export function QuoteBuilderV2Page() {
         </Card>
 
       <div className="flex gap-2">
-        {(["entry", "customer", "equipment", "financing", "review"] as Step[]).map((currentStep, index) => (
+        {([
+          { id: "entry", label: "Entry" },
+          { id: "customer", label: "Customer" },
+          { id: "equipment", label: "Equipment" },
+          { id: "tradeIn", label: "Trade-In" },
+          { id: "financing", label: "Financing" },
+          { id: "review", label: "Review" },
+        ] as Array<{ id: Step; label: string }>).map((currentStep, index) => (
           <button
-            key={currentStep}
-            onClick={() => setStep(currentStep)}
+            key={currentStep.id}
+            onClick={() => setStep(currentStep.id)}
             className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
-              step === currentStep
+              step === currentStep.id
                 ? "border-qep-orange bg-qep-orange/10 text-qep-orange"
                 : "border-border text-muted-foreground hover:border-foreground/20"
             }`}
           >
-            {index + 1}. {currentStep.charAt(0).toUpperCase() + currentStep.slice(1)}
+            {index + 1}. {currentStep.label}
           </button>
         ))}
       </div>
@@ -966,29 +1080,6 @@ export function QuoteBuilderV2Page() {
             warmth={draft.customerWarmth ?? null}
           />
 
-          {/* Slice 20b: Point, Shoot, Trade — inline trade-in capture once
-              a customer is selected. Rep snaps a photo on their phone; we
-              identify the machine, fetch a multi-source book-value range,
-              and drop a trade credit into the draft without leaving the
-              wizard. Gated on hasCustomer so the flow is: pick customer →
-              see intel → capture their trade → pick their new machine. */}
-          {hasCustomer && (
-            <PointShootTradeCard
-              dealId={draft.dealId ?? null}
-              appliedAllowanceDollars={draft.tradeAllowance || null}
-              onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
-                ...cur,
-                tradeAllowance: allowanceDollars,
-                tradeValuationId: valuationId,
-              }))}
-              onClear={() => setDraft((cur) => ({
-                ...cur,
-                tradeAllowance: 0,
-                tradeValuationId: null,
-              }))}
-            />
-          )}
-
           <div className="flex items-center justify-between gap-3">
             <Button variant="outline" onClick={() => setStep("entry")}>
               <ArrowLeft className="mr-1 h-4 w-4" /> Back
@@ -1039,21 +1130,22 @@ export function QuoteBuilderV2Page() {
             onSelect={(entry) => {
               setAvailableOptions(entry.attachments ?? []);
               setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
+              const nextLine = {
+                kind: "equipment" as const,
+                id: entry.id,
+                title: `${entry.make} ${entry.model}`,
+                make: entry.make,
+                model: entry.model,
+                year: entry.year,
+                quantity: 1,
+                unitPrice: entry.list_price || 0,
+              };
+              const nextKey = equipmentKeyForLine(nextLine);
               setDraft((current) => ({
                 ...current,
-                equipment: [
-                  ...current.equipment,
-                  {
-                    kind: "equipment",
-                    id: entry.id,
-                    title: `${entry.make} ${entry.model}`,
-                    make: entry.make,
-                    model: entry.model,
-                    year: entry.year,
-                    quantity: 1,
-                    unitPrice: entry.list_price || 0,
-                  },
-                ],
+                equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
+                  ? current.equipment
+                  : [...current.equipment, nextLine],
               }));
             }}
             onRecommendation={(recommendation) => {
@@ -1078,9 +1170,32 @@ export function QuoteBuilderV2Page() {
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Selected Equipment</p>
               {draft.equipment.map((equipment, index) => (
                 <div key={`${equipment.title}-${index}`} className="mt-2 flex items-center justify-between border-t border-border pt-2">
-                  <span className="text-sm font-medium">
-                    {equipment.make} {equipment.model} {equipment.year ? `(${equipment.year})` : ""}
-                  </span>
+                  <div>
+                    <span className="text-sm font-medium">
+                      {equipment.make} {equipment.model} {equipment.year ? `(${equipment.year})` : ""}
+                    </span>
+                    <div className="mt-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto px-0 py-0 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          const removedLabel = `${equipment.make ?? ""} ${equipment.model ?? ""}`.trim();
+                          if (removedLabel.length > 0 && availableOptionsLabel === removedLabel) {
+                            setAvailableOptions([]);
+                            setAvailableOptionsLabel(null);
+                          }
+                          setDraft((current) => ({
+                            ...current,
+                            equipment: current.equipment.filter((_, rowIndex) => rowIndex !== index),
+                          }));
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
                   <span className="font-semibold text-foreground">${equipment.unitPrice.toLocaleString()}</span>
                 </div>
               ))}
@@ -1163,25 +1278,25 @@ export function QuoteBuilderV2Page() {
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("customer")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button
-              onClick={() => {
-                financingMutation.mutate();
-                setStep("financing");
-              }}
+              onClick={() => setStep("tradeIn")}
               disabled={draft.equipment.length === 0}
             >
-              Financing <ArrowRight className="ml-1 h-4 w-4" />
+              Trade-In <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {step === "financing" && (
+      {step === "tradeIn" && (
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Financing & Trade-In</h2>
+          <h2 className="text-sm font-semibold text-foreground">Trade-In</h2>
+          <p className="text-xs text-muted-foreground">
+            Capture the customer trade once here. This is the only trade-in source used by financing, review, and save.
+          </p>
 
-          {dealId && (
+          {draft.dealId && (
             <TradeInSection
-              dealId={dealId}
+              dealId={draft.dealId}
               onTradeValueChange={(value, valId) => {
                 setDraft((current) => ({
                   ...current,
@@ -1192,40 +1307,94 @@ export function QuoteBuilderV2Page() {
             />
           )}
 
-          <FinancingCalculator totalAmount={netTotal} marginPct={marginPct} />
+          <PointShootTradeCard
+            dealId={draft.dealId ?? null}
+            appliedAllowanceDollars={draft.tradeAllowance || null}
+            onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
+              ...cur,
+              tradeAllowance: allowanceDollars,
+              tradeValuationId: valuationId,
+            }))}
+            onClear={() => setDraft((cur) => ({
+              ...cur,
+              tradeAllowance: 0,
+              tradeValuationId: null,
+            }))}
+          />
 
-          {financingMutation.isError && (
-            <Card className="border-red-500/30 bg-red-500/5 p-4">
-              <p className="text-sm text-red-400">
-                {financingMutation.error instanceof Error
-                  ? financingMutation.error.message
-                  : "Financing preview failed. Try again."}
+          <TradeInInputCard
+            tradeAllowance={draft.tradeAllowance}
+            onChange={(value) => setDraft((current) => ({
+              ...current,
+              tradeAllowance: value,
+              tradeValuationId: null,
+            }))}
+          />
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep("equipment")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button onClick={() => setStep("financing")}>Financing <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </div>
+        </div>
+      )}
+
+      {step === "financing" && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-foreground">Financing</h2>
+
+          {branches.length > 1 && !draft.branchSlug && (
+            <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+              <p className="text-sm font-medium text-amber-400">Select a quoting branch to calculate tax</p>
+              <p className="mt-1 text-xs text-amber-300">
+                Draft save stays enabled, but tax and send readiness remain unresolved until a branch is selected.
               </p>
-            </Card>
-          )}
-
-          {financeScenarios.length > 0 && (
-            <Card className="p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Financing Preview</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                {financeScenarios.map((scenario) => (
-                  <div key={scenario.label} className="rounded-lg border border-border/70 bg-card/50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-qep-orange">{scenario.label}</p>
-                    <p className="mt-2 text-lg font-semibold text-foreground">
-                      {scenario.monthlyPayment == null ? "—" : `$${Math.round(scenario.monthlyPayment).toLocaleString()}/mo`}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {scenario.termMonths ? `${scenario.termMonths} months` : scenario.type}
-                      {scenario.apr != null ? ` · ${scenario.apr.toFixed(2)}% APR` : ""}
-                    </p>
-                  </div>
-                ))}
+              <div className="mt-3 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-amber-300" />
+                <select
+                  value={draft.branchSlug}
+                  onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
+                  className="rounded border border-input bg-card px-3 py-2 text-sm"
+                >
+                  <option value="">Select quoting branch…</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
+                  ))}
+                </select>
               </div>
             </Card>
           )}
 
+          <FinancingCalculator
+            discountType={draft.commercialDiscountType}
+            discountValue={draft.commercialDiscountValue}
+            cashDown={draft.cashDown}
+            tradeAllowance={draft.tradeAllowance}
+            taxProfile={draft.taxProfile}
+            packageSubtotal={subtotal}
+            discountTotal={discountTotal}
+            discountedSubtotal={discountedSubtotal}
+            netTotal={netTotal}
+            taxTotal={taxTotal}
+            customerTotal={customerTotal}
+            amountFinanced={amountFinanced}
+            taxBreakdown={taxPreviewQuery.data}
+            taxLoading={taxPreviewQuery.isLoading}
+            taxError={taxPreviewQuery.isError}
+            taxEnabled={Boolean(draft.branchSlug)}
+            financeScenarios={financeScenarios}
+            financeLoading={financingPreviewQuery.isLoading}
+            financeError={financingPreviewQuery.isError}
+            selectedScenario={draft.selectedFinanceScenario}
+            taxProfiles={taxProfiles}
+            onDiscountTypeChange={(value) => setDraft((current) => ({ ...current, commercialDiscountType: value }))}
+            onDiscountValueChange={(value) => setDraft((current) => ({ ...current, commercialDiscountValue: value }))}
+            onCashDownChange={(value) => setDraft((current) => ({ ...current, cashDown: value }))}
+            onTaxProfileChange={(value) => setDraft((current) => ({ ...current, taxProfile: value }))}
+            onSelectScenario={(label) => setDraft((current) => ({ ...current, selectedFinanceScenario: label }))}
+          />
+
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("equipment")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
+            <Button variant="outline" onClick={() => setStep("tradeIn")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <Button onClick={() => setStep("review")}>Review <ArrowRight className="ml-1 h-4 w-4" /></Button>
           </div>
         </div>
@@ -1264,6 +1433,12 @@ export function QuoteBuilderV2Page() {
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-semibold">${subtotal.toLocaleString()}</span>
             </div>
+            {discountTotal > 0 && (
+              <div className="flex justify-between text-sm text-emerald-400">
+                <span>Commercial Discount</span>
+                <span>-${discountTotal.toLocaleString()}</span>
+              </div>
+            )}
             {draft.tradeAllowance > 0 && (
               <div className="flex justify-between text-sm text-emerald-400">
                 <span>Trade-In Credit</span>
@@ -1271,24 +1446,42 @@ export function QuoteBuilderV2Page() {
               </div>
             )}
             <div className="flex justify-between text-sm border-t border-border pt-2">
-              <span className="font-bold text-foreground">Net Total</span>
+              <span className="font-bold text-foreground">Net Before Tax</span>
               <span className="text-lg font-bold text-qep-orange">${netTotal.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Estimated Tax</span>
+              <span className="font-medium">${taxTotal.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-sm border-t border-border pt-2">
+              <span className="font-bold text-foreground">Customer Total</span>
+              <span className="text-lg font-bold text-qep-orange">${customerTotal.toLocaleString()}</span>
+            </div>
+            {cashDown > 0 && (
+              <div className="flex justify-between text-sm text-emerald-400">
+                <span>Cash Down</span>
+                <span>-${cashDown.toLocaleString()}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm border-t border-border pt-2">
+              <span className="font-bold text-foreground">Amount Financed</span>
+              <span className="text-lg font-bold text-qep-orange">${amountFinanced.toLocaleString()}</span>
             </div>
             {draft.branchSlug && <BranchDocumentFooter branchSlug={draft.branchSlug} />}
           </Card>
 
-          {dealId && netTotal > 0 && (
+          {draft.branchSlug && subtotal > 0 && (
             <TaxBreakdown
-              dealId={dealId}
-              branchSlug={draft.branchSlug || undefined}
-              equipmentCost={netTotal}
+              data={taxPreviewQuery.data}
+              isLoading={taxPreviewQuery.isLoading}
+              isError={taxPreviewQuery.isError}
               enabled={true}
             />
           )}
 
           <Card className="border-qep-orange/20 bg-qep-orange/5 p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-qep-orange">Commercial Readiness</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-border/70 bg-background/60 p-3">
                 <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Approval</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
@@ -1299,13 +1492,24 @@ export function QuoteBuilderV2Page() {
                 )}
               </div>
               <div className="rounded-lg border border-border/70 bg-background/60 p-3">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Packet Readiness</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Draft Readiness</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {packetReadiness.canSend ? "Ready to send" : "Needs completion"}
+                  {packetReadiness.draft.ready ? "Ready to save" : "Needs completion"}
                 </p>
-                {!packetReadiness.canSend && packetReadiness.missing.length > 0 && (
+                {!packetReadiness.draft.ready && packetReadiness.draft.missing.length > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Missing: {packetReadiness.missing.join(", ")}
+                    Missing: {packetReadiness.draft.missing.join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/60 p-3">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Send Readiness</p>
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {packetReadiness.send.ready ? "Ready to send" : "Needs completion"}
+                </p>
+                {!packetReadiness.send.ready && packetReadiness.send.missing.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Missing: {packetReadiness.send.missing.join(", ")}
                   </p>
                 )}
               </div>
@@ -1318,7 +1522,7 @@ export function QuoteBuilderV2Page() {
               <Button
                 variant="outline"
                 onClick={() => downloadPDF({
-                  dealName: draft.dealId || "Quote",
+                  dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
                   customerName: draft.customerName || draft.customerCompany || "Customer",
                   preparedBy: "QEP Sales Team",
                   preparedDate: new Date().toLocaleDateString(),
@@ -1333,7 +1537,12 @@ export function QuoteBuilderV2Page() {
                   equipmentTotal,
                   attachmentTotal,
                   subtotal,
+                  discountTotal,
                   tradeAllowance: draft.tradeAllowance,
+                  taxTotal,
+                  customerTotal,
+                  cashDown,
+                  amountFinanced,
                   netTotal,
                   financing: financeScenarios.map((scenario) => ({
                     type: scenario.type,
@@ -1353,6 +1562,8 @@ export function QuoteBuilderV2Page() {
                       postalCode: (branch?.postal_code as string) ?? undefined,
                       phone: (branch?.phone_main as string) ?? undefined,
                       email: (branch?.email_main as string) ?? undefined,
+                      website: (branch?.website_url as string) ?? undefined,
+                      footerText: (branch?.doc_footer_text as string) ?? undefined,
                     };
                   })(),
                 })}
@@ -1363,7 +1574,7 @@ export function QuoteBuilderV2Page() {
               </Button>
               <Button
                 onClick={() => { void handleSaveClick(); }}
-                disabled={saveMutation.isPending || !packetReadiness.canSave}
+                disabled={saveMutation.isPending || !packetReadiness.draft.ready}
               >
                 <Save className="mr-1 h-4 w-4" />
                 {saveMutation.isPending ? "Saving..." : "Save Quote"}
@@ -1402,7 +1613,19 @@ export function QuoteBuilderV2Page() {
                 return savedId ? (
                   <>
                     <IncentiveStack quotePackageId={savedId} />
-                    <SendQuoteSection quotePackageId={savedId} />
+                    {packetReadiness.send.ready ? (
+                      <SendQuoteSection
+                        quotePackageId={savedId}
+                        contactName={draft.customerName || draft.customerCompany || "customer"}
+                      />
+                    ) : (
+                      <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+                        <p className="text-sm font-medium text-amber-400">Quote saved, but not ready to send</p>
+                        <p className="mt-1 text-xs text-amber-300">
+                          Missing: {packetReadiness.send.missing.join(", ")}
+                        </p>
+                      </Card>
+                    )}
                     {portalRevision?.review && (
                       <Card className="border-border/60 bg-card/60 p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">

@@ -6,7 +6,7 @@
  * a browser download.
  */
 
-import { useState, useCallback } from "react";
+import { createElement, useState, useCallback } from "react";
 import type { QuotePDFData } from "../components/QuotePDFDocument";
 
 export function useQuotePDF() {
@@ -22,19 +22,27 @@ export function useQuotePDF() {
         import("@react-pdf/renderer"),
         import("../components/QuotePDFDocument"),
       ]);
-
-      const blob = await pdf(QuotePDFDocument({ data })).toBlob();
+      const documentNode = createElement(QuotePDFDocument, { data }) as unknown as Parameters<typeof pdf>[0];
+      const blob = await pdf(documentNode).toBlob();
+      if (!blob || blob.size === 0) {
+        throw new Error("Renderer returned an empty PDF blob");
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const safeName = data.dealName.replace(/[^a-zA-Z0-9-_ ]/g, "").trim().replace(/\s+/g, "-");
+      const safeName = (data.dealName || "Quote").replace(/[^a-zA-Z0-9-_ ]/g, "").trim().replace(/\s+/g, "-") || "Quote";
       a.download = `QEP-Quote-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("[useQuotePDF] PDF generation failed:", err);
+      console.error("[useQuotePDF] PDF generation failed:", {
+        error: err instanceof Error ? err.message : String(err),
+        dealName: data.dealName,
+        customerName: data.customerName,
+        equipmentCount: data.equipment.length,
+      });
       setError("Failed to generate the quote PDF. Try again.");
     } finally {
       setGenerating(false);

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import type { QuoteTaxProfile } from "../../../../../../shared/qep-moonshot-contracts";
 
 const TAX_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tax-calculator`;
 
@@ -26,8 +27,13 @@ export interface TaxCalculation {
 }
 
 export async function calculateTax(params: {
-  deal_id: string;
+  deal_id?: string;
+  company_id?: string;
   branch_slug?: string;
+  subtotal: number;
+  discount_total: number;
+  trade_allowance: number;
+  tax_profile: QuoteTaxProfile;
   include_179?: boolean;
   tax_year?: number;
   effective_tax_rate?: number;

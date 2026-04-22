@@ -23,6 +23,19 @@ interface TaxLine {
   applies_to: string;
 }
 
+type QuoteTaxProfile =
+  | "standard"
+  | "agriculture_exempt"
+  | "fire_mitigation_exempt"
+  | "government_exempt"
+  | "resale_exempt";
+
+function clampCurrency(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(Math.max(0, numeric) * 100) / 100;
+}
+
 function computeSection179(
   equipmentCost: number,
   taxYear: number,
@@ -63,41 +76,64 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    if (!body.deal_id) return safeJsonError("deal_id required", 400, origin);
+    const branchSlug = typeof body.branch_slug === "string" ? body.branch_slug : null;
+    const companyId = typeof body.company_id === "string" ? body.company_id : null;
+    const dealId = typeof body.deal_id === "string" ? body.deal_id : null;
+    const subtotal = clampCurrency(body.subtotal);
+    const discountTotal = clampCurrency(body.discount_total);
+    const tradeAllowance = clampCurrency(body.trade_allowance);
+    const taxProfile = (typeof body.tax_profile === "string" ? body.tax_profile : "standard") as QuoteTaxProfile;
+    const taxableBasis = Math.max(0, subtotal - discountTotal - tradeAllowance);
+    const section179Base = Math.max(0, subtotal - discountTotal);
 
-    const branchSlug = body.branch_slug || "default";
+    if (subtotal <= 0) return safeJsonError("subtotal must be positive", 400, origin);
+    if (!branchSlug) return safeJsonError("branch_slug required", 400, origin);
 
-    // Get deal details
-    const { data: deal } = await supabase
-      .from("crm_deals")
-      .select("id, amount, company_id")
-      .eq("id", body.deal_id)
-      .single();
+    const { data: branch } = await supabaseAdmin
+      .from("branches")
+      .select("slug, state_province")
+      .eq("slug", branchSlug)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-    if (!deal) return safeJsonError("Deal not found", 404, origin);
-
-    const equipmentCost = deal.amount || 0;
+    if (!branch?.state_province) {
+      return safeJsonError("Branch tax jurisdiction unavailable", 400, origin);
+    }
 
     // Look up tax treatments for branch jurisdiction
     const { data: taxTreatments } = await supabaseAdmin
       .from("tax_treatments")
       .select("*")
       .eq("is_active", true)
+      .eq("jurisdiction", branch.state_province)
+      .eq("tax_type", "sales_tax")
       .order("applies_to");
 
     // Check for customer exemptions
     let exemptionsApplied: string[] = [];
-    if (deal.company_id) {
+    if (companyId) {
       const { data: exemptions } = await supabaseAdmin
         .from("tax_exemption_certificates")
         .select("*")
-        .eq("crm_company_id", deal.company_id)
+        .eq("crm_company_id", companyId)
         .eq("status", "verified")
         .or(`expiration_date.is.null,expiration_date.gte.${new Date().toISOString().split("T")[0]}`);
 
       if (exemptions && exemptions.length > 0) {
-        exemptionsApplied = exemptions.map((e) => `${e.exemption_type} (cert #${e.certificate_number})`);
+        const matching = taxProfile === "standard"
+          ? exemptions
+          : exemptions.filter((e) => e.exemption_type === taxProfile.replace(/_exempt$/, ""));
+        if (matching.length > 0) {
+          exemptionsApplied = matching.map((e) => `${e.exemption_type} (cert #${e.certificate_number})`);
+        }
       }
+    }
+
+    if (taxProfile !== "standard" && exemptionsApplied.length === 0) {
+      exemptionsApplied = [
+        `Estimated ${taxProfile.replace(/_exempt$/, "").replace(/_/g, " ")} exemption — verify certificate before sending.`,
+      ];
     }
 
     // Calculate tax lines
@@ -106,8 +142,8 @@ Deno.serve(async (req) => {
 
     if (exemptionsApplied.length === 0 && taxTreatments) {
       for (const tt of taxTreatments) {
-        if (tt.applies_to === "equipment_new" && equipmentCost > 0) {
-          const amount = Math.round(equipmentCost * tt.rate * 100) / 100;
+        if (["equipment_new", "attachments"].includes(tt.applies_to) && taxableBasis > 0) {
+          const amount = Math.round(taxableBasis * tt.rate * 100) / 100;
           taxLines.push({
             description: `${tt.name} (${tt.jurisdiction})`,
             rate: tt.rate,
@@ -121,17 +157,17 @@ Deno.serve(async (req) => {
 
     // Section 179 scenarios
     let section179 = null;
-    if (body.include_179 !== false && equipmentCost > 0) {
+    if (body.include_179 !== false && section179Base > 0) {
       const taxYear = body.tax_year || new Date().getFullYear();
       const effectiveRate = body.effective_tax_rate || 0.25;
 
-      section179 = computeSection179(equipmentCost, taxYear, effectiveRate);
+      section179 = computeSection179(section179Base, taxYear, effectiveRate);
 
       // Save scenario
       await supabaseAdmin.from("section_179_scenarios").insert({
-        deal_id: body.deal_id,
+        deal_id: dealId,
         tax_year: taxYear,
-        equipment_cost: equipmentCost,
+        equipment_cost: section179Base,
         bonus_depreciation_pct: taxYear <= 2024 ? 60 : taxYear === 2025 ? 40 : taxYear === 2026 ? 20 : 0,
         section_179_deduction: section179.deduction,
         bonus_depreciation_amount: section179.bonus,
@@ -148,7 +184,7 @@ Deno.serve(async (req) => {
       total_tax: totalTax,
       exemptions_applied: exemptionsApplied,
       section_179: section179,
-      equipment_cost: equipmentCost,
+      equipment_cost: section179Base,
     }, origin);
   } catch (err) {
     captureEdgeException(err, { fn: "tax-calculator", req });

@@ -259,3 +259,30 @@
 **Deployment:** `supabase db push` applied `354_oem_portal_profiles.sql`; `supabase migration list` confirms remote migration `354`.
 **Remaining manual acceptance:** OEM launch URLs, credential ownership, and real dealer login workflows still need to be configured per manufacturer inside the new dashboard.
 **Parity status update:** GAP → BUILT (repo-side) / CONFIGURATION PENDING
+
+## 2026-04-22 — OEM Portal Credential Vault (Phase-9_Advanced-Intelligence · Phase 9.1) — BUILT
+**Gap row:** `16` (closes the credential-workflow gap against row 16; row 16 now fully operable pending live launch URLs + credentials)
+**Gap description:** Phase 9 dashboard shipped as registry-only — no place to store shared passwords, API keys, or MFA seeds. Operators still had to context-switch to 1Password before every portal launch.
+**Change type:** Schema + Edge Function + Crypto + Admin UI
+**Files:**
+- `supabase/migrations/355_oem_portal_credential_vault.sql`
+- `supabase/functions/oem-portal-vault/index.ts`
+- `supabase/functions/oem-portal-vault/rate-limit.test.ts`
+- `supabase/functions/_shared/vault-crypto.ts`
+- `supabase/functions/_shared/vault-crypto.test.ts`
+- `apps/web/src/features/oem-portals/lib/vault-api.ts`
+- `apps/web/src/features/oem-portals/lib/vault-api.test.ts`
+- `apps/web/src/features/oem-portals/components/CredentialCard.tsx`
+- `apps/web/src/features/oem-portals/components/CredentialSheet.tsx`
+- `apps/web/src/features/oem-portals/components/RevealModal.tsx`
+- `apps/web/src/features/oem-portals/components/TotpRing.tsx`
+- `apps/web/src/features/oem-portals/components/CredentialAuditSheet.tsx`
+- `apps/web/src/features/oem-portals/pages/OemPortalDashboardPage.tsx`
+- `apps/web/src/features/oem-portals/pages/__tests__/OemPortalDashboardPage.integration.test.tsx`
+- `supabase/config.toml`
+- `.env.example`
+**Security model:** AES-256-GCM application-layer encryption with dedicated `OEM_VAULT_ENCRYPTION_KEY` (separate blast radius from `HUBSPOT_ENCRYPTION_KEY`). Ciphertext table RLS-locked to `service_role`; metadata exposed via `oem_portal_credential_meta_for_role()` SECURITY DEFINER accessor. Audit events append-only (trigger + explicit edge-function inserts for reveal/TOTP/rate-limit). Reveal default-gated to admin/manager/owner; per-credential `reveal_allowed_for_reps` opt-in. Server-side TOTP (RFC 6238, SHA-1, 30s) — seed never leaves the edge function.
+**Verification:** `bun run migrations:check` (353 files, 001..355), `deno test supabase/functions/_shared/vault-crypto.test.ts` (14/14 inc. RFC 6238 vectors @ T=59 and T=1111111109), `deno test supabase/functions/oem-portal-vault/rate-limit.test.ts` (3/3), `deno check supabase/functions/oem-portal-vault/index.ts` (clean), `bun test apps/web/src/features/oem-portals` (12/12), `bun run build` (root + apps/web), `bun run audit:edges` (168 functions, oem-portal-vault registered with verify_jwt=false).
+**Deployment (required before operator use):** (1) `openssl rand -hex 32` → set `OEM_VAULT_ENCRYPTION_KEY` in Supabase dashboard Edge Function Secrets. (2) `supabase db push` (applies 355). (3) `supabase functions deploy oem-portal-vault`. (4) Smoke: create a shared_login credential as admin and reveal — expect `created` + `revealed` rows in `oem_portal_credential_audit_events`.
+**Remaining manual acceptance:** populate real credentials per OEM once launch URLs are verified; confirm the vault encryption key is set before ops attempt first add.
+**Parity status update:** Row 16 credential workflow → BUILT (pending prod key + credentials).

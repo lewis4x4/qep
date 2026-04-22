@@ -85,7 +85,12 @@ export interface QuotePDFData {
   equipmentTotal: number;
   attachmentTotal: number;
   subtotal: number;
+  discountTotal: number;
   tradeAllowance: number;
+  taxTotal: number;
+  customerTotal: number;
+  cashDown: number;
+  amountFinanced: number;
   netTotal: number;
   financing: Array<{ type: string; termMonths: number; rate: number; monthlyPayment: number; totalCost: number; lender: string }>;
   branch: { name: string; address?: string; city?: string; state?: string; postalCode?: string; phone?: string; email?: string; website?: string; footerText?: string };
@@ -209,6 +214,12 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
             <Text style={s.totalLabel}>Subtotal</Text>
             <Text style={s.totalValue}>{fmt(data.subtotal)}</Text>
           </View>
+          {data.discountTotal > 0 && (
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Commercial Discount</Text>
+              <Text style={s.totalValue}>({fmt(data.discountTotal)})</Text>
+            </View>
+          )}
           {data.tradeAllowance > 0 && (
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>Trade-In Allowance</Text>
@@ -216,8 +227,26 @@ export function QuotePDFDocument({ data }: { data: QuotePDFData }) {
             </View>
           )}
           <View style={[s.totalRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#ddd" }]}>
-            <Text style={s.grandTotalLabel}>Total</Text>
+            <Text style={s.grandTotalLabel}>Net Before Tax</Text>
             <Text style={s.grandTotalValue}>{fmt(data.netTotal)}</Text>
+          </View>
+          <View style={s.totalRow}>
+            <Text style={s.totalLabel}>Estimated Tax</Text>
+            <Text style={s.totalValue}>{fmt(data.taxTotal)}</Text>
+          </View>
+          <View style={s.totalRow}>
+            <Text style={s.totalLabel}>Customer Total</Text>
+            <Text style={s.totalValue}>{fmt(data.customerTotal)}</Text>
+          </View>
+          {data.cashDown > 0 && (
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Cash Down</Text>
+              <Text style={s.totalValue}>({fmt(data.cashDown)})</Text>
+            </View>
+          )}
+          <View style={[s.totalRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#ddd" }]}>
+            <Text style={s.grandTotalLabel}>Amount Financed</Text>
+            <Text style={s.grandTotalValue}>{fmt(data.amountFinanced)}</Text>
           </View>
         </View>
 

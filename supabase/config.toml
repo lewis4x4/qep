@@ -362,3 +362,9 @@ verify_jwt = false
 
 [functions.voice-to-qrm]
 verify_jwt = false
+
+# Phase 9.1 — OEM Portal Credential Vault. Uses _shared/service-auth.ts for
+# ES256 JWT validation and a separate service-role client for ciphertext IO
+# (RLS on oem_portal_credentials locks authenticated roles out entirely).
+[functions.oem-portal-vault]
+verify_jwt = false

@@ -1,8 +1,8 @@
 import { AiRecommendationCard } from "./AiRecommendationCard";
 import { FinancingPreviewCard } from "./FinancingPreviewCard";
-import { TradeInInputCard } from "./TradeInInputCard";
 import { CompetitiveBattleCard } from "./CompetitiveBattleCard";
 import type { QuoteRecommendation } from "../../../../../../shared/qep-moonshot-contracts";
+import type { QuoteFinancingRequest } from "../lib/quote-api";
 
 interface IntelligencePanelProps {
   recommendation: QuoteRecommendation | null;
@@ -10,15 +10,8 @@ interface IntelligencePanelProps {
   onSelectPrimary: () => void;
   onSelectAlternative?: () => void;
   onBrowseCatalog: () => void;
-  // Financing preview
-  netTotal: number;
-  marginPct: number;
+  financingInput: QuoteFinancingRequest;
   equipmentMake?: string;
-  equipmentKey: string;
-  // Trade-in (standalone — no deal linked)
-  hasDeal: boolean;
-  tradeAllowance: number;
-  onTradeChange: (value: number) => void;
   // Competitive intel
   userRole: string | null;
   equipmentModel?: string;
@@ -30,13 +23,8 @@ export function IntelligencePanel({
   onSelectPrimary,
   onSelectAlternative,
   onBrowseCatalog,
-  netTotal,
-  marginPct,
+  financingInput,
   equipmentMake,
-  equipmentKey,
-  hasDeal,
-  tradeAllowance,
-  onTradeChange,
   userRole,
   equipmentModel,
 }: IntelligencePanelProps) {
@@ -54,20 +42,8 @@ export function IntelligencePanel({
         />
       )}
 
-      {netTotal > 0 && (
-        <FinancingPreviewCard
-          netTotal={netTotal}
-          marginPct={marginPct}
-          make={equipmentMake}
-          equipmentKey={equipmentKey}
-        />
-      )}
-
-      {!hasDeal && (
-        <TradeInInputCard
-          tradeAllowance={tradeAllowance}
-          onChange={onTradeChange}
-        />
+      {financingInput.packageSubtotal > 0 && (
+        <FinancingPreviewCard input={financingInput} />
       )}
 
       {isManagerOrOwner && equipmentMake && (

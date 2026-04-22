@@ -1,33 +1,19 @@
-import { useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { DollarSign, Loader2 } from "lucide-react";
-import { calculateFinancing } from "../lib/quote-api";
+import { useQuoteFinancingPreview } from "../hooks/useQuoteFinancingPreview";
 import type { QuoteFinanceScenario } from "../../../../../../shared/qep-moonshot-contracts";
+import type { QuoteFinancingRequest } from "../lib/quote-api";
 
 interface FinancingPreviewCardProps {
-  netTotal: number;
-  marginPct: number;
-  make?: string;
-  /** Key that changes when equipment changes — triggers recalculation */
-  equipmentKey: string;
+  input: QuoteFinancingRequest;
 }
 
-export function FinancingPreviewCard({ netTotal, marginPct, make, equipmentKey }: FinancingPreviewCardProps) {
-  const mutation = useMutation({
-    mutationFn: () => calculateFinancing(netTotal, marginPct, make),
-  });
+export function FinancingPreviewCard({ input }: FinancingPreviewCardProps) {
+  const previewQuery = useQuoteFinancingPreview(input);
+  const scenarios: QuoteFinanceScenario[] = previewQuery.data?.scenarios ?? [];
+  const customerTotal = previewQuery.data?.customerTotal ?? input.packageSubtotal - input.discountTotal - input.tradeAllowance + input.taxTotal;
 
-  useEffect(() => {
-    if (netTotal > 0) {
-      mutation.mutate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [equipmentKey, netTotal, marginPct]);
-
-  const scenarios: QuoteFinanceScenario[] = mutation.data?.scenarios ?? [];
-
-  if (netTotal <= 0) return null;
+  if (input.packageSubtotal <= 0) return null;
 
   return (
     <Card className="p-4 space-y-2">
@@ -36,7 +22,7 @@ export function FinancingPreviewCard({ netTotal, marginPct, make, equipmentKey }
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Financing Preview</p>
       </div>
 
-      {mutation.isPending && (
+      {previewQuery.isLoading && (
         <div className="flex items-center gap-2 py-2">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Calculating…</span>
@@ -52,7 +38,7 @@ export function FinancingPreviewCard({ netTotal, marginPct, make, equipmentKey }
                 {s.monthlyPayment != null
                   ? `$${Math.round(s.monthlyPayment).toLocaleString()}/mo`
                   : s.type === "cash"
-                    ? `$${netTotal.toLocaleString()}`
+                    ? `$${Math.round(customerTotal).toLocaleString()}`
                     : "—"}
               </span>
             </div>
@@ -60,7 +46,13 @@ export function FinancingPreviewCard({ netTotal, marginPct, make, equipmentKey }
         </div>
       )}
 
-      {mutation.isError && (
+      {!previewQuery.isLoading && scenarios.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          {input.amountFinanced > 0 ? "Financing preview unavailable" : "Cash structure only"}
+        </p>
+      )}
+
+      {previewQuery.isError && (
         <p className="text-xs text-muted-foreground">Financing preview unavailable</p>
       )}
     </Card>
