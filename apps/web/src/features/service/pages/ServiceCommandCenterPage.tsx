@@ -17,6 +17,7 @@ import {
   CalendarClock,
   Clock,
   ClipboardCheck,
+  FileText,
   Package,
   Receipt,
   Smartphone,
@@ -176,6 +177,13 @@ export function ServiceCommandCenterPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link
+              to="/service/agreements"
+              className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/25 hover:text-primary"
+            >
+              <FileText className="h-4 w-4" />
+              Agreements
+            </Link>
             <Link
               to="/service/inspections"
               className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/25 hover:text-primary"

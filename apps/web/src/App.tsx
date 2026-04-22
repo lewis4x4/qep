@@ -100,6 +100,12 @@ const ServiceInspectionPlusPage = lazy(() =>
 const ServiceInspectionDetailPage = lazy(() =>
   import("./features/service/pages/ServiceInspectionDetailPage").then((m) => ({ default: m.ServiceInspectionDetailPage }))
 );
+const ServiceAgreementsPage = lazy(() =>
+  import("./features/service/pages/ServiceAgreementsPage").then((m) => ({ default: m.ServiceAgreementsPage }))
+);
+const ServiceAgreementDetailPage = lazy(() =>
+  import("./features/service/pages/ServiceAgreementDetailPage").then((m) => ({ default: m.ServiceAgreementDetailPage }))
+);
 const ServiceTechnicianMobilePage = lazy(() =>
   import("./features/service/pages/ServiceTechnicianMobilePage").then((m) => ({ default: m.ServiceTechnicianMobilePage }))
 );
@@ -1080,6 +1086,26 @@ function App() {
                 }
               />
               {/* Service Engine routes */}
+              <Route
+                path="/service/agreements/:agreementId"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceAgreementDetailPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/service/agreements"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceAgreementsPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               <Route
                 path="/service/inspections/:inspectionId"
                 element={

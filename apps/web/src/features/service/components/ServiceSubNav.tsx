@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Truck,
   ClipboardCheck,
+  FileText,
   BarChart3,
   GitBranch,
   Boxes,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const SUB_NAV_LINKS = [
   { to: "/m/service", label: "Tech Mobile", icon: Smartphone },
   { to: "/service/inspections", label: "Inspections", icon: ClipboardCheck },
+  { to: "/service/agreements", label: "Agreements", icon: FileText },
   { to: "/service/parts", label: "Shop Parts", icon: Package },
   { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
   { to: "/parts/vendors", label: "Vendors", icon: Truck },

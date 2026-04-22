@@ -132,3 +132,21 @@
 **Verification:** file-level TypeScript diagnostics on `ServiceInspectionPlusPage.tsx`, `ServiceInspectionDetailPage.tsx`, `ServiceSubNav.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/inspectionplus-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceInspectionPlusPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-inspectionplus --ui` all passed. Gate report: `test-results/agent-gates/20260422T013526Z-phase4-inspectionplus.json`.
 **Deployment:** `supabase db push` applied `348_service_inspectionplus.sql`; `supabase migration list` confirms remote migration `348`. During deploy, the migration was corrected to reference `qrm_companies` and `qrm_equipment` because the legacy `crm_*` relations are compatibility views in the remote environment.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Service Agreements (Phase-4_Service) — CLOSED
+**Gap row:** `17`
+**Gap description:** Service Agreements (PM contracts) may need dedicated schema.
+**Change type:** Schema + UI
+**Files:**
+- `supabase/migrations/349_service_agreements.sql`
+- `apps/web/src/features/service/lib/service-agreement-utils.ts`
+- `apps/web/src/features/service/lib/service-agreement-utils.test.ts`
+- `apps/web/src/features/service/pages/ServiceAgreementsPage.tsx`
+- `apps/web/src/features/service/pages/ServiceAgreementDetailPage.tsx`
+- `apps/web/src/features/service/pages/__tests__/ServiceAgreementsPage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceSubNav.tsx`
+- `apps/web/src/features/service/pages/ServiceCommandCenterPage.tsx`
+- `apps/web/src/App.tsx`
+**Verification:** file-level TypeScript diagnostics on `ServiceAgreementsPage.tsx`, `ServiceAgreementDetailPage.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/service-agreement-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceAgreementsPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-service-agreements --ui` all passed. Gate report: `test-results/agent-gates/20260422T020210Z-phase4-service-agreements.json`.
+**Deployment:** `supabase db push` applied `349_service_agreements.sql`; `supabase migration list` confirms remote migration `349`.
+**Parity status update:** GAP → BUILT
