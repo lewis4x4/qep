@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   Boxes,
   BriefcaseBusiness,
   Building2,
@@ -112,6 +113,15 @@ const MODULES: ModuleCard[] = [
     icon: Gauge,
     tone: "border-white/20 bg-white/5 text-white",
     badge: "Owner / Manager",
+  },
+  {
+    title: "Data Miner Equivalents",
+    description: "Curated profitability, A/R exposure, and service labor report packs replacing the legacy Data Miner utility.",
+    href: "/executive/data-miner",
+    roles: ["admin", "manager", "owner"],
+    icon: BarChart3,
+    tone: "border-cyan-500/30 bg-cyan-500/5 text-cyan-300",
+    badge: "Finance / Service / Owner",
   },
   {
     title: "Parts Command Center",

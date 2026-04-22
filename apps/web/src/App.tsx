@@ -409,6 +409,9 @@ const CommandCenterPage = lazy(() =>
 const OwnerDashboardPage = lazy(() =>
   import("./features/owner/pages/OwnerDashboardPage").then((m) => ({ default: m.OwnerDashboardPage }))
 );
+const DataMinerEquivalentsPage = lazy(() =>
+  import("./features/owner/pages/DataMinerEquivalentsPage").then((m) => ({ default: m.DataMinerEquivalentsPage }))
+);
 const BriefRoutes = lazy(() =>
   import("./features/brief/BriefRoutes").then((m) => ({ default: m.BriefRoutes }))
 );
@@ -1819,6 +1822,16 @@ function App() {
                 element={
                   profile.role === "owner" ? (
                     <OwnerDashboardPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/executive/data-miner"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <DataMinerEquivalentsPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

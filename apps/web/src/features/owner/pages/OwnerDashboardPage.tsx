@@ -94,12 +94,22 @@ export function OwnerDashboardPage() {
               One screen for the whole business. Refreshes every 90 seconds and on live events.
             </p>
           </div>
-          {summaryQuery.data?.generated_at && (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-300">
-              <Activity className="mr-1 inline h-3 w-3 text-qep-orange" />
-              refreshed {new Date(summaryQuery.data.generated_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/executive/data-miner")}
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.12]"
+            >
+              <LineChart className="h-3.5 w-3.5" />
+              Data Miner Equivalents
+            </button>
+            {summaryQuery.data?.generated_at && (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-300">
+                <Activity className="mr-1 inline h-3 w-3 text-qep-orange" />
+                refreshed {new Date(summaryQuery.data.generated_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
         </header>
 
         {/* TIER 1 — Hero: Health Score + Owner Brief ──────────────────── */}
@@ -244,4 +254,3 @@ function buildTiles(
     },
   ];
 }
-

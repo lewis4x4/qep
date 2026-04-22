@@ -31,3 +31,27 @@
 - Blocker: the repo has no verified OEM launch URLs, shared credential details, or dealer-specific login workflows to preload into the dashboard.
 - What unblocks it: populate real manufacturer portal URLs, credential ownership, and access-mode details in the deployed dashboard for each OEM the dealership actively uses.
 - Estimated impact: the repo-side dashboard is built and deployed, but operators still need to complete per-OEM configuration before it functions as a live launch board.
+
+## 2026-04-22 — Phase-8 Financial Operations — QuickBooks credentials and account mapping
+
+- What I was doing: confirming the remaining non-code blockers after closing the executable parity backlog.
+- What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, and pushed the slice to production with migration `352`.
+- Blocker: live QuickBooks credentials, realm id, and GL account ids are still not present in the environment, so the deployed sync cannot post transactions end-to-end.
+- What unblocks it: set the QuickBooks client id, client secret, refresh token, realm id, and production account mappings in the project environment.
+- Estimated impact: row `4` stays at built-but-not-retired status until live QuickBooks posting can be executed with production credentials.
+
+## 2026-04-22 — Cross-Cutting — Traffic Management scope decision
+
+- What I was doing: verifying the remaining workbook rows after closing row `18`.
+- What I tried: re-read the verified worksheet row and the parity prompt ordering to determine the next actionable lane.
+- Blocker: the worksheet explicitly marks Traffic Management as a scope decision, not a ready build slice. There is no approved target between folding it into Service/Rental/Parts and building a dedicated module.
+- What unblocks it: decide the product boundary for Traffic Management with Rylee/Ryan, then create the approved implementation target.
+- Estimated impact: no safe code work should begin on row `12` until product scope is fixed.
+
+## 2026-04-22 — Phase-5 Deal Genome — IronGuides contract dependency
+
+- What I was doing: verifying the remaining workbook rows after closing row `18`.
+- What I tried: re-read the verified worksheet row and checked the current repo for an IronGuides market-intelligence feed implementation target.
+- Blocker: the worksheet marks this slice as dependent on external IronGuides vendor contract status. There is no confirmed feed access or live contract artifact in the workspace.
+- What unblocks it: confirm IronGuides contract status and the permitted feed/access pattern for QEP.
+- Estimated impact: row `20` cannot move from backlog to implementation until the vendor dependency is resolved.

@@ -259,3 +259,20 @@
 **Deployment:** `supabase db push` applied `354_oem_portal_profiles.sql`; `supabase migration list` confirms remote migration `354`.
 **Remaining manual acceptance:** OEM launch URLs, credential ownership, and real dealer login workflows still need to be configured per manufacturer inside the new dashboard.
 **Parity status update:** GAP → BUILT (repo-side) / CONFIGURATION PENDING
+
+## 2026-04-22 — Data Miner Equivalents (Phase-9_Advanced-Intelligence) — CLOSED
+**Gap row:** `18`
+**Gap description:** Data Miner reports don't have 1:1 QEP analog; QEP has different BI approach.
+**Change type:** Schema + Owner / Dashboard UI
+**Files:**
+- `supabase/migrations/355_owner_data_miner_equivalents.sql`
+- `apps/web/src/features/owner/lib/data-miner-utils.ts`
+- `apps/web/src/features/owner/lib/data-miner-utils.test.ts`
+- `apps/web/src/features/owner/pages/DataMinerEquivalentsPage.tsx`
+- `apps/web/src/features/owner/pages/__tests__/DataMinerEquivalentsPage.integration.test.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/features/owner/pages/OwnerDashboardPage.tsx`
+- `apps/web/src/features/dashboards/pages/OperatingSystemHubPage.tsx`
+**Verification:** file-level TypeScript diagnostics on `DataMinerEquivalentsPage.tsx`, `data-miner-utils.ts`, `DataMinerEquivalentsPage.integration.test.tsx`, `App.tsx`, `OwnerDashboardPage.tsx`, and `OperatingSystemHubPage.tsx`, `bun test apps/web/src/features/owner/lib/data-miner-utils.test.ts apps/web/src/features/owner/pages/__tests__/DataMinerEquivalentsPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase9-data-miner --ui` all passed. Gate report: `test-results/agent-gates/20260422T140931Z-phase9-data-miner.json`.
+**Deployment:** `supabase db push` applied `355_owner_data_miner_equivalents.sql`; `supabase migration list` confirms remote migration `355`.
+**Parity status update:** GAP → BUILT
