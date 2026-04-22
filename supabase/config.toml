@@ -73,6 +73,9 @@ verify_jwt = false
 [functions.crm-router]
 verify_jwt = false
 
+[functions.vendor-pricing-portal]
+verify_jwt = false
+
 [functions.crm-auth-audit]
 verify_jwt = false
 

@@ -1,10 +1,15 @@
 import { Suspense } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
+import { lazy } from "react";
 import { OfflineBanner } from "./OfflineBanner";
 import { NotFoundPage } from "./NotFoundPage";
 import { Toaster } from "@/components/ui/toaster";
 import { portalRouteElements } from "@/features/portal/PortalRoutes";
 import { supabase } from "@/lib/supabase";
+
+const VendorPricingPortalPage = lazy(() =>
+  import("@/features/service/pages/VendorPricingPortalPage").then((m) => ({ default: m.VendorPricingPortalPage })),
+);
 
 function RouteFallback() {
   return (
@@ -29,14 +34,16 @@ export function NoProfileShell({ authError }: { authError: string | null }) {
   const location = useLocation();
   const isPortal =
     location.pathname === "/portal" || location.pathname.startsWith("/portal/");
+  const isVendorPortal = location.pathname.startsWith("/vendor/pricing/");
 
-  if (isPortal) {
+  if (isPortal || isVendorPortal) {
     return (
       <>
         <OfflineBanner />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {portalRouteElements()}
+            <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>

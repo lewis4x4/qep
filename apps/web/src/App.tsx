@@ -28,6 +28,9 @@ const LoginPage = lazy(() =>
 const PortalLoginPage = lazy(() =>
   import("./features/portal/pages/PortalLoginPage").then((m) => ({ default: m.PortalLoginPage }))
 );
+const VendorPricingPortalPage = lazy(() =>
+  import("./features/service/pages/VendorPricingPortalPage").then((m) => ({ default: m.VendorPricingPortalPage }))
+);
 const AppLayout = lazy(() =>
   import("./components/AppLayout").then((m) => ({ default: m.AppLayout }))
 );
@@ -864,6 +867,7 @@ function App() {
           >
             <Routes>
               <Route path="/service/track" element={<ServicePublicTrackPage />} />
+              <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="*" element={<LoginPage authError={error} />} />
@@ -1121,6 +1125,7 @@ function App() {
                   )
                 }
               />
+              <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
               <Route
                 path="/service/efficiency"
                 element={
