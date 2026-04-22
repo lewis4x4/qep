@@ -226,6 +226,9 @@ const AccountsPayablePage = lazy(() =>
 const AccountsPayableDetailPage = lazy(() =>
   import("./features/admin/pages/AccountsPayableDetailPage").then((m) => ({ default: m.AccountsPayableDetailPage }))
 );
+const OemPortalDashboardPage = lazy(() =>
+  import("./features/oem-portals/pages/OemPortalDashboardPage").then((m) => ({ default: m.OemPortalDashboardPage }))
+);
 const ExceptionInboxPage = lazy(() =>
   import("./features/admin/pages/ExceptionInboxPage").then((m) => ({ default: m.ExceptionInboxPage }))
 );
@@ -1508,6 +1511,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <FleetMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/oem-portals"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <OemPortalDashboardPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

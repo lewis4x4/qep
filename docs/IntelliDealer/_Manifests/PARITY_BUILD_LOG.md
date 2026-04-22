@@ -242,3 +242,20 @@
 **Verification:** file-level TypeScript diagnostics on `PortalInvoicesPage.tsx`, `PortalInvoiceDetailPage.tsx`, and `PortalRoutes.tsx`, `bun test apps/web/src/features/portal/lib/portal-invoice-history-utils.test.ts`, `deno check supabase/functions/portal-api/index.ts`, `bun run build`, and `bun run segment:gates --segment phase9-portal-invoices --ui` all passed. Gate report: `test-results/agent-gates/20260422T132535Z-phase9-portal-invoices.json`.
 **Deployment:** `supabase functions deploy portal-api` succeeded.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — OEM Portal SSO Dashboard (Phase-9_Advanced-Intelligence) — BUILT / CONFIGURATION PENDING
+**Gap row:** `16`
+**Gap description:** OEM Portal SSO dashboard missing.
+**Change type:** Schema + Admin UI
+**Files:**
+- `supabase/migrations/354_oem_portal_profiles.sql`
+- `apps/web/src/features/oem-portals/lib/oem-portal-utils.ts`
+- `apps/web/src/features/oem-portals/lib/oem-portal-utils.test.ts`
+- `apps/web/src/features/oem-portals/pages/OemPortalDashboardPage.tsx`
+- `apps/web/src/features/oem-portals/pages/__tests__/OemPortalDashboardPage.integration.test.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/AdminPage.tsx`
+**Verification:** file-level TypeScript diagnostics on `OemPortalDashboardPage.tsx`, `App.tsx`, `AdminPage.tsx`, `oem-portal-utils.ts`, and `OemPortalDashboardPage.integration.test.tsx`, `bun test apps/web/src/features/oem-portals/lib/oem-portal-utils.test.ts apps/web/src/features/oem-portals/pages/__tests__/OemPortalDashboardPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase9-oem-portal-sso --ui` all passed. Gate report: `test-results/agent-gates/20260422T134252Z-phase9-oem-portal-sso.json`.
+**Deployment:** `supabase db push` applied `354_oem_portal_profiles.sql`; `supabase migration list` confirms remote migration `354`.
+**Remaining manual acceptance:** OEM launch URLs, credential ownership, and real dealer login workflows still need to be configured per manufacturer inside the new dashboard.
+**Parity status update:** GAP → BUILT (repo-side) / CONFIGURATION PENDING

@@ -23,3 +23,11 @@
 - Blocker: the final acceptance step in the worksheet is real in-field UAT with an actual service technician on a production/mobile workflow. That cannot be executed from the workspace alone.
 - What unblocks it: run technician field validation on the deployed `/m/service` flow and record pass/fail feedback from service staff.
 - Estimated impact: the repo-side mobile slice is built and merged, but row `5` should not be considered fully retired until technician UAT is completed.
+
+## 2026-04-22 — Phase-9 Advanced Intelligence — OEM portal configuration
+
+- What I was doing: closing workbook row `16` for the OEM portal dashboard.
+- What I tried: built and deployed `oem_portal_profiles`, seeded repo-verified OEM/manufacturer rows, added an internal dashboard at `/oem-portals`, and passed the full segment gate for `phase9-oem-portal-sso`.
+- Blocker: the repo has no verified OEM launch URLs, shared credential details, or dealer-specific login workflows to preload into the dashboard.
+- What unblocks it: populate real manufacturer portal URLs, credential ownership, and access-mode details in the deployed dashboard for each OEM the dealership actively uses.
+- Estimated impact: the repo-side dashboard is built and deployed, but operators still need to complete per-OEM configuration before it functions as a live launch board.

@@ -1312,6 +1312,7 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
                 {[
+                  { label: "OEM Portals", description: "Aggregate manufacturer portals and launch paths in one dashboard.", href: "/oem-portals", icon: Building2 },
                   { label: "Accounts Payable", description: "Vendor bills, approvals, and aging analysis.", href: "/admin/accounts-payable", icon: Building2 },
                   { label: "Sequences", description: "Automated follow-up sequences that keep deals moving.", href: "/admin/sequences", icon: NotebookPen },
                   { label: "Templates", description: "Activity and email templates for reps.", href: "/admin/templates", icon: NotebookPen },
