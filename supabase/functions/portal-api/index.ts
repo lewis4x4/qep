@@ -1634,10 +1634,21 @@ Deno.serve(async (req) => {
     // ── /invoices — Payment portal ─────────────────────────────────────
     if (route === "invoices") {
       if (req.method === "GET" && !subRoute) {
-        const { data, error } = await supabase
+        const url2 = new URL(req.url);
+        const invoiceIdFilter = url2.searchParams.get("invoice_id");
+        const search = (url2.searchParams.get("search") ?? "").trim().toLowerCase();
+        const statusFilter = (url2.searchParams.get("status") ?? "").trim().toLowerCase();
+        const dateMode = (url2.searchParams.get("date_mode") ?? "invoice").trim().toLowerCase();
+        const fromDate = (url2.searchParams.get("from") ?? "").trim();
+        const toDate = (url2.searchParams.get("to") ?? "").trim();
+
+        let query = supabase
           .from("customer_invoices")
           .select("*, customer_invoice_line_items(*)")
           .order("invoice_date", { ascending: false });
+        if (invoiceIdFilter) query = query.eq("id", invoiceIdFilter);
+
+        const { data, error } = await query;
 
         if (error) return safeJsonError("Failed to load invoices", 500, origin);
 
@@ -1712,6 +1723,66 @@ Deno.serve(async (req) => {
               paymentHistory: portalPaymentHistory,
             }),
           };
+        }).filter((invoice) => {
+          const invoiceAny = invoice as Record<string, unknown> & {
+            status?: string | null;
+            due_date?: string | null;
+            updated_at?: string | null;
+            paid_at?: string | null;
+            invoice_date?: string | null;
+            customer_invoice_line_items?: Array<{ description?: string | null }> | null;
+            invoice_number?: string | null;
+            description?: string | null;
+            payment_reference?: string | null;
+            branch_id?: string | null;
+          };
+
+          if (statusFilter && statusFilter !== "all" && String(invoiceAny.status ?? "").toLowerCase() !== statusFilter) {
+            return false;
+          }
+
+          const dateValue = (() => {
+            if (dateMode === "due") return typeof invoiceAny.due_date === "string" ? invoiceAny.due_date : "";
+            if (dateMode === "updated") return typeof invoiceAny.updated_at === "string" ? invoiceAny.updated_at : "";
+            if (dateMode === "paid") return typeof invoiceAny.paid_at === "string" ? invoiceAny.paid_at : "";
+            return typeof invoiceAny.invoice_date === "string" ? invoiceAny.invoice_date : "";
+          })();
+
+          if (fromDate && (!dateValue || dateValue < fromDate)) return false;
+          if (toDate && (!dateValue || dateValue > toDate)) return false;
+
+          if (!search) return true;
+
+          const lineDescriptions = Array.isArray(invoiceAny.customer_invoice_line_items)
+            ? invoiceAny.customer_invoice_line_items
+              .map((line) => typeof line?.description === "string" ? line.description : "")
+              .join(" ")
+            : "";
+          const paymentRefs = Array.isArray(invoice.portal_payment_history)
+            ? invoice.portal_payment_history
+              .map((entry) => typeof entry.reference === "string" ? entry.reference : "")
+              .join(" ")
+            : "";
+          const timelineText = Array.isArray(invoice.portal_invoice_timeline)
+            ? invoice.portal_invoice_timeline
+              .map((entry) => `${entry.label ?? ""} ${entry.detail ?? ""}`)
+              .join(" ")
+            : "";
+
+          const haystack = [
+            invoiceAny.invoice_number,
+            invoiceAny.description,
+            invoiceAny.payment_reference,
+            invoiceAny.branch_id,
+            lineDescriptions,
+            paymentRefs,
+            timelineText,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+          return haystack.includes(search);
         });
 
         const typedInvoices = invoices as Array<Record<string, unknown> & {

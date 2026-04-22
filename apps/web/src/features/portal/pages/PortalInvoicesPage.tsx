@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,8 @@ import { portalApi, type PortalBillingSummary, type PortalInvoiceTimelineItem, t
 import { PortalLayout } from "../components/PortalLayout";
 import { PayInvoiceButton } from "../components/PayInvoiceButton";
 import { downloadInvoiceStatement, type PortalInvoicePaymentHistoryItem } from "../lib/invoice-statement";
-import { AlertCircle, CheckCircle2, Download, Loader2 } from "lucide-react";
+import { matchesPortalInvoiceFilters, type PortalInvoiceFilterDateMode } from "../lib/portal-invoice-history-utils";
+import { AlertCircle, CheckCircle2, Download, Loader2, Search } from "lucide-react";
 
 function formatCurrency(v: number | null): string {
   if (v == null) return "—";
@@ -68,14 +70,25 @@ function formatHistoryDate(value: string | null): string {
 
 export function PortalInvoicesPage() {
   const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateMode, setDateMode] = useState<PortalInvoiceFilterDateMode>("invoice");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [showOfflineForm, setShowOfflineForm] = useState<Record<string, boolean>>({});
   const [payAmount, setPayAmount] = useState<Record<string, string>>({});
   const [payMethod, setPayMethod] = useState<Record<string, string>>({});
   const [payRef, setPayRef] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery({
-    queryKey: ["portal", "invoices"],
-    queryFn: portalApi.getInvoices,
+    queryKey: ["portal", "invoices", search, statusFilter, dateMode, dateFrom, dateTo],
+    queryFn: () => portalApi.getInvoices({
+      search: search.trim() || undefined,
+      status: statusFilter === "all" ? undefined : statusFilter,
+      dateMode,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+    }),
     staleTime: 30_000,
   });
 
@@ -85,6 +98,19 @@ export function PortalInvoicesPage() {
   });
 
   const billingSummary = data?.billing_summary as PortalBillingSummary | undefined;
+  const invoices = useMemo(
+    () =>
+      (data?.invoices ?? []).filter((invoice) =>
+        matchesPortalInvoiceFilters(invoice as InvoiceRecord, {
+          search,
+          status: statusFilter,
+          dateMode,
+          from: dateFrom || undefined,
+          to: dateTo || undefined,
+        }),
+      ),
+    [data?.invoices, dateFrom, dateMode, dateTo, search, statusFilter],
+  );
 
   return (
     <PortalLayout>
@@ -92,6 +118,37 @@ export function PortalInvoicesPage() {
       <p className="text-sm text-muted-foreground mb-4">
         Pay open invoices online when Stripe is available. If you already paid by check, ACH, or another offline method, record that below so the dealership can reconcile it.
       </p>
+
+      <Card className="mb-4 p-4">
+        <div className="grid gap-3 md:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search invoice #, branch, line item, or payment ref"
+              className="pl-9"
+            />
+          </div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="sent">Sent</option>
+            <option value="viewed">Viewed</option>
+            <option value="overdue">Overdue</option>
+            <option value="paid">Paid</option>
+            <option value="partial">Partial</option>
+          </select>
+          <select value={dateMode} onChange={(e) => setDateMode(e.target.value as PortalInvoiceFilterDateMode)} className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
+            <option value="invoice">Invoice Date</option>
+            <option value="due">Due Date</option>
+            <option value="updated">Processed Date</option>
+            <option value="paid">Paid Date</option>
+          </select>
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+      </Card>
 
       {billingSummary && (
         <div className="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -117,7 +174,7 @@ export function PortalInvoicesPage() {
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i} className="h-16 animate-pulse" />)}</div>}
 
       <div className="space-y-2">
-        {(data?.invoices ?? []).map((inv) => {
+        {invoices.map((inv) => {
           const invoice = inv as InvoiceRecord;
           const balance = Number(inv.balance_due ?? 0);
           const lines = invoice.customer_invoice_line_items ?? [];
@@ -132,8 +189,13 @@ export function PortalInvoicesPage() {
             <Card key={invoiceId} className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">#{String(inv.invoice_number)}</p>
+                  <Link to={`/portal/invoices/${invoiceId}`} className="text-sm font-semibold text-foreground hover:text-primary">
+                    #{String(inv.invoice_number)}
+                  </Link>
                   <p className="text-xs text-muted-foreground">{String(inv.description || "Invoice")} • Due: {String(inv.due_date)}</p>
+                  {typeof inv.branch_id === "string" && inv.branch_id ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">Location: {inv.branch_id}</p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_COLORS[String(inv.status)] || ""}`}>{String(inv.status)}</span>
@@ -367,7 +429,7 @@ export function PortalInvoicesPage() {
             </Card>
           );
         })}
-        {!isLoading && (data?.invoices ?? []).length === 0 && (
+        {!isLoading && invoices.length === 0 && (
           <Card className="border-dashed p-6 text-center"><p className="text-sm text-muted-foreground">No invoices.</p></Card>
         )}
       </div>

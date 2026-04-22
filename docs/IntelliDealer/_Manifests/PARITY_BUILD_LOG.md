@@ -226,3 +226,19 @@
 **Verification:** file-level TypeScript diagnostics on `AccountsPayablePage.tsx`, `AccountsPayableDetailPage.tsx`, and `App.tsx`, `bun test apps/web/src/features/admin/lib/ap-aging-utils.test.ts apps/web/src/features/admin/pages/__tests__/AccountsPayablePage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase8-ap-module --ui` all passed. Gate report: `test-results/agent-gates/20260422T130902Z-phase8-ap-module.json`.
 **Deployment:** `supabase db push` applied `353_ap_module.sql`; `supabase migration list` confirms remote migration `353`.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Portal Invoice History + Payment Transcript Views (Phase-9_Advanced-Intelligence) — CLOSED
+**Gap row:** `10`
+**Gap description:** Customer Portal invoice history + payment transcript views incomplete.
+**Change type:** Portal UI + Portal API
+**Files:**
+- `apps/web/src/features/portal/lib/portal-api.ts`
+- `apps/web/src/features/portal/lib/portal-invoice-history-utils.ts`
+- `apps/web/src/features/portal/lib/portal-invoice-history-utils.test.ts`
+- `apps/web/src/features/portal/pages/PortalInvoicesPage.tsx`
+- `apps/web/src/features/portal/pages/PortalInvoiceDetailPage.tsx`
+- `apps/web/src/features/portal/PortalRoutes.tsx`
+- `supabase/functions/portal-api/index.ts`
+**Verification:** file-level TypeScript diagnostics on `PortalInvoicesPage.tsx`, `PortalInvoiceDetailPage.tsx`, and `PortalRoutes.tsx`, `bun test apps/web/src/features/portal/lib/portal-invoice-history-utils.test.ts`, `deno check supabase/functions/portal-api/index.ts`, `bun run build`, and `bun run segment:gates --segment phase9-portal-invoices --ui` all passed. Gate report: `test-results/agent-gates/20260422T132535Z-phase9-portal-invoices.json`.
+**Deployment:** `supabase functions deploy portal-api` succeeded.
+**Parity status update:** GAP → BUILT

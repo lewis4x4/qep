@@ -15,6 +15,9 @@ const PortalDealsPage = lazy(() =>
 const PortalInvoicesPage = lazy(() =>
   import("./pages/PortalInvoicesPage").then((m) => ({ default: m.PortalInvoicesPage })),
 );
+const PortalInvoiceDetailPage = lazy(() =>
+  import("./pages/PortalInvoiceDetailPage").then((m) => ({ default: m.PortalInvoiceDetailPage })),
+);
 const PortalQuotesPage = lazy(() =>
   import("./pages/PortalQuotesPage").then((m) => ({ default: m.PortalQuotesPage })),
 );
@@ -57,6 +60,7 @@ export function portalRouteElements(): ReactElement[] {
     <Route key="portal-service" path="/portal/service" element={wrap(<PortalServicePage />)} />,
     <Route key="portal-parts" path="/portal/parts" element={wrap(<PortalPartsPage />)} />,
     <Route key="portal-invoices" path="/portal/invoices" element={wrap(<PortalInvoicesPage />)} />,
+    <Route key="portal-invoice-detail" path="/portal/invoices/:invoiceId" element={wrap(<PortalInvoiceDetailPage />)} />,
     <Route key="portal-quotes" path="/portal/quotes" element={wrap(<PortalQuotesPage />)} />,
     <Route key="portal-quote-room" path="/portal/quotes/:quoteId" element={wrap(<PortalQuoteRoomPage />)} />,
     <Route key="portal-subscriptions" path="/portal/subscriptions" element={wrap(<PortalSubscriptionsPage />)} />,

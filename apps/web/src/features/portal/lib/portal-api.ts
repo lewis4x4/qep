@@ -145,6 +145,14 @@ export type PortalInvoicesResponse = {
   }>;
   billing_summary?: PortalBillingSummary;
 };
+export type PortalInvoiceFilters = {
+  invoiceId?: string;
+  search?: string;
+  status?: string;
+  dateMode?: "invoice" | "due" | "updated" | "paid";
+  from?: string;
+  to?: string;
+};
 export type PortalQuotesResponse = { quotes?: PortalQuoteSummary[] };
 export type PortalActiveDealsResponse = { deals?: PortalActiveDeal[] };
 export type PortalSubscriptionsResponse = { subscriptions?: PortalSubscriptionWorkspaceView[] };
@@ -274,7 +282,21 @@ export const portalApi = {
       method: "POST",
       body: JSON.stringify({ order_id: orderId }),
     }),
-  getInvoices: (): Promise<PortalInvoicesResponse> => portalFetch<PortalInvoicesResponse>("invoices"),
+  getInvoices: (filters?: PortalInvoiceFilters): Promise<PortalInvoicesResponse> => {
+    const params = new URLSearchParams();
+    if (filters?.invoiceId) params.set("invoice_id", filters.invoiceId);
+    if (filters?.search) params.set("search", filters.search);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.dateMode) params.set("date_mode", filters.dateMode);
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    const qs = params.toString();
+    return portalFetch<PortalInvoicesResponse>(`invoices${qs ? `?${qs}` : ""}`);
+  },
+  getInvoice: async (invoiceId: string): Promise<{ invoice: Record<string, unknown> | null }> => {
+    const payload = await portalApi.getInvoices({ invoiceId });
+    return { invoice: (payload.invoices ?? [])[0] ?? null };
+  },
   recordInvoicePayment: (data: Record<string, unknown>): Promise<Record<string, unknown>> =>
     portalFetch<Record<string, unknown>>("invoices/pay", { method: "POST", body: JSON.stringify(data) }),
   getQuotes: (): Promise<PortalQuotesResponse> => portalFetch<PortalQuotesResponse>("quotes"),
