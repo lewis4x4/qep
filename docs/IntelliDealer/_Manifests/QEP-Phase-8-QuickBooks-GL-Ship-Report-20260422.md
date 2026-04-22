@@ -14,6 +14,13 @@
 - Added encrypted QuickBooks integration seed row in `integration_status`
 - Added admin/operator UI at `/admin/quickbooks-gl`
 - Added automatic queueing for newly generated service invoices
+- Added a configuration command center that:
+  - loads non-secret stored QuickBooks settings
+  - supports secret rotation without forcing re-entry of unchanged values
+  - validates account-map completeness
+  - runs a live company handshake against QuickBooks
+  - allows clearing and reseeding stored config
+  - exposes posting backlog and invoice-level retry actions in the same surface
 
 ## Files Changed
 
@@ -24,10 +31,13 @@
 - `supabase/functions/_shared/service-invoice.ts`
 - `apps/web/src/features/admin/pages/QuickBooksGlSyncPage.tsx`
 - `apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`
+- `apps/web/src/features/admin/lib/quickbooks-config-utils.ts`
+- `apps/web/src/features/admin/lib/quickbooks-config-utils.test.ts`
 - `apps/web/src/features/service/components/ServiceQuoteBuilder.tsx`
 - `apps/web/src/App.tsx`
 - `apps/web/src/components/AdminPage.tsx`
 - `supabase/config.toml`
+- `supabase/migrations/357_backfill_quickbooks_integration_status.sql`
 
 ## Primary Evidence
 
@@ -54,19 +64,23 @@
 - `bun test apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`
 - `bun run build`
 - `bun run segment:gates --segment phase8-quickbooks-gl --ui`
+- `bun test apps/web/src/features/admin/lib/quickbooks-config-utils.test.ts apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`
+- `bun run segment:gates --segment phase8-quickbooks-config-ui --ui`
 
 ## Deployment
 
 - `supabase db push`
 - `supabase functions deploy quickbooks-gl-sync`
 - `supabase functions list`
+- `supabase migration list`
 
 ## Remaining Manual Tasks
 
-- QuickBooks OAuth app credentials
-- QuickBooks refresh token
-- QuickBooks realm id
-- QuickBooks account ids for:
+- Operator entry in `/admin/quickbooks-gl`:
+  - QuickBooks OAuth app credentials
+  - QuickBooks refresh token
+  - QuickBooks realm id
+  - QuickBooks account ids for:
   - A/R
   - service revenue
   - parts revenue

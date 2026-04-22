@@ -210,6 +210,24 @@
 **Remaining manual acceptance:** live QuickBooks credentials, realm id, and account ids must be supplied before the sync can actually post transactions.
 **Parity status update:** GAP → BUILT (repo-side) / CREDENTIALS PENDING
 
+## 2026-04-22 — QuickBooks Configuration Command Center (Phase-8_Financial-Operations) — BUILT / OPERATOR ENTRY PENDING
+**Gap row:** `4`
+**Gap description:** QuickBooks GL posting requires a first-class configuration/operator surface, not just backend hooks.
+**Change type:** Edge + Admin UI follow-up
+**Files:**
+- `supabase/functions/_shared/quickbooks-gl.ts`
+- `supabase/functions/_shared/quickbooks-gl.test.ts`
+- `supabase/functions/quickbooks-gl-sync/index.ts`
+- `apps/web/src/features/admin/lib/quickbooks-config-utils.ts`
+- `apps/web/src/features/admin/lib/quickbooks-config-utils.test.ts`
+- `apps/web/src/features/admin/pages/QuickBooksGlSyncPage.tsx`
+- `apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`
+- `supabase/migrations/357_backfill_quickbooks_integration_status.sql`
+**Verification:** file-level TypeScript diagnostics on `QuickBooksGlSyncPage.tsx`, `quickbooks-config-utils.ts`, and `QuickBooksGlSyncPage.integration.test.tsx`, `deno test supabase/functions/_shared/quickbooks-gl.test.ts --allow-read --allow-env`, `deno check supabase/functions/quickbooks-gl-sync/index.ts supabase/functions/_shared/quickbooks-gl.ts`, `bun test apps/web/src/features/admin/lib/quickbooks-config-utils.test.ts apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase8-quickbooks-config-ui --ui` all passed. Gate report: `test-results/agent-gates/20260422T152738Z-phase8-quickbooks-config-ui.json`.
+**Deployment:** `supabase db push` applied `357_backfill_quickbooks_integration_status.sql`; `supabase functions deploy quickbooks-gl-sync` succeeded and remote function list now shows `quickbooks-gl-sync` active version `2`.
+**Remaining manual acceptance:** operator still needs to enter the real QuickBooks OAuth credentials and production account ids in the new command center.
+**Parity status update:** BUILT (repo-side) / CONFIG UI COMPLETE / CREDENTIAL ENTRY PENDING
+
 ## 2026-04-22 — Accounts Payable Module (Phase-8_Financial-Operations) — CLOSED
 **Gap row:** `8`
 **Gap description:** AP module not implemented. Accounts Payable Outstanding report has no QEP analog.

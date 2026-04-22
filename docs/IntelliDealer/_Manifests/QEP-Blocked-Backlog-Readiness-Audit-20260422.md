@@ -32,6 +32,8 @@
 - `status = pending_credentials`
 - `auth_type = oauth_app`
 - encrypted credentials are still absent
+- operator-grade configuration UI is live at `/admin/quickbooks-gl`
+- `quickbooks-gl-sync` is deployed at remote version `2`
 
 **Code expectation:**
 
@@ -51,6 +53,14 @@
 - `shop_supplies_account_id`
 - `misc_revenue_account_id`
 - `tax_liability_account_id`
+
+**What is no longer missing:**
+
+- configuration UI
+- encrypted save/clear path
+- readiness summary / mapping coverage
+- live QuickBooks company handshake action
+- invoice queue retry surface
 
 ## Row 5 — Service technician field UAT
 

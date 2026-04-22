@@ -19,10 +19,10 @@
 ## 2026-04-22 — Phase-8 Financial Operations — QuickBooks credentials and account mapping
 
 - What I was doing: confirming the remaining non-code blockers after closing the executable parity backlog.
-- What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, pushed the slice to production with migration `352`, and backfilled the missing `integration_status` row via migration `357`.
+- What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, pushed the slice to production with migration `352`, backfilled the missing `integration_status` row via migration `357`, and shipped the operator-grade configuration command center at `/admin/quickbooks-gl` with encrypted save/clear, readiness cards, mapping coverage, live company handshake, and retry queue controls.
 - Blocker: the runtime row now exists, but remote state still has no encrypted credentials configured for integration key `quickbooks`. The sync still needs `client_id`, `client_secret`, `refresh_token`, `realm_id`, `ar_account_id`, `service_revenue_account_id`, `parts_revenue_account_id`, `haul_revenue_account_id`, `shop_supplies_account_id`, `misc_revenue_account_id`, and `tax_liability_account_id`.
-- What unblocks it: populate the QuickBooks integration credentials/account mapping in `integration_status` for workspace `default` or provide an equivalent production credential path used by the deployed sync.
-- Estimated impact: row `4` is reduced to a pure credential/input blocker; the missing runtime row is no longer part of the problem.
+- What unblocks it: enter the QuickBooks OAuth credentials and account mappings in the deployed `/admin/quickbooks-gl` command center for workspace `default`.
+- Estimated impact: row `4` is now reduced to a pure operator data-entry blocker; code, UI, queueing, and deployment path are complete.
 
 ## 2026-04-22 — Phase-5 Deal Genome — IronGuides contract dependency
 

@@ -3,12 +3,19 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
 import {
+  clearQuickBooksConfig,
   fetchQuickBooksCompanyInfo,
+  loadQuickBooksConfigSummary,
   postQuickBooksJournalEntry,
+  saveQuickBooksConfig,
+  type QuickBooksConfigDraft,
   type QuickBooksInvoiceContext,
 } from "../_shared/quickbooks-gl.ts";
 
 type SyncRequest =
+  | { action: "config_summary" }
+  | { action: "save_config"; config: QuickBooksConfigDraft }
+  | { action: "clear_config" }
   | { action: "test_connection" }
   | { action: "sync_invoice"; invoice_id: string }
   | { action: "sync_pending"; limit?: number };
@@ -21,7 +28,7 @@ function ensureElevatedRole(role: string, origin: string | null): Response | nul
 }
 
 async function loadInvoice(
-  admin: ReturnType<typeof createClient>,
+  admin: unknown,
   invoiceId: string,
 ): Promise<QuickBooksInvoiceContext> {
   const { data: invoice, error } = await (admin as unknown as {
@@ -80,7 +87,7 @@ async function loadInvoice(
 }
 
 async function syncInvoice(
-  admin: ReturnType<typeof createClient>,
+  admin: unknown,
   invoiceId: string,
   workspaceId: string,
   actorId: string,
@@ -190,6 +197,18 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({})) as SyncRequest;
     switch (body.action) {
+      case "config_summary": {
+        const summary = await loadQuickBooksConfigSummary(admin, auth.workspaceId);
+        return safeJsonOk({ ok: true, summary }, origin);
+      }
+      case "save_config": {
+        const summary = await saveQuickBooksConfig(admin, body.config ?? {}, auth.workspaceId);
+        return safeJsonOk({ ok: true, summary }, origin);
+      }
+      case "clear_config": {
+        const summary = await clearQuickBooksConfig(admin, auth.workspaceId);
+        return safeJsonOk({ ok: true, summary }, origin);
+      }
       case "test_connection": {
         const companyInfo = await fetchQuickBooksCompanyInfo(admin, auth.workspaceId);
         return safeJsonOk({ ok: true, company_info: companyInfo }, origin);
