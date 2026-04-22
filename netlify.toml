@@ -23,7 +23,7 @@
     # worker-src 'self' blob: is required by Sentry's session replay integration which spawns a Web Worker
     # from a Blob URL for compression. Without it Safari blocks the worker spawn and replay can't initialize.
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://sentry.io; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'self'"
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/assets/*"
