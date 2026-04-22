@@ -220,6 +220,12 @@ const DataQualityPage = lazy(() =>
 const QuickBooksGlSyncPage = lazy(() =>
   import("./features/admin/pages/QuickBooksGlSyncPage").then((m) => ({ default: m.QuickBooksGlSyncPage }))
 );
+const AccountsPayablePage = lazy(() =>
+  import("./features/admin/pages/AccountsPayablePage").then((m) => ({ default: m.AccountsPayablePage }))
+);
+const AccountsPayableDetailPage = lazy(() =>
+  import("./features/admin/pages/AccountsPayableDetailPage").then((m) => ({ default: m.AccountsPayableDetailPage }))
+);
 const ExceptionInboxPage = lazy(() =>
   import("./features/admin/pages/ExceptionInboxPage").then((m) => ({ default: m.ExceptionInboxPage }))
 );
@@ -1502,6 +1508,26 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <FleetMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/accounts-payable/:billId"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <AccountsPayableDetailPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/accounts-payable"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <AccountsPayablePage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )

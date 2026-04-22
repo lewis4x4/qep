@@ -209,3 +209,20 @@
 **Deployment:** `supabase db push` applied `352_quickbooks_gl_sync.sql`; `supabase functions deploy quickbooks-gl-sync` succeeded; remote function list shows `quickbooks-gl-sync` active version `1`.
 **Remaining manual acceptance:** live QuickBooks credentials, realm id, and account ids must be supplied before the sync can actually post transactions.
 **Parity status update:** GAP → BUILT (repo-side) / CREDENTIALS PENDING
+
+## 2026-04-22 — Accounts Payable Module (Phase-8_Financial-Operations) — CLOSED
+**Gap row:** `8`
+**Gap description:** AP module not implemented. Accounts Payable Outstanding report has no QEP analog.
+**Change type:** Schema + UI
+**Files:**
+- `supabase/migrations/353_ap_module.sql`
+- `apps/web/src/features/admin/lib/ap-aging-utils.ts`
+- `apps/web/src/features/admin/lib/ap-aging-utils.test.ts`
+- `apps/web/src/features/admin/pages/AccountsPayablePage.tsx`
+- `apps/web/src/features/admin/pages/AccountsPayableDetailPage.tsx`
+- `apps/web/src/features/admin/pages/__tests__/AccountsPayablePage.integration.test.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/AdminPage.tsx`
+**Verification:** file-level TypeScript diagnostics on `AccountsPayablePage.tsx`, `AccountsPayableDetailPage.tsx`, and `App.tsx`, `bun test apps/web/src/features/admin/lib/ap-aging-utils.test.ts apps/web/src/features/admin/pages/__tests__/AccountsPayablePage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase8-ap-module --ui` all passed. Gate report: `test-results/agent-gates/20260422T130902Z-phase8-ap-module.json`.
+**Deployment:** `supabase db push` applied `353_ap_module.sql`; `supabase migration list` confirms remote migration `353`.
+**Parity status update:** GAP → BUILT
