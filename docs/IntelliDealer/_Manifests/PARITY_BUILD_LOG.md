@@ -276,3 +276,18 @@
 **Verification:** file-level TypeScript diagnostics on `DataMinerEquivalentsPage.tsx`, `data-miner-utils.ts`, `DataMinerEquivalentsPage.integration.test.tsx`, `App.tsx`, `OwnerDashboardPage.tsx`, and `OperatingSystemHubPage.tsx`, `bun test apps/web/src/features/owner/lib/data-miner-utils.test.ts apps/web/src/features/owner/pages/__tests__/DataMinerEquivalentsPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase9-data-miner --ui` all passed. Gate report: `test-results/agent-gates/20260422T140931Z-phase9-data-miner.json`.
 **Deployment:** `supabase db push` applied `355_owner_data_miner_equivalents.sql`; `supabase migration list` confirms remote migration `355`.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Traffic Management Scope Decision (Cross-Cutting) — CLOSED
+**Gap row:** `12`
+**Gap description:** Traffic Management (equipment movement) not in QEP roadmap. IntelliDealer has dedicated module.
+**Change type:** Scope Decision + Existing Surface Verification
+**Files / evidence:**
+- `supabase/migrations/078_traffic_logistics.sql`
+- `supabase/migrations/191_command_center_operations.sql`
+- `apps/web/src/features/ops/pages/TrafficTicketsPage.tsx`
+- `apps/web/src/App.tsx`
+- `docs/IntelliDealer/_Manifests/QEP-Cross-Cutting-Traffic-Management-Scope-Decision-20260422.md`
+**Verification:** IntelliDealer `Traffic Management.pdf` + OCR reviewed against the committed QEP traffic implementation, file-level TypeScript diagnostics on `TrafficTicketsPage.tsx` and `App.tsx` passed, and the folded traffic surface was confirmed in ops, rental, branch, and COO layers through committed route/schema evidence.
+**Decision:** close this as a folded implementation. QEP already chose the “integrate into existing ops/service/rental surfaces” path rather than building a separate standalone module.
+**Deployment:** none required; traffic logistics route and schema were already deployed in earlier committed work.
+**Parity status update:** GAP → BUILT / SCOPE RESOLVED

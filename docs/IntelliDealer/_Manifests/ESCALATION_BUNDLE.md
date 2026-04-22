@@ -12,8 +12,8 @@
 
 - What I was doing: ranking the first executable parity gaps after the opening assessment.
 - What I tried: verified that `crm-hubspot-import` and `qrm-hubspot-import` already exist in committed `HEAD`, so the gap is not absence of import code.
-- Blocker: the HubSpot API key is not available in the current execution environment, so Phase-1 migration/cutover work that depends on HubSpot cannot run end-to-end.
-- What unblocks it: Rylee or the operator needs to provide the HubSpot API key in the project environment.
+- Blocker: a remote secrets audit shows only `HUBSPOT_REDIRECT_URI` and `HUBSPOT_SCOPES` are present. The required HubSpot auth credentials are still missing: `HUBSPOT_CLIENT_ID`, `HUBSPOT_CLIENT_SECRET`, `HUBSPOT_APP_ID`, and `HUBSPOT_OAUTH_STATE_SECRET` unless they are instead stored in encrypted `integration_status` payloads.
+- What unblocks it: set the missing HubSpot auth credentials remotely or populate the encrypted `integration_status` record for integration key `hubspot`.
 - Estimated impact: HubSpot retirement and CRM migration validation remain blocked even though the import surface exists.
 
 ## 2026-04-22 — Phase-4 Service — Technician field UAT
@@ -36,17 +36,9 @@
 
 - What I was doing: confirming the remaining non-code blockers after closing the executable parity backlog.
 - What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, and pushed the slice to production with migration `352`.
-- Blocker: live QuickBooks credentials, realm id, and GL account ids are still not present in the environment, so the deployed sync cannot post transactions end-to-end.
-- What unblocks it: set the QuickBooks client id, client secret, refresh token, realm id, and production account mappings in the project environment.
+- Blocker: remote secrets audit shows no QuickBooks credential set is available, and the runtime expects an encrypted `integration_status` payload for integration key `quickbooks` with `client_id`, `client_secret`, `refresh_token`, `realm_id`, `ar_account_id`, `service_revenue_account_id`, `parts_revenue_account_id`, `haul_revenue_account_id`, `shop_supplies_account_id`, `misc_revenue_account_id`, and `tax_liability_account_id`.
+- What unblocks it: populate the QuickBooks integration credentials/account mapping in `integration_status` for workspace `default` or provide an equivalent production credential path used by the deployed sync.
 - Estimated impact: row `4` stays at built-but-not-retired status until live QuickBooks posting can be executed with production credentials.
-
-## 2026-04-22 — Cross-Cutting — Traffic Management scope decision
-
-- What I was doing: verifying the remaining workbook rows after closing row `18`.
-- What I tried: re-read the verified worksheet row and the parity prompt ordering to determine the next actionable lane.
-- Blocker: the worksheet explicitly marks Traffic Management as a scope decision, not a ready build slice. There is no approved target between folding it into Service/Rental/Parts and building a dedicated module.
-- What unblocks it: decide the product boundary for Traffic Management with Rylee/Ryan, then create the approved implementation target.
-- Estimated impact: no safe code work should begin on row `12` until product scope is fixed.
 
 ## 2026-04-22 — Phase-5 Deal Genome — IronGuides contract dependency
 
