@@ -5,6 +5,9 @@ import "./index.css";
 import "@/lib/theme-store";
 import App from "./App";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { installDynamicImportRecovery } from "./lib/dynamic-import-recovery";
+
+installDynamicImportRecovery();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
