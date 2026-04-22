@@ -11,11 +11,13 @@ import {
   ChevronLeft,
   Settings2,
   Activity,
+  Smartphone,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const SUB_NAV_LINKS = [
+  { to: "/m/service", label: "Tech Mobile", icon: Smartphone },
   { to: "/service/parts", label: "Shop Parts", icon: Package },
   { to: "/parts/orders", label: "Parts Orders", icon: ShoppingCart },
   { to: "/parts/vendors", label: "Vendors", icon: Truck },

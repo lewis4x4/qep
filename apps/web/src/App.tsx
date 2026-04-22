@@ -94,6 +94,9 @@ const DashboardRouter = lazy(() =>
 const ServiceCommandCenterPage = lazy(() =>
   import("./features/service/pages/ServiceCommandCenterPage").then((m) => ({ default: m.ServiceCommandCenterPage }))
 );
+const ServiceTechnicianMobilePage = lazy(() =>
+  import("./features/service/pages/ServiceTechnicianMobilePage").then((m) => ({ default: m.ServiceTechnicianMobilePage }))
+);
 const ServiceIntakePage = lazy(() =>
   import("./features/service/pages/ServiceIntakePage").then((m) => ({ default: m.ServiceIntakePage }))
 );
@@ -1071,6 +1074,16 @@ function App() {
                 }
               />
               {/* Service Engine routes */}
+              <Route
+                path="/m/service"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceTechnicianMobilePage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               <Route
                 path="/service"
                 element={

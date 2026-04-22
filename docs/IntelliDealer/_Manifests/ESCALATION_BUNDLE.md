@@ -15,3 +15,11 @@
 - Blocker: the HubSpot API key is not available in the current execution environment, so Phase-1 migration/cutover work that depends on HubSpot cannot run end-to-end.
 - What unblocks it: Rylee or the operator needs to provide the HubSpot API key in the project environment.
 - Estimated impact: HubSpot retirement and CRM migration validation remain blocked even though the import surface exists.
+
+## 2026-04-22 — Phase-4 Service — Technician field UAT
+
+- What I was doing: closing workbook row `5` for service mobile technician validation.
+- What I tried: verified the IntelliDealer service evidence set, built a dedicated `/m/service` technician workspace over the existing service router, added repo-native tests, and passed the full segment gate for `phase4-service-mobile`.
+- Blocker: the final acceptance step in the worksheet is real in-field UAT with an actual service technician on a production/mobile workflow. That cannot be executed from the workspace alone.
+- What unblocks it: run technician field validation on the deployed `/m/service` flow and record pass/fail feedback from service staff.
+- Estimated impact: the repo-side mobile slice is built and merged, but row `5` should not be considered fully retired until technician UAT is completed.

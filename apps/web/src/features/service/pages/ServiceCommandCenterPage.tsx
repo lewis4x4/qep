@@ -18,6 +18,7 @@ import {
   Clock,
   Package,
   Receipt,
+  Smartphone,
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -173,13 +174,22 @@ export function ServiceCommandCenterPage() {
               </p>
             </div>
           </div>
-          <Link
-            to="/service/intake"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            New Request
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/m/service"
+              className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/25 hover:text-primary"
+            >
+              <Smartphone className="h-4 w-4" />
+              Tech Mobile
+            </Link>
+            <Link
+              to="/service/intake"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              New Request
+            </Link>
+          </div>
         </div>
 
         <div className="relative mt-5">

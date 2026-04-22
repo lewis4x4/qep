@@ -97,3 +97,20 @@
 **Verification:** `bun test apps/web/src/features/parts/lib/purchase-order-utils.test.ts`, file-level TypeScript diagnostics on `PurchaseOrdersPage.tsx`, `PurchaseOrderDetailPage.tsx`, and `App.tsx`, `bun run build`, `bun run pressure:parts`, `KB_INTEGRATION_REQUIRED=true bun run test:kb-integration`, and `bun run segment:gates --segment phase3-purchase-orders --ui` all passed. Gate report: `test-results/agent-gates/20260422T005137Z-phase3-purchase-orders.json`.
 **Deployment:** `supabase db push` applied `347_vendor_purchase_orders.sql`; `supabase migration list` confirms remote migration `347`.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Service Mobile Technician Workspace (Phase-4_Service) — BUILT / FIELD UAT PENDING
+**Gap row:** `5`
+**Gap description:** Service Mobile Web UI not production-validated for technicians.
+**Change type:** UI + Validation Harness
+**Files:**
+- `apps/web/src/features/service/pages/ServiceTechnicianMobilePage.tsx`
+- `apps/web/src/features/service/lib/mobile-tech-utils.ts`
+- `apps/web/src/features/service/lib/mobile-tech-utils.test.ts`
+- `apps/web/src/features/service/pages/__tests__/ServiceTechnicianMobilePage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceSubNav.tsx`
+- `apps/web/src/features/service/pages/ServiceCommandCenterPage.tsx`
+- `apps/web/src/App.tsx`
+**Verification:** file-level TypeScript diagnostics on `ServiceTechnicianMobilePage.tsx`, `ServiceSubNav.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/mobile-tech-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceTechnicianMobilePage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-service-mobile --ui` all passed. Gate report: `test-results/agent-gates/20260422T010934Z-phase4-service-mobile.json`.
+**Deployment:** no new migrations or edge functions were required for this slice.
+**Remaining manual acceptance:** workbook row `5` still calls for in-field UAT with a service technician. That manual production validation was not executable from the workspace and remains open.
+**Parity status update:** GAP → BUILT (repo-side) / FIELD UAT PENDING
