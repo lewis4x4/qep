@@ -21,6 +21,7 @@ function statusToDataSource(status: IntegrationCardConfig["status"]): DataSource
   switch (status) {
     case "connected": return "Live";
     case "demo_mode": return "Demo";
+    case "replaced": return "Native";
     case "pending_credentials": return "Manual";
     case "error": return "Error";
     default: return "Manual";
@@ -46,6 +47,12 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
   const isStale =
     config.lastSyncAt !== null &&
     new Date().getTime() - new Date(config.lastSyncAt).getTime() > 7 * 86_400_000;
+  const isReplaced = config.status === "replaced";
+  const badgeState: DataSourceState = isReplaced
+    ? dataSourceState
+    : isStale
+    ? "Stale"
+    : dataSourceState;
 
   async function handleTestSync() {
     setIsTesting(true);
@@ -84,7 +91,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
             <h3 className="text-[15px] font-semibold text-foreground leading-5 truncate">
               {config.name}
             </h3>
-            <DataSourceBadge state={isStale ? "Stale" : dataSourceState} />
+            <DataSourceBadge state={badgeState} />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{config.category}</p>
         </div>
@@ -98,7 +105,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
             {formatLastSync(config.lastSyncAt)}
           </span>
         </span>
-        {config.syncRecords !== null && (
+        {config.syncRecords !== null && !isReplaced && (
           <span>{config.syncRecords.toLocaleString()} records</span>
         )}
       </div>
@@ -114,7 +121,9 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Plug className="w-3 h-3" aria-hidden="true" />
           <span>
-            {config.status === "connected"
+            {config.status === "replaced"
+              ? `Replaced by ${config.replacement?.badgeLabel ?? "QEP native"}`
+              : config.status === "connected"
               ? "Live data"
               : config.status === "demo_mode"
               ? "Demo mode"
@@ -126,20 +135,22 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
 
         {/* Actions */}
         <div className="flex items-center gap-1 justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-11 px-3 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-qep-orange"
-            onClick={() => { void handleTestSync(); }}
-            disabled={isTesting}
-            aria-label={`Test connection for ${config.name}`}
-          >
-            <RefreshCw
-              className={cn("w-3 h-3 mr-1", isTesting && "animate-spin")}
-              aria-hidden="true"
-            />
-            {isTesting ? "Testing…" : "Test connection"}
-          </Button>
+          {!isReplaced && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-11 px-3 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-qep-orange"
+              onClick={() => { void handleTestSync(); }}
+              disabled={isTesting}
+              aria-label={`Test connection for ${config.name}`}
+            >
+              <RefreshCw
+                className={cn("w-3 h-3 mr-1", isTesting && "animate-spin")}
+                aria-hidden="true"
+              />
+              {isTesting ? "Testing…" : "Test connection"}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -148,7 +159,7 @@ export function IntegrationCard({ config, onConfigure, onTestSync }: Integration
             aria-label={`Configure ${config.name}`}
           >
             <Settings className="w-3 h-3 mr-1" aria-hidden="true" />
-            Configure
+            {isReplaced ? "View replacement" : "Configure"}
           </Button>
         </div>
       </div>

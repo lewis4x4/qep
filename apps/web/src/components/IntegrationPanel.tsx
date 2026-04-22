@@ -169,6 +169,7 @@ function statusToDataSource(status: IntegrationCardConfig["status"]): DataSource
   switch (status) {
     case "connected": return "Live";
     case "demo_mode": return "Demo";
+    case "replaced": return "Native";
     case "pending_credentials": return "Manual";
     case "error": return "Error";
     default: return "Manual";
@@ -583,7 +584,9 @@ export function IntegrationPanel({
     });
   }, [integration?.key, integration?.config]);
 
-  const isHubSpot = integration?.key === "hubspot";
+  const replacement = integration?.replacement ?? null;
+  const isReplaced = replacement !== null;
+  const isHubSpot = integration?.key === "hubspot" && !isReplaced;
   const isOneDrive = integration?.key === "onedrive";
   const resumableHubSpotRuns = hubSpotImportRuns.filter((run) =>
     HUBSPOT_RESUMABLE_STATUSES.has(run.status) && run.initiatedBy === actorUserId
@@ -1382,14 +1385,18 @@ export function IntegrationPanel({
             <div
               className={cn(
                 "rounded-lg border p-4 flex items-start gap-3",
-                integration.status === "connected"
+                integration.status === "replaced"
+                  ? "bg-emerald-500/10 border-emerald-400/40"
+                  : integration.status === "connected"
                   ? "bg-emerald-500/10 border-emerald-400/40"
                   : integration.status === "error"
                   ? "bg-[#FEF2F2] border-[#FECACA]"
                   : "bg-muted border-border"
               )}
             >
-              {integration.status === "connected" ? (
+              {integration.status === "replaced" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+              ) : integration.status === "connected" ? (
                 <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
               ) : integration.status === "error" ? (
                 <XCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
@@ -1398,7 +1405,9 @@ export function IntegrationPanel({
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">
-                  {integration.status === "connected"
+                  {integration.status === "replaced"
+                    ? `Replaced by ${replacement?.replacementSurface ?? BRAND_NAME}`
+                    : integration.status === "connected"
                     ? "Connected"
                     : integration.status === "error"
                     ? "Connection error"
@@ -1408,6 +1417,12 @@ export function IntegrationPanel({
                 </p>
                 {integration.lastSyncError && (
                   <p className="text-xs text-[#DC2626] mt-1 break-words">{integration.lastSyncError}</p>
+                )}
+                {integration.status === "replaced" && replacement && (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-1">{replacement.summary}</p>
+                    <p className="text-xs text-muted-foreground mt-2">{replacement.detail}</p>
+                  </>
                 )}
                 {integration.status === "pending_credentials" && (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -2203,7 +2218,19 @@ export function IntegrationPanel({
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-3">Credentials &amp; configuration</h4>
             <div className="space-y-4">
-              {isOneDrive ? (
+              {isReplaced ? (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium text-foreground">Native replacement in effect</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {replacement?.summary}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Credential entry is disabled because this integration is intentionally retired.
+                    Historical identifiers and audit rows may remain, but live workflows should stay in{" "}
+                    <span className="font-medium text-foreground">{replacement?.replacementSurface ?? BRAND_NAME}</span>.
+                  </p>
+                </div>
+              ) : isOneDrive ? (
                 <div className="rounded-lg border border-border bg-muted/30 p-3">
                   <p className="text-sm font-medium text-foreground">Microsoft 365 OAuth connection</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -2318,84 +2345,95 @@ export function IntegrationPanel({
           {/* Section 3: Connection test */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-3">Connection test</h4>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
-                onClick={() => void handleTest()}
-                disabled={isTesting}
-              >
-                {isTesting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
-                    Testing connection…
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
-                    {isOneDrive ? "Test Microsoft access" : "Test connection"}
-                  </>
-                )}
-              </Button>
-              {isOneDrive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
-                  onClick={() => void handleRunOneDriveSync()}
-                  disabled={isRunningOneDriveSync || !oneDriveSyncStateId}
-                >
-                  {isRunningOneDriveSync ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
-                      Running sync…
-                    </>
-                  ) : (
-                    <>
-                      <Database className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
-                      Run sync now
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-            {testResult !== null && (
-              <div
-                className={cn(
-                  "mt-3 rounded-lg border p-3 flex items-start gap-2",
-                  testResult.success
-                    ? "bg-emerald-500/10 border-emerald-400/40"
-                    : "bg-[#FEF2F2] border-[#FECACA]"
-                )}
-                role="status"
-                aria-live="polite"
-              >
-                {testResult.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
-                )}
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {testResult.success
-                      ? "Connection successful"
-                      : "Connection failed — check your credentials and endpoint URL, then try again."}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {testResult.success
-                      ? `Response in ${testResult.latencyMs}ms`
-                      : testResult.error}
-                  </p>
-                </div>
+            {isReplaced ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-sm font-medium text-foreground">Testing disabled</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This integration is intentionally retired. There is no live upstream connection to validate anymore.
+                </p>
               </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
+                    onClick={() => void handleTest()}
+                    disabled={isTesting}
+                  >
+                    {isTesting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                        Testing connection…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
+                        {isOneDrive ? "Test Microsoft access" : "Test connection"}
+                      </>
+                    )}
+                  </Button>
+                  {isOneDrive && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-border text-foreground hover:bg-muted focus-visible:ring-qep-orange w-full"
+                      onClick={() => void handleRunOneDriveSync()}
+                      disabled={isRunningOneDriveSync || !oneDriveSyncStateId}
+                    >
+                      {isRunningOneDriveSync ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" aria-hidden="true" />
+                          Running sync…
+                        </>
+                      ) : (
+                        <>
+                          <Database className="w-3.5 h-3.5 mr-2" aria-hidden="true" />
+                          Run sync now
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {testResult !== null && (
+                  <div
+                    className={cn(
+                      "mt-3 rounded-lg border p-3 flex items-start gap-2",
+                      testResult.success
+                        ? "bg-emerald-500/10 border-emerald-400/40"
+                        : "bg-[#FEF2F2] border-[#FECACA]"
+                    )}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" aria-hidden="true" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-[#DC2626] shrink-0 mt-0.5" aria-hidden="true" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {testResult.success
+                          ? "Connection successful"
+                          : "Connection failed — check your credentials and endpoint URL, then try again."}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {testResult.success
+                          ? `Response in ${testResult.latencyMs}ms`
+                          : testResult.error}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </section>
 
           <Separator className="bg-muted/40" />
 
           {/* Section 4: Sync scope toggles */}
-          {scopes.length > 0 && (
+          {scopes.length > 0 && !isReplaced && (
             <section>
               <h4 className="text-sm font-semibold text-foreground mb-1">Sync scope</h4>
               <p className="text-xs text-muted-foreground mb-3">
@@ -2557,13 +2595,21 @@ export function IntegrationPanel({
           {/* Section 6: Fallback / demo mode explanation */}
           <section>
             <h4 className="text-sm font-semibold text-foreground mb-2">Demo mode</h4>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              While disconnected, we use realistic sample data that mirrors what{" "}
-              <strong className="text-foreground">{integration.name}</strong> would provide.
-              All Deal Genome Engine features remain fully operational. Data source badges
-              will show <span className="font-medium text-qep-orange">Demo</span> to distinguish
-              live from sample data.
-            </p>
+            {isReplaced ? (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                This surface is no longer a live external integration. QEP now runs the business flow natively through{" "}
+                <strong className="text-foreground">{replacement?.replacementSurface ?? BRAND_NAME}</strong>. Legacy
+                records can stay for audit and migration history, but operators should not reconnect or depend on this vendor.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                While disconnected, we use realistic sample data that mirrors what{" "}
+                <strong className="text-foreground">{integration.name}</strong> would provide.
+                All Deal Genome Engine features remain fully operational. Data source badges
+                will show <span className="font-medium text-qep-orange">Demo</span> to distinguish
+                live from sample data.
+              </p>
+            )}
           </section>
         </div>
 
@@ -2579,7 +2625,7 @@ export function IntegrationPanel({
               >
                 Cancel
               </Button>
-            {!isOneDrive && (
+            {!isOneDrive && !isReplaced && (
               <>
                 <Button
                   variant="outline"

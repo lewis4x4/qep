@@ -49,6 +49,11 @@ type TestConnectionResult = {
 
 type TestConnectionMode = "live" | "mock";
 
+const REPLACED_INTEGRATIONS = new Set<SupportedIntegrationKey>([
+  "hubspot",
+  "intellidealer",
+]);
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -492,6 +497,21 @@ Deno.serve(async (req): Promise<Response> => {
         code: "INTEGRATION_NOT_FOUND",
         message: "Integration is not configured for your workspace.",
       });
+    }
+
+    if (
+      REPLACED_INTEGRATIONS.has(integrationKey) ||
+      statusRow.config?.lifecycle === "replaced"
+    ) {
+      return ok(
+        {
+          success: true,
+          latencyMs: 0,
+          mode: "mock",
+          replacement: true,
+        },
+        { origin },
+      );
     }
 
     const tracker = createEventTracker(adminClient, {

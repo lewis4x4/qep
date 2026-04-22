@@ -6,7 +6,7 @@
 
 import { cn } from "@/lib/utils";
 
-export type DataSourceState = "Live" | "Demo" | "Manual" | "Error" | "Stale";
+export type DataSourceState = "Live" | "Demo" | "Manual" | "Error" | "Stale" | "Native";
 
 interface DataSourceBadgeProps {
   state: DataSourceState;
@@ -24,6 +24,8 @@ const STATE_STYLES: Record<DataSourceState, string> = {
     "bg-red-50 text-red-900 border-red-200 dark:bg-red-950/40 dark:text-red-100 dark:border-red-900",
   Stale:
     "bg-yellow-50 text-yellow-900 border-yellow-200 dark:bg-yellow-950/35 dark:text-yellow-100 dark:border-yellow-800",
+  Native:
+    "bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-100 dark:border-emerald-800",
 };
 
 export function DataSourceBadge({ state, className }: DataSourceBadgeProps) {

@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { trackIntegrationEvent } from "@/lib/track-event";
 import type { UserRole } from "@/lib/database.types";
 import { BRAND_NAME } from "@/components/BrandLogo";
+import {
+  getReplacedIntegrationDescriptor,
+  type ReplacedIntegrationDescriptor,
+} from "@/lib/replaced-integrations";
 
 export interface IntegrationCardConfig {
   key: string;
@@ -22,12 +26,13 @@ export interface IntegrationCardConfig {
   category: string;
   description: string;
   icon: string;
-  status: "connected" | "pending_credentials" | "error" | "demo_mode";
+  status: "connected" | "pending_credentials" | "error" | "demo_mode" | "replaced";
   lastSyncAt: string | null;
   lastSyncError: string | null;
   syncRecords: number | null;
   endpointUrl: string | null;
   config: Record<string, unknown>;
+  replacement: ReplacedIntegrationDescriptor | null;
 }
 
 interface IntegrationHubProps {
@@ -120,7 +125,7 @@ const INTEGRATION_DISPLAY: Record<
     name: "HubSpot QRM",
     category: "QRM Data Sync",
     description:
-      "Manage HubSpot connection health and run bulk QRM imports with explicit confirmation.",
+      "Legacy migration surface only. HubSpot is replaced by native QRM workflows.",
     icon: "HS",
   },
   sendgrid: {
@@ -148,7 +153,7 @@ const INTEGRATION_DISPLAY: Record<
     name: "IntelliDealer (VitalEdge)",
     category: "Inventory & QRM",
     description:
-      "Inventory, customer master data, and deal history from your dealer management system.",
+      "Legacy DMS reference only. Inventory, quotes, and customer workflows now run natively in QEP.",
     icon: "ID",
   },
   ironguides: {
@@ -207,10 +212,13 @@ function buildHubSpotIntegrationRow(
   portalRows: HubSpotPortalRow[],
   latestRun: HubSpotImportRunRow | null
 ): IntegrationStatusRow {
+  const replacement = getReplacedIntegrationDescriptor("hubspot");
   const hasActivePortal = portalRows.some((row) => row.is_active);
 
   let status: IntegrationCardConfig["status"];
-  if (existingRow) {
+  if (replacement) {
+    status = "replaced";
+  } else if (existingRow) {
     status = existingRow.status;
   } else if (hasActivePortal) {
     status = "connected";
@@ -218,11 +226,13 @@ function buildHubSpotIntegrationRow(
     status = "pending_credentials";
   }
 
-  if (latestRun?.status === "failed" || latestRun?.status === "completed_with_errors") {
+  if (!replacement && (latestRun?.status === "failed" || latestRun?.status === "completed_with_errors")) {
     status = "error";
   }
 
-  const lastSyncError =
+  const lastSyncError = replacement
+    ? null
+    :
     latestRun?.status === "failed" || latestRun?.status === "completed_with_errors"
       ? latestRun.error_summary ?? "HubSpot import encountered an error."
       : existingRow?.last_sync_error ?? null;
@@ -274,6 +284,7 @@ function isSessionAuthError(err: PostgrestError | null): boolean {
 
 function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
   const connected = cards.filter((c) => c.status === "connected").length;
+  const native = cards.filter((c) => c.status === "replaced").length;
   const demo = cards.filter((c) => c.status === "demo_mode").length;
   const pendingSetup = cards.filter((c) => c.status === "pending_credentials").length;
   const errors = cards.filter((c) => c.status === "error").length;
@@ -289,6 +300,13 @@ function SummaryStrip({ cards }: { cards: IntegrationCardConfig[] }) {
         <span className="font-semibold">{connected}</span>
         <span className="text-muted-foreground">Connected</span>
       </div>
+      {native > 0 && (
+        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+          <Settings className="w-4 h-4" aria-hidden="true" />
+          <span className="font-semibold">{native}</span>
+          <span className="text-muted-foreground">Native replacements</span>
+        </div>
+      )}
       {demo > 0 && (
         <div className="flex items-center gap-1.5 text-[#C2410C]">
           <Wifi className="w-4 h-4" aria-hidden="true" />
@@ -506,15 +524,17 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
           endpoint_url: null,
           config: {},
         };
+        const replacement = getReplacedIntegrationDescriptor(key);
 
         return {
           key: row.integration_key,
-          status: row.status,
+          status: replacement ? "replaced" : row.status,
           lastSyncAt: row.last_sync_at,
           syncRecords: row.last_sync_records,
-          lastSyncError: row.last_sync_error,
+          lastSyncError: replacement ? null : row.last_sync_error,
           endpointUrl: row.endpoint_url,
           config: row.config ?? {},
+          replacement,
           ...INTEGRATION_DISPLAY[key],
         };
       });
@@ -583,6 +603,12 @@ export function IntegrationHub({ actorUserId, userRole }: IntegrationHubProps) {
   }
 
   async function handleTestSync(key: string) {
+    if (getReplacedIntegrationDescriptor(key)) {
+      setSelectedKey(key);
+      setPanelOpen(true);
+      return;
+    }
+
     void trackIntegrationEvent("integration_test_connection_clicked", {
       integration_key: key,
       trigger: "card_test_connection",

@@ -630,12 +630,6 @@ function RouteFallback() {
   );
 }
 
-const envIntelliDealerConnected = !!import.meta.env.VITE_INTELLIDEALER_URL;
-
-interface IntegrationAvailabilityResponse {
-  connected?: boolean;
-}
-
 /**
  * Legacy /crm/* redirect helper. The product is QRM now; old bookmarks
  * still work via this catch-all that rewrites the prefix.
@@ -709,8 +703,8 @@ function App() {
     authError: error,
   });
   const [quoteBuilderAccess, setQuoteBuilderAccess] = useState({
-    connected: envIntelliDealerConnected,
-    loading: true,
+    connected: true,
+    loading: false,
   });
   const [queryClient] = useState(
     () =>
@@ -776,69 +770,11 @@ function App() {
   useEffect(() => {
     if (!user || !profile) {
       setQuoteBuilderAccess({
-        connected: envIntelliDealerConnected,
-        loading: true,
+        connected: true,
+        loading: false,
       });
       return;
     }
-
-    let cancelled = false;
-
-    async function loadQuoteBuilderAccess(): Promise<void> {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          if (!cancelled) {
-            setQuoteBuilderAccess({
-              connected: envIntelliDealerConnected,
-              loading: false,
-            });
-          }
-          return;
-        }
-
-        const { data, error: invokeError } =
-          await supabase.functions.invoke<IntegrationAvailabilityResponse>(
-            "integration-availability",
-            {
-              body: { integration_key: "intellidealer" },
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-            }
-          );
-
-        if (cancelled) return;
-
-        if (invokeError || typeof data?.connected !== "boolean") {
-          setQuoteBuilderAccess({
-            connected: envIntelliDealerConnected,
-            loading: false,
-          });
-          return;
-        }
-
-        setQuoteBuilderAccess({
-          connected: data.connected,
-          loading: false,
-        });
-      } catch {
-        if (!cancelled) {
-          setQuoteBuilderAccess({
-            connected: envIntelliDealerConnected,
-            loading: false,
-          });
-        }
-      }
-    }
-
-    void loadQuoteBuilderAccess();
-
-    return () => {
-      cancelled = true;
-    };
   }, [user?.id, profile?.id]);
 
   if (loading) {

@@ -13,10 +13,15 @@ interface AvailabilityRequestBody {
 interface IntegrationStatusRow {
   workspace_id: string;
   status: IntegrationStatusEnum;
+  config: Record<string, unknown> | null;
 }
 
 function isSupportedIntegrationKey(key: string): boolean {
   return key === "intellidealer" || key === "sendgrid" || key === "twilio";
+}
+
+function isReplacedIntegration(key: string): boolean {
+  return key === "intellidealer" || key === "hubspot";
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -59,7 +64,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const workspaceId = caller.workspaceId ?? "default";
     const { data: scopedRow, error: scopedError } = await adminClient
       .from("integration_status")
-      .select("workspace_id, status")
+      .select("workspace_id, status, config")
       .eq("workspace_id", workspaceId)
       .eq("integration_key", integrationKey)
       .maybeSingle<IntegrationStatusRow>();
@@ -77,16 +82,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       workspaceId,
       jobType: "economic_sync_refresh",
     });
-    const status = scopedRow?.status ?? "pending_credentials";
+    const replacementLifecycle =
+      typeof scopedRow?.config?.lifecycle === "string" ? scopedRow.config.lifecycle : null;
+    const replaced = isReplacedIntegration(integrationKey) || replacementLifecycle === "replaced";
+    const status = replaced ? "replaced" : (scopedRow?.status ?? "pending_credentials");
 
     return ok(
       {
         integration_key: integrationKey,
         workspace_id: workspaceId,
         status,
-        connected: status === "connected",
-        refresh_pending: Boolean(refreshJob),
-        safe_mode: Boolean(refreshJob) || status !== "connected",
+        connected: replaced ? true : status === "connected",
+        refresh_pending: replaced ? false : Boolean(refreshJob),
+        safe_mode: replaced ? false : Boolean(refreshJob) || status !== "connected",
         refresh_job_id: refreshJob?.id ?? null,
       },
       { origin },

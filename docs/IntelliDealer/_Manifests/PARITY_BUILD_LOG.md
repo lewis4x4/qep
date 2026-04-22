@@ -206,7 +206,7 @@
 - `apps/web/src/components/AdminPage.tsx`
 - `supabase/config.toml`
 **Verification:** file-level TypeScript diagnostics on `QuickBooksGlSyncPage.tsx`, `ServiceQuoteBuilder.tsx`, and `App.tsx`, `deno test supabase/functions/_shared/quickbooks-gl.test.ts supabase/functions/_shared/service-labor-pricing.test.ts --allow-read --allow-env`, `deno check supabase/functions/quickbooks-gl-sync/index.ts supabase/functions/_shared/quickbooks-gl.ts supabase/functions/service-quote-engine/index.ts`, `bun test apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase8-quickbooks-gl --ui` all passed. Gate report: `test-results/agent-gates/20260422T125224Z-phase8-quickbooks-gl.json`.
-**Deployment:** `supabase db push` applied `352_quickbooks_gl_sync.sql`; `supabase functions deploy quickbooks-gl-sync` succeeded; remote function list shows `quickbooks-gl-sync` active version `1`.
+**Deployment:** `supabase db push` applied `352_quickbooks_gl_sync.sql`; `supabase functions deploy quickbooks-gl-sync` succeeded; remote function list shows `quickbooks-gl-sync` active version `1`. Follow-up migration `357_backfill_quickbooks_integration_status.sql` restored the missing `integration_status` row in workspace `default`.
 **Remaining manual acceptance:** live QuickBooks credentials, realm id, and account ids must be supplied before the sync can actually post transactions.
 **Parity status update:** GAP → BUILT (repo-side) / CREDENTIALS PENDING
 
@@ -291,3 +291,41 @@
 **Decision:** close this as a folded implementation. QEP already chose the “integrate into existing ops/service/rental surfaces” path rather than building a separate standalone module.
 **Deployment:** none required; traffic logistics route and schema were already deployed in earlier committed work.
 **Parity status update:** GAP → BUILT / SCOPE RESOLVED
+
+## 2026-04-22 — IntelliDealer Dependency Decommissioned (Phase-3_Parts) — CLOSED
+**Gap row:** `2`
+**Gap description:** VitalEdge / IntelliDealer API access blocker.
+**Change type:** Product Decision + Runtime Decommission
+**Files:**
+- `supabase/migrations/356_decommission_hubspot_intellidealer.sql`
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/IntegrationHub.tsx`
+- `apps/web/src/components/IntegrationCard.tsx`
+- `apps/web/src/components/IntegrationPanel.tsx`
+- `apps/web/src/components/DataSourceBadge.tsx`
+- `apps/web/src/lib/replaced-integrations.ts`
+- `apps/web/src/lib/replaced-integrations.test.ts`
+- `supabase/functions/integration-availability/index.ts`
+- `supabase/functions/integration-test-connection/index.ts`
+**Verification:** remote `integration_status` row for `intellidealer` now shows `status = demo_mode`, `config.lifecycle = replaced`, `replacement_surface = QEP Catalog + QRM`, and `external_dependency_required = false`; file-level TypeScript diagnostics on changed frontend files passed; `deno check supabase/functions/integration-availability/index.ts supabase/functions/integration-test-connection/index.ts`, `bun test apps/web/src/lib/replaced-integrations.test.ts`, and `bun run build` all passed.
+**Deployment:** `supabase db push` applied `356_decommission_hubspot_intellidealer.sql`; `supabase functions deploy integration-availability` succeeded. The `integration-test-connection` deploy command was updated in code but its remote version still needs a later successful redeploy because the CLI stalled during this pass.
+**Decision:** close this blocker as intentionally decommissioned. QEP will not wait on or rely on live IntelliDealer API access.
+**Parity status update:** BLOCKER → CLOSED / REPLACED
+
+## 2026-04-22 — HubSpot Dependency Decommissioned (Cross-Cutting) — CLOSED
+**Gap row:** `3`
+**Gap description:** HubSpot API key blocker.
+**Change type:** Product Decision + Runtime Decommission
+**Files:**
+- `supabase/migrations/356_decommission_hubspot_intellidealer.sql`
+- `apps/web/src/components/HubSpotConnectPage.tsx`
+- `apps/web/src/components/IntegrationHub.tsx`
+- `apps/web/src/components/IntegrationCard.tsx`
+- `apps/web/src/components/IntegrationPanel.tsx`
+- `apps/web/src/components/DataSourceBadge.tsx`
+- `apps/web/src/lib/replaced-integrations.ts`
+- `apps/web/src/lib/replaced-integrations.test.ts`
+**Verification:** remote `integration_status` row for `hubspot` now shows `status = demo_mode`, `config.lifecycle = replaced`, `replacement_surface = QRM`, and `external_dependency_required = false`; `bun test apps/web/src/lib/replaced-integrations.test.ts` and `bun run build` passed; remote secret/config audit confirmed HubSpot credentials are no longer required for the core product posture.
+**Deployment:** `supabase db push` applied `356_decommission_hubspot_intellidealer.sql`.
+**Decision:** close this blocker as intentionally decommissioned. QRM is the CRM system of record; HubSpot is not a required future dependency.
+**Parity status update:** BLOCKER → CLOSED / REPLACED

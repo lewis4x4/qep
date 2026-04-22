@@ -1,21 +1,5 @@
 # Escalation Bundle
 
-## 2026-04-21 — Phase-3 Parts — VitalEdge / IntelliDealer API access
-
-- What I was doing: starting the verified parity execution loop and selecting the highest-priority work units from the Gap Register.
-- What I tried: verified the worksheet row, confirmed the IntelliDealer evidence set exists locally, and checked the committed repo for parts module surfaces to confirm this is not a missing-code issue.
-- Blocker: no VitalEdge / IntelliDealer API access is available from the workspace, so data migration and parity validation against live legacy data cannot begin.
-- What unblocks it: QEP needs to provide the VitalEdge account rep introduction and working API access.
-- Estimated impact: all Phase-3 data migration work stays blocked; parts retirement and any parity work that depends on live IntelliDealer data remains blocked.
-
-## 2026-04-21 — Cross-Cutting — HubSpot API key
-
-- What I was doing: ranking the first executable parity gaps after the opening assessment.
-- What I tried: verified that `crm-hubspot-import` and `qrm-hubspot-import` already exist in committed `HEAD`, so the gap is not absence of import code.
-- Blocker: a remote secrets audit shows only `HUBSPOT_REDIRECT_URI` and `HUBSPOT_SCOPES` are present. The required HubSpot auth credentials are still missing: `HUBSPOT_CLIENT_ID`, `HUBSPOT_CLIENT_SECRET`, `HUBSPOT_APP_ID`, and `HUBSPOT_OAUTH_STATE_SECRET` unless they are instead stored in encrypted `integration_status` payloads.
-- What unblocks it: set the missing HubSpot auth credentials remotely or populate the encrypted `integration_status` record for integration key `hubspot`.
-- Estimated impact: HubSpot retirement and CRM migration validation remain blocked even though the import surface exists.
-
 ## 2026-04-22 — Phase-4 Service — Technician field UAT
 
 - What I was doing: closing workbook row `5` for service mobile technician validation.
@@ -35,10 +19,10 @@
 ## 2026-04-22 — Phase-8 Financial Operations — QuickBooks credentials and account mapping
 
 - What I was doing: confirming the remaining non-code blockers after closing the executable parity backlog.
-- What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, and pushed the slice to production with migration `352`.
-- Blocker: remote secrets audit shows no QuickBooks credential set is available, and the runtime expects an encrypted `integration_status` payload for integration key `quickbooks` with `client_id`, `client_secret`, `refresh_token`, `realm_id`, `ar_account_id`, `service_revenue_account_id`, `parts_revenue_account_id`, `haul_revenue_account_id`, `shop_supplies_account_id`, `misc_revenue_account_id`, and `tax_liability_account_id`.
+- What I tried: built and deployed the QuickBooks GL sync queue, verified the segment gate, pushed the slice to production with migration `352`, and backfilled the missing `integration_status` row via migration `357`.
+- Blocker: the runtime row now exists, but remote state still has no encrypted credentials configured for integration key `quickbooks`. The sync still needs `client_id`, `client_secret`, `refresh_token`, `realm_id`, `ar_account_id`, `service_revenue_account_id`, `parts_revenue_account_id`, `haul_revenue_account_id`, `shop_supplies_account_id`, `misc_revenue_account_id`, and `tax_liability_account_id`.
 - What unblocks it: populate the QuickBooks integration credentials/account mapping in `integration_status` for workspace `default` or provide an equivalent production credential path used by the deployed sync.
-- Estimated impact: row `4` stays at built-but-not-retired status until live QuickBooks posting can be executed with production credentials.
+- Estimated impact: row `4` is reduced to a pure credential/input blocker; the missing runtime row is no longer part of the problem.
 
 ## 2026-04-22 — Phase-5 Deal Genome — IronGuides contract dependency
 

@@ -5,43 +5,33 @@
 
 ## Row 2 — VitalEdge / IntelliDealer API access
 
-**Status:** blocked by external access  
-**Repo readiness already present:**
+**Status:** closed by decommission decision  
 
-- `apps/web/src/lib/intellidealer.types.ts` defines the adapter contract
-- current repo notes already expect a real adapter swap once access exists
-
-**Still missing:**
-
-- live VitalEdge / IntelliDealer API endpoint access
-- authentication method / credentials
-- any production integration contract from VitalEdge
+- live product decision: IntelliDealer will not be connected
+- remote `integration_status` now marks `intellidealer` as:
+  - `status = demo_mode`
+  - `config.lifecycle = replaced`
+  - `replacement_surface = QEP Catalog + QRM`
 
 ## Row 3 — HubSpot connection credentials
 
-**Status:** blocked by missing remote credentials  
-**Remote secret audit (`supabase secrets list`) found:**
+**Status:** closed by decommission decision  
 
-- present:
-  - `HUBSPOT_REDIRECT_URI`
-  - `HUBSPOT_SCOPES`
-- missing:
-  - `HUBSPOT_CLIENT_ID`
-  - `HUBSPOT_CLIENT_SECRET`
-  - `HUBSPOT_APP_ID`
-  - `HUBSPOT_OAUTH_STATE_SECRET`
-
-**Code expectation:**
-
-- `supabase/functions/_shared/hubspot-runtime-config.ts`
-- falls back to encrypted `integration_status` payload only if those credentials were stored there instead
+- live product decision: HubSpot will not be connected
+- remote `integration_status` now marks `hubspot` as:
+  - `status = demo_mode`
+  - `config.lifecycle = replaced`
+  - `replacement_surface = QRM`
 
 ## Row 4 — QuickBooks GL live posting
 
 **Status:** built, but still blocked by missing live credentials  
-**Remote secret audit (`supabase secrets list`) found:**
+**Runtime state now verified:**
 
-- no `QUICKBOOKS_*`-style remote secrets present
+- `integration_status` row exists for `quickbooks`
+- `status = pending_credentials`
+- `auth_type = oauth_app`
+- encrypted credentials are still absent
 
 **Code expectation:**
 
@@ -94,8 +84,6 @@
 
 ## Net Remaining True Blockers
 
-- row `2`
-- row `3`
 - row `4`
 - row `5`
 - row `16`
@@ -103,6 +91,10 @@
 
 ## Removed From Blocked Set
 
+- row `2`
+  - resolved by decommission / native replacement
+- row `3`
+  - resolved by decommission / native replacement
 - row `12`
   - resolved as an existing folded implementation
   - see `QEP-Cross-Cutting-Traffic-Management-Scope-Decision-20260422.md`
