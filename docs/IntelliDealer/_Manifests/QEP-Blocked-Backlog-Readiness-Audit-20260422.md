@@ -69,6 +69,8 @@
 
 - real technician validation on deployed `/m/service`
 - pass/fail feedback capture from service staff
+- manual execution pack prepared:
+  - `QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md`
 
 ## Row 16 — OEM portal dashboard configuration
 
@@ -83,6 +85,8 @@
   - individual login
   - OAuth-ready
   - API-only
+- operator checklist prepared:
+  - `QEP-Phase-9-OEM-Portal-Configuration-Checklist-20260422.md`
 
 ## Row 20 — IronGuides contract dependency
 
@@ -91,6 +95,8 @@
 
 - confirmed IronGuides contract status
 - permitted market-intelligence feed/access model
+- decision brief prepared:
+  - `QEP-Phase-5-IronGuides-Dependency-Decision-20260422.md`
 
 ## Net Remaining True Blockers
 
