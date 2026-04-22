@@ -114,3 +114,21 @@
 **Deployment:** no new migrations or edge functions were required for this slice.
 **Remaining manual acceptance:** workbook row `5` still calls for in-field UAT with a service technician. That manual production validation was not executable from the workspace and remains open.
 **Parity status update:** GAP → BUILT (repo-side) / FIELD UAT PENDING
+
+## 2026-04-22 — InspectionPlus Dedicated Schema (Phase-4_Service) — CLOSED
+**Gap row:** `9`
+**Gap description:** ID InspectionPlus dedicated schema may be needed (separate from work orders).
+**Change type:** Schema + UI
+**Files:**
+- `supabase/migrations/348_service_inspectionplus.sql`
+- `apps/web/src/features/service/lib/inspectionplus-utils.ts`
+- `apps/web/src/features/service/lib/inspectionplus-utils.test.ts`
+- `apps/web/src/features/service/pages/ServiceInspectionPlusPage.tsx`
+- `apps/web/src/features/service/pages/ServiceInspectionDetailPage.tsx`
+- `apps/web/src/features/service/pages/__tests__/ServiceInspectionPlusPage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceSubNav.tsx`
+- `apps/web/src/features/service/pages/ServiceCommandCenterPage.tsx`
+- `apps/web/src/App.tsx`
+**Verification:** file-level TypeScript diagnostics on `ServiceInspectionPlusPage.tsx`, `ServiceInspectionDetailPage.tsx`, `ServiceSubNav.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/inspectionplus-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceInspectionPlusPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-inspectionplus --ui` all passed. Gate report: `test-results/agent-gates/20260422T013526Z-phase4-inspectionplus.json`.
+**Deployment:** `supabase db push` applied `348_service_inspectionplus.sql`; `supabase migration list` confirms remote migration `348`. During deploy, the migration was corrected to reference `qrm_companies` and `qrm_equipment` because the legacy `crm_*` relations are compatibility views in the remote environment.
+**Parity status update:** GAP → BUILT

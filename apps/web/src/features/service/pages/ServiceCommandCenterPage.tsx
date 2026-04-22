@@ -16,6 +16,7 @@ import {
   AlertOctagon,
   CalendarClock,
   Clock,
+  ClipboardCheck,
   Package,
   Receipt,
   Smartphone,
@@ -175,6 +176,13 @@ export function ServiceCommandCenterPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link
+              to="/service/inspections"
+              className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/25 hover:text-primary"
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              Inspections
+            </Link>
             <Link
               to="/m/service"
               className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/25 hover:text-primary"
