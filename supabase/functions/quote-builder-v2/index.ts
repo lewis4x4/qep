@@ -126,6 +126,18 @@ interface AiRecommendationResult {
   jobConsiderations?: string[] | null;
 }
 
+function clampCurrency(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(Math.max(0, numeric) * 100) / 100;
+}
+
+function buildScenarioLabel(type: "cash" | "finance" | "lease", termMonths: number): string {
+  if (type === "cash") return "Cash";
+  if (type === "lease") return termMonths > 0 ? `Lease ${termMonths} mo` : "Lease";
+  return termMonths > 0 ? `Finance ${termMonths} mo` : "Finance";
+}
+
 async function aiEquipmentRecommendation(
   jobDescription: string,
   catalogEntries: Record<string, unknown>[],
@@ -190,20 +202,34 @@ If no good alternative exists, set alternative to null. Keep jobConsiderations t
 }
 
 function calculateFinancingScenarios(
-  totalAmount: number,
+  amountFinanced: number,
+  customerTotal: number,
   rates: Array<{ term_months: number; apr: number; lender_name: string; loan_type: string }>,
-): Array<{ type: string; term_months: number; rate: number; monthly_payment: number; total_cost: number; lender: string }> {
-  const scenarios: Array<{ type: string; term_months: number; rate: number; monthly_payment: number; total_cost: number; lender: string }> = [];
+) {
+  const scenarios: Array<{
+    type: "cash" | "finance" | "lease";
+    label: string;
+    termMonths: number;
+    apr: number;
+    rate: number;
+    monthlyPayment: number | null;
+    totalCost: number;
+    lender: string;
+  }> = [];
 
   // Cash scenario
   scenarios.push({
     type: "cash",
-    term_months: 0,
+    label: "Cash",
+    termMonths: 0,
+    apr: 0,
     rate: 0,
-    monthly_payment: 0,
-    total_cost: totalAmount,
+    monthlyPayment: null,
+    totalCost: customerTotal,
     lender: "Cash",
   });
+
+  if (amountFinanced <= 0) return scenarios;
 
   // Finance scenario (60-month, best rate)
   const financeRate = rates.find((r) => r.term_months === 60 && r.loan_type === "finance") || rates[0];
@@ -211,14 +237,16 @@ function calculateFinancingScenarios(
     const monthlyRate = financeRate.apr / 100 / 12;
     const months = financeRate.term_months || 60;
     const payment = monthlyRate > 0
-      ? (totalAmount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
-      : totalAmount / months;
+      ? (amountFinanced * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
+      : amountFinanced / months;
     scenarios.push({
       type: "finance",
-      term_months: months,
+      label: buildScenarioLabel("finance", months),
+      termMonths: months,
+      apr: financeRate.apr,
       rate: financeRate.apr,
-      monthly_payment: Math.round(payment * 100) / 100,
-      total_cost: Math.round(payment * months * 100) / 100,
+      monthlyPayment: Math.round(payment * 100) / 100,
+      totalCost: Math.round(payment * months * 100) / 100,
       lender: financeRate.lender_name,
     });
   }
@@ -228,21 +256,70 @@ function calculateFinancingScenarios(
   if (leaseRate) {
     const monthlyRate = leaseRate.apr / 100 / 12;
     const months = leaseRate.term_months || 48;
-    const residual = totalAmount * 0.25; // 25% residual
+    const residual = amountFinanced * 0.25; // 25% residual
     const payment = monthlyRate > 0
-      ? ((totalAmount - residual) * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
-      : (totalAmount - residual) / months;
+      ? ((amountFinanced - residual) * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1)
+      : (amountFinanced - residual) / months;
     scenarios.push({
       type: "lease",
-      term_months: months,
+      label: buildScenarioLabel("lease", months),
+      termMonths: months,
+      apr: leaseRate.apr,
       rate: leaseRate.apr,
-      monthly_payment: Math.round(payment * 100) / 100,
-      total_cost: Math.round((payment * months + residual) * 100) / 100,
+      monthlyPayment: Math.round(payment * 100) / 100,
+      totalCost: Math.round((payment * months + residual) * 100) / 100,
       lender: leaseRate.lender_name,
     });
   }
 
   return scenarios;
+}
+
+async function resolveFirstOpenDealStageId(
+  supabase: ReturnType<typeof createClient>,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("crm_deal_stages")
+    .select("id")
+    .neq("is_closed_won", true)
+    .neq("is_closed_lost", true)
+    .order("sort_order", { ascending: true, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error("No open CRM deal stage configured");
+  return String(data.id);
+}
+
+async function createDraftDealForQuote(input: {
+  supabase: ReturnType<typeof createClient>;
+  userId: string;
+  customerName: string | null;
+  customerCompany: string | null;
+  contactId: string | null;
+  companyId: string | null;
+  amount: number;
+}): Promise<string> {
+  const stageId = await resolveFirstOpenDealStageId(input.supabase);
+  const customerLabel = input.customerCompany || input.customerName || "Walk-in prospect";
+  const dealName = `${customerLabel} Quote`;
+  const { data, error } = await input.supabase
+    .from("crm_deals")
+    .insert({
+      name: dealName,
+      stage_id: stageId,
+      primary_contact_id: input.contactId,
+      company_id: input.companyId,
+      assigned_rep_id: input.userId,
+      amount: input.amount > 0 ? input.amount : null,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  if (!data?.id) throw new Error("Draft CRM deal creation returned no id");
+  return String(data.id);
 }
 
 Deno.serve(async (req) => {
@@ -984,8 +1061,19 @@ Deno.serve(async (req) => {
 
     // ── POST /calculate: Financing scenarios ─────────────────────────────
     if (action === "calculate") {
-      if (!body.total_amount || body.total_amount <= 0) {
-        return safeJsonError("total_amount must be positive", 400, origin);
+      const packageSubtotal = clampCurrency(body.package_subtotal);
+      const discountTotal = clampCurrency(body.discount_total);
+      const tradeAllowance = clampCurrency(body.trade_allowance);
+      const taxTotal = clampCurrency(body.tax_total);
+      const cashDown = clampCurrency(body.cash_down);
+      const customerTotal = Math.max(0, packageSubtotal - discountTotal - tradeAllowance + taxTotal);
+      const amountFinanced = Math.max(
+        0,
+        clampCurrency(body.amount_financed || customerTotal - cashDown),
+      );
+
+      if (packageSubtotal <= 0) {
+        return safeJsonError("package_subtotal must be positive", 400, origin);
       }
 
       const { data: rates } = await supabase
@@ -994,7 +1082,8 @@ Deno.serve(async (req) => {
         .eq("is_active", true);
 
       const scenarios = calculateFinancingScenarios(
-        body.total_amount,
+        amountFinanced,
+        customerTotal,
         (rates ?? []) as Array<{ term_months: number; apr: number; lender_name: string; loan_type: string }>,
       );
 
@@ -1020,7 +1109,7 @@ Deno.serve(async (req) => {
         let estimatedSavings = 0;
 
         if (discountType === "percentage" || discountType === "percent") {
-          estimatedSavings = body.total_amount * (discountValue / 100);
+          estimatedSavings = customerTotal * (discountValue / 100);
         } else if (discountType === "flat" || discountType === "cash") {
           estimatedSavings = discountValue;
         }
@@ -1050,6 +1139,10 @@ Deno.serve(async (req) => {
 
       return safeJsonOk({
         scenarios,
+        amountFinanced,
+        taxTotal,
+        customerTotal,
+        discountTotal,
         margin_check: marginStatus,
         incentives: {
           applicable: applicableIncentives,
@@ -1303,8 +1396,19 @@ Deno.serve(async (req) => {
 
     // ── POST /save: Save quote package ───────────────────────────────────
     if (action === "save") {
-      if (!body.deal_id) {
-        return safeJsonError("deal_id required", 400, origin);
+      const customerName = typeof body.customer_name === "string" ? body.customer_name.trim().slice(0, 200) : null;
+      const customerCompany = typeof body.customer_company === "string" ? body.customer_company.trim().slice(0, 200) : null;
+      const customerPhone = typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null;
+      const customerEmail = typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null;
+      const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
+      const companyId = typeof body.company_id === "string" ? body.company_id : null;
+      const equipment = Array.isArray(body.equipment) ? body.equipment : [];
+
+      if (equipment.length === 0) {
+        return safeJsonError("At least one equipment line is required", 400, origin);
+      }
+      if (!customerName && !customerCompany && !contactId && !companyId) {
+        return safeJsonError("Customer or prospect identity is required", 400, origin);
       }
 
       // Slice 09 CP2: accept optional originating_log_id so the AI Request
@@ -1341,12 +1445,36 @@ Deno.serve(async (req) => {
         }
       }
 
+      let resolvedDealId = typeof body.deal_id === "string" && body.deal_id.length > 0
+        ? body.deal_id
+        : null;
+      if (!resolvedDealId) {
+        try {
+          resolvedDealId = await createDraftDealForQuote({
+            supabase,
+            userId: user.id,
+            customerName,
+            customerCompany,
+            contactId,
+            companyId,
+            amount: clampCurrency(body.net_total),
+          });
+        } catch (err) {
+          console.error("quote save draft deal error:", err);
+          return safeJsonError(
+            err instanceof Error ? err.message : "Failed to create draft CRM deal",
+            500,
+            origin,
+          );
+        }
+      }
+
       const { data, error } = await supabase
         .from("quote_packages")
         .upsert({
-          deal_id: body.deal_id,
-          contact_id: body.contact_id,
-          equipment: body.equipment || [],
+          deal_id: resolvedDealId,
+          contact_id: contactId,
+          equipment,
           attachments_included: body.attachments_included || [],
           trade_in_valuation_id: body.trade_in_valuation_id,
           trade_allowance: body.trade_allowance,
@@ -1354,18 +1482,27 @@ Deno.serve(async (req) => {
           equipment_total: body.equipment_total || 0,
           attachment_total: body.attachment_total || 0,
           subtotal: body.subtotal || 0,
+          branch_slug: typeof body.branch_slug === "string" ? body.branch_slug : null,
+          commercial_discount_type: typeof body.commercial_discount_type === "string" ? body.commercial_discount_type : "flat",
+          commercial_discount_value: body.commercial_discount_value || 0,
+          discount_total: body.discount_total || 0,
           trade_credit: body.trade_credit || 0,
           net_total: body.net_total || 0,
+          tax_total: body.tax_total || 0,
+          cash_down: body.cash_down || 0,
+          amount_financed: body.amount_financed || 0,
+          tax_profile: typeof body.tax_profile === "string" ? body.tax_profile : "standard",
+          selected_finance_scenario: typeof body.selected_finance_scenario === "string" ? body.selected_finance_scenario : null,
           margin_amount: body.margin_amount,
           margin_pct: body.margin_pct,
           ai_recommendation: body.ai_recommendation,
           entry_mode: body.entry_mode || "manual",
           status: body.status || "draft",
           created_by: user.id,
-          customer_name: typeof body.customer_name === "string" ? body.customer_name.trim().slice(0, 200) : null,
-          customer_company: typeof body.customer_company === "string" ? body.customer_company.trim().slice(0, 200) : null,
-          customer_phone: typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null,
-          customer_email: typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null,
+          customer_name: customerName,
+          customer_company: customerCompany,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
           originating_log_id: originatingLogId,
           // Only include snapshot keys when the client supplied a valid
           // one — omitting them lets the upsert preserve the prior values
@@ -1380,7 +1517,7 @@ Deno.serve(async (req) => {
         return safeJsonError("Failed to save quote", 500, origin);
       }
 
-      return safeJsonOk({ quote: data }, origin, 201);
+      return safeJsonOk({ quote: data, deal_id: resolvedDealId }, origin, 201);
     }
 
     // ── POST /mark-viewed: sent → viewed transition (Slice 2.1h) ──────

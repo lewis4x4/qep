@@ -16,7 +16,8 @@ const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-b
 
 export interface QuotePackageSaveResponse {
   id?: string;
-  quote?: { id?: string };
+  deal_id?: string;
+  quote?: { id?: string; deal_id?: string };
 }
 
 export interface PortalRevisionEnvelope {
@@ -300,17 +301,117 @@ export async function getAiEquipmentRecommendation(jobDescription: string): Prom
   return (json?.recommendation ?? json) as QuoteRecommendation;
 }
 
+export interface QuoteFinancingRequest {
+  packageSubtotal: number;
+  discountTotal: number;
+  tradeAllowance: number;
+  taxTotal: number;
+  cashDown: number;
+  amountFinanced: number;
+  marginPct?: number;
+  manufacturer?: string;
+}
+
+function numOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+export function normalizeQuoteFinanceScenario(raw: Record<string, unknown>): QuoteFinanceScenario {
+  const type = firstString(raw.type, "cash") as QuoteFinanceScenario["type"];
+  const termMonths = numOrNull(raw.termMonths ?? raw.term_months);
+  const rate = numOrNull(raw.rate ?? raw.apr);
+  const monthlyPayment = numOrNull(raw.monthlyPayment ?? raw.monthly_payment);
+  const totalCost = numOrNull(raw.totalCost ?? raw.total_cost);
+  const lender = firstString(raw.lender) ?? null;
+  const label = firstString(
+    raw.label,
+    type === "cash"
+      ? "Cash"
+      : termMonths != null
+        ? `${type === "lease" ? "Lease" : "Finance"} ${termMonths} mo`
+        : type === "lease"
+          ? "Lease"
+          : "Finance",
+  ) ?? "Scenario";
+
+  return {
+    type: type === "lease" ? "lease" : type === "finance" ? "finance" : "cash",
+    label,
+    monthlyPayment,
+    apr: rate,
+    termMonths,
+    totalCost,
+    rate,
+    lender,
+  };
+}
+
+export function normalizeQuoteFinancingPreview(raw: Record<string, unknown> | null | undefined): QuoteFinancingPreview {
+  const scenariosRaw = Array.isArray(raw?.scenarios) ? raw.scenarios : [];
+  const applicableRaw = Array.isArray((raw?.incentives as { applicable?: unknown[] } | undefined)?.applicable)
+    ? ((raw?.incentives as { applicable?: unknown[] }).applicable ?? [])
+    : [];
+  return {
+    scenarios: scenariosRaw
+      .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+      .map((row) => normalizeQuoteFinanceScenario(row)),
+    margin_check: raw?.margin_check && typeof raw.margin_check === "object"
+      ? {
+          flagged: Boolean((raw.margin_check as { flagged?: unknown }).flagged),
+          message: firstString((raw.margin_check as { message?: unknown }).message) ?? undefined,
+        }
+      : null,
+    amountFinanced: numOrNull(raw?.amountFinanced ?? raw?.amount_financed),
+    taxTotal: numOrNull(raw?.taxTotal ?? raw?.tax_total),
+    customerTotal: numOrNull(raw?.customerTotal ?? raw?.customer_total),
+    discountTotal: numOrNull(raw?.discountTotal ?? raw?.discount_total),
+    incentives: raw?.incentives && typeof raw.incentives === "object"
+      ? {
+          applicable: applicableRaw
+            .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+            .map((row) => ({
+              id: firstString(row.id) ?? crypto.randomUUID(),
+              name: firstString(row.name, row.incentive_name) ?? "Incentive",
+              oem_name: firstString(row.oem_name, row.manufacturer) ?? undefined,
+              discount_type: firstString(row.discount_type) ?? "flat",
+              discount_value: numOrNull(row.discount_value) ?? 0,
+              estimated_savings: numOrNull(row.estimated_savings) ?? 0,
+              end_date: firstString(row.end_date) ?? undefined,
+            })),
+          total_savings: numOrNull((raw.incentives as { total_savings?: unknown }).total_savings) ?? 0,
+        }
+      : null,
+  };
+}
+
 export async function calculateFinancing(
-  totalAmount: number,
-  marginPct?: number,
-  manufacturer?: string,
+  input: QuoteFinancingRequest,
 ): Promise<QuoteFinancingPreview> {
   const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/calculate`, {
     method: "POST",
-    body: JSON.stringify({ total_amount: totalAmount, margin_pct: marginPct, manufacturer }),
+    body: JSON.stringify({
+      package_subtotal: input.packageSubtotal,
+      discount_total: input.discountTotal,
+      trade_allowance: input.tradeAllowance,
+      tax_total: input.taxTotal,
+      cash_down: input.cashDown,
+      amount_financed: input.amountFinanced,
+      margin_pct: input.marginPct,
+      manufacturer: input.manufacturer,
+    }),
   });
   if (!res.ok) throw new Error("Financing calculation failed");
-  return res.json();
+  const body = await res.json();
+  return normalizeQuoteFinancingPreview(body);
 }
 
 export async function saveQuotePackage(data: Record<string, unknown>): Promise<QuotePackageSaveResponse> {
@@ -428,10 +529,17 @@ export function buildQuoteSavePayload(
     equipmentTotal: number;
     attachmentTotal: number;
     subtotal: number;
+    discountTotal: number;
+    discountedSubtotal: number;
     netTotal: number;
+    taxTotal: number;
+    customerTotal: number;
+    cashDown: number;
+    amountFinanced: number;
     marginAmount: number;
     marginPct: number;
   },
+  financeScenarios: QuoteFinanceScenario[],
   /** Slice 20e: win-probability snapshot captured at save time. Passed
    *  opaquely to the edge function where it's validated + persisted to
    *  quote_packages.win_probability_snapshot. Optional so legacy
@@ -460,16 +568,36 @@ export function buildQuoteSavePayload(
     })),
     trade_in_valuation_id: draft.tradeValuationId,
     trade_allowance: draft.tradeAllowance,
+    financing_scenarios: financeScenarios.map((scenario) => ({
+      type: scenario.type,
+      label: scenario.label,
+      term_months: scenario.termMonths ?? null,
+      apr: scenario.apr ?? scenario.rate ?? null,
+      monthly_payment: scenario.monthlyPayment ?? null,
+      total_cost: scenario.totalCost ?? null,
+      lender: scenario.lender ?? null,
+    })),
     equipment_total: computed.equipmentTotal,
     attachment_total: computed.attachmentTotal,
     subtotal: computed.subtotal,
+    branch_slug: draft.branchSlug || null,
+    commercial_discount_type: draft.commercialDiscountType,
+    commercial_discount_value: draft.commercialDiscountValue,
+    discount_total: computed.discountTotal,
+    discounted_subtotal: computed.discountedSubtotal,
     trade_credit: draft.tradeAllowance,
     net_total: computed.netTotal,
+    tax_profile: draft.taxProfile,
+    tax_total: computed.taxTotal,
+    customer_total: computed.customerTotal,
+    cash_down: computed.cashDown,
+    amount_financed: computed.amountFinanced,
+    selected_finance_scenario: draft.selectedFinanceScenario,
     margin_amount: computed.marginAmount,
     margin_pct: computed.marginPct,
     ai_recommendation: draft.recommendation,
     entry_mode: draft.entryMode,
-    status: "ready",
+    status: "draft",
     customer_name: draft.customerName || null,
     customer_company: draft.customerCompany || null,
     customer_phone: draft.customerPhone || null,
@@ -483,7 +611,12 @@ export function buildPortalRevisionQuoteData(
   draft: QuoteWorkspaceDraft,
   computed: {
     subtotal: number;
+    discountTotal: number;
     netTotal: number;
+    taxTotal: number;
+    customerTotal: number;
+    cashDown: number;
+    amountFinanced: number;
   },
   financeScenarios: QuoteFinanceScenario[],
   dealerMessage?: string | null,
@@ -515,12 +648,21 @@ export function buildPortalRevisionQuoteData(
       type: scenario.type,
       monthlyPayment: scenario.monthlyPayment ?? null,
       termMonths: scenario.termMonths ?? null,
+      totalCost: scenario.totalCost ?? null,
+      apr: scenario.apr ?? scenario.rate ?? null,
       lender: scenario.lender ?? null,
     })),
     terms: ["Subject to dealership approval and final document review."],
     subtotal: computed.subtotal,
+    discount_total: computed.discountTotal,
     trade_allowance: draft.tradeAllowance,
     net_total: computed.netTotal,
+    tax_profile: draft.taxProfile,
+    tax_total: computed.taxTotal,
+    customer_total: computed.customerTotal,
+    cash_down: computed.cashDown,
+    amount_financed: computed.amountFinanced,
+    selected_finance_scenario: draft.selectedFinanceScenario,
     dealer_message: dealerMessage ?? null,
     revision_summary: revisionSummary ?? null,
   };

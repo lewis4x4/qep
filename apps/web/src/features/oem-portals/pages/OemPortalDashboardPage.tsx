@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, KeyRound, Plus, ShieldCheck } from "lucide-react";
+import { ExternalLink, KeyRound, Plus, ScrollText, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { matchesOemPortalFilters, sortOemPortals, countPortalSetupReady, type OemPortalRow } from "../lib/oem-portal-utils";
+import { oemVaultQueryKeys, vaultApi, type CredentialMeta } from "../lib/vault-api";
+import { CredentialCard } from "../components/CredentialCard";
+import { CredentialSheet } from "../components/CredentialSheet";
+import { CredentialAuditSheet } from "../components/CredentialAuditSheet";
+import { RevealModal } from "../components/RevealModal";
 
 function SegmentBadge({ segment }: { segment: OemPortalRow["segment"] }) {
   const style =
@@ -16,15 +21,25 @@ function SegmentBadge({ segment }: { segment: OemPortalRow["segment"] }) {
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${style}`}>{segment}</span>;
 }
 
+type CredentialSheetState =
+  | { open: false }
+  | { open: true; mode: "create" }
+  | { open: true; mode: "edit" | "rotate"; credential: CredentialMeta };
+
 export function OemPortalDashboardPage() {
   const { profile } = useAuth();
-  const canManage = ["admin", "manager", "owner"].includes(profile?.role ?? "");
+  const role = profile?.role ?? "";
+  const canManage = ["admin", "manager", "owner"].includes(role);
+  const canRevealForRep = role === "rep";
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState("all");
   const [status, setStatus] = useState("all");
   const [accessMode, setAccessMode] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [credentialSheet, setCredentialSheet] = useState<CredentialSheetState>({ open: false });
+  const [revealCredential, setRevealCredential] = useState<CredentialMeta | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const portalsQuery = useQuery({
     queryKey: ["oem-portals"],
@@ -86,6 +101,27 @@ export function OemPortalDashboardPage() {
   });
 
   const readyCount = countPortalSetupReady(portalsQuery.data ?? []);
+
+  const credentialsQuery = useQuery({
+    queryKey: selected ? oemVaultQueryKeys.list(selected.id) : ["oem-portal-credentials", "noop"],
+    queryFn: () => vaultApi.list(selected!.id),
+    enabled: !!selected,
+    staleTime: 15_000,
+  });
+
+  async function handleDeleteCredential(credential: CredentialMeta) {
+    const reason = window.prompt(
+      `Delete "${credential.label}"? This is append-only audited. Reason (optional):`,
+      "",
+    );
+    if (reason === null) return;
+    try {
+      await vaultApi.remove(credential.id, reason);
+      if (selected) qc.invalidateQueries({ queryKey: oemVaultQueryKeys.list(selected.id) });
+    } catch (err) {
+      window.alert(`Delete failed: ${(err as Error).message}`);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6 lg:px-8">
@@ -253,6 +289,57 @@ export function OemPortalDashboardPage() {
               {savePortal.isError ? (
                 <p className="text-sm text-destructive">{(savePortal.error as Error).message}</p>
               ) : null}
+
+              <div className="mt-5 border-t border-border/50 pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Credentials
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {canManage && (
+                      <Button size="sm" variant="ghost" onClick={() => setAuditOpen(true)}>
+                        <ScrollText className="mr-1 h-3.5 w-3.5" /> Audit
+                      </Button>
+                    )}
+                    {canManage && (
+                      <Button size="sm" onClick={() => setCredentialSheet({ open: true, mode: "create" })}>
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Add credential
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Secrets are encrypted server-side. Reveal is audited and clears in 30s.
+                </p>
+
+                <div className="mt-3 grid gap-3">
+                  {credentialsQuery.isLoading && (
+                    <p className="text-sm text-muted-foreground">Loading credentials…</p>
+                  )}
+                  {credentialsQuery.isError && (
+                    <p className="text-sm text-destructive">
+                      Failed to load credentials: {(credentialsQuery.error as Error).message}
+                    </p>
+                  )}
+                  {credentialsQuery.data && credentialsQuery.data.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-border/60 bg-background/40 p-4 text-sm text-muted-foreground">
+                      No credentials stored yet. Use <span className="font-medium text-foreground">Add credential</span> to seal a shared login, API key, OAuth secret, or TOTP seed.
+                    </div>
+                  )}
+                  {credentialsQuery.data?.map((credential) => (
+                    <CredentialCard
+                      key={credential.id}
+                      credential={credential}
+                      canManage={canManage}
+                      canRevealForRep={canRevealForRep}
+                      onReveal={() => setRevealCredential(credential)}
+                      onRotate={() => setCredentialSheet({ open: true, mode: "rotate", credential })}
+                      onEdit={() => setCredentialSheet({ open: true, mode: "edit", credential })}
+                      onDelete={() => handleDeleteCredential(credential)}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <p className="mt-4 text-sm text-muted-foreground">No OEM portals in this workspace yet.</p>
@@ -293,6 +380,43 @@ export function OemPortalDashboardPage() {
           </button>
         ))}
       </div>
+
+      {selected && (
+        <>
+          <CredentialSheet
+            open={credentialSheet.open}
+            onOpenChange={(open) =>
+              setCredentialSheet(open
+                ? (credentialSheet.open ? credentialSheet : { open: true, mode: "create" })
+                : { open: false })
+            }
+            portalId={selected.id}
+            mode={credentialSheet.open ? credentialSheet.mode : "create"}
+            credential={
+              credentialSheet.open && credentialSheet.mode !== "create"
+                ? credentialSheet.credential
+                : undefined
+            }
+          />
+          <CredentialAuditSheet
+            open={auditOpen}
+            onOpenChange={setAuditOpen}
+            portalId={selected.id}
+            portalName={selected.oem_name}
+          />
+        </>
+      )}
+
+      {revealCredential && (
+        <RevealModal
+          open={!!revealCredential}
+          credentialId={revealCredential.id}
+          credentialLabel={revealCredential.label}
+          onOpenChange={(open) => {
+            if (!open) setRevealCredential(null);
+          }}
+        />
+      )}
     </div>
   );
 }

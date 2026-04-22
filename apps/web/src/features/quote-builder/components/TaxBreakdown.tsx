@@ -1,15 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Sparkles, Calendar, Shield } from "lucide-react";
-import { calculateTax } from "../lib/tax-api";
+import type { TaxCalculation } from "../lib/tax-api";
 
 interface TaxBreakdownProps {
-  dealId: string;
-  branchSlug?: string;
-  equipmentCost: number;
-  taxYear?: number;
-  effectiveTaxRate?: number;
+  data: TaxCalculation | null | undefined;
+  isLoading?: boolean;
+  isError?: boolean;
   enabled?: boolean;
+  taxYear?: number;
 }
 
 function formatCurrency(value: number): string {
@@ -17,27 +15,13 @@ function formatCurrency(value: number): string {
 }
 
 export function TaxBreakdown({
-  dealId,
-  branchSlug,
-  equipmentCost,
-  taxYear = new Date().getFullYear(),
-  effectiveTaxRate = 0.25,
+  data,
+  isLoading = false,
+  isError = false,
   enabled = true,
+  taxYear = new Date().getFullYear(),
 }: TaxBreakdownProps) {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["quote", "tax", dealId, branchSlug, equipmentCost, taxYear],
-    queryFn: () => calculateTax({
-      deal_id: dealId,
-      branch_slug: branchSlug,
-      include_179: true,
-      tax_year: taxYear,
-      effective_tax_rate: effectiveTaxRate,
-    }),
-    enabled: enabled && !!dealId && equipmentCost > 0,
-    staleTime: 60_000,
-  });
-
-  if (!enabled || !dealId || equipmentCost <= 0) return null;
+  if (!enabled) return null;
 
   if (isLoading) {
     return <Card className="animate-pulse p-4"><div className="h-24 rounded bg-muted" /></Card>;

@@ -1,4 +1,11 @@
 export type QuoteEntryMode = "voice" | "ai_chat" | "manual";
+export type QuoteCommercialDiscountType = "flat" | "percent";
+export type QuoteTaxProfile =
+  | "standard"
+  | "agriculture_exempt"
+  | "fire_mitigation_exempt"
+  | "government_exempt"
+  | "resale_exempt";
 
 export interface QuoteLineItemDraft {
   kind: "equipment" | "attachment";
@@ -48,6 +55,10 @@ export interface QuoteFinancingPreview {
     flagged?: boolean;
     message?: string;
   } | null;
+  amountFinanced?: number | null;
+  taxTotal?: number | null;
+  customerTotal?: number | null;
+  discountTotal?: number | null;
   incentives?: {
     applicable?: Array<{
       id: string;
@@ -68,7 +79,14 @@ export interface QuoteApprovalState {
   reason: string | null;
 }
 
+export interface QuoteReadinessState {
+  ready: boolean;
+  missing: string[];
+}
+
 export interface QuotePacketReadiness {
+  draft: QuoteReadinessState;
+  send: QuoteReadinessState;
   canSave: boolean;
   canSend: boolean;
   missing: string[];
@@ -91,6 +109,13 @@ export interface QuoteWorkspaceDraft {
   attachments: QuoteLineItemDraft[];
   tradeAllowance: number;
   tradeValuationId: string | null;
+  commercialDiscountType: QuoteCommercialDiscountType;
+  commercialDiscountValue: number;
+  cashDown: number;
+  taxProfile: QuoteTaxProfile;
+  taxTotal: number;
+  amountFinanced: number;
+  selectedFinanceScenario: string | null;
   customerName?: string;
   customerCompany?: string;
   customerPhone?: string;
