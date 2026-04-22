@@ -15,14 +15,16 @@
     X-Frame-Options = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Permissions-Policy = "camera=(), microphone=(self), geolocation=()"
     Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
     # Include wss + *.supabase.com so Safari can reach Auth/Realtime/pooler; *.co alone is not always enough.
     # Sentry: connect-src needs *.ingest.sentry.io (events), *.ingest.us.sentry.io (US region ingest),
     # and sentry.io (replay session uploads). Without these the SDK silently CSP-blocks every captureException.
     # worker-src 'self' blob: is required by Sentry's session replay integration which spawns a Web Worker
     # from a Blob URL for compression. Without it Safari blocks the worker spawn and replay can't initialize.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://sentry.io; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'self'"
+    # Voice Quote needs same-origin microphone access, and @react-pdf/renderer
+    # compiles/load its WASM runtime via wasm-unsafe-eval + data: fetches.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' data: https://*.supabase.co wss://*.supabase.co https://*.supabase.com wss://*.supabase.com https://api.anthropic.com https://api.hubapi.com https://graph.microsoft.com https://login.microsoftonline.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://sentry.io; font-src 'self' data: https://fonts.gstatic.com; frame-ancestors 'self'"
     Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]

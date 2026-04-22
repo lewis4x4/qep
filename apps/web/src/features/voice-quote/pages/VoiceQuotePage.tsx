@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { Card } from "@/components/ui/card";
 import {
   ConversationalDealEngine,
   type ScenarioSelection,
@@ -55,20 +56,50 @@ export function VoiceQuotePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Voice Quote</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Describe the opportunity in your own words. The AI resolves the machine, computes scenarios,
-          and hands the selected one off to the quote builder.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="space-y-6">
+          <div className="rounded-[32px] border border-qep-orange/20 bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.18),transparent_42%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(15,23,42,0.88))] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.32)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-qep-orange/90">
+              Sales Voice Workflow
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">Voice Quote</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Speak the customer situation in plain language. The assistant resolves the machine, builds
+              quote scenarios, and sends your selected option directly into Quote Builder for review.
+            </p>
+          </div>
 
-      <ConversationalDealEngine
-        open={true}
-        onClose={() => navigate(-1)}
-        onScenarioSelect={handleScenarioSelect}
-      />
+          <ConversationalDealEngine
+            open={true}
+            variant="embedded"
+            defaultInputMode="voice"
+            onClose={() => navigate("/quote-v2")}
+            onScenarioSelect={handleScenarioSelect}
+          />
+        </section>
+
+        <aside className="space-y-4">
+          <Card className="rounded-[24px] border-border/60 bg-card/80 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">What To Mention</p>
+            <ul className="mt-3 space-y-3 text-sm leading-5 text-muted-foreground">
+              <li>Customer name, company, and where the machine will work.</li>
+              <li>Machine type, preferred brand, and any must-have attachments.</li>
+              <li>Budget, payment target, urgency, and trade-in context.</li>
+              <li>Any delivery state or branch-specific constraint you already know.</li>
+            </ul>
+          </Card>
+
+          <Card className="rounded-[24px] border-border/60 bg-card/80 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">What Happens Next</p>
+            <ul className="mt-3 space-y-3 text-sm leading-5 text-muted-foreground">
+              <li>The transcript is parsed and matched to the most likely machine.</li>
+              <li>Scenarios stream back with pricing direction and financing context.</li>
+              <li>Your chosen scenario opens in Quote Builder so you can confirm customer, equipment, and totals.</li>
+            </ul>
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -58,6 +58,10 @@ interface ConversationalDealEngineProps {
   onClose: () => void;
   /** If the quote is tied to a deal, pass the deal ID for voice routing */
   dealId?: string;
+  /** Drawer inside Quote Builder vs embedded card on the dedicated Voice Quote page */
+  variant?: "drawer" | "embedded";
+  /** Voice Quote should land directly in recording mode instead of text mode */
+  defaultInputMode?: InputMode;
 }
 
 type InputMode = "text" | "voice";
@@ -76,8 +80,10 @@ export function ConversationalDealEngine({
   open,
   onClose,
   dealId,
+  variant = "drawer",
+  defaultInputMode = "text",
 }: ConversationalDealEngineProps) {
-  const [inputMode, setInputMode]       = useState<InputMode>("text");
+  const [inputMode, setInputMode]       = useState<InputMode>(defaultInputMode);
   const [textPrompt, setTextPrompt]     = useState("");
   const [panelState, setPanelState]     = useState<PanelState>({ phase: "idle" });
   const [scenarios, setScenarios]       = useState<QuoteScenario[]>([]);
@@ -229,18 +235,25 @@ export function ConversationalDealEngine({
 
   const isRunning = panelState.phase === "running" || panelState.phase === "transcribing";
   const hasDone   = panelState.phase === "done" || (panelState.phase === "running" && scenarios.length > 0);
+  const isDrawer = variant === "drawer";
+  const surfaceClassName = isDrawer
+    ? "fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-background shadow-2xl sm:w-[440px]"
+    : "flex min-h-[620px] w-full flex-col overflow-hidden rounded-[28px] border border-border/60 bg-background/95 shadow-[0_32px_100px_rgba(15,23,42,0.28)]";
+  const bodyClassName = isDrawer
+    ? "flex-1 space-y-4 overflow-y-auto p-4"
+    : "flex-1 space-y-4 overflow-y-auto p-5";
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
-        onClick={handleClose}
-        aria-hidden="true"
-      />
+      {isDrawer && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
+          onClick={handleClose}
+          aria-hidden="true"
+        />
+      )}
 
-      {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-background shadow-2xl sm:w-[440px]">
+      <div className={surfaceClassName}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -261,7 +274,7 @@ export function ConversationalDealEngine({
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className={bodyClassName}>
 
           {/* Input mode toggle */}
           {panelState.phase === "idle" && (
