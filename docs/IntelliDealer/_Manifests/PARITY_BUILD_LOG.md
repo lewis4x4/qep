@@ -80,3 +80,20 @@
 - `apps/web/src/components/NoProfileShell.tsx`
 **Verification:** `bun test apps/web/src/features/service/lib/vendor-pricing-portal-utils.test.ts apps/web/src/features/admin/lib/base-options-utils.test.ts apps/web/src/features/qrm/lib/campaign-utils.test.ts`, file-level TypeScript diagnostics on the vendor portal/internal approval surfaces, `deno check supabase/functions/vendor-pricing-portal/index.ts`, and `bun run build` all passed on the working branch.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Purchase Orders (Phase-3_Parts) — CLOSED
+**Gap row:** `13`
+**Gap description:** Purchase Orders (vendor PO for non-parts) may need dedicated table.
+**Change type:** Schema + UI
+**Files:**
+- `supabase/migrations/347_vendor_purchase_orders.sql`
+- `apps/web/src/features/parts/lib/purchase-order-utils.ts`
+- `apps/web/src/features/parts/lib/purchase-order-utils.test.ts`
+- `apps/web/src/features/parts/pages/PurchaseOrdersPage.tsx`
+- `apps/web/src/features/parts/pages/PurchaseOrderDetailPage.tsx`
+- `apps/web/src/features/parts/components/PartsSubNav.tsx`
+- `apps/web/src/App.tsx`
+- `package.json`
+**Verification:** `bun test apps/web/src/features/parts/lib/purchase-order-utils.test.ts`, file-level TypeScript diagnostics on `PurchaseOrdersPage.tsx`, `PurchaseOrderDetailPage.tsx`, and `App.tsx`, `bun run build`, `bun run pressure:parts`, `KB_INTEGRATION_REQUIRED=true bun run test:kb-integration`, and `bun run segment:gates --segment phase3-purchase-orders --ui` all passed. Gate report: `test-results/agent-gates/20260422T005137Z-phase3-purchase-orders.json`.
+**Deployment:** `supabase db push` applied `347_vendor_purchase_orders.sql`; `supabase migration list` confirms remote migration `347`.
+**Parity status update:** GAP → BUILT

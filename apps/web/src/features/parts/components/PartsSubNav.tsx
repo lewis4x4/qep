@@ -17,6 +17,7 @@ const PRIMARY_LINKS = [
   { to: "/parts", label: "Command", icon: LayoutDashboard, end: true },
   { to: "/parts/catalog", label: "Catalog", icon: BookOpen, end: false },
   { to: "/parts/orders", label: "Orders", icon: ShoppingCart, end: false },
+  { to: "/parts/purchase-orders", label: "Purchase POs", icon: ShoppingCart, end: false },
   { to: "/parts/orders/new", label: "New order", icon: PlusCircle, end: false },
   { to: "/parts/fulfillment", label: "Fulfillment", icon: Package, end: false },
   { to: "/parts/inventory", label: "Inventory", icon: Boxes, end: false },

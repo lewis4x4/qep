@@ -419,6 +419,12 @@ const PartsOrderDetailPage = lazy(() =>
     default: m.PartsOrderDetailPage,
   }))
 );
+const PurchaseOrdersPage = lazy(() =>
+  import("./features/parts/pages/PurchaseOrdersPage").then((m) => ({ default: m.PurchaseOrdersPage }))
+);
+const PurchaseOrderDetailPage = lazy(() =>
+  import("./features/parts/pages/PurchaseOrderDetailPage").then((m) => ({ default: m.PurchaseOrderDetailPage }))
+);
 const PartsFulfillmentPage = lazy(() =>
   import("./features/parts/pages/PartsFulfillmentPage").then((m) => ({
     default: m.PartsFulfillmentPage,
@@ -1495,6 +1501,30 @@ function App() {
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <Suspense fallback={<RouteFallback />}>
                       <PartsCatalogPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/purchase-orders/:id"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PurchaseOrderDetailPage />
+                    </Suspense>
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/parts/purchase-orders"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <Suspense fallback={<RouteFallback />}>
+                      <PurchaseOrdersPage />
                     </Suspense>
                   ) : (
                     <Navigate to="/dashboard" replace />
