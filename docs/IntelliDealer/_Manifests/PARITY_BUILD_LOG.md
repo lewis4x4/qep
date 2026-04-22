@@ -265,7 +265,7 @@
 **Gap description:** Phase 9 dashboard shipped as registry-only — no place to store shared passwords, API keys, or MFA seeds. Operators still had to context-switch to 1Password before every portal launch.
 **Change type:** Schema + Edge Function + Crypto + Admin UI
 **Files:**
-- `supabase/migrations/355_oem_portal_credential_vault.sql`
+- `supabase/migrations/358_oem_portal_credential_vault.sql` (renumbered from 355 because 355–357 were already claimed by Data Miner + HubSpot/IntelliDealer decommission slices on the same Supabase project)
 - `supabase/functions/oem-portal-vault/index.ts`
 - `supabase/functions/oem-portal-vault/rate-limit.test.ts`
 - `supabase/functions/_shared/vault-crypto.ts`

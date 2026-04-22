@@ -60,7 +60,7 @@ it; a live TOTP ring generates 2FA codes server-side.
 ## Files Changed
 
 New:
-- `supabase/migrations/355_oem_portal_credential_vault.sql`
+- `supabase/migrations/358_oem_portal_credential_vault.sql` (renumbered from 355 at commit time because the linked Supabase project already had 355–357 applied from the Data Miner + HubSpot/IntelliDealer decommission slices)
 - `supabase/functions/oem-portal-vault/index.ts`
 - `supabase/functions/oem-portal-vault/rate-limit.test.ts`
 - `supabase/functions/_shared/vault-crypto.ts`
@@ -93,7 +93,7 @@ Modified:
 
 ## Verification Run
 
-- `bun run migrations:check` — 353 files, sequence 001..355 ✅
+- `bun run migrations:check` — sequence 001..360 with 355–357 (Data Miner / HubSpot decommission / QB backfill) and 359 (quote-builder commercial terms) and 360 (voice-capture trigger hardening) applied from sibling slices ✅
 - `bun run audit:edges` — 168 functions, 82 registered, vault function
   picked up; 16 pre-existing warnings unchanged.
 - `deno test supabase/functions/_shared/vault-crypto.test.ts` — 14/14 pass
@@ -117,7 +117,7 @@ Modified:
 2. Set it on the Supabase project:
    Dashboard → Edge Functions → `oem-portal-vault` → Secrets →
    `OEM_VAULT_ENCRYPTION_KEY`.
-3. `supabase db push` (applies migration 355).
+3. `supabase db push` (applies migration 358).
 4. `supabase functions deploy oem-portal-vault`.
 5. Verify: as admin, add a test shared_login credential and reveal it —
    audit rows `created` then `revealed` should appear in
