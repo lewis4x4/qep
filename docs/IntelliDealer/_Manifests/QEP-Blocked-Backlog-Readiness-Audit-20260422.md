@@ -71,6 +71,8 @@
 - pass/fail feedback capture from service staff
 - manual execution pack prepared:
   - `QEP-Phase-4-Service-Mobile-UAT-Checklist-20260422.md`
+  - `QEP-Phase-4-Service-Mobile-UAT-Operator-Guide-20260422.md`
+  - `QEP-Phase-4-Service-Mobile-UAT-Result-Template-20260422.md`
 
 ## Row 16 — OEM portal dashboard configuration
 
