@@ -126,5 +126,18 @@ export async function generateInvoiceForServiceJob(
     if (liErr) console.warn("customer_invoice_line_items:", liErr.message);
   }
 
+  await supabase.from("quickbooks_gl_sync_jobs").upsert({
+    workspace_id: job.workspace_id as string,
+    invoice_id: invoiceId,
+    source_type: "customer_invoice",
+    posting_mode: "journal_entry",
+    status: "queued",
+  }, { onConflict: "invoice_id" });
+
+  await supabase
+    .from("customer_invoices")
+    .update({ quickbooks_gl_status: "queued", quickbooks_gl_last_error: null })
+    .eq("id", invoiceId);
+
   return { invoice_id: invoiceId };
 }

@@ -188,3 +188,24 @@
 **Verification:** file-level TypeScript diagnostics on `ServiceLaborPricingPage.tsx`, `ServiceQuoteBuilder.tsx`, and `App.tsx`, `deno test supabase/functions/_shared/service-labor-pricing.test.ts --allow-read`, `deno check supabase/functions/service-quote-engine/index.ts supabase/functions/_shared/service-labor-pricing.ts`, `bun test apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceLaborPricingPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-labor-pricing --ui` all passed. Gate report: `test-results/agent-gates/20260422T120227Z-phase4-labor-pricing.json`.
 **Deployment:** `supabase db push` applied `351_service_labor_pricing.sql`; remote migration verification completed.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — QuickBooks GL Posting (Phase-8_Financial-Operations) — BUILT / CREDENTIALS PENDING
+**Gap row:** `4`
+**Gap description:** QuickBooks GL posting not wired. Invoices don't sync to QB.
+**Change type:** Schema + Edge + Admin UI
+**Files:**
+- `supabase/migrations/352_quickbooks_gl_sync.sql`
+- `supabase/functions/_shared/quickbooks-gl.ts`
+- `supabase/functions/_shared/quickbooks-gl.test.ts`
+- `supabase/functions/quickbooks-gl-sync/index.ts`
+- `supabase/functions/_shared/service-invoice.ts`
+- `apps/web/src/features/admin/pages/QuickBooksGlSyncPage.tsx`
+- `apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceQuoteBuilder.tsx`
+- `apps/web/src/App.tsx`
+- `apps/web/src/components/AdminPage.tsx`
+- `supabase/config.toml`
+**Verification:** file-level TypeScript diagnostics on `QuickBooksGlSyncPage.tsx`, `ServiceQuoteBuilder.tsx`, and `App.tsx`, `deno test supabase/functions/_shared/quickbooks-gl.test.ts supabase/functions/_shared/service-labor-pricing.test.ts --allow-read --allow-env`, `deno check supabase/functions/quickbooks-gl-sync/index.ts supabase/functions/_shared/quickbooks-gl.ts supabase/functions/service-quote-engine/index.ts`, `bun test apps/web/src/features/service/lib/service-labor-pricing-utils.test.ts apps/web/src/features/admin/pages/__tests__/QuickBooksGlSyncPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase8-quickbooks-gl --ui` all passed. Gate report: `test-results/agent-gates/20260422T125224Z-phase8-quickbooks-gl.json`.
+**Deployment:** `supabase db push` applied `352_quickbooks_gl_sync.sql`; `supabase functions deploy quickbooks-gl-sync` succeeded; remote function list shows `quickbooks-gl-sync` active version `1`.
+**Remaining manual acceptance:** live QuickBooks credentials, realm id, and account ids must be supplied before the sync can actually post transactions.
+**Parity status update:** GAP → BUILT (repo-side) / CREDENTIALS PENDING

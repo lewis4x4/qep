@@ -1311,12 +1311,13 @@ export function AdminPage({ userRole, userId }: AdminPageProps) {
               Manage follow-up automation, activity templates, and data quality tools.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
-              {[
-                { label: "Sequences", description: "Automated follow-up sequences that keep deals moving.", href: "/admin/sequences", icon: NotebookPen },
-                { label: "Templates", description: "Activity and email templates for reps.", href: "/admin/templates", icon: NotebookPen },
-                { label: "Duplicates", description: "Find and merge duplicate contact records.", href: "/admin/duplicates", icon: GitMerge },
-                { label: "Branches", description: "Store locations, contacts, managers, hours, and document branding.", href: "/admin/branches", icon: Building2 },
-              ].map((tool) => (
+                {[
+                  { label: "Sequences", description: "Automated follow-up sequences that keep deals moving.", href: "/admin/sequences", icon: NotebookPen },
+                  { label: "Templates", description: "Activity and email templates for reps.", href: "/admin/templates", icon: NotebookPen },
+                  { label: "Duplicates", description: "Find and merge duplicate contact records.", href: "/admin/duplicates", icon: GitMerge },
+                  { label: "Branches", description: "Store locations, contacts, managers, hours, and document branding.", href: "/admin/branches", icon: Building2 },
+                  { label: "QuickBooks GL", description: "Configure QuickBooks credentials and sync invoice postings.", href: "/admin/quickbooks-gl", icon: Building2 },
+                ].map((tool) => (
                 <Link key={tool.href} to={tool.href} className="group">
                   <Card className="flex items-center gap-4 border-border px-5 py-4 transition-shadow duration-150 group-hover:shadow-md min-h-[72px]">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

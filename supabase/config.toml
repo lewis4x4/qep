@@ -278,6 +278,9 @@ verify_jwt = false
 [functions.quote-incentive-resolver]
 verify_jwt = false
 
+[functions.quickbooks-gl-sync]
+verify_jwt = false
+
 [functions.tax-calculator]
 verify_jwt = false
 

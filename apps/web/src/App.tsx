@@ -217,6 +217,9 @@ const FleetMapPage = lazy(() =>
 const DataQualityPage = lazy(() =>
   import("./features/admin/pages/DataQualityPage").then((m) => ({ default: m.DataQualityPage }))
 );
+const QuickBooksGlSyncPage = lazy(() =>
+  import("./features/admin/pages/QuickBooksGlSyncPage").then((m) => ({ default: m.QuickBooksGlSyncPage }))
+);
 const ExceptionInboxPage = lazy(() =>
   import("./features/admin/pages/ExceptionInboxPage").then((m) => ({ default: m.ExceptionInboxPage }))
 );
@@ -1499,6 +1502,16 @@ function App() {
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <FleetMapPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/admin/quickbooks-gl"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <QuickBooksGlSyncPage />
                   ) : (
                     <Navigate to="/dashboard" replace />
                   )
