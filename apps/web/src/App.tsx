@@ -106,6 +106,9 @@ const ServiceAgreementsPage = lazy(() =>
 const ServiceAgreementDetailPage = lazy(() =>
   import("./features/service/pages/ServiceAgreementDetailPage").then((m) => ({ default: m.ServiceAgreementDetailPage }))
 );
+const ServiceWorkInProcessPage = lazy(() =>
+  import("./features/service/pages/ServiceWorkInProcessPage").then((m) => ({ default: m.ServiceWorkInProcessPage }))
+);
 const ServiceTechnicianMobilePage = lazy(() =>
   import("./features/service/pages/ServiceTechnicianMobilePage").then((m) => ({ default: m.ServiceTechnicianMobilePage }))
 );
@@ -1086,6 +1089,16 @@ function App() {
                 }
               />
               {/* Service Engine routes */}
+              <Route
+                path="/service/wip"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <ServiceWorkInProcessPage />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
               <Route
                 path="/service/agreements/:agreementId"
                 element={

@@ -150,3 +150,20 @@
 **Verification:** file-level TypeScript diagnostics on `ServiceAgreementsPage.tsx`, `ServiceAgreementDetailPage.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/service-agreement-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceAgreementsPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-service-agreements --ui` all passed. Gate report: `test-results/agent-gates/20260422T020210Z-phase4-service-agreements.json`.
 **Deployment:** `supabase db push` applied `349_service_agreements.sql`; `supabase migration list` confirms remote migration `349`.
 **Parity status update:** GAP → BUILT
+
+## 2026-04-22 — Work In Process Tracking (Phase-4_Service) — CLOSED
+**Gap row:** `19`
+**Gap description:** Work in Process tracking — confirm service_stage_timing covers all states.
+**Change type:** Validation + UI
+**Files:**
+- `supabase/migrations/350_service_work_in_process.sql`
+- `apps/web/src/features/service/lib/service-wip-utils.ts`
+- `apps/web/src/features/service/lib/service-wip-utils.test.ts`
+- `apps/web/src/features/service/pages/ServiceWorkInProcessPage.tsx`
+- `apps/web/src/features/service/pages/__tests__/ServiceWorkInProcessPage.integration.test.tsx`
+- `apps/web/src/features/service/components/ServiceSubNav.tsx`
+- `apps/web/src/features/service/pages/ServiceCommandCenterPage.tsx`
+- `apps/web/src/App.tsx`
+**Verification:** file-level TypeScript diagnostics on `ServiceWorkInProcessPage.tsx`, `ServiceSubNav.tsx`, and `App.tsx`, `bun test apps/web/src/features/service/lib/service-wip-utils.test.ts apps/web/src/features/service/pages/__tests__/ServiceWorkInProcessPage.integration.test.tsx`, `bun run build`, and `bun run segment:gates --segment phase4-work-in-process --ui` all passed. Gate report: `test-results/agent-gates/20260422T025038Z-phase4-work-in-process.json`.
+**Deployment:** `supabase db push` applied `350_service_work_in_process.sql`; `supabase migration list` confirms remote migration `350`.
+**Parity status update:** GAP → BUILT
