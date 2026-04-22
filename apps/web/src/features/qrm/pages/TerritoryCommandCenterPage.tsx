@@ -3,8 +3,8 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUpRight, Clock3, MapPin, Route, UsersRound } from "lucide-react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { computeTerritoryVisitPriorities } from "../lib/territory-command";
@@ -206,8 +206,8 @@ export function TerritoryCommandCenterPage() {
   if (territoryQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -215,9 +215,9 @@ export function TerritoryCommandCenterPage() {
   if (territoryQuery.isError || !territoryQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This territory command surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -243,31 +243,59 @@ export function TerritoryCommandCenterPage() {
       <QrmSubNav />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <SummaryCard icon={UsersRound} label="Contacts" value={String(computed.summary.contactCount)} detail="Contacts assigned to this territory" />
-        <SummaryCard icon={MapPin} label="Accounts" value={String(computed.summary.accountCount)} detail="Companies represented in the territory" />
-        <SummaryCard icon={Route} label="Open deals" value={String(computed.summary.openDealCount)} detail="Open commercial opportunities in-territory" />
-        <SummaryCard icon={Clock3} label="High-priority visits" value={String(computed.summary.highPriorityCount)} detail={`${computed.summary.overdueFollowUps} overdue follow-ups need routing`} />
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <UsersRound className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Contacts</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{String(computed.summary.contactCount)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Contacts assigned to this territory</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Accounts</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{String(computed.summary.accountCount)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Companies represented in the territory</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Route className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Open deals</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{String(computed.summary.openDealCount)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Open commercial opportunities in-territory</p>
+        </DeckSurface>
+        <DeckSurface className="p-4">
+          <div className="flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-qep-orange" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">High-priority visits</p>
+          </div>
+          <p className="mt-3 text-3xl font-semibold text-foreground">{String(computed.summary.highPriorityCount)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{computed.summary.overdueFollowUps} overdue follow-ups need routing</p>
+        </DeckSurface>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Territory routing</h2>
           <div className="mt-3 space-y-2 text-sm">
             <p className="text-muted-foreground">Assigned rep: {repNameQuery.data ?? "Unassigned"}</p>
             <p className="text-muted-foreground">Territory contacts: {computed.summary.contactCount}</p>
             <p className="text-muted-foreground">Open deals: {computed.summary.openDealCount}</p>
           </div>
-        </Card>
+        </DeckSurface>
 
-        <Card className="p-4">
+        <DeckSurface className="p-4">
           <h2 className="text-sm font-semibold text-foreground">Priority logic</h2>
           <p className="mt-2 text-xs text-muted-foreground">
             Visit priority weights open pipeline, overdue follow-up pressure, closing-soon deals, and stale touch history for accounts inside this territory.
           </p>
-        </Card>
+        </DeckSurface>
       </div>
 
-      <Card className="p-4">
+      <DeckSurface className="p-4">
         <h2 className="text-sm font-semibold text-foreground">Visit priority</h2>
         <Table className="mt-4">
           <TableHeader>
@@ -305,30 +333,7 @@ export function TerritoryCommandCenterPage() {
             ))}
           </TableBody>
         </Table>
-      </Card>
+      </DeckSurface>
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-3xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }

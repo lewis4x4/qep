@@ -37,7 +37,7 @@ bun run test:vendor-escalation-resend
 
 ## Gate
 
-Run `bun run segment:gates --segment "<id>"` per `AGENTS.md` after deployments; attach artifacts to the segment ticket. The orchestrator includes **`pressure:parts`**, **`bun run build`** (root + `apps/web`), and combined Deno tests (`service-engine-smoke` + `vendor-inbound-contract` + `vendor-escalation-resend`), matching the **CI** workflow’s static checks plus full build.
+Run `bun run segment:gates --segment "<id>"` per `AGENTS.md` after deployments; attach artifacts to the segment ticket. The orchestrator includes **`migrations:check`**, **`pressure:parts`**, **`audit:edges`**, the **`apps/web`** production build, and combined Deno tests (`service-engine-smoke` + `vendor-inbound-contract` + `vendor-escalation-resend`). It preserves the same effective CI coverage without nesting a second web build inside a root `bun run build`.
 
 ## Stakeholder sign-off
 

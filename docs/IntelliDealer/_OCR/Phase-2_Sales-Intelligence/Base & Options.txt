@@ -1,0 +1,155 @@
+Base & Options                                                                             4/21/26, 3:31 PM
+
+
+
+
+                                                                   Search                      Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Equipment Product Support > Base & Options:
+          Listing
+
+
+          Base & Options
+          Use the Base & Options screen to add, change, copy, display or
+                                                                               Security: 803
+          print equipment base and option codes.
+                                                                               - Equipment
+          To open the Base & Options screen, click Product Support >           Base and
+          Equipment > Base & Options.                                          Options
+
+                                                                               Data Source:
+                 Base & Options screen                                         BASE
+
+                                                                               Revision:
+                                                                               2025.04
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSBO001.htm                                Page 1 of 4
+Base & Options                                                                      4/21/26, 3:31 PM
+
+
+
+
+          The sorting options on the Base & Options screen are:
+
+           Sort by
+           Field                   Description
+            Base                    Sort the search results by base number.
+
+            Make/Model Sort the search results by make and model.
+
+            Class                   Sort the search results by class.
+
+
+          The search fields on the Base & Options screen are:
+
+           Field                    Description
+            Select Base              Search for base & option codes by entering a
+            Number                   base number.
+
+            Select Make Search for base & option codes by entering a
+                        make.
+
+            Select                   Search for base & option codes by entering a
+            Model                    model.
+
+            Select Class Search for base & option codes by entering a
+                         class.
+
+            Include                  If selected, includes inactive base & option
+            Inactive                 codes within the search results.
+
+https://help.intellidealer.com/intellidealer/Content/PSBO001.htm                        Page 2 of 4
+Base & Options                                                                        4/21/26, 3:31 PM
+
+
+
+
+          The fields on the Base & Options screen are:
+
+           Field                   Description
+            Base                    The base number code for the equipment unit.
+            Number
+
+            Make/Model The manufacturer of the unit or machine.
+
+                                    The model number on the unit or machine.
+
+            Description A brief description of the unit associated with
+                        this base code.
+
+            Price                   Retail price for the base code. For new
+                                    equipment the price is automatically loaded on
+                                    the base code.
+
+            Class                   This field is used to categorize the equipment
+                                    base & options.
+
+            Added                   The date the base number was first added to the
+                                    system.
+
+            Modified                The date the base number was last modified.
+
+
+          Move the cursor over a Base Number and select Edit from the
+          pop-up menu to open the Base Profile screen.
+
+          Move the cursor over a Base Number and select Copy from the
+          pop-up menu to open the Copy Base Number screen, allowing
+          you to copy a Base & Options code. If you copy a Base number
+          with associated options codes, only active options codes are
+          copied to the new Base number.
+
+          Click the Need to create a new base number? Click here to
+          add link to add a base number.
+
+          Click the Perform a mass increase/decrease link to open the
+          Update Base/Options screen, to perform a mass price
+          increase/decrease.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSBO001.htm                          Page 3 of 4
+Base & Options                                                                                               4/21/26, 3:31 PM
+
+
+
+
+          Click the Vermeer Base and Options Import link to open the
+          Vermeer Base and Options screen, to import Vermeer base and
+          options codes using a price book supplied by Vermeer.
+
+          Deprecated. Click the Bobcat Base and Options Import link to
+          open the Bobcat Base and Options Import screen, to update
+          base and options pricing from Bobcat.
+
+          Click on the Perform Equipment Base/Options Update link to
+          open a Perform Equiment Base/Options Update prompt.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSBO001.htm                                                 Page 4 of 4
+

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { join, relative } from "node:path";
+import { spawn } from "node:child_process";
 import { loadLocalEnv } from "../_shared/local-env.mjs";
 
 function parseArgs(argv) {
@@ -57,25 +57,87 @@ function tsForFilename(date = new Date()) {
   ].join("");
 }
 
-function runCommand(command, cwd) {
-  const startedAt = Date.now();
-  const child = spawnSync(command, {
-    cwd,
-    env: process.env,
-    shell: true,
-    encoding: "utf8",
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  const durationMs = Date.now() - startedAt;
-  const combinedOutput = [child.stdout ?? "", child.stderr ?? ""].join("\n").trim();
+const REPORT_OUTPUT_MAX = 12000;
+const HEARTBEAT_MS = Number.parseInt(process.env.SEGMENT_GATE_HEARTBEAT_MS ?? "15000", 10);
 
-  return {
-    exitCode: child.status ?? 1,
-    durationMs,
-    output: combinedOutput.length > 12000
-      ? `${combinedOutput.slice(0, 12000)}\n...truncated...`
-      : combinedOutput,
-  };
+function truncateOutput(output) {
+  const trimmed = output.trim();
+  if (trimmed.length <= REPORT_OUTPUT_MAX) {
+    return trimmed;
+  }
+
+  const head = trimmed.slice(0, REPORT_OUTPUT_MAX / 2).trimEnd();
+  const tail = trimmed.slice(-REPORT_OUTPUT_MAX / 2).trimStart();
+  return `${head}\n...truncated...\n${tail}`;
+}
+
+function logCheckStart({ id, command, cwd, repoRoot }) {
+  const displayCwd = relative(repoRoot, cwd) || ".";
+  console.log(`\n>>> ${id}`);
+  console.log(`cwd: ${displayCwd}`);
+  console.log(`cmd: ${command}`);
+}
+
+async function runCommand({ id, command, cwd, repoRoot }) {
+  logCheckStart({ id, command, cwd, repoRoot });
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const child = spawn(command, {
+      cwd,
+      env: process.env,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let lastOutputAt = startedAt;
+    let settled = false;
+
+    const finish = (exitCode, errorMessage = "") => {
+      if (settled) return;
+      settled = true;
+      clearInterval(heartbeat);
+
+      const durationMs = Date.now() - startedAt;
+      const combinedOutput = [stdout, stderr, errorMessage].filter(Boolean).join("\n");
+
+      console.log(`<<< ${id} ${exitCode === 0 ? "pass" : "fail"} (${durationMs}ms)`);
+
+      resolve({
+        exitCode,
+        durationMs,
+        output: truncateOutput(combinedOutput),
+      });
+    };
+
+    const heartbeat = setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const quietSeconds = Math.floor((Date.now() - lastOutputAt) / 1000);
+      console.log(`[${id}] still running (${elapsedSeconds}s elapsed, ${quietSeconds}s since last output)`);
+    }, HEARTBEAT_MS);
+
+    const streamChunk = (streamName, chunk) => {
+      const text = chunk.toString();
+      if (!text) return;
+
+      lastOutputAt = Date.now();
+      if (streamName === "stdout") {
+        stdout += text;
+        process.stdout.write(text);
+        return;
+      }
+
+      stderr += text;
+      process.stderr.write(text);
+    };
+
+    child.stdout?.on("data", (chunk) => streamChunk("stdout", chunk));
+    child.stderr?.on("data", (chunk) => streamChunk("stderr", chunk));
+    child.on("error", (error) => finish(1, `spawn error: ${error.message}`));
+    child.on("close", (code) => finish(code ?? 1));
+  });
 }
 
 function summarize(check) {
@@ -93,7 +155,7 @@ mkdirSync(reportDir, { recursive: true });
 
 const checks = [];
 
-function pushCheck({ id, command, required = true, enabled = true, cwd = repoRoot }) {
+async function pushCheck({ id, command, required = true, enabled = true, cwd = repoRoot }) {
   if (!enabled) {
     checks.push({
       id,
@@ -106,7 +168,7 @@ function pushCheck({ id, command, required = true, enabled = true, cwd = repoRoo
     return;
   }
 
-  const result = runCommand(command, cwd);
+  const result = await runCommand({ id, command, cwd, repoRoot });
   checks.push({
     id,
     status: result.exitCode === 0 ? "pass" : "fail",
@@ -117,64 +179,64 @@ function pushCheck({ id, command, required = true, enabled = true, cwd = repoRoo
   });
 }
 
-pushCheck({
+await pushCheck({
   id: "qa.migration-sequence",
   command: "bun run migrations:check",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.parts-pressure-matrix",
   command: "bun run pressure:parts",
   required: true,
 });
 
-pushCheck({
-  id: "qa.root-build",
-  command: "bun run build",
+await pushCheck({
+  id: "qa.edge-auth-audit",
+  command: "bun run audit:edges",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.web-build",
   command: "bun run build",
   cwd: join(repoRoot, "apps", "web"),
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.service-engine-deno-tests",
   command:
     "deno test supabase/functions/_shared/service-engine-smoke.test.ts supabase/functions/_shared/vendor-inbound-contract.test.ts supabase/functions/_shared/vendor-escalation-resend.test.ts --allow-read --allow-env",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.kb-retrieval-eval",
   command: "KB_EVAL_REQUIRED=true node ./scripts/kb-eval/run-eval.mjs",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.kb-integration-tests",
   command: "KB_INTEGRATION_REQUIRED=true bun run test:kb-integration",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "qa.kb-workspace-isolation",
   command: "KB_ISOLATION_REQUIRED=true node ./scripts/kb-eval/workspace-isolation.mjs",
   required: true,
 });
 
-pushCheck({
+await pushCheck({
   id: "chaos.stress-suite",
   command: "bun run stress:test",
   required: options.chaos,
   enabled: options.chaos,
 });
 
-pushCheck({
+await pushCheck({
   id: "cdo.design-review",
   command: "bun run design:review",
   required: options.ui && !options.designAdvisory,

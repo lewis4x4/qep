@@ -1,0 +1,225 @@
+Real-time Billing Queue                                                                                     4/21/26, 3:29 PM
+
+
+
+
+                                                                             Search                              Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Financial
+           Management > Real-time Billing Queue
+
+
+           Real-time Billing Queue
+           The Real-time Billing Queue lists the Real-time Billings that
+                                                                                                Security: see
+           have been submitted. For details on a specific billing, click a
+                                                                                                Security
+           Reference Number and the Data Portal screen opens showing
+                                                                                                Prerequisites
+           the reports for that billing. Note that only successful billings are
+           linked. Unsuccessful billings have an error message listed.                          Data Source:
+                                                                                                BILLINGSCH
+           There is a trigger to purge the billing queue called Real-Time
+           Billing Queue - Purge Completed/Failed Weekly - Trigger. By                          Revision:
+           default it is configured to run weekly to purge any Completed or                     2026.01
+           Failed jobs that are older than one month. You can modify the
+           default by navigating to Administration > Settings > Batch
+           Jobs then searching for the trigger and opening it for edit. See
+           Job Scheduler: Batch Jobs for details.
+
+
+                 The job details for the Billing Queue Purge trigger
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm                    Page 1 of 6
+Real-time Billing Queue                                                                         4/21/26, 3:29 PM
+
+
+
+
+           To view the Real-time Billing Queue, navigate to Financial
+           Management > Real-time Billing Queue.
+
+           Topics in this section are:
+
+                    Security Prerequisites
+
+                    Screen Description
+
+                             Error Details
+
+
+           Security Prerequisites
+
+           You can enable real-time billing for a location, or for only a few
+           users at a time, allowing you to control the roll out of this feature
+           in your dealership. For instructions see Real-time Billing
+           System.
+
+
+           Screen Description
+
+           The search fields on the Real-time Billing Queue screen are:
+
+            Field                    Description
+
+            Reference                The unique number of the billing to search for.
+            Number
+
+            Location                 The location in which to search.
+
+            Type                     The type of billings to search for.
+
+            Status                   The status of billing.
+
+            From                     Search for billings from this submission date.
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm        Page 2 of 6
+Real-time Billing Queue                                                                         4/21/26, 3:29 PM
+
+
+
+            Submitted
+            Date
+
+            To                       Search for billings up to this submission date.
+            Submitted
+            Date
+
+            Show All                 Select this checkbox to include billings that
+            Attempted                were attempted but did were not successfully
+            Billings                 submitted.
+
+
+           The fields on the Real-time Billing Queue screen are:
+
+            Field                 Description
+            Reference             A number uniquely identifying the billing.
+            Number
+                                  For successfully processed invoices, this number
+                                  is a hyperlink that opens the Data Portal
+                                  displaying the related reports.
+
+                                  For Rental invoices, hover over the hyper link and
+                                  chose one of:
+                                            Edit Contract—opens the rental contract
+                                            Details tab so you can modify it.
+                                            View Billing Reports—opens the Data
+                                            Portal displaying the related reports.
+
+            Location              The location that originated the billing.
+
+            Type                  The type of billing.
+
+            Status                The status of the billing. Can be one of:
+                                            Pending—the billing is in the queue awaiting
+                                            processing.
+                                            Processing—the billing is currently
+                                            processing.
+                                            Failed—the billing failed. An error message
+                                            is displayed.
+                                            Completed—the billing completed
+                                            successfully. The reference number is a link
+                                            to the resulting reports.
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm        Page 3 of 6
+Real-time Billing Queue                                                                         4/21/26, 3:29 PM
+
+
+
+
+            Error                 Click the link to see the error description in full.
+                                  See Error Details.
+
+            Submitted The name of the user who submitted the billing.
+            By
+
+            Submitted The date and time the billing was submitted.
+            Date
+
+            Processing The date and time the job starts running from the
+            Start      queue.
+
+            Processing The date and time the job ends.
+            End
+
+            Billing               A user-selected date for when to bill the invoice.
+            Date
+
+            A/R Date              The current month end that is open.
+
+            Printer               The printer assigned to print the billing.
+
+            Invoice               The invoice printer assigned to print the billing.
+            Printer
+
+            Billing               The output of this billing, as determined at the
+            Output                time of billing the invoice.
+
+            Print                 The format of the print output.
+            Format                For details on the formats, Printing Parameters.
+
+
+           Error Details
+
+           Billing runs that generate an error are listed in the Real-time
+           Billing Queue list with an Error link.
+
+
+                 Location of the Error link
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm        Page 4 of 6
+Real-time Billing Queue                                                                         4/21/26, 3:29 PM
+
+
+
+
+           Click the link to display details for the error and the full stack
+           trace.
+
+
+                 The Real-time Billing Queue Error details screen
+
+
+
+
+           If, under the Error column, you see the message "No
+           Transactions Found", it simply means that there was nothing to
+           bill in the context of the run.
+
+
+
+           Did you find this helpful? Yes No
+
+
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm        Page 5 of 6
+Real-time Billing Queue                                                                                      4/21/26, 3:29 PM
+
+
+
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/financial.generalLedger.billingQueue.htm                     Page 6 of 6
+

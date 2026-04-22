@@ -1,0 +1,205 @@
+Accounts Receivable - Outstanding A/R                                                        4/21/26, 3:35 PM
+
+
+
+
+                                                                   Search                         Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Financial
+          Management > Accounts Receivable > A/R
+          Outstanding
+
+
+          Accounts Receivable: A/R Outstanding
+          The Account Receivable - Outstanding A/R screen allows you to
+                                                                                 Data
+          view accounts receivable outstanding in a graph or pie chart. To run
+                                                                                 Source: ARFile
+          reports on A/R Outstanding, see Running Accounts Receivable
+          Outstanding.                                                           Security
+                                                                                 Switch: 600 -
+          The Accounts Receivable - A/R Outstanding screen is available at
+                                                                                 Access A/R
+          these locations:
+                                                                                 Outstanding
+                   Financial Management > Accounts Receivable
+                                                                                 Revision:
+                   > A/R Outstanding
+                                                                                 2023.11
+                   Management Central > Financial > Accounts Receivable
+
+                   On the Sales Support Portal screen, click the View Detail
+                   icon next to Outstanding A/R.
+
+                   In the Product Support > Rental > Supervisor, click the A/R
+                   Status tab.
+
+                   When viewing this screen from the Rental Supervisor
+                   A/R Status tab, it only displays information about rental
+                   invoices that are still outstanding in the A/R system.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                                  Page 1 of 6
+Accounts Receivable - Outstanding A/R                                                4/21/26, 3:35 PM
+
+
+
+
+          Topics in this section are:
+
+                   Running Accounts Receivable Outstanding
+
+                   Screen Description
+
+
+          Running Accounts Receivable Outstanding
+
+              1. Navigate to the Accounts Receivable - A/R Outstanding screen.
+
+              2. Enter your search criteria in the appropriate fields and click Go
+                 >> to begin the search.
+
+                   The A/R outstanding data matching your search criteria is
+                   returned and the chart updated accordingly.
+
+
+                         Accounts Receivable - Outstanding A/R screen
+
+
+
+
+              3. Click the desired Total link to view the details of that aging
+                 period.
+
+                   The Accounts Receivable - Outstanding Details screen for
+                   the period appears and displays a customer listing from highest
+                   to lowest dollars outstanding.
+
+
+                         Accounts Receivable - Outstanding Details screen
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                          Page 2 of 6
+Accounts Receivable - Outstanding A/R                                               4/21/26, 3:35 PM
+
+
+
+
+              4. Click the customer Name to view a list of A/R invoices from this
+                 customer.
+
+                   The Outstanding Details screen appears with a list of vendor
+                   invoices.
+
+
+                         Outstanding Details screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                         Page 3 of 6
+Accounts Receivable - Outstanding A/R                                                       4/21/26, 3:35 PM
+
+
+
+
+              5. Click on the checkbox next to the invoice(s) you wish to print.
+                 or click Select All to select all the available invoices.
+
+              6. Click the Print button.
+
+                   The Print Invoice screen appears.
+
+              7. Enter a Printer or click the Search               icon to search for and
+                 select a printer from the list.
+
+              8. Click Print. Depending on the invoice number selected the
+                 following reports can be produced:
+
+                    SOINV               Parts Invoice
+
+                    WORKORD Work Order
+
+                    RENTINV             Rental Invoice
+
+                    EQINV               Equipment Invoice
+
+
+          Screen Description
+
+                Accounts Receivable - Outstanding A/R screen
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                                 Page 4 of 6
+Accounts Receivable - Outstanding A/R                                                      4/21/26, 3:35 PM
+
+
+
+
+          The search fields on the Accounts Receivable - Outstanding A/R
+          screen are:
+
+           Field                  Description
+           Select                 Search by the first digit of the invoice. First digits
+           Invoice 1st            configured for your location are displayed. (See
+           Digit                  System Settings-Location.) Use the user-defined
+                                  field to search for custom digits.
+
+           Select                 Search by customer number.
+           Customer
+           Number
+
+           Select                 Search by account number.
+           Account
+
+           Select      Search by the salesperson responsible for the
+           Responsible customer's account.
+           Salesperson
+
+           Select                 Search by the branch location of the invoice.
+           Location
+
+           Responsible Select the responsible location checkbox to search
+           Location    for outstanding A/R by the responsible location,
+                       which is the default location in the Customer's
+                       Profile.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                                Page 5 of 6
+Accounts Receivable - Outstanding A/R                                                                        4/21/26, 3:35 PM
+
+
+
+
+          Click on the Go >> link to initiate aging.
+
+          Click on a Total to open the Account Receivable - Outstanding
+          Details and view the details of that aging period. By clicking on one
+          of the Amount links you can drill down for more detailed information.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCFIAR1.htm                                                  Page 6 of 6
+

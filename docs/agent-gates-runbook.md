@@ -21,14 +21,18 @@ bun run segment:gates --segment "<segment-id>" [--ui] [--no-chaos] [--design-adv
 
 - Machine-readable report in `test-results/agent-gates/*.json`
 - Includes per-check command, status, duration, and captured output
+- Streams each check live and prints a heartbeat while quiet commands are still running
 
 ## Default Checks
 
 1. migration sequence validation
-2. root build
-3. web build
-4. chaos suite (unless disabled)
-5. design review (only when `--ui`)
+2. parts/service pressure matrix
+3. edge-function auth audit
+4. web production build
+5. service-engine + vendor contract Deno tests
+6. knowledge-base eval + integration + workspace isolation
+7. chaos suite (unless disabled)
+8. design review (only when `--ui`)
 
 ## Failure Semantics
 

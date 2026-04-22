@@ -1,0 +1,147 @@
+Billing Analysis                                                                              4/21/26, 3:33 PM
+
+
+
+
+                                                                   Search                          Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Product Support >
+           Service Product Support > Analysis Reports
+
+
+           Billing Analysis
+           Use the Billing Analysis screen to view billing analysis. The Billing
+                                                                                   Data
+           Analysis screen includes quote amounts, while Area Sales only
+                                                                                   Source: MNBDD
+           reflects actual sales recorded in the revenue accounts. For actual
+           revenue figures, see the Area Sales screen.                             Security: 602
+                                                                                   Financial
+           To open the Billing Analysis screen, navigate to Product Support
+                                                                                   Management -
+           > Service > Analysis Reports.
+                                                                                   General
+           Topics in this section are:                                             Ledger
+
+                   Viewing Analysis Reports                                        Revision: 2026.04
+
+                   Screen Description
+
+
+           Viewing Analysis Reports
+
+              1. Navigate to Product Support > Service > Analysis Reports.
+
+
+                         The Billing Analysis tab appears.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSAR001.htm                                   Page 1 of 3
+Billing Analysis                                                                          4/21/26, 3:33 PM
+
+
+
+
+              2. Enter your search criteria in the appropriate fields, then click
+                 Go >>.
+
+                   A list of technician statistics matching your search criteria are
+                   returned in the billing analysis list.
+
+              3. Click the Technician link to access a complete list of that
+                 technician's billed work orders.
+                 - or –
+                 Click the Totals button to view the accumulated statistics for
+                 all technicians.
+
+
+           Screen Description
+
+           The search fields on the Billing Analysis screen are:
+
+            Field              Description
+            Select by          Search for billing analysis by selecting a means to
+                               search by (e.g. technician, type or reason).
+
+            Subtotal           Select the means to subtotal the billing analysis
+            by                 search results by (e.g. technician, type, or reason).
+
+            Include            If selected, includes specific billing types within the
+            Type               billing analysis search results (e.g. all, internal,
+                               warranty, or customer).
+
+            Include            If selected, includes totals within the billing analysis
+            Totals             search.
+
+            Select     Search for billing analysis by entering a technician.
+            Technician
+
+            Select             Search for billing analysis by entering a location.
+
+https://help.intellidealer.com/intellidealer/Content/PSAR001.htm                               Page 2 of 3
+Billing Analysis                                                                                             4/21/26, 3:33 PM
+
+
+
+            Location
+
+            Select             Narrow down the billing analysis search results by
+            Date               selecting a billing run date range.
+            Range
+
+
+           The fields on the Billing Analysis screen are:
+
+            Field              Description
+            Technician The name of the technician.
+
+            Work               The number of work orders the technician has worked
+            Orders             on.
+
+            Segments The number of segments associated with the selected
+                     technician.
+
+            Parts              The total amount (in dollars) of parts sold on the work
+                               orders the selected technician worked on.
+
+            Labor              The total amount of labor hours charged to the work
+                               orders the selected technician worked on.
+
+            Other              Any other miscellaneous charges associated with the
+                               work orders worked on by the selected technician.
+
+            Total              The total amount of charges for work orders worked
+                               on by the selected technician.
+
+
+           Click on a Technician to see a breakdown of the technician's
+           assigned work orders.
+
+           Click the Total button to open the Totals screen, which displays
+           totals of the fields that appear on the Billing Analysis screen.
+
+
+
+           Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSAR001.htm                                                  Page 3 of 3
+

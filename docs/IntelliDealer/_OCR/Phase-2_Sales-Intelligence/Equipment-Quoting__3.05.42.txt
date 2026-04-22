@@ -1,0 +1,133 @@
+  
+    
+    
+     
+
+  
+        
+
+         
+
+@
+
+> Customer Care > CRM > 01/01/01 - LAKECITY @
+
+6 2
+
+Customer Reports
+
+IntelliDealer
+
+wk
+“by VitalEdge VitalEdge \>
+
+Menu Search
+
+ 
+
+ 
+
+ 
+
+    
+   
+   
+
+ 
+
+ 
+
+ 
+
+Customer Reports
+
+. . PI lect rt :
+Financial Management lease select a report type:
+
+Customer Master Summary
+
+Customer Care
+
+Product Support
+Customer Master Summary
+
+ 
+
+ 
+
+ 
+
+ 
+
+Management Central >
+
+ 
+
+ 
+
+Support > Selection Criteria
+Description
+
+ 
+   
+ 
+   
+   
+
+ 
+
+Field File Operator
+
+*** Please add selection criteria ***
+
+   
+
+ 
+
+Quick Links >
+Click here to add selection criteria
+
+      
+ 
+   
+
+ 
+
+ID InspectionPlus Run —_ Load Saved Query _— Clear Select Close
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+pfwf5066.cdkglobal-id.net
+
+@
+
+ 
+
+Selection Criteria
+
+ 
+
+Group: A ¢ Field: | PY Operator: Equal To e Value:
+
+ 
+
+ 
+
+ 
+
+ 
+
+Save Save / Exit Close
+
+ 
+
+ 
+

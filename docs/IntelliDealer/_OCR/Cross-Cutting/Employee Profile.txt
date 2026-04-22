@@ -1,0 +1,137 @@
+Employee Profile                                                                                      4/21/26, 3:29 PM
+
+
+
+
+                                                                   Search                                 Print
+
+
+
+
+           Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+           You are here: IntelliDealer Menus > Financial
+           Management > Payroll > Employee Profile: Listing
+
+
+           Employee Profile
+           You can use the Employee Profile screen to add, change, and
+                                                                                          Data
+           display employee information.
+                                                                                          Source: EMPLOYEE
+           To access the Employee Profile screen, navigate to Financial
+                                                                                          Security: 604
+           Management > Payroll > Employee Profile.
+                                                                                          - Payroll
+           The sorting options on the Employee Profile screen are:
+                                                                                          Learning
+            Sort by                                                                       Resources:
+                                                                                          Setting up an
+            Field                             Description
+                                                                                          Employee
+            Employee                          Sort the search results by employee         Profile
+            Number                            number.
+                                                                                          Revision:
+            Name                              Sort the search results by employee name.   2024.10
+
+           The search fields on the Employee Profile screen are:
+
+            Field                        Description
+
+            Select                       Search for an employee by entering an
+            Employee                     employee number.
+
+https://help.intellidealer.com/intellidealer/Content/IDPAY01.htm                                           Page 1 of 3
+Employee Profile                                                                       4/21/26, 3:29 PM
+
+
+
+            Number
+
+            Select Class                 Search for an employee by entering an
+                                         employee class code.
+
+            Select Profit                Search for an employee by entering a profit
+            Center                       center.
+
+            Include                      If selected, includes terminated employee
+            Terminated                   profiles within the search results.
+
+            Select Name                  Search for an employee by entering an
+                                         employee name.
+
+            Select                       Search for an employee by entering an
+            Category                     employee category.
+
+            Select Pay                   Search for an employee by entering an
+            Type                         employee pay type.
+
+
+           The fields on the Employee Profile screen are:
+
+            Field               Description
+            Employee The employee number. The employee number can
+            Number be up to five digits long consisting of alphanumeric
+                     or trailing blank characters.
+
+            Name                The name of the employee.
+
+            Class               The class of the employee. This field determines
+                                the G/L expense account which the employee's
+                                wages are debited. Valid class codes are set up on
+                                the Classes screen.
+
+            Category A three character user-defined employee category.
+
+            Profit              The profit center or department where the
+            Center              employee's wages are charged.
+
+            Pay Type The employee's pay type.
+
+
+           The available Profit Center Departments are:
+
+            0        Balance Sheet
+https://help.intellidealer.com/intellidealer/Content/IDPAY01.htm                            Page 2 of 3
+Employee Profile                                                                                              4/21/26, 3:29 PM
+
+
+
+
+            1        Administration
+
+            2        Equipment Sales
+
+            3        Parts
+
+            4        Service
+
+            5        Rental
+
+            6-9 User defined departments
+
+
+           Click on an Employee Number to open the Employee Profile
+           tab.
+
+           Select the Click here to add an employee link to add a new
+           employee to the system.
+
+
+
+           Did you find this helpful? Yes No
+
+             For help with IntelliDealer contact support at: 1-855-876-2586.
+             To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+             emphasys.com
+
+             © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/IDPAY01.htm                                                   Page 3 of 3
+

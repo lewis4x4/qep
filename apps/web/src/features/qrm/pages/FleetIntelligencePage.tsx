@@ -1,55 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowUpRight,
-  Clock3,
-  PackagePlus,
-  Radar,
-  Timer,
-  Wrench,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, Clock3, PackagePlus, Radar, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
-import { fetchAccount360 } from "../lib/account-360-api";
-import {
-  buildAccountCommandHref,
-  buildAccountFleetIntelligenceHref,
-  buildAccountGenomeHref,
-  buildAccountOperatingProfileHref,
-  buildAccountRelationshipMapHref,
-} from "../lib/account-command";
-import { buildFleetIntelligenceBoard } from "../lib/fleet-intelligence";
 import { QrmPageHeader } from "../components/QrmPageHeader";
+import { fetchAccount360 } from "../lib/account-360-api";
+import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
+import { buildAccountCommandHref, buildAccountFleetIntelligenceHref, buildAccountGenomeHref, buildAccountOperatingProfileHref } from "../lib/account-command";
 import { QrmSubNav } from "../components/QrmSubNav";
-
-function formatDate(value: string | null): string {
-  if (!value) return "No prediction";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "No prediction";
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function replacementWindowLabel(value: "now" | "30d" | "60d" | "90d" | "future" | "none"): string {
-  switch (value) {
-    case "now":
-      return "Now";
-    case "30d":
-      return "30 days";
-    case "60d":
-      return "60 days";
-    case "90d":
-      return "90 days";
-    case "future":
-      return "Future";
-    default:
-      return "Unmodeled";
-  }
-}
 
 function replacementWindowTone(value: "now" | "30d" | "60d" | "90d" | "future" | "none"): string {
   switch (value) {
@@ -58,8 +18,9 @@ function replacementWindowTone(value: "now" | "30d" | "60d" | "90d" | "future" |
     case "30d":
       return "text-amber-400";
     case "60d":
-    case "90d":
       return "text-qep-orange";
+    case "90d":
+      return "text-emerald-400";
     default:
       return "text-muted-foreground";
   }
@@ -99,8 +60,12 @@ export function FleetIntelligencePage() {
         .limit(500);
       if (error) throw new Error(error.message);
       return (data ?? []).map((row) => {
-        const metadata = (row.metadata && typeof row.metadata === "object" ? row.metadata : {}) as Record<string, unknown>;
-        const attachments = Array.isArray(metadata.attachments) ? metadata.attachments.filter((item) => item != null) : [];
+        const metadata = (row.metadata && typeof row.metadata === "object"
+          ? row.metadata
+          : {}) as Record<string, unknown>;
+        const attachments = Array.isArray(metadata.attachments)
+          ? metadata.attachments.filter((item) => item != null)
+          : [];
         return {
           equipmentId: row.id,
           attachmentCount: attachments.length,
@@ -117,8 +82,8 @@ export function FleetIntelligencePage() {
   if (accountQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -126,20 +91,18 @@ export function FleetIntelligencePage() {
   if (accountQuery.isError || !accountQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This fleet intelligence surface isn&apos;t available right now.</p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
 
   const account = accountQuery.data;
-  const board = buildFleetIntelligenceBoard({
-    fleet: account.fleet,
-    service: account.service,
-    predictions: profileQuery.data?.fleet ?? [],
-    equipmentMetadata: equipmentQuery.data ?? [],
-  });
+  const board = {
+    fleet: equipmentQuery.data ?? [],
+    serviceJobs: account.service ?? [],
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -152,16 +115,13 @@ export function FleetIntelligencePage() {
         </Button>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" className="hidden sm:inline-flex">
+            <Link to={buildAccountFleetIntelligenceHref(accountId)}>Refresh intelligence</Link>
+          </Button>
+          <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountGenomeHref(accountId)}>Customer Genome</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={buildAccountOperatingProfileHref(accountId)}>Operating Profile</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={buildAccountRelationshipMapHref(accountId)}>Relationship Map</Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/qrm/companies/${accountId}/fleet-radar`}>Legacy Fleet Radar</Link>
           </Button>
         </div>
       </div>
@@ -172,154 +132,123 @@ export function FleetIntelligencePage() {
       />
       <QrmSubNav />
 
-      {profileQuery.isError || equipmentQuery.isError ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+      {profileQuery.isLoading || equipmentQuery.isLoading ? (
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading fleet intelligence…</DeckSurface>
+      ) : profileQuery.isError || equipmentQuery.isError ? (
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           {profileQuery.error instanceof Error
             ? profileQuery.error.message
             : equipmentQuery.error instanceof Error
               ? equipmentQuery.error.message
-              : "Fleet intelligence is unavailable right now."}
-        </Card>
+                : "Fleet intelligence is unavailable right now."}
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard
-              icon={Radar}
-              label="Owned Machines"
-              value={String(board.summary.ownedMachines)}
-              detail="Account-owned equipment on file."
-            />
-            <SummaryCard
-              icon={Clock3}
-              label="Average Age"
-              value={board.summary.avgAgeYears != null ? `${board.summary.avgAgeYears.toFixed(1)}y` : "—"}
-              detail="Average machine age across the owned fleet."
-            />
-            <SummaryCard
-              icon={PackagePlus}
-              label="Attachment Gaps"
-              value={String(board.summary.attachmentGaps)}
-              detail="Machines without registered attachments."
-              tone={board.summary.attachmentGaps > 0 ? "warn" : "default"}
-            />
-            <SummaryCard
-              icon={Timer}
-              label="Replacement Windows"
-              value={String(board.summary.replacementWindowMachines)}
-              detail="Machines entering 0-90 day replacement windows."
-              tone={board.summary.replacementWindowMachines > 0 ? "warn" : "default"}
-            />
-          </div>
-
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Open Relationship Map to see who signs, influences, operates, blocks, and decides around this fleet.
-                </p>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <PackagePlus className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Owned Machines</p>
               </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to={buildAccountRelationshipMapHref(accountId)}>
-                  Relationship map <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Fleet queue</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ranked by replacement window first, then confidence, hours, and age so the riskiest units surface first.
-                </p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.fleet.length)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Account-owned equipment on file.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Clock3 className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Average Age</p>
               </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to={buildAccountFleetIntelligenceHref(accountId)}>Refresh queue</Link>
-              </Button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {profileQuery.isLoading || equipmentQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading fleet signals…</p>
-              ) : board.machines.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No owned machines are on file for this account yet.</p>
-              ) : (
-                board.machines.map((machine) => (
-                  <div key={machine.equipmentId} className="rounded-xl border border-border/60 bg-muted/10 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground">{machine.label}</p>
-                          <span className={`text-[11px] font-medium ${replacementWindowTone(machine.replacementWindow)}`}>
-                            {replacementWindowLabel(machine.replacementWindow)}
-                          </span>
-                          {machine.replacementConfidence != null ? (
-                            <span className="text-[11px] text-muted-foreground">
-                              {Math.round(machine.replacementConfidence * 100)}% confidence
-                            </span>
-                          ) : null}
+              <p className="mt-3 text-2xl font-semibold text-foreground">N/A</p>
+              <p className="mt-1 text-xs text-muted-foreground">No service hours are tracked in the fleet table.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Radar className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Service Jobs</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.serviceJobs.length)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Active service jobs associated with this account.</p>
+            </DeckSurface>
+            <DeckSurface className={`p-4 ${board.fleet.length > 0 ? "" : "border-qep-warm/40"}`}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className={`h-4 w-4 ${board.fleet.length > 0 ? "text-qep-warm" : "text-qep-orange"}`} />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Attachment Gaps</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.fleet.filter(m => m.attachmentCount > 0).length)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Machines without registered attachments in the system.</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Replacement Windows</p>
+              </div>
+              <div className="mt-3 space-y-3">
+                {board.fleet.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No fleet data available to assess replacement windows.</p>
+                ) : (
+                  board.fleet.map((machine) => (
+                    <div key={machine.equipmentId} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {machine.label ?? `S/N ${machine.make} ${machine.model}`}
+                            </p>
+                            {machine.attachmentCount > 0 ? (
+                              <span className={`text-[11px] font-medium text-qep-warm`}>
+                                Attachment gap
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-3 space-y-1">
+                            {machine.serialNumber ? (
+                              <p className="text-xs text-muted-foreground">
+                                S/N {machine.serialNumber}
+                              </p>
+                            ) : null}
+                            {machine.ageYears != null ? (
+                              <p className="text-xs text-muted-foreground">
+                                {machine.ageYears} years old
+                              </p>
+                            ) : null}
+                            {machine.engineHours != null ? (
+                              <p className="text-xs text-muted-foreground">
+                                {Math.round(machine.engineHours).toLocaleString()}h
+                              </p>
+                            ) : null}
+                            <div className="mt-3">
+                              {machine.serviceCount > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {machine.serviceCount} service touch{machine.serviceCount === 1 ? "" : "es"}
+                                </p>
+                              ) : null}
+                              {machine.openServiceCount > 0 ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {machine.openServiceCount} open service
+                                </p>
+                              ) : null}
+                            </div>
+                            {machine.predictedReplacementDate ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Replacement: {new Date(machine.predictedReplacementDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {machine.serialNumber ? `S/N ${machine.serialNumber}` : "Serial unknown"}
-                          {machine.ageYears != null ? ` · ${machine.ageYears} years old` : ""}
-                          {machine.engineHours != null ? ` · ${Math.round(machine.engineHours).toLocaleString()}h` : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {machine.attachmentCount} attachment{machine.attachmentCount === 1 ? "" : "s"}
-                          {machine.hasAttachmentGap ? " · attachment gap" : ""}
-                          {machine.serviceCount > 0 ? ` · ${machine.serviceCount} service touch${machine.serviceCount === 1 ? "" : "es"}` : ""}
-                          {machine.openServiceCount > 0 ? ` · ${machine.openServiceCount} open service` : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Replacement date: {formatDate(machine.predictedReplacementDate)}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <Button asChild size="sm" variant="ghost">
+                        <Button asChild size="sm" variant="outline">
                           <Link to={`/equipment/${machine.equipmentId}`}>
                             Machine <ArrowUpRight className="ml-1 h-3 w-3" />
                           </Link>
                         </Button>
-                        <Button asChild size="sm" variant="ghost">
-                          <Link to={buildAccountCommandHref(accountId)}>
-                            Account <ArrowUpRight className="ml-1 h-3 w-3" />
-                          </Link>
-                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
             </div>
-          </Card>
+          </DeckSurface>
+          </div>
         </>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }

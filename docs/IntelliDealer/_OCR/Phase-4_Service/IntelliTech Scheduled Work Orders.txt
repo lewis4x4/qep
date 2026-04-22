@@ -1,0 +1,275 @@
+IntelliTech Scheduled Work Orders                                                                                   4/21/26, 3:32 PM
+
+
+
+
+                                                                                            Search                        Print
+
+
+
+
+         Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+         You are here: IntelliDealer Menus > Product Support > Service
+         Product Support > IntelliTech Scheduled Work Orders
+
+
+         IntelliTech Scheduled Work Orders
+         The Scheduled Work Orders screen allows you to view scheduled work
+                                                                                                     Data Source:
+         orders and log on to active work orders. You can also view a technician's Daily
+                                                                                                     WOR
+         Time Card.
+                                                                                                     Security: 812
+         To open the Scheduled Work Orders screen, navigate to Product Support
+                                                                                                     Product Support
+         > Service > IntelliTech.
+                                                                                                     - Service
+         Topics in this section include:                                                             IntelliTech
+
+                 MobileTech (IDMA)                                                                   Revision: 2026.03
+
+                 Logging on to a Work Order from IntelliTech
+
+                 Screen Description
+
+                 Daily Time Card
+
+
+         MobileTech (IDMA)
+
+         Work Orders are synchronized between IntelliTech and MobileTech (IDMA).If
+         a technician logs into a Work Order via MobileTech, the Service Call field is
+         automatically updated to MobileTech in the Work Order Header. While a Work
+         Order is active in MobileTech, it cannot be logged into from IntelliTech. Once
+         the technician logs out of MobileTech, the Work Order becomes available
+         again in IntelliTech.
+
+
+         Logging on to a Work Order from IntelliTech
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm                           Page 1 of 7
+IntelliTech Scheduled Work Orders                                                                4/21/26, 3:32 PM
+
+
+
+
+                       Note: All buttons that appear on the IntelliTech Logged On screen
+                       are controlled by and depend on security switches or configuration.
+
+
+            1. Navigate to Product Support > Service > IntelliTech.
+
+
+                      The Scheduled Work Orders screen appears.
+
+
+
+            2. Check the select technician field to make sure the technician number is
+               correct, then click GO>> to generate the work order search.
+
+
+                      Updated Scheduled Work Orders screen
+
+
+
+
+            3. To log on to a work order, click the Yes link in the Log On field.
+
+
+                      The Logged on screen appears.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm        Page 2 of 7
+IntelliTech Scheduled Work Orders                                                                4/21/26, 3:32 PM
+
+
+
+
+                 The technician's logged on time starts counting down.
+
+
+         Logging on to a Work Order Not Assigned to You in
+         IntelliTech
+
+            1. On the Scheduled Work Orders screen, enter a technician's number into
+               the Select Technician field, then click GO>> to generate the technician
+               search.
+
+
+                      Updated Scheduled Work Orders screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm        Page 3 of 7
+IntelliTech Scheduled Work Orders                                                                4/21/26, 3:32 PM
+
+
+
+            2. Click the Log on to a work order not assigned to you link.
+
+
+                      Assign to Work Order window opens
+
+
+
+
+            3. Enter a work order number in the Work Order # field.
+
+            4. Click Log On to assign yourself to the selected work order.
+
+                 The Logged on screen for the selected work order appears.
+
+
+         Screen Description
+
+         The fields on the Scheduled Work Orders screen are:
+
+          Field               Description
+          Priority            The priority of this work order/segment in relation to the other
+          Code                work order/segments for the selected technician, as displayed
+                              on the Scheduled Work Orders screen. See Work Order:
+                              Segments.
+
+          Work Order The work order number (including segment number if the
+                     Based on First Segment checkbox is left unselected).
+
+                              Checking the Based on First Segment checkbox displays
+                              work orders where the searched technician is logged to the
+                              first segment of a multiple segment work order.
+
+          Log On              Indicates whether the technician is:
+                                      On—Logged on to (working on) the work order segment.
+                                      Yes—Can be logged on to the work order segment by
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm        Page 4 of 7
+IntelliTech Scheduled Work Orders                                                                4/21/26, 3:32 PM
+
+
+
+                                      clicking the hyperlink.
+                                      Blank—The work order segment is currently active in
+                                      MobileTech (IDMA) and cannot be accessed from
+                                      IntelliTech.
+                              If the Log On information is hyperlinked, you can access
+                              additional screens.
+
+          Customer            Displays the customer's name and also lists a bit of the
+          Name                Description field from the work order segment in the row
+                              underneath.
+
+          Machine             The unit that is being serviced. The unit's Make, Model, and
+                              Year codes are listed in the row underneath.
+
+          Scheduled           The date on which the service for the selected segment is
+          Start Date          scheduled to start.
+
+          Estimated The estimated completion date of the work order segment.
+          Completion
+          Date
+
+          Job Code            The estimated or job code labor hours needed to complete the
+          Hours               work order segment.
+
+          Hours               The actual amount of hours worked to date on this segment.
+          Worked
+
+          Difference          The difference between estimated hours and hours worked.
+
+          Highlighted Highlighted Work Orders indicate that a technician is currently
+          Work        logged into the Work Order through MobileTech (IDMA).
+          Orders      While highlighted, these Work Orders cannot be logged into
+                      from IntelliTech. Once the MobileTech session is closed, the
+                      highlight is removed and the Work Order becomes available in
+                      IntelliTech.
+
+          Service             Displays the system currently associated with the Work Order.
+          Call                If the value shows MobileTech, the Work Order is currently
+                              accessed via MobileTech (IDMA) and cannot be logged into
+                              from IntelliTech.
+
+
+         Click the Log on to a work order not assigned to you button to open a pop-
+         up window asking for a specific work order number.
+
+
+              Assign to Work Order popup
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm        Page 5 of 7
+IntelliTech Scheduled Work Orders                                                                4/21/26, 3:32 PM
+
+
+
+
+         Daily Time Card
+
+         The Daily Time Card screen allows you to view/edit a technician's daily time
+         card. Click the View time card button to open an adjoining menu.
+
+
+              Daily Time Card screen
+
+
+
+
+         The time card information for the current date is retrieved from the time scan
+         file (WOTTM) and for previous days the data is retrieved from billing history
+         (MNBDD). Any unbilled labor originally scanned or logged prior to today must
+         be billed in order to show here. Note the start and stop time for prior days
+         show as N/A.
+
+         The fields on the Daily Time Card screen are:
+
+          Daily Time Card
+          Field                 Description
+
+          Start Time            The start time of the labor transaction.
+
+          Stop Time             The stop time of the labor transaction, which will default to
+                                the current time.
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm        Page 6 of 7
+IntelliTech Scheduled Work Orders                                                                                      4/21/26, 3:32 PM
+
+
+
+          Work Order            The work order number for the selected labor transaction.
+
+          Customer              The name of the customer on the work order.
+          Name
+
+          Location              The location.
+
+          Premium               The premium code that was used.
+          Code
+
+          Hours                 The amount of hours worked on the selected labor
+          Worked                transaction.
+
+
+
+
+         Did you find this helpful? Yes No
+
+          For help with IntelliDealer contact support at: 1-855-876-2586.
+          To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-emphasys.com
+
+          © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.intellitech.hidden.workorders.htm                              Page 7 of 7
+

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarDays, FileText, GitCompare, Plus } from "lucide-react";
+import { ArrowLeft, FileText, GitCompare, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import type { UserRole } from "@/lib/database.types";
 import { QrmActivityComposer } from "../components/QrmActivityComposer";
 import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
@@ -17,6 +16,7 @@ import { DgeIntelligencePanel } from "../../dge/components/DgeIntelligencePanel"
 import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
+import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
@@ -336,16 +336,16 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         </div>
       </div>
 
-      {isLoading && <div className="h-28 animate-pulse rounded-xl border border-border bg-card" />}
+      {isLoading && <div className="h-28 animate-pulse rounded-sm border border-qep-deck-rule bg-qep-deck-elevated/40" />}
       {hasError && (
-        <Card className="p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">Unable to load this deal right now. Please refresh and try again.</p>
-        </Card>
+        </DeckSurface>
       )}
       {!isLoading && !hasError && !hasDeal && (
-        <Card className="p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">This deal isn&apos;t available or you don&apos;t have access.</p>
-        </Card>
+        </DeckSurface>
       )}
 
       {dealQueryData && (
@@ -361,23 +361,35 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
           {mode === "room" && (
             <>
               <div className="grid gap-4 md:grid-cols-4">
-                <RoomSummaryCard label="Notes" value={String(roomSummary.noteCount)} detail="Logged context on the deal timeline." />
-                <RoomSummaryCard
-                  label="Open Tasks"
-                  value={String(roomSummary.openTaskCount)}
-                  detail={roomSummary.overdueTaskCount > 0 ? `${roomSummary.overdueTaskCount} overdue` : "No overdue tasks"}
-                  tone={roomSummary.overdueTaskCount > 0 ? "warn" : "default"}
-                />
-                <RoomSummaryCard
-                  label="Approvals"
-                  value={String(roomSummary.pendingApprovalCount)}
-                  detail="Demo and flow approvals still waiting on a decision."
-                  tone={roomSummary.pendingApprovalCount > 0 ? "warn" : "default"}
-                />
-                <RoomSummaryCard label="Scenarios" value={String(roomSummary.scenarioCount)} detail="DGE optimization paths for this opportunity." />
+                <DeckSurface className="p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Notes</p>
+                  <p className="mt-3 text-3xl font-semibold text-foreground">{String(roomSummary.noteCount)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Logged context on the deal timeline.</p>
+                </DeckSurface>
+                <DeckSurface className={`p-4 ${roomSummary.overdueTaskCount > 0 ? "border-qep-warm/40" : ""}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Open Tasks</p>
+                  <p className={`mt-3 text-3xl font-semibold ${roomSummary.overdueTaskCount > 0 ? "text-qep-warm" : "text-foreground"}`}>
+                    {String(roomSummary.openTaskCount)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {roomSummary.overdueTaskCount > 0 ? `${roomSummary.overdueTaskCount} overdue` : "No overdue tasks"}
+                  </p>
+                </DeckSurface>
+                <DeckSurface className={`p-4 ${roomSummary.pendingApprovalCount > 0 ? "border-qep-warm/40" : ""}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Approvals</p>
+                  <p className={`mt-3 text-3xl font-semibold ${roomSummary.pendingApprovalCount > 0 ? "text-qep-warm" : "text-foreground"}`}>
+                    {String(roomSummary.pendingApprovalCount)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Demo and flow approvals still waiting on a decision.</p>
+                </DeckSurface>
+                <DeckSurface className="p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scenarios</p>
+                  <p className="mt-3 text-3xl font-semibold text-foreground">{String(roomSummary.scenarioCount)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">DGE optimization paths for this opportunity.</p>
+                </DeckSurface>
               </div>
 
-              <Card className="p-4 sm:p-5">
+              <DeckSurface className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link to="/qrm/command/approvals">Approval Center</Link>
@@ -397,42 +409,49 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                 {(approvalsQuery.data ?? []).length > 0 ? (
                   <div className="mt-4 space-y-2">
                     {(approvalsQuery.data ?? []).map((approval) => (
-                      <div key={approval.id} className="rounded-md border border-border/60 bg-muted/10 px-3 py-2">
+                      <div key={approval.id} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 px-3 py-2">
                         <p className="text-sm font-medium text-foreground">{approval.subject}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{approval.status}</p>
                       </div>
                     ))}
                   </div>
                 ) : null}
-              </Card>
+              </DeckSurface>
             </>
           )}
 
           {mode === "autopsy" && autopsySummary && (
             <>
               <div className="grid gap-4 md:grid-cols-4">
-                <RoomSummaryCard label="Days Open" value={String(autopsySummary.daysOpen)} detail="Lifecycle length before loss." />
-                <RoomSummaryCard
-                  label="Overdue Tasks"
-                  value={String(autopsySummary.overdueTaskCount)}
-                  detail="Tasks still open when the deal closed lost."
-                  tone={autopsySummary.overdueTaskCount > 0 ? "warn" : "default"}
-                />
-                <RoomSummaryCard
-                  label="Competitor Signals"
-                  value={String(autopsySummary.competitorMentionCount)}
-                  detail="Voice evidence mentioning competitors."
-                  tone={autopsySummary.competitorMentionCount > 0 ? "warn" : "default"}
-                />
-                <RoomSummaryCard
-                  label="Last Touch Gap"
-                  value={autopsySummary.lastTouchGapDays == null ? "—" : `${autopsySummary.lastTouchGapDays}d`}
-                  detail="Days between the final recorded touch and loss."
-                  tone={(autopsySummary.lastTouchGapDays ?? 0) >= 14 ? "warn" : "default"}
-                />
+                <DeckSurface className="p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Days Open</p>
+                  <p className="mt-3 text-3xl font-semibold text-foreground">{String(autopsySummary.daysOpen)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Lifecycle length before loss.</p>
+                </DeckSurface>
+                <DeckSurface className={`p-4 ${autopsySummary.overdueTaskCount > 0 ? "border-qep-warm/40" : ""}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Overdue Tasks</p>
+                  <p className={`mt-3 text-3xl font-semibold ${autopsySummary.overdueTaskCount > 0 ? "text-qep-warm" : "text-foreground"}`}>
+                    {String(autopsySummary.overdueTaskCount)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Tasks still open when the deal closed lost.</p>
+                </DeckSurface>
+                <DeckSurface className={`p-4 ${autopsySummary.competitorMentionCount > 0 ? "border-qep-warm/40" : ""}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Competitor Signals</p>
+                  <p className={`mt-3 text-3xl font-semibold ${autopsySummary.competitorMentionCount > 0 ? "text-qep-warm" : "text-foreground"}`}>
+                    {String(autopsySummary.competitorMentionCount)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Voice evidence mentioning competitors.</p>
+                </DeckSurface>
+                <DeckSurface className={`p-4 ${(autopsySummary.lastTouchGapDays ?? 0) >= 14 ? "border-qep-warm/40" : ""}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Last Touch Gap</p>
+                  <p className={`mt-3 text-3xl font-semibold ${(autopsySummary.lastTouchGapDays ?? 0) >= 14 ? "text-qep-warm" : "text-foreground"}`}>
+                    {autopsySummary.lastTouchGapDays == null ? "—" : `${autopsySummary.lastTouchGapDays}d`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Days between the final recorded touch and loss.</p>
+                </DeckSurface>
               </div>
 
-              <Card className="p-4 sm:p-5">
+              <DeckSurface className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link to={dealQueryData.companyId ? buildAccountCommandHref(dealQueryData.companyId) : "/qrm/companies"}>
@@ -450,7 +469,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                     </div>
                   ))}
                 </div>
-              </Card>
+              </DeckSurface>
             </>
           )}
 
@@ -462,7 +481,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
             compact
           />
 
-          <Card className="p-4 sm:p-5">
+          <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">Amount</dt>
@@ -497,7 +516,7 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                 </dd>
               </div>
             </dl>
-          </Card>
+          </DeckSurface>
 
           <QrmDealUpdateCard
             stages={stagesQuery.data ?? []}
@@ -528,34 +547,40 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
 
           <QrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
 
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-base font-semibold text-foreground">Activity Timeline</h2>
+          <DeckSurface>
+            <div className="flex items-start justify-between gap-3 border-b border-qep-deck-rule/60 pb-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Activity Timeline</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The last touches tied to this deal across calls, notes, meetings, and messages.
+                </p>
+              </div>
             </div>
-            <QrmActivityTimeline
-              activities={activitiesData}
-              onLogActivity={() => setComposerOpen(true)}
-              entityLabel={dealName}
-              showEntityLabel={false}
-              pendingBodyId={pendingBodyId}
-              pendingOccurredAtId={pendingOccurredAtId}
-              pendingTaskId={pendingTaskId}
-              pendingDeliveryId={pendingDeliveryId}
-              onPatchBody={async (activity, body, updatedAt) => {
-                await patchBody({ activityId: activity.id, body, updatedAt });
-              }}
-              onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
-                await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
-              }}
-              onPatchTask={async (activity, task, updatedAt) => {
-                await patchTask({ activityId: activity.id, task, updatedAt });
-              }}
-              onDeliverCommunication={async (activity) => {
-                await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
-              }}
-            />
-          </section>
+            <div className="mt-4">
+              <QrmActivityTimeline
+                activities={activitiesData}
+                onLogActivity={() => setComposerOpen(true)}
+                entityLabel={dealName}
+                showEntityLabel={false}
+                pendingBodyId={pendingBodyId}
+                pendingOccurredAtId={pendingOccurredAtId}
+                pendingTaskId={pendingTaskId}
+                pendingDeliveryId={pendingDeliveryId}
+                onPatchBody={async (activity, body, updatedAt) => {
+                  await patchBody({ activityId: activity.id, body, updatedAt });
+                }}
+                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
+                }}
+                onPatchTask={async (activity, task, updatedAt) => {
+                  await patchTask({ activityId: activity.id, task, updatedAt });
+                }}
+                onDeliverCommunication={async (activity) => {
+                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
+                }}
+              />
+            </div>
+          </DeckSurface>
         </>
       )}
 
@@ -583,25 +608,5 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         onArchived={() => navigate("/qrm/deals")}
       />
     </div>
-  );
-}
-
-function RoomSummaryCard({
-  label,
-  value,
-  detail,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <Card className="p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className={`mt-3 text-3xl font-semibold ${tone === "warn" ? "text-amber-400" : "text-foreground"}`}>{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   );
 }

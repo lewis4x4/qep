@@ -33,6 +33,7 @@ import { HealthScoreDrawer } from "../../nervous-system/components/HealthScoreDr
 import { ARCreditBlockBanner } from "../components/ARCreditBlockBanner";
 import { CustomerPartsIntelCard } from "../../parts/components/CustomerPartsIntelCard";
 import { listCompanyActivities } from "../lib/qrm-api";
+import { DeckSurface } from "../components/command-deck";
 
 export function AccountCommandCenterPage() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -59,21 +60,21 @@ export function AccountCommandCenterPage() {
 
   if (account360Query.isLoading) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
 
   if (account360Query.isError || !account360Query.data) {
     return (
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             This account command surface isn&apos;t available right now.
           </p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -131,7 +132,11 @@ export function AccountCommandCenterPage() {
       </div>
 
       <div className="flex items-start justify-between gap-3">
-        <QrmPageHeader title={data.company.name} subtitle={locationLabel} />
+        <QrmPageHeader
+          title={data.company.name}
+          subtitle={locationLabel}
+          crumb={{ surface: "GRAPH", lens: "COMMAND", count: accountId?.slice(0, 8) }}
+        />
         <div className="flex items-center gap-2">
           <HealthScorePill
             score={data.health?.current_score != null ? Number(data.health.current_score) : null}
@@ -156,35 +161,37 @@ export function AccountCommandCenterPage() {
         <div className="space-y-4">
           <AccountNextBestActions data={data} />
 
-          <Card className="p-4">
-            <div role="tablist" className="flex flex-wrap gap-1 border-b border-border pb-2">
-              {[
-                { key: "commercial", label: "Commercial" },
-                { key: "fleet", label: `Fleet (${data.fleet.length})` },
-                { key: "quotes", label: `Quotes (${data.open_quotes.length})` },
-                { key: "service", label: `Service (${data.service.length})` },
-                { key: "parts", label: "Parts" },
-                { key: "ar", label: `AR (${data.invoices.length})` },
-                { key: "lifecycle", label: "Lifecycle" },
-              ].map((item) => {
-                const isActive = item.key === tab;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => setTab(item.key as typeof tab)}
-                    className={`rounded-md px-3 py-2 text-xs font-medium transition ${
-                      isActive
-                        ? "bg-qep-orange/10 text-qep-orange"
-                        : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
+          <DeckSurface>
+            <div className="border-b border-qep-deck-rule/60 pb-2">
+              <div role="tablist" className="flex flex-wrap gap-1">
+                {[
+                  { key: "commercial", label: "Commercial" },
+                  { key: "fleet", label: `Fleet (${data.fleet.length})` },
+                  { key: "quotes", label: `Quotes (${data.open_quotes.length})` },
+                  { key: "service", label: `Service (${data.service.length})` },
+                  { key: "parts", label: "Parts" },
+                  { key: "ar", label: `AR (${data.invoices.length})` },
+                  { key: "lifecycle", label: "Lifecycle" },
+                ].map((item) => {
+                  const isActive = item.key === tab;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => setTab(item.key as typeof tab)}
+                      className={`rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-qep-orange/10 text-qep-orange"
+                          : "text-muted-foreground hover:bg-qep-deck-elevated/30 hover:text-foreground"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mt-4">
@@ -195,7 +202,7 @@ export function AccountCommandCenterPage() {
               {tab === "parts" && <AccountPartsTab parts={data.parts} />}
               {tab === "ar" && <AccountARTab invoices={data.invoices} arBlock={data.ar_block} />}
               {tab === "lifecycle" && (
-                <Card className="p-4">
+                <DeckSurface className="border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">Customer lifecycle</h3>
@@ -209,17 +216,17 @@ export function AccountCommandCenterPage() {
                       </Link>
                     </Button>
                   </div>
-                </Card>
+                </DeckSurface>
               )}
             </div>
-          </Card>
+          </DeckSurface>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <CustomerPartsIntelCard companyId={accountId} />
 
-          <Card className="p-4">
-            <div className="flex items-start justify-between gap-3">
+          <DeckSurface>
+            <div className="flex items-start justify-between gap-3 border-b border-qep-deck-rule/60 pb-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Recent account activity</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -238,7 +245,7 @@ export function AccountCommandCenterPage() {
                 showEntityLabel={false}
               />
             </div>
-          </Card>
+          </DeckSurface>
         </div>
       </div>
 

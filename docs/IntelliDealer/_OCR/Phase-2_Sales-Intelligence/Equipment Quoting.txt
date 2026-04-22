@@ -1,0 +1,230 @@
+Equipment Quoting                                                                          4/21/26, 3:30 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Equipment Product Support > Equipment
+          Quoting: Listing
+
+
+          Equipment Quoting
+          You can use the Equipment Quoting screen to:
+                                                                               Data
+                    search for an equipment quote                              Source: CGIINH,
+                                                                               CGIIND
+                    view or edit an equipment quote
+                                                                               Security
+                    create an equipment quote                                  Switch: 801 -
+                    reactivate an equipment quote                              Product
+                                                                               Support -
+                    copy an equipment quote                                    Equipment
+                                                                               Quoting
+                    modify default printing parameters
+                                                                               Learning
+          To open the Equipment Quoting screen, navigate to Product
+                                                                               Resources:
+          Support > Equipment > Equipment Quoting .
+                                                                               Reactivating
+                                                                               an Equipment
+                 Equipment Quoting screen                                      Quote
+
+                                                                               Revision:
+                                                                               2026.04
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm                                Page 1 of 6
+Equipment Quoting                                                                         4/21/26, 3:30 PM
+
+
+
+
+          The sorting options on the Equipment Quoting screen are:
+
+           Sort by
+           Field                     Description
+            Reference                 Sort the search results by reference number.
+            Number
+
+            Customer                  Sort the search results by customer.
+
+            Expiry Date               Sort the search results by the expiry date of the
+                                      equipment quote.
+
+
+          The search fields on the Equipment Quoting screen are:
+
+           Field                    Description
+            Select                  Search for equipment quotes by selecting an
+            Status                  equipment quote status.
+
+            Select                  Search for equipment quotes by entering a
+            Reference               reference number.
+            Number
+
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm                               Page 2 of 6
+Equipment Quoting                                                                     4/21/26, 3:30 PM
+
+
+
+            Select                  Search for equipment quotes by entering a
+            Customer                customer number.
+            Number
+
+            Select      Search for equipment quotes by entering a
+            Salesperson salesperson.
+
+            Select                  Search for equipment quotes by entering a
+            Location                location.
+
+            Show                    If selected, includes extended description (a
+            Extended                description of the unit on the selected quote)
+            Description             within the quote search results.
+
+            Include                 If selected, includes master quotes within the
+            Master                  quote search. A master quote is a quote
+            Quotes                  template that quote information can be enter
+                                    into. The master quote can be used multiple
+                                    times.
+
+            Select                  Search for equipment quote by entering a stock
+            Stock                   number.
+            Number
+
+            Select Make Search for equipment quote by entering a make
+                        code.
+
+            Select                  Search for equipment quote by entering a model
+            Model                   code.
+
+            Select                  Search for equipment quote by entering a group
+            Group                   code.
+
+            Select Type Search for equipment quote by selecting a unit
+                        type from the drop down list.
+
+            Select                  Search for equipment quotes by selecting the
+            Worksheet               status of the corresponding margin worksheet.
+            Status
+                                    This field only appears when sorting the search
+                                    results by Salesperson.
+
+
+          The fields on the Equipment Quoting screen are:
+
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm                           Page 3 of 6
+Equipment Quoting                                                                           4/21/26, 3:30 PM
+
+
+
+           Field                    Description
+            Reference               The equipment quote reference number.
+            Number
+
+            Customer                The customer's name.
+
+            Salesperson The salesperson associated with the equipment
+                        quote.
+
+            Stock                   The stock number of the unit on the quote
+            Number                  which acts as an inventory identification
+                                    number.
+
+            Location                The branch location of the equipment quote.
+
+            Expiry Date             The date the equipment quote expires.
+
+            Quote                   The status of the equipment quote.
+            Status
+
+            VESign                  The signing status of the VESign document. Can
+            Status                  be one of:
+                                             Awaiting Signature—all signatures are
+                                             pending.
+                                             Partially Signed—more than one
+                                             signature is pending.
+                                             Signed—all required signatures are
+                                             complete.
+                                             Canceled—signing has been canceled.
+                                             If no status is present, then the document
+                                             has not been sent for electronic signing.
+                                    IntelliDealer checks for a status update every 30
+                                    minutes.
+
+
+                                                    Note: OneSpan imposes a 120-day
+                                                    limit on quotes. You can send quotes
+                                                    for signature that expire after this
+                                                    time, however, the VESign will expire
+                                                    at 120 days, even though the quote is
+                                                    still active.
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm                                 Page 4 of 6
+Equipment Quoting                                                                                            4/21/26, 3:30 PM
+
+
+
+
+          Move the cursor over a Reference Number and select View
+          from the pop-up menu to view an equipment quote.
+
+          Move the cursor over the Reference Number of an expired
+          quote and select Reactivate from the pop-up menu to
+          reactivate an equipment quote.
+
+          Move the cursor over a Reference Number and select Copy
+          from the pop-up menu to copy an equipment quote.
+
+          Click on a Customer name to open the Customer Profile
+          screen.
+
+          Click on a Stock Number to open the Equipment Profile
+          screen.
+
+          Click on the Need to create a quote? Click here to add link to
+          create a quote.
+
+          Click on the Modify Default printing parameters link to modify
+          print parameters.
+
+          Click on the Switch to Margin Worksheets link to open the
+          Equipment Margin Worksheets screen. This link only appears if
+          you are configured as a Level 1, 2, or 3 Manager on the User
+          Profiles screen.
+
+          To save your search defaults, hover over the bookmark icon and
+          select Save Defaults from the drop down list.
+
+          Click Close to complete your work on the Equipment Quoting
+          screen.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm                                                  Page 5 of 6
+Equipment Quoting                                                  4/21/26, 3:30 PM
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSQU001.htm        Page 6 of 6
+

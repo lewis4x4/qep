@@ -134,7 +134,6 @@ export interface QrmCampaignRecipient {
   completedAt: string | null;
   createdAt: string;
 }
-
 export interface QrmActivityItem {
   id: string;
   workspaceId: string;

@@ -1,0 +1,166 @@
+Accounts Payable Outstanding                                                                   4/21/26, 3:35 PM
+
+
+
+
+                                                                   Search                            Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Financial
+          Management > Accounts Payable > A/P Outstanding
+
+
+          Accounts Payable Outstanding
+          The Accounts Payable Outstanding screen allows you to view a
+                                                                                   Data
+          vendor's outstanding amounts and run an A/P outstanding report.
+                                                                                   Source: OUTSTD
+          The accounts payable outstanding is displayed in a month by month
+          bar graph or pie chart showing an accounts activity. Click the link to   Security: 601 -
+          toggle between the display types.                                        Accounts
+                                                                                   Payable
+                Accounts Payable Outstanding screen
+                                                                                   Revision:
+                                                                                   2024.01
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                                     Page 1 of 6
+Accounts Payable Outstanding                                                       4/21/26, 3:35 PM
+
+
+
+
+          Topics in this section include:
+
+                  Viewing the A/P Outstanding
+
+                  Screen Description
+
+
+          Viewing the A/P Outstanding
+
+             1. From anywhere in IntelliDealer , navigating to Financial
+                Management > Accounts Payable > A/P Outstanding.
+
+
+             2. On the Accounts Payable - Outstanding screen, enter your
+                search criteria in the appropriate fields, then click Go >> to
+                begin the search.
+
+                  The A/P Outstanding data matching your search criteria will be
+                  returned and the chart updated accordingly.
+
+             3. Click the desired Total link to view the details of that aging
+                period.
+
+                  The Accounts Payable - Outstanding Details screen for the
+                  period appears and displays a vendor listing from highest to
+                  lowest dollars outstanding.
+
+
+                        Accounts Payable - Outstanding Details screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                        Page 2 of 6
+Accounts Payable Outstanding                                                     4/21/26, 3:35 PM
+
+
+
+
+             4. Click the vendor Name to view a list of A/P invoices from this
+                vendor.
+
+                  The Accounts Payable - Outstanding Details screen
+                  refreshes to display a list of vendor invoices.
+
+
+                        Accounts Payable - Outstanding Details screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                      Page 3 of 6
+Accounts Payable Outstanding                                                   4/21/26, 3:35 PM
+
+
+
+
+             5. Click the Invoice Number to view the details of an invoice.
+
+                  The Vouchers Information tab appears displaying details of
+                  the accounts impacted by this invoice.
+
+
+                        Vouchers Information tab
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                    Page 4 of 6
+Accounts Payable Outstanding                                                       4/21/26, 3:35 PM
+
+
+
+
+             6. On the Vouchers Information tab, click Close to return to the
+                Accounts Payable - Outstanding Details screen.
+
+
+          Screen Description
+
+          The aging methods available on the Accounts Payable Outstanding
+          screen are:
+
+          Aging Method
+          Field                  Description
+           Due Date              Choose accounts aging by due date.
+
+           Invoice Date Choose accounts aging by invoice date.
+
+
+          The search fields on the Accounts Payable Outstanding screen
+          are:
+
+          Field                       Description
+           Select Vendor              Search for accounts payable outstanding by
+           Number                     entering a vendor number.
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                        Page 5 of 6
+Accounts Payable Outstanding                                                                                4/21/26, 3:35 PM
+
+
+
+           Select Payable             Search for accounts payable outstanding by
+           Account                    entering an payable account.
+
+
+          Click on a Total link to open the Accounts Payable - Outstanding
+          Details By Due Date screen.
+
+
+
+          Did you find this helpful? Yes No
+
+           For help with IntelliDealer contact support at: 1-855-876-2586.
+           To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+           emphasys.com
+
+           © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCAPMAN.htm                                                 Page 6 of 6
+

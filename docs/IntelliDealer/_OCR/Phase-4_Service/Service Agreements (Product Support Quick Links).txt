@@ -1,0 +1,143 @@
+Service Agreements (Product Support Quick Links)                                           4/21/26, 3:36 PM
+
+
+
+
+                                                                   Search                      Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product
+          Support > Equipment Product Support > Service
+          Agreements
+
+
+          Service Agreements
+          The Service Agreements tab allows you to view and add
+                                                                               Data Source:
+          service agreements.
+                                                                               PMCNTRH
+          To open the Service Agreements tab, navigate to one of these
+                                                                               Security: 805
+          locations:
+                                                                               - Product
+                   Product Support > Equipment > Service Agreements            Support, SAM
+
+                   Product Support > Service > Service Agreements              Revision:
+                                                                               2025.04
+                   Product Support > Rental > Service Agreements
+
+                   Management Central > Service > Service Agreements
+
+          You can sort the search results by any one of:
+
+                   Contract Number
+
+                   Stock Number
+
+                   Name
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCSAG01.htm                                Page 1 of 3
+Service Agreements (Product Support Quick Links)                                      4/21/26, 3:36 PM
+
+
+
+
+                   Expiry Date
+
+          The search fields on the Service Agreements tab are:
+
+           Field               Description
+            Select             Search for service agreements by entering a
+            Contract           contract number.
+
+            Select             Search for service agreements by entering a
+            Stock              machine stock number.
+            Number
+
+            Select             Search for service agreements by entering a
+            Location           branch location.
+
+            Select   Search for service agreements by entering a
+            Customer customer number.
+
+            Select             Search for service agreements by selecting a
+            Program            SAM program from the drop down list.
+
+                               Valid SAM Programs are accessed at
+                               Configuration > Service > Agreements
+                               Warranty > SAM Programs.
+
+            Select   Search for service agreements by selecting a user-
+            Category defined Category.
+
+            Show               If selected, includes expired service agreements
+            Expired            within the service agreement search results.
+
+
+          The fields on the Service Agreements tab are:
+
+           Field                                   Service
+            Contract Number                        The service agreement's contract
+                                                   number.
+
+            Stock Number                           The machine/unit stock number.
+
+            Machine Serial                         The machine/unit serial number.
+            Number
+
+            Make/Model
+
+https://help.intellidealer.com/intellidealer/Content/MCSAG01.htm                           Page 2 of 3
+Service Agreements (Product Support Quick Links)                                                             4/21/26, 3:36 PM
+
+
+
+
+                                                   The manufacturer of the machine/unit.
+
+                                                   The model number on the
+                                                   machine/unit.
+
+            Name                                   The customer's name or rental fleet
+                                                   name.
+
+            Program                                The service agreement program.
+
+            Expiry Date                            The service agreement expiration
+                                                   date.
+
+
+          Click a Contract Number to open the Contract Maintenance
+          tab.
+
+          Click a Stock Number to open the Equipment Profile screen.
+
+          Click a Name to open the Customer Profile screen.
+
+          Click the Need to create a new agreement? Click here to add
+          link to add a new service agreement.
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCSAG01.htm                                                  Page 3 of 3
+

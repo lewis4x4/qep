@@ -1,0 +1,153 @@
+Customer Profile: Search and Listing                                                                                                  4/21/26, 3:29 PM
+
+
+
+
+                                                                                                            Search                               Print
+
+
+
+
+      Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+      You are here: IntelliDealer Menus > Financial Management > Accounts Receivable >
+      Customer Profile: Listing
+
+
+      Customer Profile: Search and Listing
+      The Customer Listing screen is the point of entry to Customer Profiles. It is available from these menu
+                                                                                                                     Data Source: CMASTR
+      paths:
+                                                                                                                     Security Switch: 996 -
+            Financial Management > Accounts Receivable > Customer Profile
+                                                                                                                     Customer Profile
+            Customer Care > CRM > Customer Profile
+                                                                                                                     Revision: 2025.09
+            Management Central > CRM > Customer Profile
+
+      Use this screen to:
+
+            search for a customer profile and open it for edit. See Searching for Customer Profiles
+
+            or add a new Customer Profile.
+
+
+
+
+      Searching for Customer Profiles
+
+         1. Enter your search criteria in the appropriate fields. See Screen Description.
+
+         2. Click the Search button.
+
+            The Customer Profiles that meet the search criteria are shown. If only one profile entry is found, the
+            system automatically opens the screen displaying the corresponding profile.
+
+         3. Locate the desired customer from the results and click on it to open the Customer Profile.
+
+      If Search Extended Fields is selected and you enter a Customer Name then executing a search also scans:
+
+            the Customer Profile: Contacts tab for a matching firstName or lastName
+
+            the Customer Profile: Ship To tab for a matching name
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/customer.customerListing.htm                                                             Page 1 of 3
+Customer Profile: Search and Listing                                                                                   4/21/26, 3:29 PM
+
+
+
+      If Search Extended Fields is selected, and you enter a generic Keyword Search OR regardless of the Search
+      Extended Fields if a Salesperson, Home or Business Email or Phone Number is selected, then executing a
+      search also scans the Customer Profile: Contacts tab for a matching:
+
+              partsSalesperson, serviceSalesperson, rentalSalesperson, equipmentSalesperson, adminSalesperson or
+              otherSalesperson
+
+              homeEmailAddress or businessEmailAddress
+
+              phoneNumber
+
+      See also Listing Screens.
+
+
+      Screen Description
+
+      The search fields on the Customer Listing screen are:
+
+       Field                  Description
+
+       Search 1 or 2          Search for a customer by entering either search word 1 or 2.
+
+                              The Search 1 and Search 2 fields are "starts with" search fields. When you enter a
+                              value in one of these fields, IntelliDealer begins searching the customer database for
+                              customers with Search 1 or Search 2 field values that start with the value entered.
+
+       Country/Prov/State Search for a customer by entering a Country/Prov/State.
+
+       Phone Number           Search for a customer by entering a phone number.
+
+                              The search includes phone numbers currently on contact list.
+
+       Status                 Search for a customer by selecting a specific customer status from the drop down
+                              list. For example: All, Active, Deleted or prospect customer status.
+
+       Customer Number        Search for a customer by entering a customer number.
+
+       City                   Search for a customer by entering a city location.
+
+       Territory              Search within a specific territory
+
+       Name                   Search for a customer by entering a customer name.
+
+       Location               Search for a customer by entering a location.
+
+       Salesperson            Search for a customer by entering a salesperson.
+
+                              The Salesperson entries from both the Customer Profile and the Customer Profile
+                              Contacts are searched.
+
+       Search Extended        Adds the data in the Contacts and Ship To tabs to the search to find more results
+       Fields                 based on the search criteria.
+
+
+      Search results appear in a categorized list:
+
+
+
+
+      The       icon option Export to CSV creates a CSV file version of the results listed.
+
+      The Create button opens the Add Customer screen in a new pop-up.
+
+
+https://help.intellidealer.com/intellidealer/Content/customer.customerListing.htm                                           Page 2 of 3
+Customer Profile: Search and Listing                                                                                 4/21/26, 3:29 PM
+
+
+
+      The Mass Update button opens the Customer Group File Changes screen.
+
+      The Maintain Agency Parameters button opens the Activate/Deactivate Agency Codes screen.
+
+      The Close button closes the window.
+
+
+
+      Did you find this helpful? Yes No
+
+        For help with IntelliDealer contact support at: 1-855-876-2586.
+        To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-emphasys.com
+
+        © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/customer.customerListing.htm                                         Page 3 of 3
+

@@ -1,0 +1,127 @@
+Data Miner                                                                                   4/21/26, 3:36 PM
+
+
+
+
+                                                                   Search                         Print
+
+
+
+
+             Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+             You are here: IntelliDealer Menus > Management
+             Central > Utilities > Data Miner
+
+
+             Data Miner
+             Data Miner allows you to build your own data access views so
+                                                                                  Data Source:
+             you can extract the information you need to make management-
+                                                                                  WEBQRYAL,
+             level decisions. Queries can be saved for future use.
+                                                                                  WEBQRYC,
+             To open the Data Miner screen, navigate to Management                WEBQRYF,
+             Central > Utilities > Data Miner. Or, to run data miner queries      WEBQRYH,
+             from the home page, add the Data Miner option to your                WEBQRYR
+             Executive Summary.
+                                                                                  Security: 505
+             To easily organize the key data you want to extract, you can         -
+             specify columns, selection criteria, and sort order. Queries are     Management
+             based on the files, columns, and rows you specify, allowing you      Central
+             to extract the just customer, finance, equipment, parts, and         Utilities,
+             marketing information that you need. You can set authorities for     Data Miner
+             your query so that only select users can view it.                    Security
+
+             See also:
+
+                   Data Miner Repository Listing
+
+                   Creating a Data Miner Query
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBQY01.htm                                  Page 1 of 3
+Data Miner                                                                                     4/21/26, 3:36 PM
+
+
+
+
+                   Uploading a Query to the Data Miner Repository                  Learning
+                                                                                   Resources:
+                   Linking to PFWTAB
+                                                                                   Locating a
+             The search fields on the Data Miner screen are:                       Data Source;
+                                                                                   Downloading
+             Field                 Description
+                                                                                   a Report from
+             Select User Search or queries by entering the ID of the user          the Data
+                         who created the query.                                    Miner
+                                                                                   Repository;
+             Select                 Search for queries by name.
+                                                                                   How to
+             Query
+                                                                                   Create a Data
+             Select      Search for queries by description.                        Miner Report
+             Description
+                                                                                   Revision:
+                                                                                   2025.08
+             The fields on the Data Miner screen are:
+
+             Field                             Description
+
+             Query Name                        The name of the query.
+
+             Description                       A brief description of the query.
+
+             Created by                        The user who created the query.
+
+             Date Created                      The date the query was created.
+
+             Date Last Modified The date the query was last modified.
+
+             Date Last Run                     The date the query was last run.
+
+
+             Hover over a query name and choose one of these options:
+
+                   Edit- edit the query.
+
+                   Copy- copy the query.
+
+                   Run- run the query.
+
+             To create a new query, click Need to create a new query?
+             Click here to add .
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBQY01.htm                                    Page 2 of 3
+Data Miner                                                                                                     4/21/26, 3:36 PM
+
+
+
+
+             To download a query from the Data Miner Repository, click
+             Download query from Data Miner Repository. This link only
+             appears if the Download Queries from Data Miner Repository
+             switch is activated in security system 505.
+
+
+
+             Did you find this helpful? Yes No
+
+              For help with IntelliDealer contact support at: 1-855-876-2586.
+              To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+              emphasys.com
+
+              © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/WEBQY01.htm                                                    Page 3 of 3
+

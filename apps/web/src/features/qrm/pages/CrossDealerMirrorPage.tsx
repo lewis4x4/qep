@@ -10,8 +10,8 @@ import {
   Siren,
   Swords,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
@@ -168,8 +168,8 @@ export function CrossDealerMirrorPage() {
   if (accountQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="h-32 animate-pulse border-border bg-muted/40" />
-        <Card className="h-80 animate-pulse border-border bg-muted/40" />
+        <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
@@ -177,11 +177,11 @@ export function CrossDealerMirrorPage() {
   if (accountQuery.isError || !accountQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
-        <Card className="border-border bg-card p-6 text-center">
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
           <p className="text-sm text-muted-foreground">
             This cross-dealer mirror surface isn&apos;t available right now.
           </p>
-        </Card>
+        </DeckSurface>
       </div>
     );
   }
@@ -246,9 +246,9 @@ export function CrossDealerMirrorPage() {
     });
 
     const equipmentSignals = signals.equipmentSignals.map((row) => {
-      const metadata = (row.metadata && typeof row.metadata === "object"
+      const metadata = (row.metadata && typeof row.metadata === "object")
         ? row.metadata
-        : {}) as Record<string, unknown>;
+        : {} as Record<string, unknown>;
       const attachments = Array.isArray(metadata.attachments)
         ? metadata.attachments.filter((item) => item != null)
         : [];
@@ -348,37 +348,61 @@ export function CrossDealerMirrorPage() {
       <QrmSubNav />
 
       {profileQuery.isLoading || signalsQuery.isLoading ? (
-        <Card className="p-6 text-sm text-muted-foreground">Loading cross-dealer mirror…</Card>
+        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading cross-dealer mirror…</DeckSurface>
       ) : profileQuery.isError || signalsQuery.isError || !board ? (
-        <Card className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
+        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
           {profileQuery.error instanceof Error
             ? profileQuery.error.message
             : signalsQuery.error instanceof Error
               ? signalsQuery.error.message
               : "Cross-dealer mirror is unavailable right now."}
-        </Card>
+        </DeckSurface>
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-4">
-            <SummaryCard icon={Eye} label="Visible Signals" value={String(board.summary.visibleSignals)} />
-            <SummaryCard icon={Swords} label="Attack Paths" value={String(board.summary.attackPaths)} />
-            <SummaryCard icon={Shield} label="Buyer Gaps" value={String(board.summary.buyerGaps)} />
-            <SummaryCard icon={Siren} label="Urgency" value={`${board.summary.urgencyScore}`} />
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Visible Signals</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.visibleSignals)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Swords className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Attack Paths</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.attackPaths)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Buyer Gaps</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.buyerGaps)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Siren className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Urgency</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{board.summary.urgencyScore}</p>
+            </DeckSurface>
           </div>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Mirror framing</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This is not our internal account story. It is the cleaner, competitor-facing version of the same account as it would appear inside another dealer&apos;s CRM.
+                  This is not our internal account story. It is a cleaner, competitor-facing version of the same account as it would appear inside another dealer&apos;s CRM.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
                 <Link to={buildAccountCrossDealerMirrorHref(accountId)}>Refresh mirror</Link>
               </Button>
             </div>
-          </Card>
+          </DeckSurface>
 
           <div className="grid gap-4 xl:grid-cols-3">
             <MirrorColumn
@@ -398,12 +422,12 @@ export function CrossDealerMirrorPage() {
             />
           </div>
 
-          <Card className="p-4">
+          <DeckSurface className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Canonical companion surfaces</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Use the mirror to pressure-test the account plan, then move back into the operating routes that actually close the gaps.
+                  Use the mirror to pressure-test the account plan, then move back into the operating routes that actually close gaps.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -424,30 +448,10 @@ export function CrossDealerMirrorPage() {
                 </Button>
               </div>
             </div>
-          </Card>
+          </DeckSurface>
         </>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-qep-orange" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </Card>
   );
 }
 
@@ -468,14 +472,14 @@ function MirrorColumn({
   emptyText: string;
 }) {
   return (
-    <Card className="p-4">
+    <DeckSurface className="p-4">
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       <div className="mt-4 space-y-3">
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">{emptyText}</p>
         ) : (
           rows.map((row) => (
-            <div key={row.key} className="rounded-xl border border-border/60 bg-muted/10 p-4">
+            <div key={row.key} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -502,6 +506,6 @@ function MirrorColumn({
           ))
         )}
       </div>
-    </Card>
+    </DeckSurface>
   );
 }

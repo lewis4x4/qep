@@ -1,0 +1,238 @@
+Work Orders: Listing                                                                                 4/21/26, 3:32 PM
+
+
+
+
+                                                                           Search                        Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support
+          > Service Product Support > Work Order: Listing
+
+
+          Work Orders: Listing
+          The Work Orders screen is the point of entry to Work Orders. To
+                                                                                         Security
+          access the Work Orders screen navigate to Product Support >
+                                                                                         Switch: 810 -
+          Service > Work Orders or, Management Central > Service
+                                                                                         Product
+          > Open Work Orders.
+                                                                                         Support -
+                                                                                         Work Orders
+                 The Work Orders listing screen
+                                                                                         Revision: 2025.11
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm                    Page 1 of 6
+Work Orders: Listing                                                                     4/21/26, 3:32 PM
+
+
+
+
+          The search fields displayed on the Work Orders screen are:
+
+           Field                    Description
+            Work Order              Search for an open work order by entering a
+            Number                  work order number.
+
+            Customer                Search for work orders opened by a specific
+            Number                  customer by entering a customer number.
+
+            Salesperson Search for work orders opened by a specific
+                        salesperson by entering a salesperson.
+
+            Stock                   Search for work orders opened by a specific
+            Number                  stock number by entering a stock number.
+
+            Model                   Search for work orders opened by a specific
+                                    model by entering a model.
+
+            Serial                  Search for work orders opened by a specific
+            Number                  serial number by entering a serial number.
+
+            PO Number               Search for open work orders by entering a
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm        Page 2 of 6
+Work Orders: Listing                                                                          4/21/26, 3:32 PM
+
+
+
+                                    purchase order number.
+
+            Ship Via                Search for work orders opened by a specific
+                                    shipping method by entering a shipping method.
+
+            Location                Search for work orders opened in a specific
+                                    branch location by entering a branch location.
+
+            Segment                 Search for open work orders by selecting a
+            Status                  status from the drop down list (e.g. active,
+                                    customer, warranty, internal, sign off, ready to
+                                    close or closed).
+
+
+                                                    Note: Ready to Close is when all
+                                                    segments on the work order are in
+                                                    Sign Off status and are ready for final
+                                                    review.
+
+
+
+            Include All             If selected, displays more information regarding
+            Segments                specific work order segments. Segment status
+                                    is listed under the Machine column for each
+                                    work order, with Description, Technician,
+                                    Estimated Completion Date, and Days Open
+                                    appearing in the neighboring columns.
+
+
+                          Note: Field level-security assigned to your user
+                          profile (as defined on the Field - Work With Field
+                          Level Security screen) may change the appearance
+                          of or hide certain fields.
+
+
+          Enter your search criteria in the appropriate fields then click Go
+          >> to begin the search. Displayed results appear in these
+          columns:
+
+           Field                   Description
+            Order                   The work order number.
+            Number
+
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm             Page 3 of 6
+Work Orders: Listing                                                                     4/21/26, 3:32 PM
+
+
+
+
+            Location                The location of the open work order.
+
+            Customer                The customer name.
+
+            Machine                 A description of the unit on the work order.
+
+            Description A brief description about the work order, work
+                        order segment, or the number of the associated
+                        job jacket.
+
+            Current                 The current amount owing on the corresponding
+            Value                   work order.
+
+                                    This column does NOT include Tax 3 or Tax 4
+                                    values. It is calculated by adding these values:
+                                             Total Parts-Customer
+                                             Total Parts-Warranty+Internal
+                                             Total Labor-Customer
+                                             Total Labor-Warranty+Internal
+                                             Total Sublet-Customer
+                                             Total Sublet-Warranty+Internal
+                                             Total Service_Calls-Customer
+                                             Total Service Calls-Warranty+Internal
+                                             Total Delivery-Customer
+                                             Total Delivery-Warranty+Internal
+                                             Total Other-Customer
+                                             Total Other-Warranty+Internal
+                                             Total Tax-Customer
+                                             Total Tax-Warranty+Internal
+                                             Total Discount-Customer
+                                             Total Discount-Warranty+Internal
+
+            Make/Model The manufacturer of the unit.
+
+                                    The model number on the unit.
+
+            Serial                  The serial number of the unit on the
+            Number                  corresponding work order.
+
+            Date Added The date the work order was created/added.
+
+            Last
+
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm        Page 4 of 6
+Work Orders: Listing                                                                     4/21/26, 3:32 PM
+
+
+
+            Activity                The date the last parts/labor transactions was
+                                    posted to the work order.
+
+                                    The date used is either the last Parts transaction
+                                    date or the last Labor transaction date,
+                                    depending on which amount is larger.
+
+
+          Hover your mouse on a work order, then click one of these
+          buttons:
+
+                   Edit W/O—to edit the work order.
+
+                   Quick Print—to print a PDF of the work order, using the
+                   current settings of the Print Parameters window.
+
+                   Email W/O—to email a PDF of the work order, using the
+                   current settings.
+
+                   Text W/O—to text a PDF of the work order, using the
+                   current settings. You must be licensed for feature 6267 for
+                   this button to be present.
+
+                   Print Parameters—to open the Print Parameters window.
+
+                   Close W/O— to close the work order. Requires the Allow
+                   Quick Close Work Order security switch to be on.
+
+          If you are on Management Central > Service > Open Work
+          Orders, click a work order link to open the Work Order Details
+          screen.
+
+          The buttons available on the Open Work Orders screen are:
+
+           Field                        Description
+            Quick Add     Opens the Add Work Order screen so you can
+            Work          quickly add a new Work Order.
+            Order/Request
+
+            Quick close                 Opens the Close Work Orders screen so you
+            work orders                 can quickly close Work Orders.
+
+            Reverse Work                Opens the Invoice History screen so you can
+            Order                       locate a Work Order that needs to be
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm        Page 5 of 6
+Work Orders: Listing                                                                                         4/21/26, 3:32 PM
+
+
+
+                                        reversed.
+
+            Tethr It Now                Opens a pop-up to begin to launch Tethr It.
+
+            JD Proactive                Opens the John Deere: Proactive Jobs screen
+            Jobs                        so you can manage service agreements with
+                                        John Deere.
+
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/service.workOrders.workOrders.htm                            Page 6 of 6
+

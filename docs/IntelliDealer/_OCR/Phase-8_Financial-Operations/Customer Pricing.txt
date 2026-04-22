@@ -1,0 +1,184 @@
+Customer Pricing                                                                           4/21/26, 3:34 PM
+
+
+
+
+                                                                   Search                       Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product
+          Support > Parts Product Support > Customer
+          Pricing
+
+
+          Customer Pricing
+          Use the Customer Pricing screen to view customer pricing,
+                                                                               Data
+          create a customer pricing record, and view price inquiries.
+                                                                               Source: PARTDISC
+          The system uses configured Customer Pricing Records to find
+                                                                               Security: 824
+          the best price, or a special price, for that customer, when an
+                                                                               - Product
+          IntelliDealer user adds a part to an invoice and/or a requisition.
+                                                                               Support -
+          Expired records are purged after at least 31 days, depending on
+                                                                               Parts
+          when you run your Accounts Receivable month end and
+                                                                               Customer
+          subsequent full database reorganize.
+                                                                               Pricing
+          To open the Customer Pricing screen, navigate to Product
+                                                                               Revision:
+          Support > Parts > Customer Pricing.
+                                                                               2025.10
+          Customer Pricing records are only recognized by the system if
+          the Utilize Parts Customer Discount Pricing field is enabled
+          on the System Settings - Location screen. If the Your Savings
+          field is also activated, invoices created for customers with a
+          pricing record will include a "Your Savings" line, displaying the
+          total sales price reduction that was applied.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSCD001.htm                                Page 1 of 4
+Customer Pricing                                                                         4/21/26, 3:34 PM
+
+
+
+
+          Screen Description
+
+          The sorting options on the Customer Pricing screen are:
+
+           Sort by
+           Field                             Description
+
+            Customer                         Sort the search results by customer
+            Number                           number.
+
+            Location                         Sort the search results by location.
+
+            Vendor                           Sort the search results by vendor number.
+
+            Source                           Sort the search results by source code.
+
+            Class                            Sort the search results by class code.
+
+            Type                             Sort the search results by type code.
+
+
+          The search fields on the Customer Pricing screen are:
+
+           Search by
+           Field                            Description
+            Select         Search for customer pricing by entering a
+            Customer/Group customer/group.
+
+            Select Part                     Search for customer pricing by entering a
+            Number                          part number.
+
+            Select Vendor                   Search for customer pricing by entering a
+            Number                          vendor number.
+
+            Select Source                   Search for customer pricing by entering a
+                                            source code.
+
+            Select Class                    Search for customer pricing by entering a
+                                            class code.
+
+            Select Type                     Search for customer pricing by entering a
+                                            type code.
+
+            Select Location                 Search for customer pricing by entering a
+                                            location.
+
+https://help.intellidealer.com/intellidealer/Content/PSCD001.htm                              Page 2 of 4
+Customer Pricing                                                                           4/21/26, 3:34 PM
+
+
+
+
+          The fields on the Customer Pricing screen are:
+
+           Field                           Description
+
+            Customer/Group Enter a specific customer.
+
+                                            Or enter a group name used to identify a
+                                            group of customers that this pricing applies
+                                            to. This is a free text field and it is your
+                                            responsibility to ensure that the group
+                                            name entered here matches the Group
+                                            Name entered elsewhere in the system,
+                                            such as customer profile , service
+                                            agreements, work orders, and so on.
+
+            Location                        The location where the customer pricing is
+                                            located or all locations.
+
+            Vendor                          The vendor number associated with the
+                                            customer pricing or all vendor numbers.
+
+            Source                          The source code or all source codes.
+
+            Class                           Applies the customer pricing to parts with a
+                                            specific class code or parts with all class
+                                            codes.
+
+            Type                            Applies the customer pricing to parts with a
+                                            type code or parts with all type codes.
+
+            Part Number                     The number of the part that is affected by
+                                            the customer pricing.
+
+            Comment                         Any comments associated with the
+                                            customer pricing.
+
+
+          When you move the cursor over a customer/group on the
+          Customer/Group field, a popup menu appears with these
+          options:
+
+                    Edit—to edit a customer pricing.
+
+                    Copy —to copy a customer pricing.
+
+https://help.intellidealer.com/intellidealer/Content/PSCD001.htm                                Page 3 of 4
+Customer Pricing                                                                                             4/21/26, 3:34 PM
+
+
+
+
+          Click the Need to create a new customer pricing record?
+          Click here to add link to open the Customer Pricing Record
+          screen and add a new customer pricing record.
+
+          Click the Price Inquiry link to open the Customer Parts Pricing
+          Inquiry screen.
+
+          Click the Customer Pricing Import link to open the Customer
+          Pricing Import screen and import a CSV file updating customer
+          pricing records (customer special pricing).
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSCD001.htm                                                  Page 4 of 4
+

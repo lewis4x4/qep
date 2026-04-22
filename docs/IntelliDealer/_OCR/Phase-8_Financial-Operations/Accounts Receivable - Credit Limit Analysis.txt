@@ -1,0 +1,182 @@
+Accounts Receivable - Credit Limit Analysis                                                  4/21/26, 3:35 PM
+
+
+
+
+                                                                   Search                         Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Financial
+          Management > Accounts Receivable > Credit Limit
+          Analysis
+
+
+          Credit Limit Analysis
+          The Credit Limit Analysis screen allows you to search for and view
+                                                                                 Data
+          customers whose A/R balance has reached or surpassed their credit
+                                                                                 Source: CMASTRE
+          limit by the specified percentage.
+                                                                                 Security
+          Topics in this section are:
+                                                                                 Switch: 600 -
+                  Viewing a Credit Limit Analysis                                Access Credit
+                                                                                 Limit Analysis
+                  Screen Description
+                                                                                 Revision:
+                                                                                 2024.01
+          Viewing a Credit Limit Analysis
+
+             1. Navigate to either of these locations:
+
+                           Financial Management > Accounts Receivable > Credit
+                           Limit Analysis
+
+                           Management Central > Financial > Credit Limit
+                           Analysis
+
+                  The Credit Limit Analysis screen appears.
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCARANL.htm                                  Page 1 of 5
+Accounts Receivable - Credit Limit Analysis                                        4/21/26, 3:35 PM
+
+
+
+
+                        Credit Limit Analysis screen
+
+
+
+
+             2. To locate the desired customer(s), enter the selection criteria
+                and click Go>>.
+
+                  For results to be displayed, you must select both a Percentage
+                  of Credit Limit amount and a Receivable Account
+
+
+                        Updated Credit Limit Analysis screen
+
+
+
+
+             3. To open the Outstanding Detailsscreen for a customer, click
+                on a Customer Name.
+
+
+                        Outstanding Details screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCARANL.htm                        Page 2 of 5
+Accounts Receivable - Credit Limit Analysis                                               4/21/26, 3:35 PM
+
+
+
+
+             4. Click the Information icon to view the Customer Profile
+                screen for this customer.
+
+
+          Screen Description
+
+          The search fields on the Accounts Receivable - Credit Limit
+          Analysis screen are:
+
+           Field                              Description
+
+           Select Percentage Enter a credit limit percentage that will return
+           of Credit Limit   customers that match or exceed the
+                             percentage.
+
+           Select Receivable                  Enter the receivable account you wish to
+           Account                            compare against.
+
+           Show Customers                     If selected, includes customers with zero
+           with Zero Credit                   credit limit in the search results.
+           Limit
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCARANL.htm                               Page 3 of 5
+Accounts Receivable - Credit Limit Analysis                                             4/21/26, 3:35 PM
+
+
+
+
+          To update the table with customers who match the search criteria
+          click Go >>
+
+          The fields on the Accounts Receivable - Credit Limit Analysis
+          screen are:
+
+           Field                Description
+
+                                Select the Information icon to view the Customer
+                                Profile screen for this customer.
+
+           Customer             The customer's name.
+           Name
+
+           Total A/R            The customer's total accounts receivable for the
+                                account selected in the Select Receivable Account
+                                field.
+
+           Credit               The customer's credit limit.
+           Limit
+
+           Credit               The customer's credit rating which shows the state of
+           Rating               the customer's credit.
+
+                                The credit limit/rating comes from the corresponding
+                                cash code on the A/R Agency tab of the Customer
+                                Profile.
+
+           Percentage The total percentage by which the customer has
+                      exceeded their credit limit.
+
+           Equipment Shows if the customer currently has a machine in the
+           Disposition shop on a Work Order, or if the customer has a
+                       machine on Rental.
+
+           Phone                The customer's phone number.
+           Number
+
+
+          Click on a Customer Name to open the Outstanding Detailsscreen.
+
+
+
+          Did you find this helpful? Yes No
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCARANL.htm                             Page 4 of 5
+Accounts Receivable - Credit Limit Analysis                                                                 4/21/26, 3:35 PM
+
+
+
+
+           For help with IntelliDealer contact support at: 1-855-876-2586.
+           To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+           emphasys.com
+
+           © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/MCARANL.htm                                                 Page 5 of 5
+

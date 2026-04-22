@@ -1,0 +1,168 @@
+Equipment Invoicing (Sales Support Portal)                                                                                   4/21/26, 3:30 PM
+
+
+
+
+                                                                                                  Search                              Print
+
+
+
+
+      Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+      You are here: IntelliDealer Menus > Product Support > Equipment Product Support >
+      Equipment Invoicing: Listing
+
+
+      Equipment Invoicing
+      You can use the Equipment Invoicing screen to:
+                                                                                                             Data Source: CGIINH
+            search for equipment invoices
+                                                                                                             Security: 802 -
+            create an invoice                                                                                Equipment Invoicing
+
+            modify printing parameters                                                                       Revision: 2026.04
+
+            reverse the sales of a stock number
+
+            view or edit an equipment invoice
+
+            copy an equipment invoice
+
+      To open the Equipment Invoicing screen, navigate to Product Support > Equipment > Equipment
+      Invoicing.
+      -or-
+      Click on the View Details icon next to the Pending Equipment Sales field on the Sales Support Portal
+      screen.
+
+
+           Equipment Invoicing screen
+
+
+
+
+      The sorting options on the Equipment Invoicing screen are:
+
+       Sort by
+       Field                    Description
+
+       Reference Number Sort the search results by reference number.
+
+       Customer                 Sort the search results by customer.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSEI001.htm                                                                   Page 1 of 3
+Equipment Invoicing (Sales Support Portal)                                                                            4/21/26, 3:30 PM
+
+
+       Date Added             Sort the search results by invoice creation date.
+
+
+      The search fields on the Equipment Invoicing screen are:
+
+       Field                         Description
+
+       Select Reference              Search for equipment invoices by entering a reference number.
+       Number
+
+       Select Customer Number Search for equipment invoices by entering a customer number.
+
+       Select Salesperson            Search for equipment invoices by entering a salesperson.
+
+       Show Extended                 If selected, includes extended equipment description within the invoice search
+       Description                   results.
+
+       Select Stock Number           Search for equipment invoices by entering a stock number.
+
+       Select Location               Search for equipment invoices by entering a location.
+
+       Select Status                 Search for equipment invoices by selecting an invoice status from the drop
+                                     down list.
+
+
+      The fields on the Equipment Invoicing screen are:
+
+       Field            Description
+
+       Reference         The reference number for the equipment invoice. Used to locate and identify equipment
+       Number            invoices throughout the system.
+
+       Customer          The name of the customer associated with the equipment invoice.
+
+       Salesperson       The salesperson assigned to the equipment invoice.
+
+       Stock             The stock number of the unit.
+       Number
+
+       Location          The branch location of the equipment invoice.
+
+       Date Added        The date the equipment invoice was created.
+
+       Invoice           The status of the equipment invoice
+       Status
+                              Pending—the invoice is not yet been processed.
+
+                              Invoiced—the invoice has been generated and is awaiting payment.
+
+                              Released—the invoice has been processed and payment has been released.
+
+       VESign            The signing status of the VESign document. Can be one of:
+       Status
+                              Awaiting Signature—all signatures are pending.
+                              Partially Signed—more than one signature is pending.
+                              Signed—all required signatures are complete.
+                              Canceled—signing has been canceled.
+                              If no status is present, then the document has not been sent for electronic signing.
+                         IntelliDealer checks for a status update every 30 minutes.
+
+
+      Move the cursor over a Reference Number and select either Edit or Copy from the pop-up menu to edit or
+      copy an equipment invoice.
+
+      Click on a Customer Name to open the Customer Profile screen.
+
+      Click on a Stock Number to open the Equipment Profile screen.
+
+      Click the Need to create an invoice? Click here to add link to create a new invoice.
+
+      Click the Modify default printing parameters link to modify printing parameters.
+
+      Click the Reverse the sales of a stock number link to reverse the sale of a stock number or reverse a rental
+      invoice.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSEI001.htm                                                           Page 2 of 3
+Equipment Invoicing (Sales Support Portal)                                                                           4/21/26, 3:30 PM
+
+
+
+      Click the Access JD POs link to view any quotes that have been accepted in the JD Quote II program in the
+      Access JD POs screen. The Access JD POs link only appears if you are licensed to use the JD Quote
+      II interface and the Access JD POs switch is activated on the Authorization List for Product Support -
+      Equipment Invoicing screen.
+
+      Click the JD Proactive Jobs link to open the John Deere Proactive Jobs interface.
+
+      Click the Tethr It Now link to open the Tethr It interface.
+
+      Click the Close button you to complete your work on the Equipment Invoicing screen.
+
+
+
+      Did you find this helpful? Yes No
+
+        For help with IntelliDealer contact support at: 1-855-876-2586.
+        To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-emphasys.com
+
+        © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSEI001.htm                                                          Page 3 of 3
+

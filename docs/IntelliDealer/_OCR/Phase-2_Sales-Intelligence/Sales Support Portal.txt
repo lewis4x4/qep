@@ -1,0 +1,417 @@
+Sales Support Portal                                                                            4/21/26, 3:31 PM
+
+
+
+
+                                                                   Search                              Print
+
+
+
+
+          Please check the IntelliDealer Online Help for the latest updates.
+
+
+
+
+          You are here: IntelliDealer Menus > Product Support >
+          Equipment Product Support > Sales Support Portal
+
+
+          Sales Support Portal
+          Equipment salespersons can use the Sales Support Portal screen
+                                                                                    Security: 808 -
+          to stay on top of active sales, current sales figures, contacts, call
+                                                                                    Product
+          schedule and much more. This screen is customizable and can be
+                                                                                    Support -
+          setup to meet each salesperson’s needs.
+                                                                                    Sales Support
+          A salesperson's customer base is determined by customers where            Portal
+          the salesperson has been selected as the default salesperson while
+                                                                                    Revision:
+          setting up the customer profile or if the salesperson has been
+                                                                                    2025.04
+          selected as a customer's contact salesperson for one of these sales
+          categories: parts, service, other, equipment, rental or administration.
+
+          To open the Sales Support Portal screen, navigate to Product
+          Support > Equipment > Sales Support Portal.
+
+
+                Sales Support Portal screen
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                                      Page 1 of 12
+Sales Support Portal                                                      4/21/26, 3:31 PM
+
+
+
+
+          Topics in this section include:
+
+                   Setting up a Sales Support Portal
+
+                   Screen Description
+
+
+          Setting up a Sales Support Portal
+
+             1. Navigate to Product Support > Equipment > Sales Support
+                Portal.
+
+
+                         The Sales Support Portal screen appears.
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm              Page 2 of 12
+Sales Support Portal                                                          4/21/26, 3:31 PM
+
+
+
+
+             2. Click the Personalize Portal link, located at the top left.
+
+
+                      The Sales Support Portal - Personalize Portal screen
+                   appears in a new browser window.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                 Page 3 of 12
+Sales Support Portal                                                               4/21/26, 3:31 PM
+
+
+
+
+             3. To add an available view to the Sales Support Portal screen,
+                click the desired view from the Available Views section and
+                drag it into the desired area on the Sales Support Portal -
+                Personalize Portal section.
+
+                   To remove a view from the Sales Support Portal screen click
+                   the desired view from the Sales Support Portal - Personalize
+                   Portal section and drag it into the Available Views sections.
+
+             4. To change a view's background or text color click on the
+                appropriate color box within the desired view.
+
+
+                      A Color screen appears that you can use to edit the
+                   background or text view color.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                      Page 4 of 12
+Sales Support Portal                                                                4/21/26, 3:31 PM
+
+
+
+
+             5. Click Save to make your changes and return to an updated
+                view of the Customer Portal Sequencing screen.
+                - or -
+                Click the Delete button to discard your changes and return to
+                the Customer Portal Sequencing screen.
+
+             6. From the Customer Portal Sequencing screen, click the
+                Close button to return to the Customer Portal screen.
+
+             7. To update the Customer Portal screen to reflect the new view
+                click Go>>.
+
+
+                                  Note: You must have a customer selected for the
+                                  customer portal sequence to be displayed.
+
+
+
+                         Updated Sales Support Portal screen
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                        Page 5 of 12
+Sales Support Portal                                                                    4/21/26, 3:31 PM
+
+
+
+
+          Screen Description
+
+          The search field on the Sales Support Portal screen is:
+
+           Field                      Description
+
+           Select                     Search for a sales support portal by entering a
+           Salesperson                salesperson's ID.
+
+
+          The views available on the Sales Support Portal screen are:
+
+           Field                  Description
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                           Page 6 of 12
+Sales Support Portal                                                                     4/21/26, 3:31 PM
+
+
+
+           Outstanding The salesperson's outstanding accounts receivable
+           A/R         by all aging periods and the percentage for each
+                                  aging period.
+
+                                  Click the View Details  icon to see Accounts
+                                  Receivable: A/R Outstanding.
+
+           Top 10                 The salesperson's top 10 most profitable customers
+           Profitable             year to date. Click a Customer Name to open the
+           Fiscal YTD             Customer Profile screen.
+
+                                  Click the View Details   icon to see Current
+                                  Fiscal YTD - Total/Customer Profitability.
+
+           10 Least               The salesperson's 10 least profitable customers year
+           Profitable             to date. Click a Customer Name to open the
+           Fiscal YTD             Customer Profile screen.
+
+                                  Click the View Details   icon to see Current
+                                  Fiscal YTD - Total/Customer Profitability.
+
+           Fiscal                 The salesperson's customer's purchasing trends.
+           Purchasing
+           Trends                 Click the View Details   icon to see Geographic
+                                  and Business Analysis - Province/State.
+
+           Fiscal YTD    The salesperson's year to date total profitability
+           Profitability summary.
+           Summary
+                         Click a Margin link to open the Current Fiscal YTD
+                         screen.
+
+           Last Fiscal   The salesperson's total last year to date profitability
+           Year YTD      summary.
+           Profitability
+           Summary       Click a Margin link to open the Last Fiscal YTD
+                         screen.
+
+           Rolling 12    The salesperson's profitability summary of the last
+           Profitability twelve months of financial activity.
+           Summary
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                             Page 7 of 12
+Sales Support Portal                                                                             4/21/26, 3:31 PM
+
+
+
+
+                                  Click a Margin link to open the Rolling 12 screen.
+
+           Last Fiscal   The salesperson's last year total profitability
+           Year          summary.
+           Profitability
+           Summary       Click a Margin link to open the Last Fiscal Year End
+                         Total screen. Allows you to view the salesperson's
+                         customers last fiscal year end total profitability.
+
+           Oldest Last            A list of the last activity on the account of the
+           Sales                  salesperson's oldest customers.
+           Activity
+                                  Click a Customer Name to open the Customer
+                                  Profile screen.
+
+           My Calls               Summarized information about the salesperson's
+                                  customer calls. To search for calls by date range,
+                                  enter a From and To date and click Go >>. The
+                                  fields are:
+
+                                           Total Lost Sales—the total amount of lost
+                                           sales for the salesperson logged in during the
+                                           date range specified. Click the Total Lost
+                                           Sales column link to open the Call Analysis
+                                           screen .
+
+                                           My Calls—displays:
+                                                    All—the total amount of sales calls to all
+                                                    customers during the date range
+                                                    specified
+                                                    My—the total amount of sales calls to my
+                                                    customers
+                                                    %—the percentage of all sales calls that
+                                                    were to my customers.
+                                           Click the My Calls - All column link to open
+                                           the Call Analysis screen.
+
+                                           Customers—displays:
+                                                    All—the total amount of customers
+                                                    My—the amount of customers the
+                                                    salesperson is responsible for
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                                    Page 8 of 12
+Sales Support Portal                                                                         4/21/26, 3:31 PM
+
+
+
+                                                    %—the percentage of all customers that
+                                                    the salesperson is responsible for.
+                                           Click the Customers - My column link to open
+                                           the Your Customers screen.
+
+                                           Customers Contacted—displays:
+                                                All—the total number of all customers
+                                                contacted by the salespeople during the
+                                                date range specified
+                                                My—the number of my customers
+                                                contacted by the salespeople
+                                                %—the percentage of all contacted
+                                                customers that the salesperson is
+                                                responsible for.
+                                           % Contacted—displays:
+                                                All—the percentage of all customers
+                                                contacted during the date range
+                                                specified
+                                                My—the percentage of customers
+                                                contacted for the salesperson's
+                                                customers.
+                                           Not Contacted—displays:
+                                                All—the total number of customers not
+                                                contacted during the date range
+                                                specified
+                                                My—the total number of my customers
+                                                not contacted
+                                                %—the percentage of all customers that
+                                                the salesperson currently responsible for
+                                                that were not contacted.
+                                           Click the Not Contacted - My column link to
+                                           open the Not Contacted screen.
+
+           Last 5 Calls           A detailed list of the salesperson's last 5 customer
+                                  calls.
+
+                                  Click a Customer Name to open the Customer
+                                  Profile screen.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                                Page 9 of 12
+Sales Support Portal                                                                        4/21/26, 3:31 PM
+
+
+
+
+                                  Click the View Details   icon to see Call History
+                                  - Salesperson/Call History - Type.
+
+           Next 5                 A detailed list of the salesperson's next 5 scheduled
+           Scheduled              calls.
+           Calls
+                                  Click a Customer Name to open the Customer
+                                  Profile screen.
+
+           Last 5                 Displays a detailed list of the last 5 customer calls
+           (Other than            by other salespeople.
+           me)
+                                  Click on the Customer Name to open the
+                                  Customer Profile screen.
+
+           Contact                A list of the salesperson's customer's contacts
+           Birthdays              birthdays.
+
+                                  Click on the Customer Name to open the Edit
+                                  Contactscreen.
+
+           Next 10                A list of the salesperson's next 10 quotes that are
+           Quotes                 expiring.
+           Expiring
+                                  Click on the Customer Name to open the
+                                  Customer Profile screen.
+
+                                  Click the View Details           icon to see the Select
+                                  Quote Type screen.
+
+           Pending                A list of the salesperson's pending equipment sales.
+           Equipment              Click on the Customer Name to open the
+           Sales                  Customer Profile screen.
+
+                                  Click the View Details           icon to see the Open
+                                  Work Orders screen.
+
+           Machines in A list of units that are current in for service.
+           Shop
+                       Click on the Customer Name to open the
+                       Customer Profile screen.
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                               Page 10 of 12
+Sales Support Portal                                                                       4/21/26, 3:31 PM
+
+
+
+
+                                  Click the View Details  icon to see the
+                                  Equipment Invoicing screen.
+
+           Renting                A list of equipment out on rent. Click a Customer
+           Equipment              Name to open the Customer Profile screen.
+
+           Demos &                A list of equipment that is out as demos or loaners.
+           Loaners                Click a Customer Name to open the Customer
+                                  Profile screen.
+
+           Trade in               A detailed list of the trade in inventory the
+           Inventory              salesperson is responsible for.
+
+                                  Click the View Details   icon to see the
+                                  Equipment Listing screen.
+
+           Quick                  Provides quick access to a list of selected screens:
+           Access
+                                           Customer Portal
+                                           Equipment Profile
+                                           Parts Profile
+                                           Supplier Lookup
+                                           Campaigns
+                                           Forms
+
+           Prospect               A list of prospective customers or (if you have
+           Board                  purchased the JD Quote II feature), a list of
+                                  JD Quote II purchase orders/ quotes that are still in
+                                  progress.
+
+
+                                                 Note: Prospective customers and
+                                                 JD Quote II quotes that are still in
+                                                 progress are maintained on the Prospect
+                                                 Board screen.
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                              Page 11 of 12
+Sales Support Portal                                                                                         4/21/26, 3:31 PM
+
+
+
+
+          To customize the view, click the Personalize Portal link. The Sales
+          Support Portals - Personalize Portal screen appears. You can edit
+          an existing sales support portal or set up a new sales support portal.
+          See Setting up a Sales Support Portal
+
+
+
+          Did you find this helpful? Yes No
+
+            For help with IntelliDealer contact support at: 1-855-876-2586.
+            To suggest improvements to the IntelliDealer Online Help email: Documentation.IntelliDealer@e-
+            emphasys.com
+
+            © 2026 VitalEdge Technologies
+
+
+
+
+https://help.intellidealer.com/intellidealer/Content/PSSPA01.htm                                                Page 12 of 12
+
