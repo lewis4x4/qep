@@ -1,5 +1,3 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
 type PortalAction = "session" | "submit";
 
 interface PortalRequest {
@@ -57,7 +55,52 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
 }
 
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const REST_BASE = `${SUPABASE_URL}/rest/v1`;
+const ADMIN_HEADERS = {
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  "Content-Type": "application/json",
+};
+
+async function restGet<T>(path: string, query: Record<string, string>): Promise<T> {
+  const params = new URLSearchParams(query);
+  const response = await fetch(`${REST_BASE}/${path}?${params.toString()}`, {
+    headers: ADMIN_HEADERS,
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return await response.json() as T;
+}
+
+async function restPatch(path: string, query: Record<string, string>, body: unknown): Promise<void> {
+  const params = new URLSearchParams(query);
+  const response = await fetch(`${REST_BASE}/${path}?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      ...ADMIN_HEADERS,
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
+async function restInsert(path: string, body: unknown): Promise<void> {
+  const response = await fetch(`${REST_BASE}/${path}`, {
+    method: "POST",
+    headers: {
+      ...ADMIN_HEADERS,
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -77,21 +120,30 @@ Deno.serve(async (req) => {
     }
 
     const accessKeyHash = await sha256Hex(accessKey);
-    const { data: accessRow, error: accessError } = await supabaseAdmin
-      .from("vendor_portal_access_keys")
-      .select("id, workspace_id, vendor_id, label, contact_name, contact_email, expires_at, revoked_at, vendor_profiles(name, supplier_type, notes)")
-      .eq("access_key_hash", accessKeyHash)
-      .maybeSingle();
+    const accessRows = await restGet<Array<{
+      id: string;
+      workspace_id: string;
+      vendor_id: string;
+      label: string | null;
+      contact_name: string | null;
+      contact_email: string | null;
+      expires_at: string | null;
+      revoked_at: string | null;
+      vendor_profiles: { name?: string; supplier_type?: string; notes?: string | null } | Array<{ name?: string; supplier_type?: string; notes?: string | null }> | null;
+    }>>("vendor_portal_access_keys", {
+      select: "id,workspace_id,vendor_id,label,contact_name,contact_email,expires_at,revoked_at,vendor_profiles(name,supplier_type,notes)",
+      access_key_hash: `eq.${accessKeyHash}`,
+      limit: "1",
+    });
 
-    if (accessError) throw accessError;
+    const accessRow = accessRows[0];
     if (!accessRow || accessRow.revoked_at || !isFuture(accessRow.expires_at)) {
       return jsonResponse(origin, 404, { error: "This vendor pricing link is invalid or expired." });
     }
 
-    await supabaseAdmin
-      .from("vendor_portal_access_keys")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("id", accessRow.id);
+    await restPatch("vendor_portal_access_keys", { id: `eq.${accessRow.id}` }, {
+      last_used_at: new Date().toISOString(),
+    });
 
     if (action === "submit") {
       const items = body.items ?? [];
@@ -121,26 +173,28 @@ Deno.serve(async (req) => {
         };
       });
 
-      const { error: insertError } = await supabaseAdmin
-        .from("parts_vendor_price_submissions")
-        .insert(insertRows);
-
-      if (insertError) throw insertError;
+      await restInsert("parts_vendor_price_submissions", insertRows);
     }
 
     const search = (body.search ?? "").trim().toLowerCase();
 
-    const { data: vendorPrices, error: vendorPricesError } = await supabaseAdmin
-      .from("parts_vendor_prices")
-      .select("id, part_number, description, list_price, currency, effective_date")
-      .eq("workspace_id", accessRow.workspace_id)
-      .eq("vendor_id", accessRow.vendor_id)
-      .order("effective_date", { ascending: false })
-      .limit(500);
-    if (vendorPricesError) throw vendorPricesError;
+    const vendorPrices = await restGet<Array<{
+      id: string;
+      part_number: string;
+      description: string | null;
+      list_price: number | null;
+      currency: string;
+      effective_date: string;
+    }>>("parts_vendor_prices", {
+      select: "id,part_number,description,list_price,currency,effective_date",
+      workspace_id: `eq.${accessRow.workspace_id}`,
+      vendor_id: `eq.${accessRow.vendor_id}`,
+      order: "effective_date.desc",
+      limit: "500",
+    });
 
-    const latestByPart = new Map<string, { id: string; part_number: string; description: string | null; list_price: number | null; currency: string; effective_date: string }>();
-    for (const row of vendorPrices ?? []) {
+    const latestByPart = new Map<string, typeof vendorPrices[number]>();
+    for (const row of vendorPrices) {
       if (!latestByPart.has(row.part_number)) {
         latestByPart.set(row.part_number, row);
       }
@@ -161,14 +215,24 @@ Deno.serve(async (req) => {
         effectiveDate: row.effective_date,
       }));
 
-    const { data: submissions, error: submissionsError } = await supabaseAdmin
-      .from("parts_vendor_price_submissions")
-      .select("id, part_number, description, proposed_list_price, currency, effective_date, submission_notes, status, review_notes, created_at")
-      .eq("workspace_id", accessRow.workspace_id)
-      .eq("vendor_id", accessRow.vendor_id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (submissionsError) throw submissionsError;
+    const submissions = await restGet<Array<{
+      id: string;
+      part_number: string;
+      description: string | null;
+      proposed_list_price: number;
+      currency: string;
+      effective_date: string;
+      submission_notes: string | null;
+      status: string;
+      review_notes: string | null;
+      created_at: string;
+    }>>("parts_vendor_price_submissions", {
+      select: "id,part_number,description,proposed_list_price,currency,effective_date,submission_notes,status,review_notes,created_at",
+      workspace_id: `eq.${accessRow.workspace_id}`,
+      vendor_id: `eq.${accessRow.vendor_id}`,
+      order: "created_at.desc",
+      limit: "50",
+    });
 
     const vendorJoin = Array.isArray(accessRow.vendor_profiles) ? accessRow.vendor_profiles[0] : accessRow.vendor_profiles;
 
@@ -183,7 +247,7 @@ Deno.serve(async (req) => {
         contactEmail: accessRow.contact_email ?? null,
       },
       prices,
-      submissions: (submissions ?? []).map((row) => ({
+      submissions: submissions.map((row) => ({
         id: row.id,
         partNumber: row.part_number,
         description: row.description,
