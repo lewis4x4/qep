@@ -190,6 +190,17 @@ function buildEquipmentLineFromRecommendation(
   };
 }
 
+// QEP governance: Download PDF / Send Quote / Share Link are locked
+// until the quote reaches an approved state via the owner-tier review
+// (Ryan + Rylee McKenzie). Draft, pending_approval, changes_requested,
+// and rejected quotes can't be distributed to a customer.
+export function isQuoteApprovedForDistribution(status: string | null | undefined): boolean {
+  return status === "approved"
+    || status === "approved_with_conditions"
+    || status === "sent"
+    || status === "accepted";
+}
+
 function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "make" | "model" | "year">): string {
   return [
     item.id ?? "",
@@ -1870,7 +1881,8 @@ export function QuoteBuilderV2Page() {
                     };
                   })(),
                 })}
-                disabled={pdfGenerating}
+                disabled={pdfGenerating || !isQuoteApprovedForDistribution(draft.quoteStatus)}
+                title={isQuoteApprovedForDistribution(draft.quoteStatus) ? undefined : "PDF unlocks after owner approval"}
               >
                 {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
                 {pdfGenerating ? "Generating..." : "Download PDF"}

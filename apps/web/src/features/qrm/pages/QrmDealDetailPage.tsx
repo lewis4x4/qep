@@ -542,18 +542,43 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                               {activeQuote?.id === quote.id ? "Resume current" : "Open quote"}
                             </Link>
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => { void handleShareQuote(quote.id); }}
-                            title="Copy a customer-shareable link to this proposal"
-                          >
-                            {shareStateByQuote[quote.id]?.status === "copied" ? (
-                              <><Check className="mr-1 h-3.5 w-3.5" /> Copied</>
-                            ) : (
-                              <><LinkIcon className="mr-1 h-3.5 w-3.5" /> Share link</>
-                            )}
-                          </Button>
+                          {(() => {
+                            // Gated: customer-shareable link is only
+                            // available once the owners have approved
+                            // the quote. Before that, the Share button
+                            // explains what's needed.
+                            const approvedForShare =
+                              quote.status === "approved"
+                              || quote.status === "approved_with_conditions"
+                              || quote.status === "sent"
+                              || quote.status === "accepted";
+                            if (!approvedForShare) {
+                              return (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled
+                                  title="Share link unlocks after owner approval"
+                                >
+                                  <LinkIcon className="mr-1 h-3.5 w-3.5" /> Awaiting approval
+                                </Button>
+                              );
+                            }
+                            return (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => { void handleShareQuote(quote.id); }}
+                                title="Copy a customer-shareable link to this proposal"
+                              >
+                                {shareStateByQuote[quote.id]?.status === "copied" ? (
+                                  <><Check className="mr-1 h-3.5 w-3.5" /> Copied</>
+                                ) : (
+                                  <><LinkIcon className="mr-1 h-3.5 w-3.5" /> Share link</>
+                                )}
+                              </Button>
+                            );
+                          })()}
                           {shareStateByQuote[quote.id]?.status === "error" && (
                             <span className="text-[11px] text-rose-400">
                               {shareStateByQuote[quote.id]?.message}

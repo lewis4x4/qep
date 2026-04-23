@@ -3224,11 +3224,19 @@ Deno.serve(async (req) => {
         admin,
         workspaceId: pkgRow.workspace_id || "default",
       });
-      const authorityBand = resolveQuoteApprovalAuthorityBand({
+      // QEP requires every quote to land in front of the owners (Ryan +
+      // Rylee McKenzie). The branch-manager tier is retained in code
+      // for other tenants' policies, but for QEP we force the authority
+      // band to owner_admin on every submission. This bypasses the
+      // branch_sales_manager and branch_general_manager resolution
+      // paths entirely — the route always lands on an owner/admin.
+      const _computedAuthorityBand = resolveQuoteApprovalAuthorityBand({
         marginPct: pkgRow.margin_pct,
         amount: pkgRow.net_total,
         policy,
       });
+      const authorityBand: "branch_manager" | "owner_admin" = "owner_admin";
+      void _computedAuthorityBand; // keep the function call for future tenants
       const approvalRoute = await resolveQuoteApprovalAssignee({
         admin,
         workspaceId: pkgRow.workspace_id || "default",

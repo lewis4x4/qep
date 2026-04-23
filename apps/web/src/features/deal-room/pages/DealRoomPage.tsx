@@ -16,7 +16,6 @@ import {
   type TradeEstimatePayload,
 } from "../lib/deal-room-api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PortalSignaturePad, type PortalSignaturePadHandle } from "@/features/portal/components/PortalSignaturePad";
 import {
   computePaymentFor,
   filterDisplayableScenarios,
@@ -1216,16 +1215,13 @@ function AcceptPanel({
   tradeCredit: number;
   configuratorSelections: Array<{ key: string; name: string; price: number }>;
 }) {
-  const [open, setOpen] = useState(false);
   const [signerName, setSignerName] = useState(customerHint === "Customer" ? "" : customerHint);
-  const [signerEmail, setSignerEmail] = useState("");
-  const signaturePadRef = useRef<PortalSignaturePadHandle>(null);
   const queryClient = useQueryClient();
 
   // Quote-status-based affordance: already-accepted quotes render the
   // confirmation state instead of the Accept button. Rep-driven flows
-  // (pending_approval, changes_requested, rejected) lock out signing
-  // so the customer can't accept a stale price.
+  // (pending_approval, changes_requested, rejected) lock out accept
+  // so the customer can't commit against a stale price.
   const currentStatus = quote.status;
   const alreadyAccepted = ["accepted", "converted_to_deal"].includes(currentStatus);
   const lockedStatuses = new Set([
@@ -1239,8 +1235,6 @@ function AcceptPanel({
 
   const acceptMutation = useMutation({
     mutationFn: () => {
-      const dataUrl = signaturePadRef.current?.toDataUrl() ?? "";
-      if (!dataUrl) throw new Error("Please sign in the box.");
       const configuration: Record<string, unknown> = {
         quote_id: quote.id,
         customer_total: quote.customer_total ?? 0,
@@ -1253,18 +1247,22 @@ function AcceptPanel({
         trade_credit: tradeCredit,
         attachments: configuratorSelections,
       };
+      // QEP's workflow doesn't require a customer signature — the
+      // accept is a non-binding "yes, move forward" indication. The
+      // binding paperwork happens offline with the rep. Server-side
+      // still records signer_name + a blank signature_data_url so the
+      // existing accept endpoint shape stays compatible.
       return acceptPublicQuote(token, {
-        signerName: signerName.trim(),
-        signerEmail: signerEmail.trim() || null,
-        signatureDataUrl: dataUrl,
+        signerName: signerName.trim() || (customerHint === "Customer" ? "Customer" : customerHint),
+        signerEmail: null,
+        signatureDataUrl: "data:image/png;base64,",
         customerConfiguration: configuration,
       });
     },
     onSuccess: () => {
-      // Invalidate the deal-room read so the page flips to the accepted
-      // state without a manual refresh.
+      // Invalidate the deal-room read so the page flips to the
+      // accepted state without a manual refresh.
       queryClient.invalidateQueries({ queryKey: ["deal-room", token] });
-      setOpen(false);
     },
   });
 
@@ -1277,11 +1275,11 @@ function AcceptPanel({
               Proposal accepted
             </div>
             <p className="mt-1 text-sm text-emerald-900">
-              Your rep has been notified. They'll reach out to confirm delivery, final paperwork, and next steps.
+              Your rep has been notified. They'll reach out to confirm delivery, paperwork, and next steps.
             </p>
           </div>
           <div className="rounded-full bg-emerald-600 px-4 py-1 text-xs font-bold uppercase tracking-[0.08em] text-white">
-            Signed
+            Accepted
           </div>
         </div>
       </section>
@@ -1291,130 +1289,46 @@ function AcceptPanel({
   if (locked) {
     return (
       <section className="mt-9 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
-        This proposal is in <strong>{currentStatus.replace(/_/g, " ")}</strong> status. Contact your rep to resume signing.
+        This proposal is in <strong>{currentStatus.replace(/_/g, " ")}</strong> status. Contact your rep for next steps.
       </section>
     );
   }
 
   return (
-    <>
-      <section className="mt-9 rounded-2xl border-2 border-[#E87722] bg-[#fff7ed] p-6 sm:p-7">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#E87722]">
-              Ready to move forward?
-            </div>
-            <p className="mt-1 text-sm text-slate-800">
-              Tap to sign — your configuration is locked at acceptance and your rep will reach out to finalize.
-            </p>
+    <section className="mt-9 rounded-2xl border-2 border-[#E87722] bg-[#fff7ed] p-6 sm:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#E87722]">
+            Ready to move forward?
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="rounded-lg bg-[#E87722] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#d06a1e]"
-          >
-            Accept this proposal
-          </button>
+          <p className="mt-1 text-sm text-slate-800">
+            Tap Accept to let your rep know you want to proceed. They'll reach out to finalize paperwork, delivery, and any remaining details.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              placeholder="Your name"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-xs"
+            />
+          </div>
         </div>
-      </section>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Sign to accept"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
+        <button
+          type="button"
+          onClick={() => acceptMutation.mutate()}
+          disabled={!signerName.trim() || acceptMutation.isPending}
+          className="rounded-lg bg-[#E87722] px-6 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#d06a1e] disabled:opacity-40"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Confirm and sign</h3>
-                <p className="mt-0.5 text-[13px] text-slate-500">
-                  Your configuration, cash down, and term are locked at this moment.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-slate-400 hover:bg-slate-100"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-lg bg-slate-50 p-3 text-[13px] leading-relaxed text-slate-700">
-              <div className="flex justify-between"><span>Monthly payment</span><span className="font-semibold tabular-nums">{formatCurrency(computed?.monthlyPayment ?? 0, 0)}/mo</span></div>
-              <div className="flex justify-between"><span>{computed?.isCash ? "Paid at close" : "Amount financed"}</span><span className="font-semibold tabular-nums">{formatCurrency(computed?.amountFinanced ?? quote.amount_financed ?? 0, 0)}</span></div>
-              <div className="flex justify-between"><span>Customer total</span><span className="font-semibold tabular-nums">{formatCurrency(quote.customer_total ?? 0, 0)}</span></div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Your name</span>
-                <input
-                  type="text"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  required
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Email (optional)</span>
-                <input
-                  type="email"
-                  value={signerEmail}
-                  onChange={(e) => setSignerEmail(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                />
-              </label>
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Signature</span>
-                  <button
-                    type="button"
-                    onClick={() => signaturePadRef.current?.clear()}
-                    className="text-[11px] text-slate-500 underline-offset-2 hover:underline"
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div className="mt-1 overflow-hidden rounded-md border border-slate-300 bg-white">
-                  <PortalSignaturePad ref={signaturePadRef} width={400} height={160} />
-                </div>
-              </div>
-            </div>
-
-            {acceptMutation.isError && (
-              <div className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-[13px] text-rose-700">
-                {acceptMutation.error instanceof Error ? acceptMutation.error.message : "Couldn't record acceptance."}
-              </div>
-            )}
-
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => acceptMutation.mutate()}
-                disabled={!signerName.trim() || acceptMutation.isPending}
-                className="rounded-md bg-[#E87722] px-5 py-2 text-sm font-bold text-white disabled:opacity-40"
-              >
-                {acceptMutation.isPending ? "Recording…" : "Sign and accept"}
-              </button>
-            </div>
-          </div>
+          {acceptMutation.isPending ? "Recording…" : "Accept this proposal"}
+        </button>
+      </div>
+      {acceptMutation.isError && (
+        <div className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-[13px] text-rose-700">
+          {acceptMutation.error instanceof Error ? acceptMutation.error.message : "Couldn't record acceptance."}
         </div>
       )}
-    </>
+    </section>
   );
 }
 

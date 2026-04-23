@@ -222,6 +222,19 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
     },
   },
   {
+    name: "search_platform",
+    description:
+      "Federated search across the ENTIRE QEP platform — contacts, companies, deals, saved quotes, equipment inventory, and service jobs — in a single call. USE THIS FIRST when the user's question names a person, company, or machine that could live in any module, or when you don't know which module the answer is in. Returns a unified, ranked result set with source type tagged per row. After you get back the results, use the row's (source, id) to drill in with the specific lookup_* tool for detailed fields. Prefer this over calling lookup_contact then lookup_quote then search_equipment one at a time.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Free-text search term (e.g. 'John Coker', 'SR175', 'Brantford Florida')" },
+        limit_per_source: { type: "number", description: "Max rows returned per source (default 5)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
     name: "lookup_quote",
     description:
       "Find saved equipment proposals (quote packages) by customer name, company name, or quote id. Returns the quote's customer, equipment, totals, cash down, amount financed, financing scenarios, status, and the AI reasoning used to build it (which often captures budget and job context). USE THIS WHEN: the user asks about a quoted deal, a prospect who doesn't have a full CRM contact yet, or anything about numbers on a specific proposal (e.g. 'how much was John gonna put down', 'what's the budget on the Coker deal', 'which SR175 quote have we sent recently'). Falls through to this when lookup_contact returns nothing for a known prospect name.",
@@ -327,6 +340,12 @@ export async function executeIronTool(
         );
       case "web_search":
         return await toolWebSearch(String(input.query ?? ""), ctx);
+      case "search_platform":
+        return await toolSearchPlatform(
+          String(input.query ?? ""),
+          (input.limit_per_source as number | undefined) ?? 5,
+          ctx,
+        );
       case "lookup_quote":
         return await toolLookupQuote(
           input.customer_name as string | undefined,
@@ -693,6 +712,272 @@ async function toolLookupContact(name: string, limit: number, ctx: ToolContext) 
       title: c.title,
       company: c.primary_company_id ? companyById.get(c.primary_company_id) ?? null : null,
     })),
+  };
+}
+
+interface PlatformHit {
+  source: "contact" | "company" | "deal" | "quote" | "equipment" | "service_job";
+  id: string;
+  title: string;
+  subtitle: string | null;
+  context: Record<string, unknown>;
+  match_score: number;
+}
+
+// Cheap relevance score: exact-match > prefix > substring, case-insensitive.
+// Keeps ranking predictable across heterogeneous sources without a vector
+// store. Iron can already re-rank semantically in-model if needed.
+function platformMatchScore(term: string, candidate: string | null | undefined): number {
+  if (!candidate) return 0;
+  const t = term.trim().toLowerCase();
+  const c = candidate.toLowerCase();
+  if (!t) return 0;
+  if (c === t) return 100;
+  if (c.startsWith(t)) return 60;
+  if (c.includes(t)) return 30;
+  return 0;
+}
+
+async function toolSearchPlatform(
+  query: string,
+  limitPerSource: number,
+  ctx: ToolContext,
+): Promise<unknown> {
+  const trimmed = query.trim();
+  if (!trimmed) return { error: "query is required" };
+  const term = trimmed.slice(0, 80);
+  const like = `%${term.replace(/[%_]/g, "")}%`;
+  const cap = Math.max(1, Math.min(limitPerSource, 10));
+
+  // Fan out six independent queries; any one failing just contributes
+  // zero rows from that source. This matches the user's "search the
+  // entire platform" expectation: a bad RLS policy on service_jobs
+  // shouldn't hide contacts.
+  const [
+    contactsRes,
+    companiesRes,
+    dealsRes,
+    quotesRes,
+    equipmentRes,
+    jobsRes,
+  ] = await Promise.allSettled([
+    ctx.admin
+      .from("qrm_contacts")
+      .select("id, first_name, last_name, email, phone, title, primary_company_id")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like}`)
+      .limit(cap),
+    ctx.admin
+      .from("qrm_companies")
+      .select("id, name, industry, city, state")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .ilike("name", like)
+      .limit(cap),
+    ctx.admin
+      .from("crm_deals")
+      .select("id, name, amount, stage, status, customer_name, customer_company")
+      .is("deleted_at", null)
+      .or(`name.ilike.${like},customer_name.ilike.${like},customer_company.ilike.${like}`)
+      .limit(cap),
+    ctx.admin
+      .from("quote_packages")
+      .select("id, quote_number, customer_name, customer_company, status, net_total, customer_total, equipment, ai_recommendation, created_at")
+      .eq("workspace_id", ctx.workspaceId)
+      .or(`customer_name.ilike.${like},customer_company.ilike.${like},quote_number.ilike.${like}`)
+      .order("created_at", { ascending: false })
+      .limit(cap),
+    ctx.admin
+      .from("qrm_equipment")
+      .select("id, make, model, year, serial_number, category, availability, current_market_value")
+      .eq("workspace_id", ctx.workspaceId)
+      .is("deleted_at", null)
+      .or(`make.ilike.${like},model.ilike.${like},serial_number.ilike.${like}`)
+      .limit(cap),
+    ctx.admin
+      .from("qrm_service_jobs")
+      .select("id, customer_problem_summary, current_stage, priority, customer_id, scheduled_date")
+      .ilike("customer_problem_summary", like)
+      .limit(cap),
+  ]);
+
+  const hits: PlatformHit[] = [];
+
+  if (contactsRes.status === "fulfilled" && contactsRes.value.data) {
+    for (const row of contactsRes.value.data as Array<Record<string, unknown>>) {
+      const name = `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim();
+      const emailScore = platformMatchScore(term, row.email as string | null);
+      const nameScore = Math.max(
+        platformMatchScore(term, name),
+        platformMatchScore(term, row.first_name as string | null),
+        platformMatchScore(term, row.last_name as string | null),
+      );
+      hits.push({
+        source: "contact",
+        id: String(row.id),
+        title: name || (row.email as string) || "(unnamed contact)",
+        subtitle: typeof row.title === "string" ? row.title : null,
+        context: {
+          email: row.email,
+          phone: row.phone,
+          primary_company_id: row.primary_company_id,
+        },
+        match_score: Math.max(emailScore, nameScore),
+      });
+    }
+  }
+
+  if (companiesRes.status === "fulfilled" && companiesRes.value.data) {
+    for (const row of companiesRes.value.data as Array<Record<string, unknown>>) {
+      const name = row.name as string | null;
+      hits.push({
+        source: "company",
+        id: String(row.id),
+        title: name ?? "(unnamed company)",
+        subtitle: [row.industry, row.city, row.state].filter(Boolean).join(" · ") || null,
+        context: {
+          industry: row.industry,
+          city: row.city,
+          state: row.state,
+        },
+        match_score: platformMatchScore(term, name),
+      });
+    }
+  }
+
+  if (dealsRes.status === "fulfilled" && dealsRes.value.data) {
+    for (const row of dealsRes.value.data as Array<Record<string, unknown>>) {
+      const name = row.name as string | null;
+      const title = name ?? (row.customer_name as string) ?? "(deal)";
+      hits.push({
+        source: "deal",
+        id: String(row.id),
+        title,
+        subtitle: typeof row.stage === "string" ? String(row.stage) : null,
+        context: {
+          amount: row.amount,
+          stage: row.stage,
+          status: row.status,
+          customer_name: row.customer_name,
+          customer_company: row.customer_company,
+        },
+        match_score: Math.max(
+          platformMatchScore(term, name),
+          platformMatchScore(term, row.customer_name as string | null),
+          platformMatchScore(term, row.customer_company as string | null),
+        ),
+      });
+    }
+  }
+
+  if (quotesRes.status === "fulfilled" && quotesRes.value.data) {
+    for (const row of quotesRes.value.data as Array<Record<string, unknown>>) {
+      const equipment = Array.isArray(row.equipment) ? row.equipment : [];
+      const primary = equipment[0] as Record<string, unknown> | undefined;
+      const primaryLabel = primary
+        ? [primary.make, primary.model].filter(Boolean).join(" ")
+        : null;
+      const customerLabel = (row.customer_name as string)
+        ?? (row.customer_company as string)
+        ?? (row.quote_number as string)
+        ?? "(unlabeled quote)";
+      const rec = row.ai_recommendation && typeof row.ai_recommendation === "object"
+        ? row.ai_recommendation as Record<string, unknown>
+        : null;
+      hits.push({
+        source: "quote",
+        id: String(row.id),
+        title: `Quote — ${customerLabel}`,
+        subtitle: primaryLabel ? `${primaryLabel}${row.status ? ` · ${row.status}` : ""}` : (row.status as string | undefined) ?? null,
+        context: {
+          status: row.status,
+          quote_number: row.quote_number,
+          customer_name: row.customer_name,
+          customer_company: row.customer_company,
+          net_total: row.net_total,
+          customer_total: row.customer_total,
+          primary_equipment: primaryLabel,
+          reasoning: rec && typeof rec.reasoning === "string" ? rec.reasoning : null,
+          created_at: row.created_at,
+        },
+        match_score: Math.max(
+          platformMatchScore(term, row.customer_name as string | null),
+          platformMatchScore(term, row.customer_company as string | null),
+          platformMatchScore(term, row.quote_number as string | null),
+        ),
+      });
+    }
+  }
+
+  if (equipmentRes.status === "fulfilled" && equipmentRes.value.data) {
+    for (const row of equipmentRes.value.data as Array<Record<string, unknown>>) {
+      const make = row.make as string | null;
+      const model = row.model as string | null;
+      const label = [make, model, row.year ? `(${row.year})` : null].filter(Boolean).join(" ");
+      hits.push({
+        source: "equipment",
+        id: String(row.id),
+        title: label || (row.serial_number as string) || "(equipment)",
+        subtitle: typeof row.availability === "string" ? String(row.availability) : null,
+        context: {
+          make,
+          model,
+          year: row.year,
+          serial_number: row.serial_number,
+          category: row.category,
+          availability: row.availability,
+          current_market_value: row.current_market_value,
+        },
+        match_score: Math.max(
+          platformMatchScore(term, make),
+          platformMatchScore(term, model),
+          platformMatchScore(term, row.serial_number as string | null),
+        ),
+      });
+    }
+  }
+
+  if (jobsRes.status === "fulfilled" && jobsRes.value.data) {
+    for (const row of jobsRes.value.data as Array<Record<string, unknown>>) {
+      const summary = row.customer_problem_summary as string | null;
+      hits.push({
+        source: "service_job",
+        id: String(row.id),
+        title: summary ?? "(service job)",
+        subtitle: typeof row.current_stage === "string" ? String(row.current_stage) : null,
+        context: {
+          current_stage: row.current_stage,
+          priority: row.priority,
+          customer_id: row.customer_id,
+          scheduled_date: row.scheduled_date,
+        },
+        match_score: platformMatchScore(term, summary),
+      });
+    }
+  }
+
+  // Rank by score desc, then by source (quote > contact > deal > company
+  // > equipment > service_job) so "John Coker" pulls the quote up above
+  // an equipment row that happens to share a substring.
+  const sourceRank: Record<PlatformHit["source"], number> = {
+    quote: 5, contact: 4, deal: 3, company: 2, equipment: 1, service_job: 0,
+  };
+  hits.sort((a, b) => {
+    if (b.match_score !== a.match_score) return b.match_score - a.match_score;
+    return sourceRank[b.source] - sourceRank[a.source];
+  });
+
+  // Cap total return to keep Iron's context under control. 24 is the
+  // product of 6 sources × 4 cap; matches the "~6 sources, top 4 each"
+  // mental model for a fair single-turn fan-out.
+  const capped = hits.slice(0, 24);
+
+  return {
+    count: capped.length,
+    total_candidates: hits.length,
+    query: term,
+    results: capped,
   };
 }
 
