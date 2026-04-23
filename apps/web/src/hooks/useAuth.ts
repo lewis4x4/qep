@@ -68,6 +68,38 @@ export function useAuth(): AuthState {
     )
   );
 
+  // Hard-ceiling safety net. withTimeoutRetries already gives the auth
+  // flow a bounded budget, but supabase-js has been observed deadlocking
+  // its internal state machine (especially on stale ES256 tokens), which
+  // can keep the outer promise pending past every inner timeout. If the
+  // hook hasn't settled after HARD_CEILING_MS we force loading=false
+  // ourselves and route the user to the expired-session path so they can
+  // sign in fresh rather than staring at "Loading…" before a demo.
+  useEffect(() => {
+    const HARD_CEILING_MS = 20_000;
+    const handle = setTimeout(() => {
+      setState((prev) => {
+        if (!prev.loading) return prev;
+        console.warn("[useAuth] hard ceiling hit, forcing loading=false");
+        try {
+          Object.keys(localStorage)
+            .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+            .forEach((k) => localStorage.removeItem(k));
+        } catch {
+          /* private mode — ignore */
+        }
+        return {
+          user: null,
+          session: null,
+          profile: null,
+          loading: false,
+          error: "Authentication took too long. Please sign in again.",
+        };
+      });
+    }, HARD_CEILING_MS);
+    return () => clearTimeout(handle);
+  }, []);
+
   useEffect(() => {
     const hadStoredToken = hadStoredTokenRef.current;
 
