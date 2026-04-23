@@ -272,8 +272,20 @@ export async function getCompetitorListings(make: string, model?: string): Promi
   return res.json();
 }
 
-export async function getQuoteForDeal(dealId: string) {
-  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}?deal_id=${dealId}`);
+export async function getSavedQuotePackage(params: {
+  dealId?: string;
+  packageId?: string;
+}): Promise<{ quote: Record<string, unknown> | null }> {
+  const qs = new URLSearchParams();
+  if (params.packageId) qs.set("package_id", params.packageId);
+  if (params.dealId) qs.set("deal_id", params.dealId);
+  const suffix = qs.toString();
+
+  if (!suffix) {
+    throw new Error("dealId or packageId is required to load a saved quote.");
+  }
+
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}?${suffix}`);
   if (!res.ok) throw new Error("Failed to load quote");
   return res.json();
 }
@@ -433,6 +445,22 @@ export async function sendQuotePackage(quotePackageId: string): Promise<{ sent: 
     throw new Error((err as { error?: string }).error ?? "Failed to send quote");
   }
   return res.json() as Promise<{ sent: boolean; to_email: string }>;
+}
+
+export async function submitQuoteForApproval(quotePackageId: string): Promise<{
+  approval_id: string;
+  status: "pending_approval";
+  already_pending?: boolean;
+}> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/submit-approval`, {
+    method: "POST",
+    body: JSON.stringify({ quote_package_id: quotePackageId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Failed to submit quote for approval" }));
+    throw new Error((err as { error?: string }).error ?? "Failed to submit quote for approval");
+  }
+  return res.json();
 }
 
 export async function saveQuoteSignature(data: {

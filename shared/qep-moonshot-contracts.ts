@@ -133,6 +133,20 @@ export interface QuoteWorkspaceDraft {
     pastQuoteValueCents: number;
   } | null;
   customerWarmth?: "warm" | "cool" | "dormant" | "new" | null;
+  /** Live quote package status from the server. Save returns to draft;
+   *  submit-for-approval / manager decision advance this state so the
+   *  review screen can unlock sending only after approval. */
+  quoteStatus?:
+    | "draft"
+    | "pending_approval"
+    | "approved"
+    | "sent"
+    | "accepted"
+    | "rejected"
+    | "expired"
+    | "converted_to_deal"
+    | "archived"
+    | null;
   /** Slice 09: when a draft was seeded by an AI-scenario stream, the
    *  qb_ai_request_log.id that generated it. Threaded through the save
    *  flow so the AI Request Log can show real time-to-quote numbers. */
