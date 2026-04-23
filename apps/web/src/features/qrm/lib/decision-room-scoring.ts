@@ -13,11 +13,12 @@
  * (ghost inference) will tighten coverage using workspace archetypes. The
  * output shape is stable so those upgrades don't force UI changes.
  */
-import type {
-  ConfidenceLevel,
-  DecisionRoomSeat,
-  SeatArchetype,
-  SeatStance,
+import {
+  ARCHETYPE_DEFS,
+  type ConfidenceLevel,
+  type DecisionRoomSeat,
+  type SeatArchetype,
+  type SeatStance,
 } from "./decision-room-archetype";
 
 export interface DecisionVelocityScore {
@@ -263,4 +264,43 @@ export function buildScores(input: ScoringInput): DecisionRoomScores {
     consensusRisk: scoreConsensusRisk(input),
     latentVeto: scoreLatentVeto(input),
   };
+}
+
+/** Short labels used in the coverage story line. The full
+ *  `ARCHETYPE_DEFS[x].label` values can be long ("Operations / Plant
+ *  Manager") and don't read naturally in a sentence — these are the
+ *  scannable equivalents. */
+const SHORT_ARCHETYPE_LABEL: Record<SeatArchetype, string> = {
+  champion: "champion",
+  economic_buyer: "economic buyer",
+  operations: "operations",
+  procurement: "procurement",
+  operator: "operator",
+  maintenance: "maintenance",
+  executive_sponsor: "exec sponsor",
+};
+
+/**
+ * Human-readable story for the Coverage tile's subline.
+ *
+ * Bare ratios ("0 of 5 named") read as failure even when the work is on
+ * track — Jordan-as-operator is "0 of 5" but the deal isn't in crisis.
+ * This turns the same data into the actual question the rep is asking:
+ * *which* seats are missing?
+ */
+export function coverageStory(cov: CoverageScore): string {
+  if (cov.expected === 0) return "No seats expected for this deal size";
+  if (cov.missingArchetypes.length === 0) {
+    return `All ${cov.expected} expected seats named`;
+  }
+  const labels = cov.missingArchetypes
+    .slice(0, 2)
+    .map((a) => SHORT_ARCHETYPE_LABEL[a] ?? ARCHETYPE_DEFS[a].label.toLowerCase());
+  const extra = cov.missingArchetypes.length - labels.length;
+  const list =
+    labels.length <= 1
+      ? labels[0]
+      : `${labels[0]} and ${labels[1]}`;
+  const tail = extra > 0 ? ` (+${extra} more)` : "";
+  return `Missing ${list}${tail}`;
 }

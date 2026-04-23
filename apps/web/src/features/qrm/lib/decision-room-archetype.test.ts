@@ -16,6 +16,7 @@ function baseContact(overrides: Partial<RelationshipMapContact>): RelationshipMa
     roles: [],
     evidence: [],
     lastSignalAt: null,
+    archetypeOverride: null,
     ...overrides,
   };
 }
@@ -47,6 +48,36 @@ describe("inferArchetypeForContact", () => {
     const result = inferArchetypeForContact(baseContact({ title: null, roles: [] }));
     expect(result.archetype).toBe("champion");
     expect(result.confidence).toBe("low");
+  });
+
+  it("respects a rep-authored override even when the title points elsewhere", () => {
+    // "General Superintendent" matches the `operator` titleKeyword, but the
+    // rep has reclassified this contact as champion. The override must win.
+    const result = inferArchetypeForContact(
+      baseContact({ title: "General Superintendent", archetypeOverride: "champion" }),
+    );
+    expect(result.archetype).toBe("champion");
+    expect(result.confidence).toBe("high");
+    expect(result.reason).toBe("Reclassified by rep");
+  });
+
+  it("respects override for a contact that otherwise has no signal", () => {
+    // No title, no roles — would default to champion; override flips to operations.
+    const result = inferArchetypeForContact(
+      baseContact({ title: null, roles: [], archetypeOverride: "operations" }),
+    );
+    expect(result.archetype).toBe("operations");
+    expect(result.confidence).toBe("high");
+  });
+
+  it("ignores an override whose value isn't a known archetype", () => {
+    // Guard: a corrupt or legacy metadata value must not crash inference or
+    // poison the seat. Fall through to title-based logic.
+    const result = inferArchetypeForContact(
+      baseContact({ title: "CFO", archetypeOverride: "not_a_real_archetype" }),
+    );
+    expect(result.archetype).toBe("economic_buyer");
+    expect(result.reason).toContain("Title");
   });
 });
 

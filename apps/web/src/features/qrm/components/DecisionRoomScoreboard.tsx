@@ -8,8 +8,9 @@
 import { useState } from "react";
 import { Gauge, ShieldAlert, Users, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { CoverageScore, DecisionRoomScores } from "../lib/decision-room-simulator";
-import { ARCHETYPE_DEFS, type ConfidenceLevel } from "../lib/decision-room-archetype";
+import type { DecisionRoomScores } from "../lib/decision-room-simulator";
+import { coverageStory } from "../lib/decision-room-scoring";
+import type { ConfidenceLevel } from "../lib/decision-room-archetype";
 
 interface Props {
   scores: DecisionRoomScores;
@@ -62,37 +63,6 @@ function coverageTone(value: number): string {
   return "text-red-300";
 }
 
-/** Short label for each archetype — we use these in the coverage story
- *  because the full labels ("Operations / Plant Manager") are too long
- *  to comfortably fit in the tile's sub line. */
-const SHORT_ARCHETYPE_LABEL: Record<string, string> = {
-  champion: "champion",
-  economic_buyer: "economic buyer",
-  operations: "operations",
-  procurement: "procurement",
-  operator: "operator",
-  maintenance: "maintenance",
-  executive_sponsor: "exec sponsor",
-};
-
-/** Human-readable coverage story — same data as "0 of 5 named" but tells
- *  the rep *which* seats are missing instead of hiding the names behind a
- *  ratio. Bare ratios read as failure even when the work is on track. */
-function coverageStory(cov: CoverageScore): string {
-  if (cov.expected === 0) return "No seats expected for this deal size";
-  if (cov.missingArchetypes.length === 0) {
-    return `All ${cov.expected} expected seats named`;
-  }
-  const labels = cov.missingArchetypes
-    .slice(0, 2)
-    .map((a) => SHORT_ARCHETYPE_LABEL[a] ?? ARCHETYPE_DEFS[a].label.toLowerCase());
-  const extra = cov.missingArchetypes.length - labels.length;
-  const list = labels.length <= 1
-    ? labels[0]
-    : `${labels[0]} and ${labels[1]}`;
-  const tail = extra > 0 ? ` (+${extra} more)` : "";
-  return `Missing ${list}${tail}`;
-}
 
 interface TileProps {
   icon: React.ReactNode;

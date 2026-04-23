@@ -49,6 +49,7 @@ import { DecisionRoomBriefExport } from "../components/DecisionRoomBriefExport";
 import { DecisionRoomGymPicker } from "../components/DecisionRoomGymPicker";
 import { DecisionRoomReplayBanner } from "../components/DecisionRoomReplayBanner";
 import { DecisionRoomDealLens } from "../components/DecisionRoomDealLens";
+import { DecisionRoomPatternBanner } from "../components/DecisionRoomPatternBanner";
 import { coachReadQueryKey, fetchCoachRead } from "../lib/decision-room-coach-read-api";
 import {
   insertMoveToDb,
@@ -371,6 +372,10 @@ export function DecisionRoomSimulatorPage() {
       <Suspense fallback={<DeckSurface className="border-qep-orange/30 bg-gradient-to-br from-qep-orange/[0.06] to-qep-orange/[0.02] p-5"><div className="h-16 animate-pulse rounded bg-white/5" /></DeckSurface>}>
         <DecisionRoomCoachRead board={board} />
       </Suspense>
+
+      {/* Cross-deal pattern banner — only renders when the workspace has
+          enough historical loss signal for rooms like this one. */}
+      <DecisionRoomPatternBanner dealId={dealId} />
 
       <DecisionRoomScoreboard scores={board.scores} velocityDelta={velocityDelta} />
 

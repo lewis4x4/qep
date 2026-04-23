@@ -1,6 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { buildScores } from "./decision-room-scoring";
+import { buildScores, coverageStory, type CoverageScore } from "./decision-room-scoring";
 import type { DecisionRoomSeat, SeatArchetype } from "./decision-room-archetype";
+
+function coverage(overrides: Partial<CoverageScore>): CoverageScore {
+  return {
+    value: 0,
+    filled: 0,
+    expected: 5,
+    missingArchetypes: [],
+    trace: [],
+    ...overrides,
+  };
+}
 
 function seat(overrides: Partial<DecisionRoomSeat>): DecisionRoomSeat {
   return {
@@ -185,5 +196,63 @@ describe("buildScores", () => {
     });
     expect(scores.latentVeto.level).toBe("low");
     expect(scores.latentVeto.topGhostArchetype).toBeNull();
+  });
+});
+
+describe("coverageStory", () => {
+  it("returns the zero-expected fallback when no seats are expected", () => {
+    expect(coverageStory(coverage({ expected: 0 }))).toBe(
+      "No seats expected for this deal size",
+    );
+  });
+
+  it("celebrates a fully-covered room", () => {
+    expect(coverageStory(coverage({ expected: 3, filled: 3 }))).toBe(
+      "All 3 expected seats named",
+    );
+  });
+
+  it("names the missing archetype when only one is missing", () => {
+    const s = coverageStory(
+      coverage({ expected: 3, filled: 2, missingArchetypes: ["economic_buyer"] }),
+    );
+    expect(s).toBe("Missing economic buyer");
+  });
+
+  it("joins two missing archetypes with 'and'", () => {
+    const s = coverageStory(
+      coverage({
+        expected: 3,
+        filled: 1,
+        missingArchetypes: ["economic_buyer", "operations"],
+      }),
+    );
+    expect(s).toBe("Missing economic buyer and operations");
+  });
+
+  it("caps the list at two names and counts the remainder", () => {
+    const s = coverageStory(
+      coverage({
+        expected: 5,
+        filled: 0,
+        missingArchetypes: [
+          "economic_buyer",
+          "operations",
+          "champion",
+          "procurement",
+          "maintenance",
+        ],
+      }),
+    );
+    expect(s).toBe("Missing economic buyer and operations (+3 more)");
+  });
+
+  it("uses the short-label map for each archetype", () => {
+    // exec_sponsor's canonical label is "Executive Sponsor" — the story
+    // line should use the shorter "exec sponsor" to keep the tile readable.
+    const s = coverageStory(
+      coverage({ expected: 2, filled: 0, missingArchetypes: ["executive_sponsor"] }),
+    );
+    expect(s).toBe("Missing exec sponsor");
   });
 });
