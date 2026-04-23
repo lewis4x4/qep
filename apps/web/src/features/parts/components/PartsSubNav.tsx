@@ -5,6 +5,7 @@ import {
   ShoppingCart,
   Package,
   TrendingUp,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ type SubItem = {
   to: string;
   label: string;
   matches?: (pathname: string) => boolean;
+  external?: boolean;
 };
 
 type NavGroup = {
@@ -93,10 +95,18 @@ const GROUPS: NavGroup[] = [
     label: "Intel",
     icon: TrendingUp,
     to: "/parts/forecast",
-    matches: (p) => p === "/parts/forecast" || p === "/parts/analytics",
+    matches: (p) =>
+      p === "/parts/forecast" ||
+      p === "/parts/analytics" ||
+      p === "/qrm/parts-intelligence",
     children: [
       { to: "/parts/forecast", label: "Forecast" },
       { to: "/parts/analytics", label: "Analytics" },
+      {
+        to: "/qrm/parts-intelligence",
+        label: "Parts Intelligence",
+        external: true,
+      },
     ],
   },
 ];
@@ -188,9 +198,16 @@ export function PartsSubNav() {
                 key={child.to}
                 to={child.to}
                 aria-current={childActive ? "page" : undefined}
-                className={childActive ? subPillActive : subPillBase}
+                className={cn(
+                  childActive ? subPillActive : subPillBase,
+                  child.external && "gap-1",
+                )}
+                title={child.external ? `${child.label} (opens in QRM)` : undefined}
               >
                 {child.label}
+                {child.external && (
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+                )}
               </Link>
             );
           })}

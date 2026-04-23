@@ -162,6 +162,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     sectionLabel: "Operations",
   },
   {
+    label: "Purchase POs",
+    href: "/parts/purchase-orders",
+    icon: ShoppingCart,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "parts",
+    sectionLabel: "Operations",
+  },
+  {
     label: "Inventory",
     href: "/parts/inventory",
     icon: Boxes,
