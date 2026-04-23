@@ -1975,12 +1975,44 @@ export function QuoteBuilderV2Page() {
         </div>
       </aside>
 
-      {/* Deal Assistant panel (Slice 05) */}
+      {/* Deal Assistant / Copilot panel (Slice 05 cold-start + Slice 21
+          per-quote copilot). The drawer auto-routes to the Copilot tab
+          when a quote is in flight (activeQuotePackageId present) and
+          falls back to Scenarios for cold-start. */}
       <ConversationalDealEngine
         open={dealAssistantOpen}
         onClose={() => setDealAssistantOpen(false)}
         onScenarioSelect={handleScenarioSelection}
         dealId={draft.dealId || undefined}
+        quotePackageId={activeQuotePackageId ?? undefined}
+        quoteName={
+          draft.customerName || draft.customerCompany || undefined
+        }
+        onCopilotDraftPatch={(patch) => {
+          // Merge patch into the draft reducer. customerSignals gets a
+          // shallow merge so CRM-sourced numerics (openDeals, past quote
+          // count, etc.) aren't overwritten by the copilot's narrower
+          // surface.
+          setDraft((current) => ({
+            ...current,
+            ...patch,
+            customerSignals: patch.customerSignals
+              ? { ...(current.customerSignals ?? {
+                  openDeals: 0,
+                  openDealValueCents: 0,
+                  lastContactDaysAgo: null,
+                  pastQuoteCount: 0,
+                  pastQuoteValueCents: 0,
+                }), ...patch.customerSignals }
+              : current.customerSignals,
+          }));
+        }}
+        onCopilotScore={(_score, _factors, _lifts) => {
+          // Intentionally no-op in the reducer path: WinProbabilityStrip
+          // recomputes from the patched draft, so the score surface is
+          // already live. This callback is reserved for future
+          // animation hooks (pulse the strip on delta, etc.).
+        }}
       />
     </div>
   );

@@ -19,12 +19,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MessageSquare, X, Zap, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Mic, MessageSquare, X, Zap, Loader2, AlertCircle, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import { ScenarioCard } from "./ScenarioCard";
+import { DealCopilotPanel } from "./DealCopilotPanel";
 import {
   streamScenarios,
   type SseEvent,
@@ -32,6 +34,13 @@ import {
   type ScenarioSession,
 } from "../lib/scenario-orchestrator";
 import type { QuoteScenario } from "@/features/quote-builder/lib/programs-types";
+import type {
+  QuoteWorkspaceDraft,
+} from "../../../../../../shared/qep-moonshot-contracts";
+import type {
+  WinProbabilityFactor,
+  WinProbabilityLift,
+} from "../lib/win-probability-scorer";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -62,7 +71,28 @@ interface ConversationalDealEngineProps {
   variant?: "drawer" | "embedded";
   /** Voice Quote should land directly in recording mode instead of text mode */
   defaultInputMode?: InputMode;
+  /**
+   * Slice 21: when present, the drawer opens in a tabbed Copilot/Scenarios
+   * layout with the Copilot tab selected by default. Omitting this prop
+   * preserves the pre-Slice-21 cold-start-only behavior. Reps on a saved
+   * quote get the stateful copilot; reps on a brand-new quote still get
+   * the scenario generator.
+   */
+  quotePackageId?: string;
+  /** Slice 21: bubbled up from DealCopilotPanel's score SSE events so
+   *  the hosting page can animate WinProbabilityStrip. */
+  onCopilotScore?: (score: number, factors: WinProbabilityFactor[], lifts: WinProbabilityLift[]) => void;
+  /** Slice 21: bubbled up from DealCopilotPanel's draftPatch SSE events
+   *  so the hosting page can apply the patch to its draft reducer. */
+  onCopilotDraftPatch?: (patch: Partial<QuoteWorkspaceDraft>, changedPaths: string[]) => void;
+  /** Slice 21: short human label for the copilot header
+   *  (e.g. "RT-135 · Dave Whittaker"). */
+  quoteName?: string;
+  /** Slice 21: current win-probability score for the copilot header pill. */
+  currentScore?: number | null;
 }
+
+type EngineTab = "copilot" | "scenarios";
 
 type InputMode = "text" | "voice";
 
@@ -82,7 +112,27 @@ export function ConversationalDealEngine({
   dealId,
   variant = "drawer",
   defaultInputMode = "text",
+  quotePackageId,
+  onCopilotScore,
+  onCopilotDraftPatch,
+  quoteName,
+  currentScore,
 }: ConversationalDealEngineProps) {
+  // Slice 21: tabbed Copilot/Scenarios drawer. Default to Copilot when a
+  // quote is in flight (rep has real state to converse over); default to
+  // Scenarios when cold-start (rep needs the oracle, not the per-quote
+  // thread). Reps can toggle either way once the drawer is open.
+  const [activeTab, setActiveTab] = useState<EngineTab>(
+    quotePackageId ? "copilot" : "scenarios",
+  );
+  // When the parent opens the drawer with a new quotePackageId, re-seed
+  // the default tab so the Copilot surface is primary when relevant.
+  useEffect(() => {
+    if (open) {
+      setActiveTab(quotePackageId ? "copilot" : "scenarios");
+    }
+  }, [open, quotePackageId]);
+
   const [inputMode, setInputMode]       = useState<InputMode>(defaultInputMode);
   const [textPrompt, setTextPrompt]     = useState("");
   const [panelState, setPanelState]     = useState<PanelState>({ phase: "idle" });
@@ -233,6 +283,25 @@ export function ConversationalDealEngine({
 
   if (!open) return null;
 
+  // ── Slice 21: Copilot tab short-circuit ─────────────────────────────────
+  // When a quote is in flight AND the rep is on the Copilot tab, delegate
+  // to DealCopilotPanel (which renders its own drawer). The Scenarios
+  // drawer is not mounted simultaneously — only one drawer is ever visible.
+  if (quotePackageId && activeTab === "copilot") {
+    return (
+      <DealCopilotPanel
+        quotePackageId={quotePackageId}
+        quoteName={quoteName}
+        currentScore={currentScore}
+        open={open}
+        onClose={onClose}
+        onScore={onCopilotScore}
+        onDraftPatch={onCopilotDraftPatch}
+        dealId={dealId}
+      />
+    );
+  }
+
   const isRunning = panelState.phase === "running" || panelState.phase === "transcribing";
   const hasDone   = panelState.phase === "done" || (panelState.phase === "running" && scenarios.length > 0);
   const isDrawer = variant === "drawer";
@@ -255,22 +324,47 @@ export function ConversationalDealEngine({
 
       <div className={surfaceClassName}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Zap className="h-4 w-4 text-qep-orange" />
-            <span className="text-sm font-semibold text-foreground">Deal Assistant</span>
-            <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
-              AI
-            </span>
+        <div className="border-b border-border/60 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-qep-orange" />
+              <span className="text-sm font-semibold text-foreground">Deal Assistant</span>
+              <span className="rounded-full bg-qep-orange/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
+                AI
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded p-1 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close Deal Assistant"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded p-1 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Close Deal Assistant"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {/* Slice 21: tab toggle — only visible when a quote is in flight.
+              Cold-start reps never see it because there's no thread to
+              switch to. */}
+          {quotePackageId && (
+            <div className="mt-2 flex rounded-lg border border-border/60 p-0.5">
+              {(["copilot", "scenarios"] as EngineTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-medium transition",
+                    activeTab === tab
+                      ? "bg-qep-orange/10 text-qep-orange"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {tab === "copilot" ? <Sparkles className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                  {tab === "copilot" ? "Copilot" : "Scenarios"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Scrollable body */}

@@ -460,6 +460,14 @@ verify_jwt = false
 [functions.qb-ai-scenarios]
 verify_jwt = false
 
+# Slice 21 — Deal Copilot. Streams SSE for per-quote copilot turns: extracts
+# signals from rep input, patches the draft, re-runs the win-probability
+# scorer, and streams the result. verify_jwt MUST be false because the
+# function authenticates internally via requireServiceUser() (project uses
+# ES256 signing keys, which the gateway's built-in verifier rejects).
+[functions.qb-copilot-turn]
+verify_jwt = false
+
 [functions.qb-parse-request]
 verify_jwt = false
 

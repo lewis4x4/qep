@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  classifyObjectionSurface,
   computeWinProbability,
   computeWinProbabilityLifts,
   MAX_LIFTS,
@@ -603,5 +604,266 @@ describe("computeWinProbabilityLifts — deltas use real scorer", () => {
       expect(l.rationale.length).toBeGreaterThan(0);
       expect(l.actionHint.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ── Slice 21: Copilot-driven signals ─────────────────────────────────────
+
+describe("classifyObjectionSurface", () => {
+  test("empty array → none", () => {
+    expect(classifyObjectionSurface([])).toBe("none");
+  });
+
+  test("single price-related objection → priceOnly", () => {
+    expect(classifyObjectionSurface(["price too high"])).toBe("priceOnly");
+    expect(classifyObjectionSurface(["a bit expensive"])).toBe("priceOnly");
+    expect(classifyObjectionSurface(["budget doesn't stretch"])).toBe("priceOnly");
+  });
+
+  test("single non-price objection → multiple bucket (real concern)", () => {
+    expect(classifyObjectionSurface(["needs CEO approval"])).toBe("multiple");
+    expect(classifyObjectionSurface(["spec concerns on hydraulics"])).toBe("multiple");
+  });
+
+  test("two or more objections → multiple", () => {
+    expect(classifyObjectionSurface(["price too high", "needs approval"])).toBe("multiple");
+    expect(classifyObjectionSurface(["a", "b", "c", "d"])).toBe("multiple");
+  });
+});
+
+describe("computeWinProbability — objection surface (Slice 21)", () => {
+  test("undefined objections → factor omitted entirely", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals() }),
+      noCtx,
+    );
+    // Base signals() leaves `objections` undefined — no factor.
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("objection"))).toBe(false);
+  });
+
+  test("empty objections array → 'none' bucket, +3", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ objections: [] }) }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "No objections logged")?.weight).toBe(3);
+  });
+
+  test("single price objection → priceOnly, -4", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ objections: ["price too high"] }) }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "Price objection")?.weight).toBe(-4);
+  });
+
+  test("multiple objections → -10", () => {
+    const r = computeWinProbability(
+      draft({
+        customerSignals: signals({ objections: ["needs CEO approval", "spec doubts", "timing"] }),
+      }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "3 objections raised")?.weight).toBe(-10);
+  });
+});
+
+describe("computeWinProbability — timeline pressure (Slice 21)", () => {
+  test("null timeline → factor omitted", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ timelinePressure: null }) }),
+      noCtx,
+    );
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("timeline") || f.label.toLowerCase().includes("immediate") || f.label.toLowerCase().includes("weeks") || f.label.toLowerCase().includes("months"))).toBe(false);
+  });
+
+  test("immediate → +8", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ timelinePressure: "immediate" }) }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "Immediate need")?.weight).toBe(8);
+  });
+
+  test("weeks → +3", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ timelinePressure: "weeks" }) }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "Buying within weeks")?.weight).toBe(3);
+  });
+
+  test("months → -3", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ timelinePressure: "months" }) }),
+      noCtx,
+    );
+    expect(r.factors.find((f) => f.label === "Long timeline")?.weight).toBe(-3);
+  });
+});
+
+describe("computeWinProbability — competitor mentions (Slice 21)", () => {
+  test("absent competitors → factor omitted", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals() }),
+      noCtx,
+    );
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("competitor"))).toBe(false);
+  });
+
+  test("empty competitor array → factor omitted", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ competitorMentions: [] }) }),
+      noCtx,
+    );
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("competitor"))).toBe(false);
+  });
+
+  test("one competitor → -4 with named label", () => {
+    const r = computeWinProbability(
+      draft({ customerSignals: signals({ competitorMentions: ["Acme Rental"] }) }),
+      noCtx,
+    );
+    const f = r.factors.find((x) => x.label === "Competitor in play: Acme Rental");
+    expect(f?.weight).toBe(-4);
+  });
+
+  test("multiple competitors → flat -4, not multiplied", () => {
+    const r = computeWinProbability(
+      draft({
+        customerSignals: signals({ competitorMentions: ["Acme", "Beta", "Gamma"] }),
+      }),
+      noCtx,
+    );
+    const f = r.factors.find((x) => x.label === "3 competitors in play");
+    expect(f?.weight).toBe(-4); // Flat — not -12.
+  });
+});
+
+describe("computeWinProbability — financing pref locked (Slice 21)", () => {
+  test("undefined financingPref → factor omitted", () => {
+    const r = computeWinProbability(draft(), noCtx);
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("financing") || f.label.toLowerCase().includes("cash"))).toBe(false);
+  });
+
+  test("null financingPref → factor omitted", () => {
+    const r = computeWinProbability(draft({ financingPref: null }), noCtx);
+    expect(r.factors.some((f) => f.label.toLowerCase().includes("cash-preferred") || f.label.toLowerCase().includes("financing path"))).toBe(false);
+  });
+
+  test("cash → +3 with 'Cash-preferred locked' label", () => {
+    const r = computeWinProbability(draft({ financingPref: "cash" }), noCtx);
+    expect(r.factors.find((f) => f.label === "Cash-preferred locked")?.weight).toBe(3);
+  });
+
+  test("financing → +3", () => {
+    const r = computeWinProbability(draft({ financingPref: "financing" }), noCtx);
+    expect(r.factors.find((f) => f.label === "Financing path locked")?.weight).toBe(3);
+  });
+
+  test("open → +3", () => {
+    const r = computeWinProbability(draft({ financingPref: "open" }), noCtx);
+    expect(r.factors.find((f) => f.label === "Financing flexibility confirmed")?.weight).toBe(3);
+  });
+});
+
+describe("computeWinProbabilityLifts — Slice 21 candidates", () => {
+  test("address_objection appears when any objection is logged", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ objections: ["price too high"] }) }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "address_objection")).toBe(true);
+  });
+
+  test("address_objection delta is larger for multiple-bucket than priceOnly", () => {
+    // multiple bucket = -10 → clearing moves to none (+3). Delta = +13.
+    const multipleLifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ objections: ["a", "b", "c"] }) }),
+      noCtx,
+    );
+    const multiple = multipleLifts.find((l) => l.id === "address_objection");
+    expect(multiple?.deltaPts).toBe(13);
+
+    // priceOnly bucket = -4 → clearing moves to none (+3). Delta = +7.
+    const priceLifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ objections: ["price too high"] }) }),
+      noCtx,
+    );
+    const price = priceLifts.find((l) => l.id === "address_objection");
+    expect(price?.deltaPts).toBe(7);
+  });
+
+  test("address_objection skipped when no objections", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals() }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "address_objection")).toBe(false);
+  });
+
+  // lock_financing_pref carries the minimum eligible delta (+3 = MIN_LIFT_DELTA).
+  // On an empty draft it gets beaten to the cap by capture_trade/select_equipment/
+  // ai_recommendation. These tests pre-satisfy those higher-delta lifts so the
+  // financing lift survives MAX_LIFTS.
+  const preSatisfiedHighLifts = (over: Partial<QuoteWorkspaceDraft> = {}) =>
+    draft({
+      tradeAllowance: 5_000,
+      equipment: [{ kind: "equipment" as const, title: "pre", quantity: 1, unitPrice: 1 }],
+      recommendation: { machine: "pre", attachments: [], reasoning: "pre" },
+      ...over,
+    });
+
+  test("lock_financing_pref appears when financingPref is null", () => {
+    const lifts = computeWinProbabilityLifts(
+      preSatisfiedHighLifts({ financingPref: null }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "lock_financing_pref")).toBe(true);
+  });
+
+  test("lock_financing_pref appears when financingPref is undefined", () => {
+    const lifts = computeWinProbabilityLifts(preSatisfiedHighLifts(), noCtx);
+    expect(lifts.some((l) => l.id === "lock_financing_pref")).toBe(true);
+  });
+
+  test("lock_financing_pref skipped when financingPref is set", () => {
+    const lifts = computeWinProbabilityLifts(
+      preSatisfiedHighLifts({ financingPref: "cash" }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "lock_financing_pref")).toBe(false);
+  });
+
+  test("lock_financing_pref delta matches financingPrefLocked weight", () => {
+    const lifts = computeWinProbabilityLifts(preSatisfiedHighLifts(), noCtx);
+    const lift = lifts.find((l) => l.id === "lock_financing_pref");
+    expect(lift?.deltaPts).toBe(WIN_PROB_WEIGHTS.financingPrefLocked);
+  });
+
+  test("counter_competitor appears when competitor is mentioned", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ competitorMentions: ["Acme"] }) }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "counter_competitor")).toBe(true);
+  });
+
+  test("counter_competitor skipped when no competitors", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals() }),
+      noCtx,
+    );
+    expect(lifts.some((l) => l.id === "counter_competitor")).toBe(false);
+  });
+
+  test("counter_competitor delta matches competitorMentioned weight magnitude", () => {
+    const lifts = computeWinProbabilityLifts(
+      draft({ customerSignals: signals({ competitorMentions: ["Acme", "Beta"] }) }),
+      noCtx,
+    );
+    const lift = lifts.find((l) => l.id === "counter_competitor");
+    // Clearing competitorMentions removes the -4 drag → +4 delta.
+    expect(lift?.deltaPts).toBe(Math.abs(WIN_PROB_WEIGHTS.competitorMentioned));
   });
 });

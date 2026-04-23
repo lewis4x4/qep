@@ -29,7 +29,11 @@
  *   • marginPct (supplied via context; compared to marginBaseline)
  */
 
-import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts";
+// `.ts` extension is mandatory here — this module is also consumed by
+// the qb-copilot-turn edge function under Deno, which requires explicit
+// extensions. Vite accepts either form, so keeping the extension is
+// backward-compatible with the web build.
+import type { QuoteWorkspaceDraft } from "../../../../../../shared/qep-moonshot-contracts.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -115,6 +119,49 @@ export const WIN_PROB_WEIGHTS = {
   // chasing the deal at the cost of P&L.
   marginAboveBaseline: +5,
   marginBelowBaseline: -8,
+
+  // ── Slice 21: Deal Copilot signals ───────────────────────────────────
+  // The copilot converts rep conversation — voice memos, texts, pasted
+  // emails — into structured signals that mechanically move the score.
+  // Every weight below only fires when the field is *present* on the
+  // draft; absence means "the copilot hasn't learned this yet" and is
+  // treated as unknown (no factor), NOT as a zero penalty. That's why
+  // the scoring code below gates each branch on an explicit `!= undefined`
+  // check rather than a falsy check — an empty array means "explicitly
+  // no objections," which is a real positive signal.
+
+  // Objection surface — engaged customers surface concerns; the question
+  // is whether those concerns are isolated (price-only, addressable) or
+  // broad (needs CEO approval + spec doubts + timing fears → multiple).
+  // Price-only complaints are a predictable negotiation; multiple concerns
+  // are a real risk signal.
+  objectionSurface: {
+    none:       +3,
+    priceOnly:  -4,
+    multiple:  -10,
+  },
+
+  // Timeline pressure — "we need it next week" customers close faster
+  // than "we're kicking tires for Q4." Null (unknown) is scored as no
+  // factor — absence of timeline signal shouldn't penalize a rep who
+  // simply hasn't asked yet.
+  timelinePressure: {
+    immediate: +8,
+    weeks:     +3,
+    months:    -3,
+  },
+
+  // Competitor mentioned — any named competitor is a drag signal; the
+  // rep is no longer in a sole-source conversation. Flat penalty
+  // regardless of count so we don't over-punish a thorough rep who
+  // logged three competitors instead of one.
+  competitorMentioned: -4,
+
+  // Financing preference locked — the rep has confirmed cash/financing/
+  // open with the customer. Not a huge lift on its own, but it removes
+  // a common late-stage source of deal slippage ("oh wait, can we
+  // finance this?").
+  financingPrefLocked: +3,
 } as const;
 
 // ── Main scorer ──────────────────────────────────────────────────────────
@@ -260,6 +307,66 @@ export function computeWinProbability(
     }
   }
 
+  // ── Slice 21: Copilot signals ──────────────────────────────────────
+  // Each branch gates on explicit field *presence* — `undefined` is
+  // treated as "copilot hasn't learned this" and contributes no factor.
+  // An empty array for objections is meaningful: it's the rep explicitly
+  // saying "I've confirmed no objections," which is a real positive.
+
+  // Engagement: objection surface.
+  const objections = draft.customerSignals?.objections;
+  if (objections !== undefined) {
+    const surface = classifyObjectionSurface(objections);
+    const w = WIN_PROB_WEIGHTS.objectionSurface[surface];
+    score += w;
+    factors.push({
+      label: objectionSurfaceLabel(surface, objections.length),
+      weight: w,
+      rationale: objectionSurfaceRationale(surface, objections),
+      kind: "engagement",
+    });
+  }
+
+  // Engagement: timeline pressure.
+  const timeline = draft.customerSignals?.timelinePressure ?? null;
+  if (timeline) {
+    const w = WIN_PROB_WEIGHTS.timelinePressure[timeline];
+    score += w;
+    factors.push({
+      label: timelineLabel(timeline),
+      weight: w,
+      rationale: timelineRationale(timeline),
+      kind: "engagement",
+    });
+  }
+
+  // Engagement: competitor mentioned. Flat drag when any competitor is
+  // on the board — count doesn't increase the penalty (thorough rep
+  // who logs three shouldn't score worse than one who logs one).
+  const competitors = draft.customerSignals?.competitorMentions;
+  if (competitors && competitors.length > 0) {
+    score += WIN_PROB_WEIGHTS.competitorMentioned;
+    factors.push({
+      label: competitors.length === 1
+        ? `Competitor in play: ${competitors[0]}`
+        : `${competitors.length} competitors in play`,
+      weight: WIN_PROB_WEIGHTS.competitorMentioned,
+      rationale: "Named competition is on the table — you're no longer in a sole-source conversation.",
+      kind: "engagement",
+    });
+  }
+
+  // Commercial: financing preference locked.
+  if (draft.financingPref != null) {
+    score += WIN_PROB_WEIGHTS.financingPrefLocked;
+    factors.push({
+      label: financingPrefLabel(draft.financingPref),
+      weight: WIN_PROB_WEIGHTS.financingPrefLocked,
+      rationale: "Financing path confirmed with the customer — removes a common late-stage source of deal slippage.",
+      kind: "commercial",
+    });
+  }
+
   // ── Clamp + band + headline ────────────────────────────────────────
   const rawScore = score;
   const clamped = Math.max(5, Math.min(95, Math.round(score)));
@@ -286,6 +393,67 @@ export function computeWinProbability(
 
 function cap(s: string): string {
   return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
+}
+
+// ── Slice 21 helpers ─────────────────────────────────────────────────────
+
+/** Price-related objection heuristic — used to bucket a single objection
+ *  into `priceOnly` vs `multiple`. Kept as a simple substring scan
+ *  because the copilot extraction already normalizes to short phrases
+ *  ("price too high"), not freeform paragraphs. */
+const PRICE_OBJECTION_PATTERN = /price|cost|expensive|budget|afford/i;
+
+export type ObjectionSurface = "none" | "priceOnly" | "multiple";
+
+export function classifyObjectionSurface(objections: string[]): ObjectionSurface {
+  if (objections.length === 0) return "none";
+  if (objections.length === 1) {
+    return PRICE_OBJECTION_PATTERN.test(objections[0]!) ? "priceOnly" : "multiple";
+  }
+  return "multiple";
+}
+
+function objectionSurfaceLabel(surface: ObjectionSurface, count: number): string {
+  switch (surface) {
+    case "none":      return "No objections logged";
+    case "priceOnly": return "Price objection";
+    case "multiple":  return count === 1 ? "1 objection raised" : `${count} objections raised`;
+  }
+}
+
+function objectionSurfaceRationale(surface: ObjectionSurface, objections: string[]): string {
+  switch (surface) {
+    case "none":
+      return "Rep has confirmed no open customer concerns — a real positive signal, not just absence of data.";
+    case "priceOnly":
+      return "Lone price objection is an addressable negotiation — often closed with a program or trim.";
+    case "multiple":
+      return `Concerns on the board: ${objections.slice(0, 3).join("; ")}${objections.length > 3 ? "…" : ""}. Multiple or non-price objections materially drag close rate.`;
+  }
+}
+
+function timelineLabel(t: "immediate" | "weeks" | "months"): string {
+  switch (t) {
+    case "immediate": return "Immediate need";
+    case "weeks":     return "Buying within weeks";
+    case "months":    return "Long timeline";
+  }
+}
+
+function timelineRationale(t: "immediate" | "weeks" | "months"): string {
+  switch (t) {
+    case "immediate": return "Urgency is the strongest short-of-signature commitment signal.";
+    case "weeks":     return "Short-window buyers close materially above baseline.";
+    case "months":    return "Long timelines bleed — pipeline slippage, competitor entry, budget cycle risk.";
+  }
+}
+
+function financingPrefLabel(p: "cash" | "financing" | "open"): string {
+  switch (p) {
+    case "cash":      return "Cash-preferred locked";
+    case "financing": return "Financing path locked";
+    case "open":      return "Financing flexibility confirmed";
+  }
 }
 
 function warmthRationale(warmth: string): string {
@@ -354,7 +522,11 @@ export type WinProbabilityLiftId =
   | "select_equipment"
   | "ai_recommendation"
   | "reconnect_customer"
-  | "raise_margin";
+  | "raise_margin"
+  // ── Slice 21: Copilot-driven lifts ──────────────────────────────────
+  | "address_objection"
+  | "lock_financing_pref"
+  | "counter_competitor";
 
 export interface WinProbabilityLift {
   id: WinProbabilityLiftId;
@@ -459,6 +631,55 @@ export function computeWinProbabilityLifts(
       simulate: () => ({
         draft,
         ctx: { ...ctx, marginPct: ctx.marginBaselineMedianPct ?? ctx.marginPct },
+      }),
+    },
+    // ── Slice 21: Copilot-driven lifts ──────────────────────────────────
+    {
+      id: "address_objection",
+      label: "Address their objections",
+      rationale: "Unresolved concerns are the single biggest modifiable drag on close rate. Working them down to zero flips the factor from drag to lift.",
+      actionHint: "Re-engage on the open concerns — resolve what you can, ack-and-defer what you can't, then update the copilot.",
+      // Only show when there are logged objections. The simulate step
+      // models "you addressed and cleared them" — mechanically, that's
+      // setting objections to an empty array, which moves the scorer
+      // from the priceOnly/multiple bucket to the `none` bucket.
+      skipIf: () => !(draft.customerSignals?.objections && draft.customerSignals.objections.length > 0),
+      simulate: () => ({
+        draft: {
+          ...draft,
+          customerSignals: draft.customerSignals
+            ? { ...draft.customerSignals, objections: [] }
+            : draft.customerSignals,
+        },
+        ctx,
+      }),
+    },
+    {
+      id: "lock_financing_pref",
+      label: "Lock their financing path",
+      rationale: "Confirming cash vs financing with the customer removes a common late-stage source of deal slippage. Small lift, high-leverage call.",
+      actionHint: "Ask the customer outright: 'cash purchase, financing, or are we open on both?' Then mark it in the copilot.",
+      // Absent or explicitly null financingPref → lift is eligible.
+      skipIf: () => draft.financingPref != null,
+      simulate: () => ({
+        draft: { ...draft, financingPref: "open" },
+        ctx,
+      }),
+    },
+    {
+      id: "counter_competitor",
+      label: "Counter the competition",
+      rationale: "Named competition is a real drag signal. A successful counter — program match, spec advantage, or service story — neutralizes the mention and removes the penalty.",
+      actionHint: "Build a side-by-side on the top competitor; the copilot can draft the opening if you log what they're comparing.",
+      skipIf: () => !(draft.customerSignals?.competitorMentions && draft.customerSignals.competitorMentions.length > 0),
+      simulate: () => ({
+        draft: {
+          ...draft,
+          customerSignals: draft.customerSignals
+            ? { ...draft.customerSignals, competitorMentions: [] }
+            : draft.customerSignals,
+        },
+        ctx,
       }),
     },
   ];
