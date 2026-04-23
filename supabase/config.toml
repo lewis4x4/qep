@@ -379,6 +379,12 @@ verify_jwt = false
 [functions.morning-briefing]
 verify_jwt = false
 
+# Decision Room seat persona chat. Same ES256 situation as morning-briefing:
+# function validates user JWT internally via resolveCallerContext, so gateway
+# verify_jwt must be false or no ES256 token ever reaches the handler.
+[functions.decision-room-seat-chat]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 

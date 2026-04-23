@@ -1,26 +1,42 @@
-import { useMemo } from "react";
+/**
+ * DecisionRoomSimulatorPage — Phase 1 moonshot.
+ *
+ * A top-down conference-table visualization of the humans who decide every
+ * equipment deal, with ghost seats for the archetypes the room expects but
+ * hasn't filled yet. Four real scores (Decision Velocity, Coverage,
+ * Consensus Risk, Latent Veto) replace the old count tiles; each seat has
+ * an evidence chain and a persona-backed "Ask this seat" surface.
+ *
+ * Extension points are explicit:
+ *   - Phase 2 (try-a-move): drop a chat bar at the bottom; seats get
+ *     reaction bubbles via the same seat id.
+ *   - Phase 3 (ghost inference): findGuidance on ghost seats is already
+ *     structured for Tavily + exec title enrichment.
+ *   - Phase 4 (time scrubber): buildDecisionRoomBoard takes a `now` param;
+ *     swap in a selected timestamp and re-score.
+ */
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  MessagesSquare,
-  ShieldAlert,
-  Users,
-  UserRoundX,
-} from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
 import { supabase } from "@/lib/supabase";
 import type { ExtractedDealData } from "@/lib/voice-capture-extraction.types";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import { buildDealRoomSummary, type DealRoomApproval } from "../lib/deal-room";
-import { buildDecisionRoomBoard } from "../lib/decision-room-simulator";
+import {
+  buildDecisionRoomBoard,
+  type DecisionRoomSeat,
+} from "../lib/decision-room-simulator";
 import { buildRelationshipMapBoard, type RelationshipMapBoard } from "../lib/relationship-map";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DecisionRoomCanvas } from "../components/DecisionRoomCanvas";
+import { DecisionRoomScoreboard } from "../components/DecisionRoomScoreboard";
+import { DecisionRoomSeatDrawer } from "../components/DecisionRoomSeatDrawer";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -28,20 +44,11 @@ const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   unmatchedStakeholders: [],
 };
 
-function confidenceTone(confidence: "high" | "medium" | "low"): string {
-  switch (confidence) {
-    case "high":
-      return "text-emerald-400";
-    case "medium":
-      return "text-qep-orange";
-    default:
-      return "text-muted-foreground";
-  }
-}
-
 export function DecisionRoomSimulatorPage() {
   const { dealId } = useParams<{ dealId: string }>();
   const blockers = useBlockers();
+  const [selectedSeat, setSelectedSeat] = useState<DecisionRoomSeat | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const compositeQuery = useQuery({
     queryKey: ["decision-room-simulator", dealId, "composite"],
@@ -55,7 +62,7 @@ export function DecisionRoomSimulatorPage() {
     enabled: Boolean(dealId) && Boolean(compositeQuery.data?.deal.companyId),
     queryFn: async () => {
       const companyId = compositeQuery.data?.deal.companyId;
-      if (!companyId) return null;
+      if (!companyId) return EMPTY_RELATIONSHIP_BOARD;
 
       const [contactsResult, voiceResult, signaturesResult] = await Promise.all([
         supabase
@@ -76,12 +83,13 @@ export function DecisionRoomSimulatorPage() {
           .limit(100),
       ]);
 
-      if (contactsResult.error) throw new Error(contactsResult.error.message);
-      if (voiceResult.error) throw new Error(voiceResult.error.message);
-      if (signaturesResult.error) throw new Error(signaturesResult.error.message);
+      // One failing sub-read must not take down the whole surface.
+      const contacts = contactsResult.error ? [] : (contactsResult.data ?? []);
+      const voice = voiceResult.error ? [] : (voiceResult.data ?? []);
+      const signatures = signaturesResult.error ? [] : (signaturesResult.data ?? []);
 
       return buildRelationshipMapBoard({
-        contacts: (contactsResult.data ?? []).map((row) => ({
+        contacts: contacts.map((row) => ({
           id: row.id,
           firstName: row.first_name,
           lastName: row.last_name,
@@ -102,12 +110,12 @@ export function DecisionRoomSimulatorPage() {
               createdAt: compositeQuery.data.deal.updatedAt,
             }]
           : [],
-        voiceSignals: (voiceResult.data ?? []).map((row) => ({
+        voiceSignals: voice.map((row) => ({
           linkedContactId: row.linked_contact_id,
           createdAt: row.created_at,
           extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
         })),
-        signatures: (signaturesResult.data ?? []).map((row) => ({
+        signatures: signatures.map((row) => ({
           dealId: row.deal_id,
           signerName: row.signer_name,
           signerEmail: row.signer_email,
@@ -152,41 +160,27 @@ export function DecisionRoomSimulatorPage() {
       })
     : null;
 
-  const loading =
-    compositeQuery.isLoading ||
-    relationshipQuery.isLoading ||
-    approvalsQuery.isLoading ||
-    blockers.isLoading;
+  const loading = compositeQuery.isLoading;
 
-  const errorMessage =
-    compositeQuery.error instanceof Error
-      ? compositeQuery.error.message
-      : relationshipQuery.error instanceof Error
-        ? relationshipQuery.error.message
-        : approvalsQuery.error instanceof Error
-          ? approvalsQuery.error.message
-          : blockers.error instanceof Error
-            ? blockers.error.message
-            : null;
-
-  const board = useMemo(
-    () =>
-      composite && roomSummary
-        ? buildDecisionRoomBoard({
-            dealId: dealId!,
-            relationship: relationshipQuery.data ?? EMPTY_RELATIONSHIP_BOARD,
-            needsAssessment: composite.needsAssessment,
-            blockerPresent: Boolean(blocker),
-            openTaskCount: roomSummary?.openTaskCount ?? 0,
-            overdueTaskCount: roomSummary?.overdueTaskCount ?? 0,
-            pendingApprovalCount: roomSummary?.pendingApprovalCount ?? 0,
-            quotePresented:
-              composite.demos.some((demo) => demo.quote_presented) ||
-              composite.activities.some((activity) => activity.activityType === "email"),
-          })
-        : null,
-    [blocker, composite, dealId, relationshipQuery.data, approvalsQuery.data, roomSummary],
-  );
+  const board = useMemo(() => {
+    if (!composite || !roomSummary) return null;
+    return buildDecisionRoomBoard({
+      dealId: dealId!,
+      dealName: composite.deal.name ?? null,
+      dealAmount: composite.deal.amount ?? null,
+      expectedCloseOn: composite.deal.expectedCloseOn ?? null,
+      companyName: composite.company?.name ?? null,
+      relationship: relationshipQuery.data ?? EMPTY_RELATIONSHIP_BOARD,
+      needsAssessment: composite.needsAssessment,
+      blockerPresent: Boolean(blocker),
+      openTaskCount: roomSummary?.openTaskCount ?? 0,
+      overdueTaskCount: roomSummary?.overdueTaskCount ?? 0,
+      pendingApprovalCount: roomSummary?.pendingApprovalCount ?? 0,
+      quotePresented:
+        composite.demos.some((demo) => demo.quote_presented) ||
+        composite.activities.some((activity) => activity.activityType === "email"),
+    });
+  }, [composite, relationshipQuery.data, roomSummary, blocker, dealId]);
 
   if (!dealId) {
     return <Navigate to="/qrm/deals" replace />;
@@ -196,19 +190,29 @@ export function DecisionRoomSimulatorPage() {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
-        <DeckSurface className="h-80 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
+        <DeckSurface className="h-[460px] animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>
       </div>
     );
   }
 
-  if (errorMessage || !composite) {
+  if (!composite || !board) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
-          <p className="text-sm text-muted-foreground">{errorMessage ?? "Decision room simulator is unavailable right now."}</p>
+          <p className="text-sm text-muted-foreground">
+            Decision room simulator is unavailable right now.
+          </p>
         </DeckSurface>
       </div>
     );
+  }
+
+  const namedCount = board.seats.filter((s) => s.status === "named").length;
+  const ghostCount = board.seats.length - namedCount;
+
+  function handleSelectSeat(seat: DecisionRoomSeat) {
+    setSelectedSeat(seat);
+    setDrawerOpen(true);
   }
 
   return (
@@ -225,7 +229,9 @@ export function DecisionRoomSimulatorPage() {
             <Link to={`/qrm/deals/${dealId}/room`}>Deal Room</Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
+            <Link to={`/qrm/deals/${dealId}/coach`}>
+              AI Deal Coach <ArrowUpRight className="ml-1 h-3 w-3" />
+            </Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link to={`/qrm/deals/${dealId}`}>
@@ -236,115 +242,58 @@ export function DecisionRoomSimulatorPage() {
       </div>
 
       <QrmPageHeader
-        title={composite?.deal.name ? `${composite.deal.name} — Decision Room Simulator` : "Decision Room Simulator"}
-        subtitle="Literal humans in the room, chairs they occupy, and most likely paths room takes before deal moves."
+        title={composite?.deal.name ? `${composite.deal.name} — Decision Room` : "Decision Room"}
+        subtitle={`${namedCount} named seat${namedCount === 1 ? "" : "s"} · ${ghostCount} ghost seat${ghostCount === 1 ? "" : "s"} mapped against the canonical equipment-sale decision room`}
       />
       <QrmSubNav />
 
-      {loading ? (
-        <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading decision room simulator…</DeckSurface>
-      ) : errorMessage || !composite || !board ? (
-        <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {errorMessage ?? "Decision room simulator is unavailable right now."}
-        </DeckSurface>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-4">
-            <DeckSurface className="p-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Named Participants</p>
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.namedParticipants)}</p>
-            </DeckSurface>
-            <DeckSurface className="p-4">
-              <div className="flex items-center gap-2">
-                <UserRoundX className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Ghost Participants</p>
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.ghostParticipants)}</p>
-            </DeckSurface>
-            <DeckSurface className="p-4">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Blockers</p>
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.blockerCount)}</p>
-            </DeckSurface>
-            <DeckSurface className="p-4">
-              <div className="flex items-center gap-2">
-                <MessagesSquare className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scenarios</p>
-              </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.scenarioCount)}</p>
-            </DeckSurface>
-          </div>
+      <DecisionRoomScoreboard scores={board.scores} />
 
-          <DeckSurface className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Seats in the room</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Named humans and chair they appear to occupy from live CRM, assessment, voice, and signature evidence.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/qrm/deals/${dealId}/coach`}>
-                  AI Deal Coach <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </DeckSurface>
+      <DecisionRoomCanvas
+        seats={board.seats}
+        selectedSeatId={selectedSeat?.id ?? null}
+        onSelectSeat={handleSelectSeat}
+        companyName={board.companyName}
+        dealName={board.dealName}
+      />
 
-          <DeckSurface className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Simulated paths</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  The likely ways this human room moves from the current evidence, with explicit confidence labels and working traces so rep can see why it is being suggested.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/qrm/deals/${dealId}/room`}>
-                  Deal Room <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </DeckSurface>
+      {/* Legend / read-me */}
+      <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/40 p-4">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_hsl(150_80%_45%/0.6)]" />
+            Champion
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-400 shadow-[0_0_8px_hsl(0_80%_55%/0.6)]" />
+            Blocker
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-qep-orange shadow-[0_0_8px_hsl(var(--qep-orange)/0.6)]" />
+            Neutral / unknown
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-white/50" />
+            Ghost seat
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-foreground/70">Size</span>
+            <span>= decision power</span>
+          </span>
+          <span className="ml-auto text-[11px] italic">
+            Tap any seat to see evidence and ask them a grounded question.
+          </span>
+        </div>
+      </DeckSurface>
 
-          <DeckSurface className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Next 7B surface</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Open Deal Room to run actual scenarios and see how blockers, tasks, and approvals respond to the live decision process.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="outline">
-                <Link to={`/qrm/deals/${dealId}/room`}>
-                  Deal Room <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </DeckSurface>
-
-          <DeckSurface className="p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Canonical route</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Use Decision Room Simulator for scenario testing before field execution, then move back into AI Deal Coach for active coaching.
-                </p>
-              </div>
-              <Button asChild size="sm" variant="ghost">
-                <Link to={`/qrm/deals/${dealId}/coach`}>
-                  Refresh simulator <ArrowUpRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-            </div>
-          </DeckSurface>
-        </>
-      )}
+      <DecisionRoomSeatDrawer
+        seat={selectedSeat}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        dealId={dealId}
+        companyName={board.companyName}
+        dealName={board.dealName}
+      />
     </div>
   );
 }
