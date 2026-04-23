@@ -368,3 +368,22 @@ verify_jwt = false
 # (RLS on oem_portal_credentials locks authenticated roles out entirely).
 [functions.oem-portal-vault]
 verify_jwt = false
+
+# Morning briefing, generate-daily-briefing, anomaly-scan, and embed-crm use
+# resolveCallerContext() from _shared/dge-auth.ts, which validates user JWTs
+# against GoTrue's /auth/v1/user endpoint directly. This is required because
+# the project signs with ES256 and the platform gateway's verify_jwt rejects
+# ES256 tokens with UNAUTHORIZED_INVALID_JWT_FORMAT before the function can
+# run its own auth. Gateway verify_jwt MUST be false on these — the function
+# enforces auth internally.
+[functions.morning-briefing]
+verify_jwt = false
+
+[functions.generate-daily-briefing]
+verify_jwt = false
+
+[functions.anomaly-scan]
+verify_jwt = false
+
+[functions.embed-crm]
+verify_jwt = false
