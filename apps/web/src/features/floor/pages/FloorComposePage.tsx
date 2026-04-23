@@ -8,14 +8,36 @@
  * same narrative strip, same quick-action hero, same widget frames —
  * so Brian arranges exactly what the target role will see.
  *
- * Drag-drop is native HTML5 DataTransfer with always-visible arrow controls
- * as the touch fallback.
+ * Drag-drop runs through @dnd-kit with pointer, touch, and keyboard sensors.
+ * Always-visible arrow controls remain as the explicit keyboard fallback.
  *
  * Narrative, quick actions, role defaults, user overrides, and audit history
  * are edited here. The DB still enforces the six-widget / three-action caps.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  SortableContext,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowDown,
   ArrowLeft,
@@ -74,10 +96,15 @@ const ALL_ROLES: IronRole[] = [
   "iron_parts_manager",
 ];
 
-const DND_MIME_PALETTE = "application/x-floor-palette-widget";
-const DND_MIME_REORDER = "application/x-floor-reorder-widget";
+const FLOOR_DROPZONE_ID = "floor-widget-dropzone";
+const PALETTE_DRAG_PREFIX = "palette:";
+const SAFE_QUICK_ACTION_ROUTE = /^\/(?!\/)[A-Za-z0-9/_:?.=&%#-]*$/;
 const FLOOR_LAYOUT_SELECT =
   "id, workspace_id, iron_role, user_id, layout_json, updated_by, created_at, updated_at";
+
+type FloorDragData =
+  | { kind: "palette"; widgetId: string }
+  | { kind: "widget"; widgetId: string };
 
 type ComposeTargetMode = "role" | "user";
 
@@ -113,12 +140,23 @@ function cloneDefaultLayout(role: IronRole): FloorLayout {
   return normalizeFloorLayout(DEFAULT_FLOOR_LAYOUTS[role]);
 }
 
+function validateQuickAction(action: FloorQuickAction): string | null {
+  const label = action.label.trim() || action.id;
+  const route = action.route.trim();
+  if (!action.label.trim()) return "Every quick action needs a label.";
+  if (!SAFE_QUICK_ACTION_ROUTE.test(route)) {
+    return `${label} needs a safe in-app route like /qrm/approvals.`;
+  }
+  if (action.icon && !(action.icon in FLOOR_QUICK_ACTION_ICON_MAP)) {
+    return `${label} uses an icon that is not in the Floor icon map.`;
+  }
+  return null;
+}
+
 function validateQuickActions(actions: FloorQuickAction[]): string | null {
   for (const action of actions) {
-    if (!action.label.trim()) return "Every quick action needs a label.";
-    if (!action.route.trim().startsWith("/")) {
-      return `${action.label || action.id} needs an in-app route that starts with "/".`;
-    }
+    const error = validateQuickAction(action);
+    if (error) return error;
   }
   return null;
 }
@@ -156,6 +194,7 @@ export function FloorComposePage({
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditRows, setAuditRows] = useState<LayoutAuditRow[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [activeDragData, setActiveDragData] = useState<FloorDragData | null>(null);
 
   // ── Load profiles that can receive a user override ─────────────────────
   useEffect(() => {
@@ -251,6 +290,17 @@ export function FloorComposePage({
   }, [selectedRole, layout.widgets]);
 
   const atCap = layout.widgets.length >= FLOOR_WIDGET_CAP;
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   // ── Layout mutations ──────────────────────────────────────────────────
   const addWidget = (id: string, atIndex?: number) => {
@@ -276,14 +326,48 @@ export function FloorComposePage({
   const moveWidget = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return;
     setLayout((prev) => {
+      if (fromIndex < 0 || fromIndex >= prev.widgets.length) return prev;
       const next = [...prev.widgets];
       const [moved] = next.splice(fromIndex, 1);
       if (!moved) return prev;
-      const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex;
+      const insertAt = Math.max(0, Math.min(toIndex, next.length));
       next.splice(insertAt, 0, moved);
       return { ...prev, widgets: next.map((w, i) => ({ ...w, order: i })) };
     });
     setIsDirty(true);
+  };
+
+  const resolveDropIndex = (overId: string | number | null | undefined) => {
+    if (!overId || overId === FLOOR_DROPZONE_ID) return layout.widgets.length;
+    const index = layout.widgets.findIndex((widget) => widget.id === String(overId));
+    return index >= 0 ? index : layout.widgets.length;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current as FloorDragData | undefined;
+    setActiveDragData(data ?? null);
+  };
+
+  const handleDragCancel = (_event: DragCancelEvent) => {
+    setActiveDragData(null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const data = event.active.data.current as FloorDragData | undefined;
+    const overId = event.over?.id;
+    setActiveDragData(null);
+    if (!data || !overId) return;
+
+    if (data.kind === "palette") {
+      if (atCap || layout.widgets.some((widget) => widget.id === data.widgetId)) return;
+      addWidget(data.widgetId, resolveDropIndex(overId));
+      return;
+    }
+
+    const fromIndex = layout.widgets.findIndex((widget) => widget.id === data.widgetId);
+    const toIndex = resolveDropIndex(overId);
+    if (fromIndex < 0 || fromIndex === toIndex) return;
+    moveWidget(fromIndex, toIndex);
   };
 
   const toggleNarrative = () => {
@@ -490,34 +574,46 @@ export function FloorComposePage({
         atCap={atCap}
       />
 
-      <div className="flex flex-1 flex-col md:flex-row">
-        {/* 2/3 LIVE PREVIEW */}
-        <div className="flex-1 md:basis-2/3 md:border-r md:border-[hsl(var(--qep-deck-rule))]">
-          <PreviewPane
-            selectedRole={selectedRole}
-            layout={layout}
-            isLoading={isLoading}
-            atCap={atCap}
-            userFullName={userFullName}
-            onAddFromPalette={addWidget}
-            onRemoveWidget={removeWidget}
-            onMoveWidget={moveWidget}
-          />
-        </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="flex flex-1 flex-col md:flex-row">
+          {/* 2/3 LIVE PREVIEW */}
+          <div className="flex-1 md:basis-2/3 md:border-r md:border-[hsl(var(--qep-deck-rule))]">
+            <PreviewPane
+              selectedRole={selectedRole}
+              targetMode={targetMode}
+              selectedSubjectUser={selectedSubjectUser}
+              layout={layout}
+              isLoading={isLoading}
+              atCap={atCap}
+              userFullName={userFullName}
+              onRemoveWidget={removeWidget}
+              onMoveWidget={moveWidget}
+            />
+          </div>
 
-        {/* 1/3 PALETTE */}
-        <div className="md:basis-1/3">
-          <PalettePane
-            widgets={paletteWidgets}
-            atCap={atCap}
-            quickActions={layout.quickActions}
-            onAddQuickAction={addQuickAction}
-            onUpdateQuickAction={updateQuickAction}
-            onRemoveQuickAction={removeQuickAction}
-            onQuickAdd={(id) => addWidget(id)}
-          />
+          {/* 1/3 PALETTE */}
+          <div className="md:basis-1/3">
+            <PalettePane
+              widgets={paletteWidgets}
+              atCap={atCap}
+              quickActions={layout.quickActions}
+              onAddQuickAction={addQuickAction}
+              onUpdateQuickAction={updateQuickAction}
+              onRemoveQuickAction={removeQuickAction}
+              onQuickAdd={(id) => addWidget(id)}
+            />
+          </div>
         </div>
-      </div>
+        <DragOverlay dropAnimation={null}>
+          {activeDragData ? <DragOverlayCard dragData={activeDragData} /> : null}
+        </DragOverlay>
+      </DndContext>
 
       {auditOpen && (
         <AuditDrawer
@@ -663,6 +759,7 @@ function RoleBar({
       <select
         value={selectedRole}
         onChange={(e) => onSelectRole(e.target.value as IronRole)}
+        aria-label="Compose Floor for role"
         className="rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] px-3 py-1.5 text-sm font-semibold text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
       >
         {ALL_ROLES.map((r) => (
@@ -693,6 +790,7 @@ function RoleBar({
           <select
             value={selectedSubjectUserId}
             onChange={(e) => onSelectSubjectUser(e.target.value)}
+            aria-label="Compose Floor user override profile"
             className="max-w-[240px] rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] px-3 py-1.5 text-sm font-semibold text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
           >
             {profiles.length === 0 ? (
@@ -748,102 +846,40 @@ function RoleBar({
 // pointer-events-none; the compose chrome (position badge, remove,
 // up/down) lives in a pointer-events-auto overlay above.
 //
-// Drag-drop model:
-//   • Each card's onDragOver decides insertion position based on cursor
-//     Y relative to the card's mid-line (top half = insert before me,
-//     bottom half = insert after me) and writes `insertion` state with
-//     { index, before }.
-//   • A thin orange line renders ABOVE the card at `insertion.index`
-//     when `before=true`, or BELOW at `insertion.index + 1` when
-//     `before=false`.
-//   • onDrop reads DND_MIME_PALETTE (new widget) or DND_MIME_REORDER
-//     (existing widget index) and commits the move.
-//   • onDragEnd clears insertion state so a cancelled drag leaves
-//     no orphan indicator.
-//
-// Up/down arrow buttons are a keyboard-friendly fallback for the
-// drag-averse (or touch devices).
-
-type Insertion = { index: number; before: boolean } | null;
+// Drag-drop model is @dnd-kit:
+//   • Palette cards use useDraggable with `kind: "palette"`.
+//   • Preview cards use useSortable with `kind: "widget"`.
+//   • Pointer, touch, and keyboard sensors all hit the same move/add code.
+//   • Up/down arrow buttons remain the visible fallback for users who do not
+//     want to drag.
 
 function PreviewPane({
   selectedRole,
+  targetMode,
+  selectedSubjectUser,
   layout,
   isLoading,
   atCap,
   userFullName,
-  onAddFromPalette,
   onRemoveWidget,
   onMoveWidget,
 }: {
   selectedRole: IronRole;
+  targetMode: ComposeTargetMode;
+  selectedSubjectUser: ComposeProfile | null;
   layout: FloorLayout;
   isLoading: boolean;
   atCap: boolean;
   userFullName: string | null;
-  onAddFromPalette: (id: string, atIndex?: number) => void;
   onRemoveWidget: (id: string) => void;
   onMoveWidget: (from: number, to: number) => void;
 }) {
-  const [insertion, setInsertion] = useState<Insertion>(null);
-  const [dragSource, setDragSource] = useState<number | null>(null);
   const firstName = (userFullName ?? "").split(" ").filter(Boolean)[0] ?? "";
-
-  const computeInsertionForCard = (e: React.DragEvent, index: number) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    const before = e.clientY < midY;
-    setInsertion((prev) => {
-      if (prev && prev.index === index && prev.before === before) return prev;
-      return { index, before };
-    });
-  };
-
-  const resolveTargetIndex = (ins: Insertion): number => {
-    if (!ins) return layout.widgets.length;
-    return ins.before ? ins.index : ins.index + 1;
-  };
-
-  const onCardDragOver = (e: React.DragEvent, index: number) => {
-    const types = e.dataTransfer.types;
-    if (!types.includes(DND_MIME_PALETTE) && !types.includes(DND_MIME_REORDER)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = types.includes(DND_MIME_PALETTE) ? "copy" : "move";
-    computeInsertionForCard(e, index);
-  };
-
-  const onGridDragOver = (e: React.DragEvent) => {
-    const types = e.dataTransfer.types;
-    if (!types.includes(DND_MIME_PALETTE) && !types.includes(DND_MIME_REORDER)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = types.includes(DND_MIME_PALETTE) ? "copy" : "move";
-    // If nothing's set yet (user dragged into empty grid area), default
-    // to "append at end".
-    setInsertion((prev) =>
-      prev ?? { index: Math.max(0, layout.widgets.length - 1), before: false },
-    );
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const paletteId = e.dataTransfer.getData(DND_MIME_PALETTE);
-    const reorderIdxRaw = e.dataTransfer.getData(DND_MIME_REORDER);
-    const target = resolveTargetIndex(insertion);
-
-    if (paletteId) {
-      onAddFromPalette(paletteId, target);
-    } else if (reorderIdxRaw) {
-      const from = Number(reorderIdxRaw);
-      if (Number.isFinite(from)) onMoveWidget(from, target);
-    }
-    setInsertion(null);
-    setDragSource(null);
-  };
-
-  const handleDragEnd = () => {
-    setInsertion(null);
-    setDragSource(null);
-  };
+  const previewName =
+    targetMode === "user"
+      ? selectedSubjectUser?.full_name ?? selectedSubjectUser?.email ?? "selected user"
+      : `${IRON_ROLE_DISPLAY_NAMES[selectedRole]} role default`;
+  const widgetIds = layout.widgets.map((widget) => widget.id);
 
   return (
     <div className="h-full overflow-auto">
@@ -852,6 +888,9 @@ function PreviewPane({
           index="PREVIEW"
           label={IRON_ROLE_DISPLAY_NAMES[selectedRole].toUpperCase()}
         />
+        <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Preview as {previewName}
+        </p>
       </div>
 
       {isLoading ? (
@@ -877,67 +916,37 @@ function PreviewPane({
 
           <FloorZoneLabel index="03" label="THE FLOOR" className="mt-4" />
 
-          <div
-            onDragOver={onGridDragOver}
-            onDrop={handleDrop}
+          <SortableContext items={widgetIds} strategy={rectSortingStrategy}>
+            <div
             className={cn(
               "mx-4 mt-2 rounded-xl border-2 border-dashed p-3 transition-colors sm:mx-6",
-              insertion != null
-                ? "border-[hsl(var(--qep-orange))]/70 bg-[hsl(var(--qep-orange))]/5"
-                : "border-[hsl(var(--qep-deck-rule))]/60",
+              "border-[hsl(var(--qep-deck-rule))]/60",
             )}
           >
             {layout.widgets.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                <p className="font-display text-2xl tracking-[0.04em] text-foreground">
-                  EMPTY FLOOR
-                </p>
-                <p className="mt-2">
-                  Drag widgets from the palette → . Six max. Drop them here to add.
-                </p>
-              </div>
+              <PreviewDropZone atCap={atCap} hasWidgets={false} />
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {layout.widgets.map((w, i) => {
-                  const isBeingDragged = dragSource === i;
-                  const showIndicatorAbove =
-                    insertion != null && insertion.index === i && insertion.before;
-                  const showIndicatorBelow =
-                    insertion != null && insertion.index === i && !insertion.before;
                   return (
                     <PreviewWidget
                       key={w.id}
                       position={i}
                       widgetId={w.id}
                       totalCount={layout.widgets.length}
-                      isBeingDragged={isBeingDragged}
-                      showIndicatorAbove={showIndicatorAbove}
-                      showIndicatorBelow={showIndicatorBelow}
                       onRemove={() => onRemoveWidget(w.id)}
-                      onDragStart={() => setDragSource(i)}
-                      onDragOver={(e) => onCardDragOver(e, i)}
-                      onDrop={handleDrop}
-                      onDragEnd={handleDragEnd}
                       onMoveUp={() => i > 0 && onMoveWidget(i, i - 1)}
                       onMoveDown={() =>
-                        i < layout.widgets.length - 1 && onMoveWidget(i, i + 2)
+                        i < layout.widgets.length - 1 && onMoveWidget(i, i + 1)
                       }
                     />
                   );
                 })}
-                {!atCap && (
-                  <div
-                    onDragOver={onGridDragOver}
-                    onDrop={handleDrop}
-                    className="flex min-h-[140px] items-center justify-center rounded-xl border-2 border-dashed border-[hsl(var(--qep-deck-rule))]/60 px-3 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--qep-orange))]/60"
-                    aria-label="Drop zone — append widget"
-                  >
-                    Drop here to append · or drag a palette card
-                  </div>
-                )}
+                <PreviewDropZone atCap={atCap} hasWidgets />
               </div>
             )}
-          </div>
+            </div>
+          </SortableContext>
         </div>
       )}
     </div>
@@ -956,28 +965,14 @@ function PreviewWidget({
   position,
   widgetId,
   totalCount,
-  isBeingDragged,
-  showIndicatorAbove,
-  showIndicatorBelow,
   onRemove,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
   onMoveUp,
   onMoveDown,
 }: {
   position: number;
   widgetId: string;
   totalCount: number;
-  isBeingDragged: boolean;
-  showIndicatorAbove: boolean;
-  showIndicatorBelow: boolean;
   onRemove: () => void;
-  onDragStart: () => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
@@ -985,11 +980,20 @@ function PreviewWidget({
   const title = descriptor?.title ?? widgetId;
   const size = descriptor?.size ?? "normal";
   const Component = descriptor?.component ?? null;
-
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData(DND_MIME_REORDER, String(position));
-    e.dataTransfer.effectAllowed = "move";
-    onDragStart();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: widgetId,
+    data: { kind: "widget", widgetId } satisfies FloorDragData,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
   };
 
   const canMoveUp = position > 0;
@@ -997,30 +1001,30 @@ function PreviewWidget({
 
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      ref={setNodeRef}
+      style={style}
       className={cn(
         "group relative",
         size === "wide" ? "md:col-span-2" : "",
-        isBeingDragged ? "opacity-40" : "",
+        isDragging ? "opacity-40" : "",
       )}
     >
-      {/* Insertion indicator above */}
-      {showIndicatorAbove && <InsertionLine />}
-
       <div
         className={cn(
-          "relative flex min-h-[140px] cursor-grab flex-col overflow-hidden rounded-xl border bg-[hsl(var(--qep-deck-elevated))] transition-all active:cursor-grabbing",
+          "relative flex min-h-[140px] flex-col overflow-hidden rounded-xl border bg-[hsl(var(--qep-deck-elevated))] transition-all",
           "border-[hsl(var(--qep-deck-rule))] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]",
           "hover:border-[hsl(var(--qep-orange))]/40 hover:shadow-[0_0_24px_-12px_hsl(var(--qep-orange))]",
         )}
       >
         {/* Compose chrome overlay — interactive */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 px-1.5 py-1 text-[10px] font-kpi font-extrabold uppercase tracking-[0.14em] backdrop-blur">
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={`Drag ${title}`}
+            className="pointer-events-auto flex cursor-grab items-center gap-1.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 px-1.5 py-1 text-[10px] font-kpi font-extrabold uppercase tracking-[0.14em] backdrop-blur active:cursor-grabbing"
+          >
             <GripVertical
               className="h-3 w-3 text-[hsl(var(--qep-orange))]"
               aria-hidden="true"
@@ -1031,7 +1035,7 @@ function PreviewWidget({
                 Wide
               </span>
             )}
-          </div>
+          </button>
 
           <div className="pointer-events-auto flex items-center gap-0.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 p-0.5 opacity-100 backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <button
@@ -1075,21 +1079,43 @@ function PreviewWidget({
             </div>
           )}
         </div>
-      </div>
+        </div>
 
-      {/* Insertion indicator below */}
-      {showIndicatorBelow && <InsertionLine />}
     </div>
   );
 }
 
-/** Thin 2px orange line with soft glow — drop-position indicator. */
-function InsertionLine() {
+function PreviewDropZone({ atCap, hasWidgets }: { atCap: boolean; hasWidgets: boolean }) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: FLOOR_DROPZONE_ID,
+    disabled: atCap,
+  });
+
+  if (atCap) return null;
+
   return (
     <div
-      aria-hidden="true"
-      className="relative my-1 h-[2px] w-full rounded-full bg-[hsl(var(--qep-orange))] shadow-[0_0_12px_0_hsl(var(--qep-orange))]"
-    />
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-[140px] items-center justify-center rounded-xl border-2 border-dashed px-3 text-center text-xs text-muted-foreground transition-colors",
+        isOver
+          ? "border-[hsl(var(--qep-orange))]/70 bg-[hsl(var(--qep-orange))]/5"
+          : "border-[hsl(var(--qep-deck-rule))]/60 hover:border-[hsl(var(--qep-orange))]/60",
+        !hasWidgets && "py-10",
+      )}
+      aria-label="Drop zone — append widget"
+    >
+      <div>
+        {!hasWidgets && (
+          <p className="font-display text-2xl tracking-[0.04em] text-foreground">
+            EMPTY FLOOR
+          </p>
+        )}
+        <p className={hasWidgets ? "" : "mt-2"}>
+          Drop here to append, or click a palette card. Six max.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -1148,6 +1174,7 @@ function PalettePane({
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter widgets…"
+          aria-label="Filter Floor widgets"
           className="mt-2 h-8 w-full rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 text-xs placeholder:text-muted-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
         />
       </div>
@@ -1238,10 +1265,17 @@ function QuickActionEditor({
         </p>
       ) : (
         <div className="space-y-2">
-          {actions.map((action, index) => (
+          {actions.map((action, index) => {
+            const validationError = validateQuickAction(action);
+            return (
             <div
               key={`${action.id}-${index}`}
-              className="rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-2"
+              className={cn(
+                "rounded-md border bg-[hsl(var(--qep-deck-elevated))] p-2",
+                validationError
+                  ? "border-rose-500/50"
+                  : "border-[hsl(var(--qep-deck-rule))]",
+              )}
             >
               <div className="grid grid-cols-[1fr_auto] gap-2">
                 <input
@@ -1263,8 +1297,18 @@ function QuickActionEditor({
                 value={action.route}
                 onChange={(e) => onUpdate(index, { route: e.target.value })}
                 aria-label={`Quick action ${index + 1} route`}
-                className="mt-2 h-8 w-full rounded border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-2 font-mono text-xs text-foreground focus:border-[hsl(var(--qep-orange))] focus:outline-none"
+                className={cn(
+                  "mt-2 h-8 w-full rounded border bg-[hsl(var(--qep-deck))] px-2 font-mono text-xs text-foreground focus:outline-none",
+                  validationError
+                    ? "border-rose-500/60 focus:border-rose-400"
+                    : "border-[hsl(var(--qep-deck-rule))] focus:border-[hsl(var(--qep-orange))]",
+                )}
               />
+              {validationError && (
+                <p className="mt-1 text-[10px] font-semibold text-rose-300">
+                  {validationError}
+                </p>
+              )}
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <input
                   value={action.subLabel ?? ""}
@@ -1287,7 +1331,8 @@ function QuickActionEditor({
                 </select>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
@@ -1309,20 +1354,22 @@ function PaletteCard({
   disabled: boolean;
   onQuickAdd: () => void;
 }) {
-  const onDragStart = (e: React.DragEvent) => {
-    if (disabled) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.setData(DND_MIME_PALETTE, widgetId);
-    e.dataTransfer.effectAllowed = "copy";
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `${PALETTE_DRAG_PREFIX}${widgetId}`,
+    data: { kind: "palette", widgetId } satisfies FloorDragData,
+    disabled,
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
   };
 
   return (
     <button
+      ref={setNodeRef}
       type="button"
-      draggable={!disabled}
-      onDragStart={onDragStart}
+      style={style}
+      {...attributes}
+      {...listeners}
       onClick={disabled ? undefined : onQuickAdd}
       disabled={disabled}
       aria-label={disabled ? `${title} — Floor at cap` : `Add ${title}`}
@@ -1330,6 +1377,7 @@ function PaletteCard({
         "group relative flex w-full cursor-grab flex-col items-start gap-1 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-3 text-left transition-all",
         "hover:border-[hsl(var(--qep-orange))]/60 hover:shadow-[0_0_20px_-10px_hsl(var(--qep-orange))]",
         "active:cursor-grabbing",
+        isDragging && "opacity-40",
         disabled && "cursor-not-allowed opacity-40 hover:border-[hsl(var(--qep-deck-rule))] hover:shadow-none",
       )}
     >
@@ -1351,6 +1399,24 @@ function PaletteCard({
       </div>
       <p className="text-[11px] leading-snug text-muted-foreground">{purpose}</p>
     </button>
+  );
+}
+
+function DragOverlayCard({ dragData }: { dragData: FloorDragData }) {
+  const descriptor = resolveFloorWidget(dragData.widgetId);
+  const title = descriptor?.title ?? dragData.widgetId;
+  const purpose =
+    dragData.kind === "palette"
+      ? descriptor?.purpose ?? "Add this widget to the Floor."
+      : "Move this widget on the Floor.";
+  return (
+    <div className="w-72 rounded-md border border-[hsl(var(--qep-orange))]/60 bg-[hsl(var(--qep-deck-elevated))] p-3 text-left shadow-[0_0_32px_-12px_hsl(var(--qep-orange))]">
+      <div className="flex items-center gap-1.5">
+        <GripVertical className="h-3 w-3 text-[hsl(var(--qep-orange))]" aria-hidden="true" />
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+      </div>
+      <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{purpose}</p>
+    </div>
   );
 }
 

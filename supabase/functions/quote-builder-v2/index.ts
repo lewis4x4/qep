@@ -3085,6 +3085,12 @@ Deno.serve(async (req) => {
       const customerCompany = typeof body.customer_company === "string" ? body.customer_company.trim().slice(0, 200) : null;
       const customerPhone = typeof body.customer_phone === "string" ? body.customer_phone.trim().slice(0, 30) : null;
       const customerEmail = typeof body.customer_email === "string" ? body.customer_email.trim().slice(0, 200) : null;
+      const opportunityDescription = typeof body.opportunity_description === "string"
+        ? body.opportunity_description.trim().slice(0, 4000)
+        : null;
+      const voiceTranscript = typeof body.voice_transcript === "string"
+        ? body.voice_transcript.trim().slice(0, 12000)
+        : null;
       const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
       const companyId = typeof body.company_id === "string" ? body.company_id : null;
       const equipment = Array.isArray(body.equipment) ? body.equipment : [];
@@ -3280,6 +3286,8 @@ Deno.serve(async (req) => {
           customer_company: customerCompany,
           customer_phone: customerPhone,
           customer_email: customerEmail,
+          opportunity_description: opportunityDescription,
+          voice_transcript: voiceTranscript,
           originating_log_id: originatingLogId,
           // Only include snapshot keys when the client supplied a valid
           // one — omitting them lets the upsert preserve the prior values

@@ -17966,6 +17966,7 @@ export type Database = {
           margin_pct: number | null
           net_total: number | null
           originating_log_id: string | null
+          opportunity_description: string | null
           pdf_generated_at: string | null
           pdf_url: string | null
           photos_included: Json | null
@@ -17982,6 +17983,7 @@ export type Database = {
           trade_in_valuation_id: string | null
           updated_at: string
           video_url: string | null
+          voice_transcript: string | null
           viewed_at: string | null
           workspace_id: string
         }
@@ -18012,6 +18014,7 @@ export type Database = {
           margin_pct?: number | null
           net_total?: number | null
           originating_log_id?: string | null
+          opportunity_description?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -18028,6 +18031,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          voice_transcript?: string | null
           viewed_at?: string | null
           workspace_id?: string
         }
@@ -18058,6 +18062,7 @@ export type Database = {
           margin_pct?: number | null
           net_total?: number | null
           originating_log_id?: string | null
+          opportunity_description?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -18074,6 +18079,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          voice_transcript?: string | null
           viewed_at?: string | null
           workspace_id?: string
         }

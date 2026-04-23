@@ -81,7 +81,7 @@ export interface PrimaryNavGroup extends PrimaryNavGroupDefinition {
 }
 
 export const PRIMARY_NAV_GROUPS: PrimaryNavGroupDefinition[] = [
-  { id: "qrm", label: "QRM", href: "/qrm" },
+  { id: "qrm", label: "QRM", href: "/floor" },
   { id: "sales", label: "Sales", href: "/dashboard" },
   { id: "parts", label: "Parts", href: "/parts" },
   { id: "service", label: "Service", href: "/service" },
@@ -304,6 +304,14 @@ export const NAV_ITEMS: NavItemDefinition[] = [
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "rentals",
     sectionLabel: "Operations",
+  },
+  {
+    label: "Dashboard",
+    href: "/floor",
+    icon: BriefcaseBusiness,
+    roles: ["rep", "admin", "manager", "owner"],
+    primaryHeaderId: "qrm",
+    sectionLabel: "Core",
   },
   {
     label: "Command Center",

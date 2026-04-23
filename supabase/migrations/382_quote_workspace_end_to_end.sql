@@ -16,10 +16,19 @@ alter table public.quote_packages
 
 alter table public.quote_packages
   add constraint quote_packages_entry_mode_check
-  check (entry_mode in ('voice', 'ai_chat', 'manual', 'trade_photo'));
+  check (entry_mode is null or entry_mode in ('voice', 'ai_chat', 'manual', 'trade_photo'));
 
 comment on constraint quote_packages_entry_mode_check on public.quote_packages is
   'Quote workspace entry method. Trade Photo is first-class with Voice, AI Chat, and Manual.';
+
+alter table public.quote_packages
+  add column if not exists opportunity_description text,
+  add column if not exists voice_transcript text;
+
+comment on column public.quote_packages.opportunity_description is
+  'Rep-authored or AI-chat opportunity description shown in the quote workspace.';
+comment on column public.quote_packages.voice_transcript is
+  'Voice-entry transcript when the quote originated from voice capture.';
 
 -- ── Native package line items ────────────────────────────────────────────────
 

@@ -130,6 +130,9 @@ const STEP_LABELS: Record<Step, string> = {
 
 interface CatalogEntryMatch {
   id?: string;
+  sourceCatalog?: QuoteLineItemDraft["sourceCatalog"];
+  sourceId?: string | null;
+  dealerCost?: number | null;
   make: string;
   model: string;
   year: number | null;
@@ -182,6 +185,9 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
   return {
     kind: "equipment",
     id: entry.id,
+    sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+    sourceId: entry.sourceId ?? entry.id ?? null,
+    dealerCost: entry.dealerCost ?? null,
     title: `${entry.make} ${entry.model}`,
     make: entry.make,
     model: entry.model,
@@ -204,6 +210,9 @@ function buildEquipmentLineFromRecommendation(
   const [firstToken, ...rest] = text.split(/\s+/);
   return {
     kind: "equipment",
+    sourceCatalog: "manual",
+    sourceId: null,
+    dealerCost: null,
     title: text,
     make: firstToken ?? text,
     model: rest.join(" "),
@@ -1192,13 +1201,17 @@ export function QuoteBuilderV2Page() {
   function handleAddCustomLine(kindLabel: "Warranty" | "Financing" | "Custom") {
     const title = customLineTitle.trim() || `${kindLabel} line item`;
     const unitPrice = Number.isFinite(customLinePrice) && customLinePrice > 0 ? customLinePrice : 0;
+    const kind = kindLabel.toLowerCase() as "warranty" | "financing" | "custom";
     setDraft((current) => ({
       ...current,
       attachments: [
         ...current.attachments,
         {
-          kind: "attachment",
+          kind,
           id: `${kindLabel.toLowerCase()}-${Date.now()}`,
+          sourceCatalog: "manual",
+          sourceId: null,
+          dealerCost: null,
           title: `${kindLabel}: ${title}`,
           quantity: 1,
           unitPrice,
@@ -1594,6 +1607,9 @@ export function QuoteBuilderV2Page() {
                       const nextLine = {
                         kind: "equipment" as const,
                         id: entry.id,
+                        sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+                        sourceId: entry.sourceId ?? entry.id ?? null,
+                        dealerCost: entry.dealerCost ?? null,
                         title: `${entry.make} ${entry.model}`,
                         make: entry.make,
                         model: entry.model,
@@ -1634,7 +1650,16 @@ export function QuoteBuilderV2Page() {
                                 ...current,
                                 attachments: selected
                                   ? current.attachments.filter((attachment) => attachment.id !== option.id)
-                                  : [...current.attachments, { kind: "attachment", id: option.id, title: option.name, quantity: 1, unitPrice: option.price }],
+                                  : [...current.attachments, {
+                                    kind: "attachment",
+                                    id: option.id,
+                                    sourceCatalog: "qb_attachments",
+                                    sourceId: option.id,
+                                    dealerCost: null,
+                                    title: option.name,
+                                    quantity: 1,
+                                    unitPrice: option.price,
+                                  }],
                               }))}
                             >
                               {selected ? "Remove" : "Add"}
@@ -1829,7 +1854,14 @@ export function QuoteBuilderV2Page() {
                   <p className="text-sm font-semibold text-foreground">{draft.recommendation.machine}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{draft.recommendation.reasoning}</p>
                   <p className="mt-3 rounded border border-border/70 bg-background/60 px-2 py-1 text-[11px] text-muted-foreground">
-                    Trigger: {draft.entryMode === "voice" ? "voice transcript" : draft.entryMode === "ai_chat" ? "AI chat prompt" : "manual recommendation request"}
+                    Trigger: {draft.recommendation.trigger?.sourceField
+                      ? draft.recommendation.trigger.sourceField.replace(/_/g, " ")
+                      : draft.entryMode === "voice"
+                        ? "voice transcript"
+                        : draft.entryMode === "ai_chat"
+                          ? "AI chat prompt"
+                          : "manual recommendation request"}
+                    {draft.recommendation.trigger?.excerpt ? ` - "${draft.recommendation.trigger.excerpt}"` : ""}
                   </p>
                   <Button
                     size="sm"
@@ -2225,6 +2257,9 @@ export function QuoteBuilderV2Page() {
               const nextLine = {
                 kind: "equipment" as const,
                 id: entry.id,
+                sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+                sourceId: entry.sourceId ?? entry.id ?? null,
+                dealerCost: entry.dealerCost ?? null,
                 title: `${entry.make} ${entry.model}`,
                 make: entry.make,
                 model: entry.model,
@@ -2356,6 +2391,9 @@ export function QuoteBuilderV2Page() {
                                   {
                                     kind: "attachment",
                                     id: option.id,
+                                    sourceCatalog: "qb_attachments",
+                                    sourceId: option.id,
+                                    dealerCost: null,
                                     title: option.name,
                                     quantity: 1,
                                     unitPrice: option.price,

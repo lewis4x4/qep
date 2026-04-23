@@ -21,6 +21,7 @@
  */
 import type { ComponentType } from "react";
 import type { IronRole } from "@/features/qrm/lib/iron-roles";
+import type { FloorAttentionScore, FloorAttentionSignals } from "./attention";
 
 import {
   PipelineByRepWidget,
@@ -102,6 +103,9 @@ export interface FloorWidgetDescriptor {
   size: "normal" | "wide";
   /** The component rendered inside the FloorWidget frame. */
   component: ComponentType;
+  /** Optional display-only attention score. Used to auto-pin urgent widgets
+   *  without mutating the saved layout JSON. */
+  getAttentionScore?: (signals: FloorAttentionSignals) => FloorAttentionScore;
 }
 
 const ALL_ROLES: IronRole[] = [
@@ -113,6 +117,13 @@ const ALL_ROLES: IronRole[] = [
   "iron_parts_counter",
   "iron_parts_manager",
 ];
+
+function countAttention(count: number, pointsPerItem: number, noun: string): FloorAttentionScore {
+  return {
+    score: count * pointsPerItem,
+    reason: count > 0 ? `${count} ${noun}` : undefined,
+  };
+}
 
 export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
   // ── Existing real widgets (re-used from legacy registry) ─────────────
@@ -131,6 +142,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_manager", "iron_woman", "iron_owner"],
     size: "normal",
     component: ApprovalQueueWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.approvalCount, 18, "approval signal waiting"),
   },
   "iron.inventory-aging": {
     id: "iron.inventory-aging",
@@ -280,6 +293,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     // Phase 2-a wiring — picks the hottest active pipeline deal and
     // renders the real DecisionRoomScoreboard against live pipeline data.
     component: DecisionRoomScoreboardFloorWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.staleDealCount, 10, "stale deal signal"),
   },
   "sales.ai-briefing": {
     id: "sales.ai-briefing",
@@ -309,6 +324,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_advisor"],
     size: "wide",
     component: MyQuotesByStatusWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.quoteFollowupCount, 16, "quote needing follow-up"),
   },
   "sales.day-summary": {
     id: "sales.day-summary",
@@ -383,6 +400,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_parts_counter"],
     size: "wide",
     component: CounterInquiriesWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.counterInquiryCount, 20, "counter inquiry needing a quote"),
   },
   "parts.demand-forecast": {
     id: "parts.demand-forecast",
@@ -473,6 +492,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_manager"],
     size: "wide",
     component: AgingDealsTeamWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.staleDealCount, 12, "stale deal"),
   },
   "iron.owner-large-deals": {
     id: "iron.owner-large-deals",
@@ -505,6 +526,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_woman", "iron_manager"],
     size: "normal",
     component: PendingInvoicesFloorWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.pendingInvoiceCount, 18, "invoice waiting"),
   },
   "iron-man.open-service-tickets": {
     id: "iron-man.open-service-tickets",
@@ -513,6 +536,8 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     allowedRoles: ["iron_man", "iron_manager"],
     size: "normal",
     component: OpenServiceTicketsFloorWidget,
+    getAttentionScore: (signals) =>
+      countAttention(signals.openServiceTicketCount, 12, "open service ticket"),
   },
   "parts.lost-sales": {
     id: "parts.lost-sales",

@@ -11,6 +11,9 @@ export type QuoteTaxProfile =
 export interface QuoteLineItemDraft {
   kind: QuoteLineItemKind;
   id?: string;
+  sourceCatalog?: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
+  sourceId?: string | null;
+  dealerCost?: number | null;
   title: string;
   make?: string;
   model?: string;
@@ -23,6 +26,12 @@ export interface QuoteRecommendation {
   machine: string;
   attachments: string[];
   reasoning: string;
+  trigger?: {
+    triggerType: "voice_transcript" | "ai_chat_prompt" | "manual_request" | "quote_event";
+    sourceField: string;
+    excerpt: string | null;
+    createdAt?: string | null;
+  } | null;
   alternative?: {
     machine: string;
     attachments: string[];
