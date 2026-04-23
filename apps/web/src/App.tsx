@@ -720,7 +720,7 @@ function SalesOrAppLayout({
   children,
 }: AppLayoutProps) {
   const location = useLocation();
-  const isSalesRoute = location.pathname.startsWith("/sales");
+  const isSalesRoute = location.pathname.startsWith("/sales") && location.pathname !== "/sales/quotes";
   const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
   const isFloorRoute = location.pathname.startsWith("/floor");
 
@@ -1084,7 +1084,7 @@ function App() {
                 }
               />
               <Route
-                path="/quote"
+                path="/sales/quotes"
                 element={
                   ["rep", "manager", "owner"].includes(profile.role) ? (
                     <QuoteListPage />
@@ -1093,6 +1093,8 @@ function App() {
                   )
                 }
               />
+              <Route path="/quote" element={<RedirectPreserveSearch to="/sales/quotes" />} />
+              <Route path="/quotes" element={<RedirectPreserveSearch to="/sales/quotes" />} />
               <Route
                 path="/quote-v2"
                 element={

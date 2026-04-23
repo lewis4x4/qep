@@ -657,11 +657,14 @@ export interface QuoteListItem {
   quote_number: string | null;
   customer_name: string | null;
   customer_company: string | null;
+  contact_name: string | null;
   status: string;
   net_total: number | null;
   equipment_summary: string;
   entry_mode: string | null;
   created_at: string;
+  updated_at: string;
+  accepted_at: string | null;
   /**
    * Slice 20e: denormalized win-probability score (0..100) captured at
    * save time by the rule-based scorer. Null for quotes saved before

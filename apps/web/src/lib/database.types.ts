@@ -17922,6 +17922,7 @@ export type Database = {
       }
       quote_packages: {
         Row: {
+          accepted_at: string | null
           ai_recommendation: Json | null
           attachment_total: number | null
           attachments_included: Json | null
@@ -17967,6 +17968,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          accepted_at?: string | null
           ai_recommendation?: Json | null
           attachment_total?: number | null
           attachments_included?: Json | null
@@ -18012,6 +18014,7 @@ export type Database = {
           workspace_id?: string
         }
         Update: {
+          accepted_at?: string | null
           ai_recommendation?: Json | null
           attachment_total?: number | null
           attachments_included?: Json | null

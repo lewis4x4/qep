@@ -157,6 +157,17 @@ function clampCurrency(value: unknown): number {
   return Math.round(Math.max(0, numeric) * 100) / 100;
 }
 
+function contactNameFromRelation(value: unknown): string | null {
+  const contact = Array.isArray(value) ? value[0] : value;
+  if (!contact || typeof contact !== "object") return null;
+  const record = contact as Record<string, unknown>;
+  const name = [
+    typeof record.first_name === "string" ? record.first_name.trim() : "",
+    typeof record.last_name === "string" ? record.last_name.trim() : "",
+  ].filter(Boolean).join(" ").trim();
+  return name.length > 0 ? name : null;
+}
+
 function buildScenarioLabel(type: "cash" | "finance" | "lease", termMonths: number): string {
   if (type === "cash") return "Cash";
   if (type === "lease") return termMonths > 0 ? `Lease ${termMonths} mo` : "Lease";
@@ -915,11 +926,9 @@ async function handlePublicAccept(
     "archived",
   ]);
   if (!preserveStatuses.has(String(quote.status))) {
-    // quote_packages doesn't track an accepted_at of its own — the
-    // signature row's signed_at is the canonical accept timestamp.
     await admin
       .from("quote_packages")
-      .update({ status: "accepted" })
+      .update({ status: "accepted", accepted_at: sigRow?.signed_at ?? new Date().toISOString() })
       .eq("id", quote.id);
   }
 
@@ -1910,9 +1919,9 @@ Deno.serve(async (req) => {
 
         let query = supabase
           .from("quote_packages")
-          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, win_probability_score")
-          .order("created_at", { ascending: false })
-          .limit(50);
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score, crm_contacts(first_name, last_name)")
+          .order("updated_at", { ascending: false })
+          .limit(200);
 
         if (status && status !== "all") {
           query = query.eq("status", status);
@@ -1951,11 +1960,14 @@ Deno.serve(async (req) => {
             quote_number: row.quote_number ?? null,
             customer_name: row.customer_name ?? null,
             customer_company: row.customer_company ?? null,
+            contact_name: contactNameFromRelation(row.crm_contacts),
             status: row.status ?? "draft",
             net_total: row.net_total ?? null,
             equipment_summary: summary,
             entry_mode: row.entry_mode ?? null,
             created_at: row.created_at,
+            updated_at: row.updated_at ?? row.created_at,
+            accepted_at: row.accepted_at ?? null,
             win_probability_score: winScore,
           };
         });
@@ -2400,6 +2412,95 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
+
+    // ── POST /list-action: narrow row actions from the quote list ────────
+    if (action === "list-action") {
+      if (!canRevise) return safeJsonError("Quote actions require rep, manager, or owner role", 403, origin);
+      const quotePackageId = typeof body.quote_package_id === "string" ? body.quote_package_id : "";
+      const requestedAction = typeof body.action === "string" ? body.action : "";
+      if (!quotePackageId) return safeJsonError("quote_package_id required", 400, origin);
+      if (!["duplicate", "mark_sent", "archive", "discard"].includes(requestedAction)) {
+        return safeJsonError("Unsupported quote action", 400, origin);
+      }
+
+      const { data: pkg, error: pkgErr } = await supabase
+        .from("quote_packages")
+        .select("*")
+        .eq("id", quotePackageId)
+        .maybeSingle();
+      if (pkgErr) return safeJsonError(pkgErr.message, 500, origin);
+      if (!pkg) return safeJsonError("Quote package not found or not accessible", 404, origin);
+
+      const nowIso = new Date().toISOString();
+
+      if (requestedAction === "mark_sent") {
+        const { data: updated, error: updateErr } = await supabase
+          .from("quote_packages")
+          .update({ status: "sent", sent_at: nowIso, sent_via: "manual" })
+          .eq("id", quotePackageId)
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+          .single();
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        return safeJsonOk({ ok: true, quote: updated }, origin);
+      }
+
+      if (requestedAction === "archive") {
+        const { data: updated, error: updateErr } = await supabase
+          .from("quote_packages")
+          .update({ status: "archived" })
+          .eq("id", quotePackageId)
+          .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+          .single();
+        if (updateErr) return safeJsonError(updateErr.message, 500, origin);
+        return safeJsonOk({ ok: true, quote: updated }, origin);
+      }
+
+      if (requestedAction === "discard") {
+        if (String(pkg.status ?? "") !== "draft") {
+          return safeJsonError("Only draft quotes can be discarded", 409, origin);
+        }
+        const { error: deleteErr } = await supabase
+          .from("quote_packages")
+          .delete()
+          .eq("id", quotePackageId);
+        if (deleteErr) return safeJsonError(deleteErr.message, 500, origin);
+        return safeJsonOk({ ok: true, quote: null }, origin);
+      }
+
+      const duplicateSource = pkg as Record<string, unknown>;
+      const {
+        id: _id,
+        quote_number: _quoteNumber,
+        deal_id: _dealId,
+        created_at: _createdAt,
+        updated_at: _updatedAt,
+        accepted_at: _acceptedAt,
+        sent_at: _sentAt,
+        viewed_at: _viewedAt,
+        pdf_generated_at: _pdfGeneratedAt,
+        share_token: _shareToken,
+        share_token_created_at: _shareTokenCreatedAt,
+        ...copyable
+      } = duplicateSource;
+      const { data: created, error: createErr } = await supabase
+        .from("quote_packages")
+        .insert({
+          ...copyable,
+          deal_id: null,
+          quote_number: null,
+          status: "draft",
+          sent_at: null,
+          viewed_at: null,
+          accepted_at: null,
+          pdf_url: null,
+          pdf_generated_at: null,
+          created_by: user.id,
+        })
+        .select("id, quote_number, customer_name, customer_company, status, net_total, equipment, entry_mode, created_at, updated_at, accepted_at, win_probability_score")
+        .single();
+      if (createErr) return safeJsonError(createErr.message, 500, origin);
+      return safeJsonOk({ ok: true, quote: created }, origin, 201);
+    }
 
     // ── POST /recommend: AI equipment recommendation ─────────────────────
     if (action === "recommend") {
@@ -3761,7 +3862,7 @@ Deno.serve(async (req) => {
 
       await supabase
         .from("quote_packages")
-        .update({ status: "accepted" })
+        .update({ status: "accepted", accepted_at: new Date().toISOString() })
         .eq("id", body.quote_package_id);
 
       return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);

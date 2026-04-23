@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildQuoteListActionPayload,
+  buildQuoteListUrl,
   normalizeQuoteFinanceScenario,
   normalizeQuoteFinancingPreview,
 } from "../quote-api";
@@ -20,6 +22,30 @@ describe("normalizeQuoteFinanceScenario", () => {
     expect(scenario.apr).toBe(6.5);
     expect(scenario.monthlyPayment).toBe(1999.42);
     expect(scenario.totalCost).toBe(119_965.2);
+  });
+});
+
+describe("quote list API helpers", () => {
+  test("buildQuoteListUrl encodes search and omits all status", () => {
+    const url = buildQuoteListUrl({ status: "all", search: "QEP 0002 & DFW" });
+
+    expect(url).toContain("/quote-builder-v2/list?");
+    expect(url).toContain("search=QEP+0002+%26+DFW");
+    expect(url).not.toContain("status=all");
+  });
+
+  test("buildQuoteListUrl includes specific status filters", () => {
+    const url = buildQuoteListUrl({ status: "sent" });
+
+    expect(url).toContain("/quote-builder-v2/list?");
+    expect(url).toContain("status=sent");
+  });
+
+  test("buildQuoteListActionPayload uses backend snake_case contract", () => {
+    expect(buildQuoteListActionPayload({ quotePackageId: "quote-1", action: "archive" })).toEqual({
+      quote_package_id: "quote-1",
+      action: "archive",
+    });
   });
 });
 
