@@ -165,9 +165,15 @@ describe("VoiceCapturePage redesign", () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByText("POST-VISIT CAPTURE")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Field Note" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start recording" })).toBeTruthy();
+    expect(screen.getByLabelText("Field note workflow")).toBeTruthy();
+    expect(screen.getByText("Record")).toBeTruthy();
+    expect(screen.getByText("Match to deal")).toBeTruthy();
     expect(screen.getByLabelText("QRM match bar")).toBeTruthy();
+    expect(screen.getByText("Match Mode")).toBeTruthy();
+    expect(screen.getAllByText("Queued").length).toBeGreaterThan(0);
     expect(screen.getByText("Extracted details (preview)")).toBeTruthy();
     expect(screen.getByText("Offline & sync status")).toBeTruthy();
     expect(screen.getByPlaceholderText("Search notes...")).toBeTruthy();

@@ -209,7 +209,14 @@ const PROCESSING_STEPS = [
   { label: "Done", icon: Sparkles },
 ];
 
+const WORKFLOW_STEPS = ["Record", "Review", "Extract", "Match to deal", "Synced"];
+
 const RECORDING_FORMATS: RecordingFormat[] = [
+  {
+    mimeType: "audio/mp4;codecs=mp4a.40.2",
+    fileName: "recording.m4a",
+    previewTypes: ["audio/mp4; codecs=mp4a.40.2", "audio/mp4", "audio/aac"],
+  },
   {
     mimeType: "audio/mp4",
     fileName: "recording.m4a",
@@ -1252,43 +1259,33 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const trimmedQuery = dealLookupQuery.trim();
     const isDirectId = looksLikeCrmRecordId(trimmedQuery);
     const showOptions = trimmedQuery.length >= 2 && !isDirectId;
-    const selectedSummary = selectedDealLabel
-      ? { title: selectedDealLabel, detail: hubspotDealId }
-      : hubspotDealId
-      ? { title: "Linked by pasted QRM deal ID", detail: hubspotDealId }
-      : null;
 
     return (
-      <div className="space-y-2">
-        <Input
-          id={inputId}
-          type="text"
-          value={dealLookupQuery}
-          onChange={(e) => handleDealLookupChange(e.target.value)}
-          placeholder="Search by deal name or paste QRM deal ID"
-          autoComplete="off"
-        />
-
-        {selectedSummary && (
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">{selectedSummary.title}</p>
-              <p className="truncate text-xs text-muted-foreground">{selectedSummary.detail}</p>
-            </div>
-            <Button
+      <div className="relative">
+        <div className="relative">
+          <Input
+            id={inputId}
+            type="text"
+            value={dealLookupQuery}
+            onChange={(e) => handleDealLookupChange(e.target.value)}
+            placeholder="Search by deal name, customer, or QRM deal ID"
+            autoComplete="off"
+            className={cn("h-10 pr-11", (selectedDealLabel || hubspotDealId) && "border-qep-orange/40")}
+          />
+          {(selectedDealLabel || hubspotDealId) && (
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              aria-label="Clear QRM deal selection"
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={clearDealSelection}
             >
-              Clear
-            </Button>
-          </div>
-        )}
+              <XCircle className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         {showOptions && (
-          <div className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+          <div className="absolute left-0 right-0 top-[calc(100%+0.375rem)] z-20 overflow-hidden rounded-lg border border-border bg-background shadow-lg">
             {dealLookupLoading ? (
               <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1317,11 +1314,6 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
             )}
           </div>
         )}
-
-        <p className="text-xs text-muted-foreground">
-          Search by deal name or paste the QRM deal ID directly. If you leave it blank, we&apos;ll
-          still try to match the note by customer details.
-        </p>
       </div>
     );
   }
@@ -1333,10 +1325,54 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
       : resolvedDealOption.name
     : selectedDealLabel;
-  const matchConfidence = activeDealId ? "High" : dealLookupQuery.trim() ? "Needs review" : "Auto-match";
+  const queuedCount = queuedVoiceNotes.length;
   const matchConfidenceClass = activeDealId
     ? "border-green-500/30 bg-green-500/10 text-green-300"
     : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  const workflowStepIndex =
+    recordingState === "done" && (result?.local_crm_saved || result?.hubspot_synced)
+      ? 4
+      : recordingState === "done"
+        ? 3
+        : recordingState === "processing"
+          ? 2
+          : recordingState === "recorded" || recordingState === "error"
+            ? 1
+            : 0;
+  const matchModeLabel = activeDealId
+    ? "Direct match"
+    : dealLookupQuery.trim()
+      ? "Review match"
+      : "Auto-match";
+  const statusCards = [
+    {
+      label: "Match Mode",
+      value: matchModeLabel,
+      detail: activeDealId ? "Deal selected" : "Customer details resolve after transcript",
+      icon: Sparkles,
+      className: activeDealId
+        ? "border-green-500/30 bg-green-500/10 text-green-300"
+        : "border-border bg-background/50 text-foreground",
+    },
+    {
+      label: "Offline",
+      value: isOnline ? "Ready" : "Offline",
+      detail: isOnline ? "Local fallback enabled" : "Saving to this device",
+      icon: isOnline ? ShieldCheck : WifiOff,
+      className: isOnline
+        ? "border-blue-500/25 bg-blue-500/10 text-blue-200"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-200",
+    },
+    {
+      label: "Queued",
+      value: `${queuedCount} notes`,
+      detail: queuedCount === 1 ? "Waiting to sync" : "Waiting to sync",
+      icon: DatabaseIcon,
+      className: queuedCount > 0
+        ? "border-qep-orange/30 bg-qep-orange/10 text-qep-orange"
+        : "border-border bg-background/50 text-foreground",
+    },
+  ];
 
   const recentRows = useMemo(() => {
     const rows = [
@@ -1362,7 +1398,6 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     });
   }, [queuedVoiceNotes, recentCaptures, recentSearch, recentStatusFilter, recentDateFilter]);
 
-  const queuedCount = queuedVoiceNotes.length;
   const liveTranscriptText =
     liveTranscript ||
     (recordingState === "recording"
@@ -1373,9 +1408,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     <TooltipProvider>
       <div className="flex-1 overflow-y-auto bg-background">
         <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 lg:px-7">
-          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold tracking-normal text-foreground">Field Note</h1>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-qep-orange/90">POST-VISIT CAPTURE</p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">Field Note</h1>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
                 Record a post-visit recap. Iron transcribes it, extracts the deal signals, and syncs the record to the QRM timeline.
               </p>
@@ -1387,12 +1423,44 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
             </div>
           </header>
 
-          <section className="rounded-xl border border-border bg-card p-4 shadow-sm" aria-label="QRM match bar">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_0.7fr_0.8fr_0.8fr] lg:items-end">
-              <div className="space-y-2">
+          <section className="rounded-xl border border-border bg-card p-3 shadow-sm" aria-label="Field note workflow">
+            <div className="grid gap-2 sm:grid-cols-5">
+              {WORKFLOW_STEPS.map((step, index) => {
+                const complete = workflowStepIndex > index;
+                const active = workflowStepIndex === index;
+                return (
+                  <div
+                    key={step}
+                    className={cn(
+                      "relative flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+                      complete && "border-green-500/30 bg-green-500/10 text-green-300",
+                      active && "border-qep-orange/35 bg-qep-orange/10 text-qep-orange",
+                      !complete && !active && "border-border bg-background/40 text-muted-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+                        complete && "border-green-500/30 bg-green-500/20",
+                        active && "border-qep-orange/40 bg-qep-orange/15",
+                        !complete && !active && "border-border bg-muted/30",
+                      )}
+                    >
+                      {complete ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                    </span>
+                    <span className="font-medium leading-tight">{step}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-3 shadow-sm" aria-label="QRM match bar">
+            <div className="grid gap-3 lg:grid-cols-[minmax(320px,1.25fr)_repeat(3,minmax(0,0.75fr))] lg:items-end">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="deal-id" className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    QRM Deal ID or search by deal / customer
+                  <Label htmlFor="deal-id" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    QRM Deal ID
                   </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1400,34 +1468,26 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         <HelpCircle className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side={isMobile ? "bottom" : "right"} className="max-w-[220px]">
-                      Search by deal name or paste the QRM deal ID. Blank notes are auto-matched from customer details.
+                    <TooltipContent side={isMobile ? "bottom" : "right"} className="max-w-[260px]">
+                      Search by deal name or paste the QRM deal ID directly. If you leave it blank, we&apos;ll still try to match the note by customer details.
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 {renderDealLookupField("deal-id")}
               </div>
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Match confidence</p>
-                <span className={cn("inline-flex h-9 items-center rounded-full border px-4 text-sm font-semibold", matchConfidenceClass)}>
-                  {matchConfidence}
-                  {activeDealId && <Check className="ml-2 h-3.5 w-3.5" />}
-                </span>
-              </div>
-              <div className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-muted/30 px-4 text-sm text-foreground">
-                <Sparkles className="h-4 w-4 text-qep-orange" />
-                Auto-match enabled
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="inline-flex items-center gap-2 text-green-300">
-                  <ShieldCheck className="h-4 w-4" />
-                  Offline-ready
-                </span>
-                <span className="inline-flex items-center gap-2 text-qep-orange">
-                  <DatabaseIcon className="h-4 w-4" />
-                  {queuedCount} queued
-                </span>
-              </div>
+              {statusCards.map((card) => {
+                const StatusIcon = card.icon;
+                return (
+                  <div key={card.label} className={cn("flex h-[60px] items-center gap-3 rounded-lg border px-3", card.className)}>
+                    <StatusIcon className="h-4 w-4 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{card.label}</p>
+                      <p className="truncate text-sm font-semibold">{card.value}</p>
+                      <p className="truncate text-[11px] opacity-70">{card.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
@@ -1475,7 +1535,11 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         onClick={recordingState === "paused" ? resumeRecording : pauseRecording}
                         disabled={recordingState !== "recording" && recordingState !== "paused"}
                       >
-                        {recordingState === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                        {recordingState === "paused" ? (
+                          <Play className="h-4 w-4" />
+                        ) : (
+                          <span aria-hidden="true" className="text-base leading-none">⏸</span>
+                        )}
                         {recordingState === "paused" ? "Resume" : "Pause"}
                       </Button>
                       <Button
@@ -1485,7 +1549,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         onClick={stopRecording}
                         disabled={recordingState !== "recording" && recordingState !== "paused"}
                       >
-                        <Square className="h-4 w-4" />
+                        <span aria-hidden="true" className="text-base leading-none">⏹</span>
                         Stop
                       </Button>
                     </div>
@@ -1517,16 +1581,12 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                     {recordingState === "recorded" && audioBlob && (
                       <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground">Preview before processing</p>
-                          <span className="font-mono text-xs text-muted-foreground">{formatTime(elapsedSeconds)}</span>
+                          <p className="text-sm font-semibold text-foreground">
+                            {audioPreviewFailed ? "Recording ready" : "Preview before processing"}
+                          </p>
                         </div>
                         {audioBlobUrl && !audioPreviewFailed && (
                           <audio controls src={audioBlobUrl} className="h-10 w-full" onError={() => setAudioPreviewFailed(true)} />
-                        )}
-                        {audioPreviewFailed && (
-                          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                            Playback is not available in this browser, but the note can still be processed.
-                          </p>
                         )}
                         <div className="flex gap-2">
                           <Button variant="outline" className="flex-1" onClick={resetCapture}>Re-record</Button>
@@ -1590,9 +1650,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
                         return (
                           <div key={item.label} className="grid grid-cols-[24px_minmax(0,1fr)_32px] gap-3">
                             <Icon className="mt-1 h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-medium text-foreground">{item.label}</p>
-                              <p className="text-sm text-muted-foreground">{item.value}</p>
+                            <div className="min-w-0">
+                              <p className="whitespace-nowrap text-sm font-medium leading-tight text-foreground">{item.label}</p>
+                              <p className="break-words text-sm text-muted-foreground">{item.value}</p>
                             </div>
                             <Button variant="ghost" size="icon" aria-label={`Edit ${item.label}`}>
                               <Pencil className="h-3.5 w-3.5" />
