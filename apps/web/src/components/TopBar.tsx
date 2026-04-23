@@ -76,6 +76,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   "/chat": "Knowledge",
   "/voice": "Field Note",
   "/quote": "Quotes",
+  "/sales/quotes": "Quotes",
   "/quote-v2": "Quote Builder",
   "/qrm": "QRM",
   "/qrm/activities": "Activities",
@@ -125,6 +126,7 @@ const QUICK_ACTION_MAP: Record<string, { label: string; route: string } | null> 
   "/chat": { label: "New Chat", route: "/chat" },
   "/voice": { label: "Record", route: "/voice" },
   "/quote": { label: "New Quote", route: "/quote-v2" },
+  "/sales/quotes": { label: "New Quote", route: "/quote-v2" },
   "/quote-v2": { label: "New Quote", route: "/quote-v2" },
   "/qrm": { label: "QRM Hub", route: "/qrm" },
   "/qrm/activities": { label: "Activities", route: "/qrm/activities" },
@@ -512,7 +514,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
                     type="search"
                     value={searchValue}
                     onChange={(e) => setSearchValue(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={location.pathname === "/sales/quotes" ? "Search quotes, customers, or #..." : "Search..."}
                     className="w-full pl-9 pr-4 py-1.5 text-xs bg-white/5 border border-white/10 rounded-full text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-qep-orange focus:bg-white/10 transition-all"
                   />
                 </div>

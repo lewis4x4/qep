@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   Filter,
+  Info,
   List,
   Mail,
   Pencil,
@@ -164,7 +165,7 @@ export function QuoteListPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<QuoteSort>(getDefaultQuoteSort);
-  const [activeStatFilters, setActiveStatFilters] = useState<Set<QuoteStatFilter>>(() => new Set());
+  const [activeStatFilters, setActiveStatFilters] = useState<Set<QuoteStatFilter>>(() => new Set(["total"]));
   const [localDrafts, setLocalDrafts] = useState<LocalDraftRecord[]>([]);
   const [showScoringAccuracy, setShowScoringAccuracy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -268,16 +269,12 @@ export function QuoteListPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-20 pt-6 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-6 px-5 pb-20 pt-4 sm:px-8 lg:px-10">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Quotes</h1>
           <p className="mt-1 text-sm text-muted-foreground">All equipment proposals — search, filter, or start a new one.</p>
         </div>
-        <Button onClick={() => navigate("/quote-v2")} className="bg-qep-orange text-white hover:bg-qep-orange/90">
-          <Plus className="mr-2 h-4 w-4" />
-          New Quote
-        </Button>
       </header>
 
       <section className="grid gap-3 md:grid-cols-4">
@@ -435,21 +432,31 @@ function QuoteTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] table-fixed">
+      <table className="w-full min-w-[1100px] table-fixed">
         <thead className="border-b border-border/60 bg-muted/10">
           <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            <SortableHeader label="Quote" column="quote" sort={sort} onSort={onSort} className="w-[17%]" />
-            <SortableHeader label="Customer & Contact" column="customer" sort={sort} onSort={onSort} className="w-[25%]" />
-            <SortableHeader label="Equipment" column="equipment" sort={sort} onSort={onSort} className="w-[18%]" />
-            <SortableHeader label="Total" column="total" sort={sort} onSort={onSort} className="w-[10%]" />
+            <SortableHeader label="Quote" column="quote" sort={sort} onSort={onSort} className="w-[20%]" />
+            <SortableHeader label="Customer & Contact" column="customer" sort={sort} onSort={onSort} className="w-[24%]" />
+            <SortableHeader label="Equipment" column="equipment" sort={sort} onSort={onSort} className="w-[17%]" />
+            <SortableHeader label="Total" column="total" sort={sort} onSort={onSort} className="w-[9%]" />
             <SortableHeader
-              label="Deal Score"
+              label={
+                <span className="inline-flex items-center gap-1">
+                  Deal Score
+                  <span className="group/info relative inline-flex">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="pointer-events-none absolute left-1/2 top-5 z-20 hidden w-64 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-2 text-left text-xs normal-case tracking-normal text-popover-foreground shadow-xl group-hover/info:block">
+                      Score blends quote fit, customer signal, pricing strength, and follow-up timing into a win-probability indicator.
+                    </span>
+                  </span>
+                </span>
+              }
               column="score"
               sort={sort}
               onSort={onSort}
-              className="w-[12%]"
+              className="w-[10%]"
             />
-            <SortableHeader label="Updated" column="updated" sort={sort} onSort={onSort} className="w-[18%]" />
+            <SortableHeader label="Updated" column="updated" sort={sort} onSort={onSort} className="w-[20%]" />
           </tr>
         </thead>
         <tbody>
@@ -498,7 +505,7 @@ function QuoteRow({
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-foreground">{item.quote_number ?? "Unnumbered quote"}</div>
-            <Badge className={`mt-1 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_CHIP_CLASSES[statusKey]}`}>
+            <Badge className={`mt-1 border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${STATUS_CHIP_CLASSES[statusKey]}`}>
               {statusLabel}
             </Badge>
           </div>

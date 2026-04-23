@@ -668,6 +668,7 @@ export function resolveActivePrimaryHeader(pathname: string): PrimaryHeaderId | 
     pathname === "/dashboard" ||
     pathname === "/dashboard/classic" ||
     pathname.startsWith("/quote") ||
+    pathname.startsWith("/sales") ||
     pathname === "/voice" ||
     pathname.startsWith("/voice/") ||
     pathname === "/voice-qrm"
