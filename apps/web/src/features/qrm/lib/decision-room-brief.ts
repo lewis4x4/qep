@@ -1,0 +1,130 @@
+/**
+ * Decision Room — shareable markdown brief.
+ *
+ * Turns a DecisionRoomBoard (+ optional coach read + recent moves) into
+ * a single markdown document the rep can paste into a handoff doc, send
+ * to their manager, or drop into an account review. Pure function — no
+ * model call, no async work. Every fact on the page that landed through
+ * a grounded surface lands here too.
+ */
+import type { DecisionRoomBoard } from "./decision-room-simulator";
+import type { TriedMove } from "../components/DecisionRoomMoveBar";
+import type { FutureTick } from "./decision-room-future";
+import type { RecommendedMove } from "./decision-room-moves";
+
+export interface BriefInput {
+  board: DecisionRoomBoard;
+  coachRead: string | null;
+  recommendedMoves: RecommendedMove[];
+  futureTicks: FutureTick[];
+  moveHistory: TriedMove[];
+}
+
+function formatDays(days: number | null): string {
+  if (days == null) return "no predicted close date";
+  if (days < 0) return `${Math.abs(days)}d past due`;
+  if (days === 0) return "close today";
+  return `${days}d to close`;
+}
+
+function formatLevel(level: string): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+function seatLine(seat: DecisionRoomBoard["seats"][number]): string {
+  const nameBit = seat.name ?? `(probable ${seat.archetypeLabel.toLowerCase()})`;
+  const titleBit = seat.title ? `, ${seat.title}` : "";
+  const statusBit = seat.status === "ghost" ? "ghost" : seat.stance;
+  return `- **${nameBit}**${titleBit} — ${seat.archetypeLabel} · ${statusBit} · power ${(seat.powerWeight * 100).toFixed(0)}%`;
+}
+
+export function buildRoomBriefMarkdown(input: BriefInput): string {
+  const { board, coachRead, recommendedMoves, futureTicks, moveHistory } = input;
+
+  const lines: string[] = [];
+  lines.push(`# ${board.dealName ?? "Untitled deal"} — Decision Room Brief`);
+  if (board.companyName) lines.push(`**Company:** ${board.companyName}`);
+  lines.push(`**Generated:** ${new Date().toLocaleString()}`);
+  lines.push("");
+
+  if (coachRead) {
+    lines.push("## Coach's read");
+    lines.push(coachRead);
+    lines.push("");
+  }
+
+  lines.push("## Scoreboard");
+  lines.push(`- **Decision Velocity:** ${formatDays(board.scores.decisionVelocity.days)} (${formatLevel(board.scores.decisionVelocity.confidence)} confidence)`);
+  lines.push(`- **Coverage:** ${board.scores.coverage.filled}/${board.scores.coverage.expected} expected seats named (${Math.round(board.scores.coverage.value * 100)}%)`);
+  if (board.scores.coverage.missingArchetypes.length > 0) {
+    lines.push(`  - Missing: ${board.scores.coverage.missingArchetypes.join(", ")}`);
+  }
+  lines.push(`- **Consensus Risk:** ${formatLevel(board.scores.consensusRisk.level)}`);
+  lines.push(`- **Latent Veto:** ${formatLevel(board.scores.latentVeto.level)}${board.scores.latentVeto.topGhostArchetype ? ` — top risk: ${board.scores.latentVeto.topGhostArchetype.replace(/_/g, " ")}` : ""}`);
+  lines.push("");
+
+  const named = board.seats.filter((s) => s.status === "named");
+  const ghosts = board.seats.filter((s) => s.status === "ghost");
+
+  lines.push("## Named seats");
+  if (named.length === 0) {
+    lines.push("_(none yet)_");
+  } else {
+    named.forEach((s) => lines.push(seatLine(s)));
+  }
+  lines.push("");
+
+  lines.push("## Ghost seats");
+  if (ghosts.length === 0) {
+    lines.push("_(every expected archetype is named)_");
+  } else {
+    ghosts.forEach((s) => {
+      lines.push(seatLine(s));
+      if (s.findGuidance) {
+        lines.push(`  - Why expected: ${s.findGuidance.reason}`);
+        lines.push(`  - Next step: ${s.findGuidance.nextStep}`);
+      }
+    });
+  }
+  lines.push("");
+
+  if (recommendedMoves.length > 0) {
+    lines.push("## Recommended moves");
+    recommendedMoves.forEach((move, i) => {
+      const tag = move.leverage === "high" ? "High leverage" : move.leverage === "medium" ? "Medium" : "Quick win";
+      lines.push(`${i + 1}. **${move.title}** _(${tag})_`);
+      lines.push(`   ${move.rationale}`);
+    });
+    lines.push("");
+  }
+
+  if (futureTicks.length > 0) {
+    lines.push("## Future pulse — without action");
+    futureTicks.forEach((tick) => {
+      const drift = tick.velocityDrift === 0
+        ? "steady"
+        : tick.velocityDrift > 0
+          ? `+${tick.velocityDrift}d slower`
+          : `${Math.abs(tick.velocityDrift)}d faster`;
+      lines.push(`- **${tick.horizon}:** ${drift} — ${tick.headline}`);
+    });
+    lines.push("");
+  }
+
+  if (moveHistory.length > 0) {
+    lines.push("## Moves tried in this session");
+    moveHistory.slice(0, 5).forEach((m) => {
+      const delta = m.aggregate.velocityDelta === 0
+        ? "steady"
+        : m.aggregate.velocityDelta > 0
+          ? `+${m.aggregate.velocityDelta}d slower`
+          : `${Math.abs(m.aggregate.velocityDelta)}d faster`;
+      lines.push(`- **"${m.move}"** — ${m.aggregate.mood}, ${delta}. ${m.aggregate.summary}`);
+    });
+    lines.push("");
+  }
+
+  lines.push("---");
+  lines.push("_Generated by the QEP Decision Room Simulator. Every persona reaction, ghost proposal, and score trace on this page is grounded on evidence — verify with your champion before acting._");
+  return lines.join("\n");
+}
