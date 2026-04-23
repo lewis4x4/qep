@@ -208,12 +208,16 @@ Deno.serve(async (req) => {
   // Process each document
   for (const docId of document_ids) {
     try {
-      // Fetch document chunks from KB
+      // Fetch document chunks from the canonical `chunks` table.
+      // (The legacy `kb_chunks` table referenced here previously never
+      // existed in this schema, so the function 404'd on every call.)
+      // The real table stores body text in `content` and has no
+      // section_title / page_number columns — those fields were never
+      // populated, so we drop them and order by chunk_index only.
       const { data: chunks, error: chunkError } = await supabase
-        .from("kb_chunks")
-        .select("chunk_text, section_title, page_number")
+        .from("chunks")
+        .select("content, chunk_index")
         .eq("document_id", docId)
-        .order("page_number", { ascending: true })
         .order("chunk_index", { ascending: true });
 
       if (chunkError || !chunks || chunks.length === 0) {
@@ -226,10 +230,8 @@ Deno.serve(async (req) => {
 
       // Combine chunks into a single document text
       const documentText = chunks
-        .map(
-          (c: any) =>
-            `${c.section_title ? `[${c.section_title}] ` : ""}${c.chunk_text}`,
-        )
+        .map((c: { content: string | null }) => c.content ?? "")
+        .filter((text) => text.length > 0)
         .join("\n\n");
 
       // Extract profiles via Claude
