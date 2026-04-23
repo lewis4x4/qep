@@ -6,13 +6,24 @@
  */
 
 const DB_NAME = "sales_companion";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface OfflineQueueItem {
   id: string;
   action_type: string;
   payload: Record<string, unknown>;
   queued_at: string;
+}
+
+export interface QueuedVoiceNote {
+  id: string;
+  audioBlob: Blob;
+  mimeType: string;
+  fileName: string;
+  durationSeconds: number;
+  dealId: string | null;
+  dealLabel: string | null;
+  queuedAt: string;
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -32,6 +43,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("offline_queue")) {
         db.createObjectStore("offline_queue", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("voice_note_queue")) {
+        db.createObjectStore("voice_note_queue", { keyPath: "id" });
       }
     };
 
@@ -135,6 +149,47 @@ export async function clearSyncedActions(ids: string[]): Promise<void> {
   const db = await openDB();
   const tx = db.transaction("offline_queue", "readwrite");
   const store = tx.objectStore("offline_queue");
+  for (const id of ids) {
+    store.delete(id);
+  }
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+export async function enqueueVoiceNote(item: QueuedVoiceNote): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction("voice_note_queue", "readwrite");
+  tx.objectStore("voice_note_queue").put(item);
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+export async function getQueuedVoiceNotes(): Promise<QueuedVoiceNote[]> {
+  return getAll<QueuedVoiceNote>("voice_note_queue");
+}
+
+export async function removeQueuedVoiceNotes(ids: string[]): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction("voice_note_queue", "readwrite");
+  const store = tx.objectStore("voice_note_queue");
   for (const id of ids) {
     store.delete(id);
   }

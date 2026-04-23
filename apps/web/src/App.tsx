@@ -1080,7 +1080,30 @@ function App() {
                 }
               />
               <Route
+                path="/sales/field-note"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VoiceCapturePage
+                      userRole={profile.role}
+                      userEmail={profile.email}
+                    />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
                 path="/voice/history"
+                element={
+                  ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
+                    <VoiceHistoryPage userRole={profile.role} />
+                  ) : (
+                    <Navigate to="/dashboard" replace />
+                  )
+                }
+              />
+              <Route
+                path="/sales/field-note/history"
                 element={
                   ["rep", "admin", "manager", "owner"].includes(profile.role) ? (
                     <VoiceHistoryPage userRole={profile.role} />
