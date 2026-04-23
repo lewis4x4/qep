@@ -23,6 +23,7 @@
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 
 const CHAT_MODEL = "gpt-5.4-mini";
 
@@ -197,6 +198,16 @@ Deno.serve(async (req) => {
   const caller = await resolveCallerContext(req, admin);
   if (!caller.userId || !caller.role) {
     return safeJsonError("Unauthorized", 401, origin);
+  }
+
+  const rateOk = await enforceRateLimitWithFallback(admin, {
+    userId: caller.userId,
+    endpoint: "decision-room-seat-chat",
+    maxRequests: 30,
+    windowSeconds: 60,
+  });
+  if (!rateOk) {
+    return safeJsonError("Rate limit exceeded — try again in a moment.", 429, origin);
   }
 
   // Workspace isolation — verify the caller actually has access to this deal

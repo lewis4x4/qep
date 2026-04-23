@@ -15,6 +15,7 @@
 import { createCallerClient, createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { enforceRateLimitWithFallback } from "../_shared/rate-limit-fallback.ts";
 
 const MODEL = "gpt-5.4-mini";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -189,6 +190,16 @@ Deno.serve(async (req) => {
   const caller = await resolveCallerContext(req, admin);
   if (!caller.userId || !caller.role || !caller.authHeader) {
     return safeJsonError("Unauthorized", 401, origin);
+  }
+
+  const rateOk = await enforceRateLimitWithFallback(admin, {
+    userId: caller.userId,
+    endpoint: "decision-room-draft-email",
+    maxRequests: 20,
+    windowSeconds: 60,
+  });
+  if (!rateOk) {
+    return safeJsonError("Rate limit exceeded — try again in a moment.", 429, origin);
   }
 
   const callerClient = createCallerClient(caller.authHeader);
