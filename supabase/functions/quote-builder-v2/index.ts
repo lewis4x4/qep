@@ -525,6 +525,86 @@ function generateShareToken(): string {
   return globalThis.crypto.randomUUID().replace(/-/g, "");
 }
 
+// Public attachments lookup — finds the quote by token, pulls the primary
+// equipment line's catalog id, and returns attachments compatible with
+// that model (plus universal attachments). Matches the structure the rep
+// side uses in searchCatalog() so included + also-available lists stay
+// consistent with what the rep could have added.
+async function handlePublicAttachmentsRead(url: URL, origin: string | null): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, equipment, workspace_id")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) {
+    console.error("public attachments quote read error:", quoteErr);
+    return safeJsonError("Failed to load quote", 500, origin);
+  }
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const equipment = Array.isArray(quote.equipment) ? quote.equipment : [];
+  const primary = equipment[0] as Record<string, unknown> | undefined;
+  const primaryId = primary && typeof primary.id === "string" ? primary.id : null;
+
+  // Guard against malformed model id so the contains-array filter below
+  // can't blow up the query.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let attachments: Array<Record<string, unknown>> = [];
+  if (primaryId && UUID_RE.test(primaryId)) {
+    // Fetch compatible OR universal attachments in one round trip.
+    const { data, error } = await admin
+      .from("qb_attachments")
+      .select("id, name, category, list_price_cents, attachment_type, universal, compatible_model_ids")
+      .eq("active", true)
+      .is("deleted_at", null)
+      .or(`universal.eq.true,compatible_model_ids.cs.{${primaryId}}`)
+      .order("name", { ascending: true })
+      .limit(50);
+    if (error) {
+      console.error("public attachments fetch error:", error);
+      return safeJsonError("Failed to load attachments", 500, origin);
+    }
+    attachments = data ?? [];
+  } else {
+    // No catalog-linked primary machine — surface only universal attachments.
+    const { data, error } = await admin
+      .from("qb_attachments")
+      .select("id, name, category, list_price_cents, attachment_type, universal, compatible_model_ids")
+      .eq("active", true)
+      .is("deleted_at", null)
+      .eq("universal", true)
+      .order("name", { ascending: true })
+      .limit(30);
+    if (error) {
+      console.error("public universal attachments fetch error:", error);
+      return safeJsonError("Failed to load attachments", 500, origin);
+    }
+    attachments = data ?? [];
+  }
+
+  const items = attachments.map((row) => ({
+    id: typeof row.id === "string" ? row.id : null,
+    name: typeof row.name === "string" ? row.name : null,
+    category: typeof row.category === "string" ? row.category : null,
+    attachment_type: typeof row.attachment_type === "string" ? row.attachment_type : null,
+    price: typeof row.list_price_cents === "number"
+      ? row.list_price_cents / 100
+      : typeof row.list_price_cents === "string"
+        ? Number(row.list_price_cents) / 100
+        : null,
+    universal: row.universal === true,
+  }));
+
+  return safeJsonOk({ attachments: items }, origin);
+}
+
 async function ensureQuoteApprovalWorkflow(
   // deno-lint-ignore no-explicit-any
   admin: any,
@@ -1129,6 +1209,9 @@ Deno.serve(async (req) => {
     const publicAction = publicUrl.pathname.split("/").pop() || "";
     if (req.method === "GET" && publicAction === "public") {
       return await handlePublicDealRoomRead(publicUrl, origin);
+    }
+    if (req.method === "GET" && publicAction === "public-attachments") {
+      return await handlePublicAttachmentsRead(publicUrl, origin);
     }
   } catch (err) {
     console.error("public-route dispatch error:", err);

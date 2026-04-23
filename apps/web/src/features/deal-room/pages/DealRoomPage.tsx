@@ -3,7 +3,9 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchPublicDealRoom,
+  fetchPublicDealRoomAttachments,
   type DealRoomBranch,
+  type DealRoomCompatibleAttachment,
   type DealRoomFinanceScenario,
   type DealRoomPayload,
   type DealRoomQuote,
@@ -82,15 +84,111 @@ export function DealRoomPage() {
   return <DealRoomView payload={data} />;
 }
 
+interface ConfiguratorOption {
+  key: string;
+  name: string;
+  price: number;
+  source: "included" | "catalog";
+  category: string | null;
+  universal: boolean;
+}
+
 function DealRoomView({ payload }: { payload: DealRoomPayload }) {
+  const { token = "" } = useParams<{ token: string }>();
   const { quote, branch } = payload;
   const [hero, ...rest] = quote.equipment ?? [];
-  const attachments = quote.attachments_included ?? [];
+  const includedAttachments = quote.attachments_included ?? [];
   const displayableScenarios = useMemo(
     () => filterDisplayableScenarios(quote.financing_scenarios ?? []),
     [quote.financing_scenarios],
   );
   const initialScenario = useMemo(() => pickSelectedFinance(quote), [quote]);
+
+  // Compatible-attachments lookup. Fires in parallel with the main quote
+  // fetch; silently no-ops when the quote's primary equipment is not a
+  // catalog-matched model (rep typed a free-text machine), in which case
+  // the configurator falls back to just the rep-included attachments.
+  const attachmentsQuery = useQuery({
+    queryKey: ["deal-room", token, "attachments"],
+    queryFn: () => fetchPublicDealRoomAttachments(token),
+    enabled: token.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const compatibleAttachments: DealRoomCompatibleAttachment[] = attachmentsQuery.data?.attachments ?? [];
+
+  // Merge rep-included + catalog-compatible into a single option list,
+  // deduped on name so a catalog match for an included attachment
+  // collapses to one row (with price preferring the saved quote value).
+  const configuratorOptions: ConfiguratorOption[] = useMemo(() => {
+    const byKey = new Map<string, ConfiguratorOption>();
+    for (const row of includedAttachments) {
+      const name = (row.name ?? "").trim();
+      if (!name) continue;
+      const key = `inc:${name.toLowerCase()}`;
+      byKey.set(key, {
+        key,
+        name,
+        price: row.price ?? 0,
+        source: "included",
+        category: null,
+        universal: false,
+      });
+    }
+    for (const att of compatibleAttachments) {
+      const name = (att.name ?? "").trim();
+      if (!name) continue;
+      const dedupeKey = `inc:${name.toLowerCase()}`;
+      if (byKey.has(dedupeKey)) {
+        // Already in — keep the included price and mark that the catalog
+        // knows about it (no visible change, but future slices may want
+        // the id for accept/save).
+        continue;
+      }
+      const key = att.id ? `cat:${att.id}` : `catname:${name.toLowerCase()}`;
+      byKey.set(key, {
+        key,
+        name,
+        price: att.price ?? 0,
+        source: "catalog",
+        category: att.category,
+        universal: att.universal,
+      });
+    }
+    return Array.from(byKey.values());
+  }, [includedAttachments, compatibleAttachments]);
+
+  // Customer's selection — pre-check everything the rep already included,
+  // leave catalog-only options unchecked. Re-seeds when the underlying
+  // option list shifts (e.g. attachment fetch resolves after first render).
+  const defaultSelected = useMemo(
+    () => new Set(configuratorOptions.filter((o) => o.source === "included").map((o) => o.key)),
+    [configuratorOptions],
+  );
+  const [selectedAttachments, setSelectedAttachments] = useState<Set<string>>(defaultSelected);
+  useEffect(() => {
+    setSelectedAttachments(defaultSelected);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote.id, attachmentsQuery.dataUpdatedAt]);
+
+  const toggleAttachment = (key: string) => {
+    setSelectedAttachments((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Running attachment total drives the Commercial Summary + Net + Total
+  // below, so a toggle here lights up the numbers everywhere on the
+  // page without touching the quote persistence layer.
+  const chosenAttachmentTotal = useMemo(
+    () => configuratorOptions
+      .filter((o) => selectedAttachments.has(o.key))
+      .reduce((sum, o) => sum + (o.price ?? 0), 0),
+    [configuratorOptions, selectedAttachments],
+  );
 
   // Customer-driven financing inputs — the deal room's decision rails.
   // Seeded from the saved quote so the first render matches the PDF,
@@ -118,19 +216,33 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
     ?? displayableScenarios[0]
     ?? null;
 
+  // Adjusted quote reflects the customer's live choices: attachment
+  // configurator flips attachment_total, which ripples through subtotal
+  // / net_total / customer_total so every downstream surface (pricing
+  // summary, financing math, slider cap) sees the same number.
+  const attachmentDelta = chosenAttachmentTotal - (quote.attachment_total ?? 0);
+  const adjustedQuote = useMemo<DealRoomQuote>(() => ({
+    ...quote,
+    attachment_total: chosenAttachmentTotal,
+    subtotal: (quote.subtotal ?? 0) + attachmentDelta,
+    net_total: (quote.net_total ?? 0) + attachmentDelta,
+    customer_total: (quote.customer_total ?? 0) + attachmentDelta,
+    amount_financed: Math.max(0, (quote.customer_total ?? 0) + attachmentDelta - cashDown),
+  }), [quote, chosenAttachmentTotal, attachmentDelta, cashDown]);
+
   const computed = useMemo<ComputedPayment | null>(() => {
     if (!activeScenario) return null;
-    return computePaymentFor(quote, activeScenario, {
+    return computePaymentFor(adjustedQuote, activeScenario, {
       cashDown,
       termMonths,
       scenarioKey: selectedKey,
     });
-  }, [quote, activeScenario, cashDown, termMonths, selectedKey]);
+  }, [adjustedQuote, activeScenario, cashDown, termMonths, selectedKey]);
 
   const refBadge = referenceBadge(quote);
   const preparedDate = formatDate(quote.created_at) || formatDate(quote.updated_at);
   const displayCustomer = quote.customer_name?.trim() || quote.customer_company?.trim() || "Customer";
-  const customerTotal = quote.customer_total ?? 0;
+  const customerTotal = adjustedQuote.customer_total ?? 0;
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -150,11 +262,19 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
         {quote.ai_recommendation && (
           <WhyThisMachine recommendation={quote.ai_recommendation} />
         )}
-        {rest.length + attachments.length > 0 && (
-          <AdditionalItems equipment={rest} attachments={attachments} />
+        {rest.length + includedAttachments.length > 0 && (
+          <AdditionalItems equipment={rest} attachments={includedAttachments} />
+        )}
+        {configuratorOptions.length > 0 && (
+          <ConfiguratorPanel
+            options={configuratorOptions}
+            selected={selectedAttachments}
+            onToggle={toggleAttachment}
+            attachmentTotal={chosenAttachmentTotal}
+          />
         )}
         <div className="mt-9 grid gap-5 sm:grid-cols-[1.15fr_1fr]">
-          <PricingSummary quote={quote} cashDownOverride={cashDown} computed={computed} />
+          <PricingSummary quote={adjustedQuote} cashDownOverride={cashDown} computed={computed} />
           <FinancingPanel
             scenarios={displayableScenarios}
             selectedKey={selectedKey}
@@ -601,6 +721,103 @@ function FinancingPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function ConfiguratorPanel({
+  options, selected, onToggle, attachmentTotal,
+}: {
+  options: ConfiguratorOption[];
+  selected: Set<string>;
+  onToggle: (key: string) => void;
+  attachmentTotal: number;
+}) {
+  // Group by category so the customer scans the configurator by job
+  // function (buckets, mowers, grapples) instead of one long list.
+  const grouped = useMemo(() => {
+    const map = new Map<string, ConfiguratorOption[]>();
+    for (const opt of options) {
+      const group = opt.source === "included" ? "Included by your rep" : (opt.category?.trim() || "Other attachments");
+      const bucket = map.get(group) ?? [];
+      bucket.push(opt);
+      map.set(group, bucket);
+    }
+    // "Included by your rep" first, then rest alphabetically.
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === "Included by your rep") return -1;
+      if (b === "Included by your rep") return 1;
+      return a.localeCompare(b);
+    });
+  }, [options]);
+
+  return (
+    <section className="mt-9">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Configure your package
+          </div>
+          <p className="mt-1 text-sm text-slate-700">
+            Toggle attachments to see the price move in real time. Nothing is committed until you accept.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Attachments total</div>
+          <div className="text-xl font-extrabold tabular-nums text-slate-900">
+            {formatCurrency(attachmentTotal, 0)}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 space-y-5">
+        {grouped.map(([group, items]) => (
+          <div key={group}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+              {group}
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {items.map((opt) => {
+                const active = selected.has(opt.key);
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => onToggle(opt.key)}
+                    aria-pressed={active}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                      active
+                        ? "border-[#E87722] bg-[#fff7ed]"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                          active ? "border-[#E87722] bg-[#E87722]" : "border-slate-300 bg-white"
+                        }`}
+                        aria-hidden
+                      >
+                        {active && (
+                          <span className="block h-1.5 w-1.5 rounded-sm bg-white" />
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-slate-900">{opt.name}</div>
+                        <div className="mt-0.5 text-[11px] text-slate-500">
+                          {opt.universal ? "Universal mount" : opt.category ?? (opt.source === "included" ? "Included" : "Compatible")}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="whitespace-nowrap text-sm font-bold tabular-nums text-slate-900">
+                      {opt.price > 0 ? `+${formatCurrency(opt.price, 0)}` : "Included"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

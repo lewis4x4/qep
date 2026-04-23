@@ -88,6 +88,34 @@ export interface DealRoomPayload {
   branch: DealRoomBranch | null;
 }
 
+export interface DealRoomCompatibleAttachment {
+  id: string | null;
+  name: string | null;
+  category: string | null;
+  attachment_type: string | null;
+  price: number | null;
+  universal: boolean;
+}
+
+export interface DealRoomAttachmentsPayload {
+  attachments: DealRoomCompatibleAttachment[];
+}
+
+export async function fetchPublicDealRoomAttachments(token: string): Promise<DealRoomAttachmentsPayload> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-attachments?token=${encodeURIComponent(token)}`, {
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 // Public deal-room read. No user auth — the opaque token IS the
 // authorization. The anon key is still required as the function
 // gateway's API key, but it does not identify a user.
