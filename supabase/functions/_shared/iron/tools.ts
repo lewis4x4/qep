@@ -124,7 +124,7 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
   {
     name: "lookup_contact",
     description:
-      "Find a contact person by first name, last name, or email. Returns contact id, name, email, phone, title, and primary company. USE THIS WHEN: the user mentions a person by name, e.g. 'find John Smith' or 'who is the contact at Acme'.",
+      "Find a contact person by first name, last name, or email. Returns contact id, name, email, phone, title, and primary company. USE THIS WHEN: the user mentions a person by name, e.g. 'find John Smith' or 'who is the contact at Acme'. If this returns 0 results, the person may be a prospect captured on a quote — call lookup_quote next with the same name before telling the user nothing was found.",
     input_schema: {
       type: "object",
       properties: {
@@ -221,6 +221,20 @@ export const IRON_TOOL_DEFINITIONS: AnthropicToolDef[] = [
       required: ["query"],
     },
   },
+  {
+    name: "lookup_quote",
+    description:
+      "Find saved equipment proposals (quote packages) by customer name, company name, or quote id. Returns the quote's customer, equipment, totals, cash down, amount financed, financing scenarios, status, and the AI reasoning used to build it (which often captures budget and job context). USE THIS WHEN: the user asks about a quoted deal, a prospect who doesn't have a full CRM contact yet, or anything about numbers on a specific proposal (e.g. 'how much was John gonna put down', 'what's the budget on the Coker deal', 'which SR175 quote have we sent recently'). Falls through to this when lookup_contact returns nothing for a known prospect name.",
+    input_schema: {
+      type: "object",
+      properties: {
+        customer_name: { type: "string", description: "Buyer's full or partial name (e.g. 'John Coker')" },
+        customer_company: { type: "string", description: "Company name on the proposal" },
+        quote_id: { type: "string", description: "Exact quote_packages.id UUID if known" },
+        limit: { type: "number", description: "Max results (default 10)" },
+      },
+    },
+  },
 ];
 
 /* ─── Tool execution context ────────────────────────────────────────────── */
@@ -313,6 +327,14 @@ export async function executeIronTool(
         );
       case "web_search":
         return await toolWebSearch(String(input.query ?? ""), ctx);
+      case "lookup_quote":
+        return await toolLookupQuote(
+          input.customer_name as string | undefined,
+          input.customer_company as string | undefined,
+          input.quote_id as string | undefined,
+          (input.limit as number | undefined) ?? 10,
+          ctx,
+        );
       default:
         return { error: `unknown tool: ${name}` };
     }
@@ -672,6 +694,103 @@ async function toolLookupContact(name: string, limit: number, ctx: ToolContext) 
       company: c.primary_company_id ? companyById.get(c.primary_company_id) ?? null : null,
     })),
   };
+}
+
+async function toolLookupQuote(
+  customerName: string | undefined,
+  customerCompany: string | undefined,
+  quoteId: string | undefined,
+  limit: number,
+  ctx: ToolContext,
+) {
+  if (!customerName && !customerCompany && !quoteId) {
+    return { error: "customer_name, customer_company, or quote_id is required" };
+  }
+  let q = ctx.admin
+    .from("quote_packages")
+    .select(
+      "id, deal_id, contact_id, customer_name, customer_company, customer_email, customer_phone, status, quote_number, branch_slug, equipment, attachments_included, subtotal, discount_total, trade_credit, net_total, tax_total, cash_down, amount_financed, customer_total, selected_finance_scenario, financing_scenarios, ai_recommendation, created_at, updated_at, sent_at",
+    )
+    .eq("workspace_id", ctx.workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(limit, 25));
+  if (quoteId) {
+    q = q.eq("id", quoteId);
+  } else {
+    const filters: string[] = [];
+    if (customerName) {
+      const term = customerName.replace(/[%_]/g, "").slice(0, 80);
+      filters.push(`customer_name.ilike.%${term}%`);
+    }
+    if (customerCompany) {
+      const term = customerCompany.replace(/[%_]/g, "").slice(0, 80);
+      filters.push(`customer_company.ilike.%${term}%`);
+    }
+    if (filters.length === 0) return { count: 0, quotes: [] };
+    q = q.or(filters.join(","));
+  }
+  const { data, error } = await q;
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { count: 0, quotes: [] };
+
+  const shapedQuotes = data.map((row: Record<string, unknown>) => {
+    const equipment = Array.isArray(row.equipment) ? row.equipment : [];
+    const primary = equipment[0] as Record<string, unknown> | undefined;
+    const primaryLabel = primary
+      ? [primary.make, primary.model, primary.year ? `(${primary.year})` : null]
+        .filter(Boolean).join(" ")
+      : "(no equipment)";
+    const scenarios = Array.isArray(row.financing_scenarios) ? row.financing_scenarios : [];
+    const selectedLabel = typeof row.selected_finance_scenario === "string"
+      ? row.selected_finance_scenario
+      : null;
+    const selected = scenarios.find((s: Record<string, unknown>) =>
+      typeof s.label === "string" && s.label === selectedLabel,
+    ) ?? scenarios[0] ?? null;
+    const rec = row.ai_recommendation && typeof row.ai_recommendation === "object"
+      ? row.ai_recommendation as Record<string, unknown>
+      : null;
+    return {
+      id: row.id,
+      quote_number: row.quote_number ?? null,
+      status: row.status ?? "draft",
+      customer_name: row.customer_name ?? null,
+      customer_company: row.customer_company ?? null,
+      customer_email: row.customer_email ?? null,
+      customer_phone: row.customer_phone ?? null,
+      deal_id: row.deal_id ?? null,
+      branch_slug: row.branch_slug ?? null,
+      primary_equipment: primaryLabel,
+      equipment_count: equipment.length,
+      attachments: Array.isArray(row.attachments_included)
+        ? (row.attachments_included as Array<Record<string, unknown>>)
+          .map((a) => a?.name).filter((n) => typeof n === "string")
+        : [],
+      subtotal: row.subtotal ?? null,
+      discount_total: row.discount_total ?? null,
+      trade_credit: row.trade_credit ?? null,
+      net_total: row.net_total ?? null,
+      tax_total: row.tax_total ?? null,
+      cash_down: row.cash_down ?? null,
+      amount_financed: row.amount_financed ?? null,
+      customer_total: row.customer_total ?? null,
+      selected_financing: selected
+        ? {
+          label: (selected as Record<string, unknown>).label ?? null,
+          term_months: (selected as Record<string, unknown>).term_months ?? null,
+          apr: (selected as Record<string, unknown>).apr ?? (selected as Record<string, unknown>).rate ?? null,
+          monthly_payment: (selected as Record<string, unknown>).monthly_payment ?? null,
+        }
+        : null,
+      reasoning: rec && typeof rec.reasoning === "string" ? rec.reasoning : null,
+      job_facts: rec && Array.isArray(rec.jobFacts) ? rec.jobFacts : null,
+      created_at: row.created_at ?? null,
+      updated_at: row.updated_at ?? null,
+      sent_at: row.sent_at ?? null,
+    };
+  });
+
+  return { count: shapedQuotes.length, quotes: shapedQuotes };
 }
 
 async function toolSearchEquipment(

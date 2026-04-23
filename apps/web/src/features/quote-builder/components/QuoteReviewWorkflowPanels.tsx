@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PenTool } from "lucide-react";
+import { PenTool, ChevronDown, ChevronRight } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,10 @@ export function QuoteReviewWorkflowPanels({
   const queryClient = useQueryClient();
   const sigRef = useRef<PortalSignaturePadHandle>(null);
   const [signerName, setSignerName] = useState("");
+  // In-person signature capture is collapsed by default now that most
+  // closes happen remotely via the deal room. Reps who hand over the
+  // device for an in-person sign click to expand.
+  const [inPersonSignOpen, setInPersonSignOpen] = useState(false);
   const [dealerMessage, setDealerMessage] = useState("");
   const [revisionSummary, setRevisionSummary] = useState("");
 
@@ -433,33 +437,49 @@ export function QuoteReviewWorkflowPanels({
         </Card>
       )}
 
-      <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <PenTool className="h-4 w-4 text-qep-orange" />
-          <p className="text-sm font-medium text-foreground">E-signature</p>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Capture signer name, IP, timestamp, and signature image for the quote package.
-        </p>
-        <Input
-          value={signerName}
-          onChange={(event) => setSignerName(event.target.value)}
-          placeholder="Signer full name"
-        />
-        <PortalSignaturePad ref={sigRef} />
-        <Button
-          onClick={() => signMutation.mutate()}
-          disabled={signMutation.isPending || !signerName.trim()}
+      <Card className="border-border/60 bg-card/60 p-4">
+        <button
+          type="button"
+          onClick={() => setInPersonSignOpen((open) => !open)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+          aria-expanded={inPersonSignOpen}
         >
-          {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
-        </Button>
-        {signMutation.isSuccess && (
-          <p className="text-xs text-emerald-400">Signature captured successfully.</p>
-        )}
-        {signMutation.isError && (
-          <p className="text-xs text-red-400">
-            {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
-          </p>
+          <div className="flex items-center gap-2">
+            <PenTool className="h-4 w-4 text-qep-orange" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Sign in person</p>
+              <p className="text-xs text-muted-foreground">
+                Customer here with you? Hand over the device to sign. Most closes go through the deal-room Share link instead.
+              </p>
+            </div>
+          </div>
+          {inPersonSignOpen
+            ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </button>
+        {inPersonSignOpen && (
+          <div className="mt-3 space-y-3">
+            <Input
+              value={signerName}
+              onChange={(event) => setSignerName(event.target.value)}
+              placeholder="Signer full name"
+            />
+            <PortalSignaturePad ref={sigRef} />
+            <Button
+              onClick={() => signMutation.mutate()}
+              disabled={signMutation.isPending || !signerName.trim()}
+            >
+              {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
+            </Button>
+            {signMutation.isSuccess && (
+              <p className="text-xs text-emerald-400">Signature captured successfully.</p>
+            )}
+            {signMutation.isError && (
+              <p className="text-xs text-red-400">
+                {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
+              </p>
+            )}
+          </div>
         )}
       </Card>
     </>
