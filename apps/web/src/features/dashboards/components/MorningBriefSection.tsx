@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 import { Sparkles, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,14 @@ type Briefing = {
   briefing_date: string;
   created_at: string;
 } | null;
+
+type GenerateBriefResponse = {
+  briefing: Briefing;
+  result?: {
+    userId: string;
+    status: string;
+  } | null;
+};
 
 function isBriefingCollapsedToday(): boolean {
   try {
@@ -68,7 +77,7 @@ async function fetchTodayBrief(): Promise<Briefing> {
   return (data as Briefing) ?? null;
 }
 
-async function generateBriefForCurrentUser(regenerate: boolean): Promise<void> {
+async function generateBriefForCurrentUser(regenerate: boolean): Promise<GenerateBriefResponse> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not authenticated");
   const res = await fetch(
@@ -83,13 +92,24 @@ async function generateBriefForCurrentUser(regenerate: boolean): Promise<void> {
       body: JSON.stringify({ regenerate }),
     },
   );
+  const payload = await res.json().catch(() => ({})) as Partial<GenerateBriefResponse> & {
+    error?: string;
+  };
   if (!res.ok) {
-    throw new Error(`morning-briefing returned ${res.status}`);
+    throw new Error(payload.error ?? `morning-briefing returned ${res.status}`);
   }
+  if (!payload.briefing) {
+    throw new Error(payload.error ?? "Morning briefing did not generate.");
+  }
+  return {
+    briefing: payload.briefing,
+    result: payload.result ?? null,
+  };
 }
 
 export function MorningBriefSection() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: briefing, isLoading } = useQuery({
     queryKey: BRIEFING_QUERY_KEY,
     queryFn: fetchTodayBrief,
@@ -100,10 +120,24 @@ export function MorningBriefSection() {
 
   const mutation = useMutation({
     mutationFn: (regenerate: boolean) => generateBriefForCurrentUser(regenerate),
-    onSuccess: () => {
+    onSuccess: (payload) => {
       setCollapsed(false);
       setBriefingCollapsedFlag(false);
+      queryClient.setQueryData(BRIEFING_QUERY_KEY, payload.briefing);
       queryClient.invalidateQueries({ queryKey: BRIEFING_QUERY_KEY });
+      if (payload.result?.status === "generated_fallback") {
+        toast({
+          title: "Briefing generated",
+          description: "The live AI model was unavailable, so a fallback summary was generated instead.",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Briefing failed",
+        description: error instanceof Error ? error.message : "Something went wrong while generating the briefing.",
+        variant: "destructive",
+      });
     },
   });
 

@@ -9,41 +9,18 @@
  * Can be called per-user (with auth) or for all users (via service role / cron).
  */
 import { createAdminClient, resolveCallerContext } from "../_shared/dge-auth.ts";
+import {
+  buildFallbackMorningBriefing,
+  type MorningBriefingData,
+} from "../_shared/morning-briefing-fallback.ts";
 import { safeCorsHeaders as corsHeaders, optionsResponse } from "../_shared/safe-cors.ts";
 
 const BRIEFING_MODEL = "gpt-5.4-mini";
 
-interface UserBriefingData {
-  userId: string;
-  fullName: string;
-  role: string;
-  dealsClosingSoon: Array<{
-    name: string;
-    amount: number | null;
-    expected_close: string;
-    stage: string | null;
-    company: string | null;
-  }>;
-  overdueFollowUps: Array<{
-    name: string;
-    amount: number | null;
-    follow_up_date: string;
-    company: string | null;
-  }>;
-  recentActivities: Array<{
-    type: string;
-    body: string | null;
-    date: string;
-  }>;
-  pipelineTotal: number;
-  openDealCount: number;
-  newVoiceNotes: number;
-}
-
 async function gatherUserData(
   db: ReturnType<typeof createAdminClient>,
   userId: string,
-): Promise<UserBriefingData | null> {
+): Promise<MorningBriefingData | null> {
   const { data: profile } = await db
     .from("profiles")
     .select("id, full_name, role")
@@ -151,7 +128,14 @@ async function gatherUserData(
   };
 }
 
-async function generateBriefing(data: UserBriefingData): Promise<string> {
+function statusToUserMessage(status: string): string {
+  if (status === "already_exists") return "A briefing already exists for today.";
+  if (status === "user_not_found") return "No profile was found for the signed-in user.";
+  if (status.startsWith("error:")) return status.slice("error:".length).trim();
+  return "Morning briefing did not generate.";
+}
+
+async function generateBriefing(data: MorningBriefingData): Promise<string> {
   const today = new Date();
   const dayOfWeek = today.toLocaleDateString("en-US", { weekday: "long" });
   const dateStr = today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
@@ -164,21 +148,21 @@ PIPELINE: ${data.openDealCount} open deals, $${data.pipelineTotal.toLocaleString
 
 DEALS CLOSING THIS WEEK (${data.dealsClosingSoon.length}):
 ${data.dealsClosingSoon.length > 0
-    ? data.dealsClosingSoon.map((d) =>
+    ? data.dealsClosingSoon.map((d: MorningBriefingData["dealsClosingSoon"][number]) =>
       `- ${d.name}${d.company ? ` (${d.company})` : ""}: $${(d.amount ?? 0).toLocaleString()} closing ${d.expected_close}${d.stage ? `, stage: ${d.stage}` : ""}`
     ).join("\n")
     : "None"}
 
 OVERDUE FOLLOW-UPS (${data.overdueFollowUps.length}):
 ${data.overdueFollowUps.length > 0
-    ? data.overdueFollowUps.map((d) =>
+    ? data.overdueFollowUps.map((d: MorningBriefingData["overdueFollowUps"][number]) =>
       `- ${d.name}${d.company ? ` (${d.company})` : ""}: $${(d.amount ?? 0).toLocaleString()}, follow-up was due ${d.follow_up_date}`
     ).join("\n")
     : "None"}
 
 YESTERDAY'S ACTIVITIES (${data.recentActivities.length}):
 ${data.recentActivities.length > 0
-    ? data.recentActivities.map((a) =>
+    ? data.recentActivities.map((a: MorningBriefingData["recentActivities"][number]) =>
       `- ${a.type}: ${a.body ?? "(no details)"}`
     ).join("\n")
     : "No activity recorded"}
@@ -311,9 +295,17 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const content = await generateBriefing(data);
+      let content: string;
+      let usedFallback = false;
+      try {
+        content = await generateBriefing(data);
+      } catch (err) {
+        usedFallback = true;
+        console.error(`[morning-briefing] AI generation failed for user ${userId}, using fallback:`, err);
+        content = buildFallbackMorningBriefing(data);
+      }
 
-      await adminClient.from("morning_briefings").insert({
+      const { error: upsertError } = await adminClient.from("morning_briefings").upsert({
         user_id: userId,
         briefing_date: today,
         content,
@@ -324,10 +316,17 @@ Deno.serve(async (req) => {
           overdue_follow_ups: data.overdueFollowUps.length,
           recent_activity_count: data.recentActivities.length,
           new_voice_notes: data.newVoiceNotes,
+          generation_mode: usedFallback ? "fallback" : "ai",
         },
+      }, {
+        onConflict: "user_id,briefing_date",
       });
 
-      results.push({ userId, status: "generated" });
+      if (upsertError) {
+        throw upsertError;
+      }
+
+      results.push({ userId, status: usedFallback ? "generated_fallback" : "generated" });
     } catch (err) {
       console.error(`[morning-briefing] error for user ${userId}:`, err);
       results.push({ userId, status: `error: ${err instanceof Error ? err.message : "unknown"}` });
@@ -342,6 +341,7 @@ Deno.serve(async (req) => {
 
   // If single user, return the briefing content directly
   if (targetUserIds.length === 1 && !isServiceRole) {
+    const result = results[0] ?? null;
     const { data: briefing } = await adminClient
       .from("morning_briefings")
       .select("id, content, data, briefing_date, created_at")
@@ -349,7 +349,37 @@ Deno.serve(async (req) => {
       .eq("briefing_date", today)
       .maybeSingle();
 
-    return new Response(JSON.stringify({ briefing }), {
+    if (result?.status === "user_not_found") {
+      return new Response(JSON.stringify({
+        error: statusToUserMessage(result.status),
+        result,
+      }), {
+        status: 404,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
+    if (result?.status.startsWith("error:")) {
+      return new Response(JSON.stringify({
+        error: statusToUserMessage(result.status),
+        result,
+      }), {
+        status: 500,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!briefing) {
+      return new Response(JSON.stringify({
+        error: "Morning briefing did not generate. Please try again.",
+        result,
+      }), {
+        status: 500,
+        headers: { ...ch, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ briefing, result }), {
       status: 200,
       headers: { ...ch, "Content-Type": "application/json" },
     });

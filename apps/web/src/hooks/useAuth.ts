@@ -48,8 +48,8 @@ interface AuthState {
 
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
 const AUTH_TIMEOUT_RETRIES = 2;
-const PROFILE_REQUEST_TIMEOUT_MS = 2500;
-const PROFILE_TIMEOUT_RETRIES = 1;
+const PROFILE_REQUEST_TIMEOUT_MS = 8000;
+const PROFILE_TIMEOUT_RETRIES = 2;
 
 export function useAuth(): AuthState {
   const [state, setState] = useState<AuthState>({
