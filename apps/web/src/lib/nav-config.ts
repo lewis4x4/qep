@@ -107,7 +107,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
   {
     label: "Field Note",
-    href: "/voice",
+    href: "/sales/field-note",
     icon: Mic,
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",

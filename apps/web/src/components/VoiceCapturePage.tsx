@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Mic,
@@ -23,11 +23,22 @@ import {
   Sparkles,
   HelpCircle,
   CalendarDays,
-  ChevronDown,
   Send,
   Clock,
   XCircle,
   Volume2,
+  Search,
+  Play,
+  Pause,
+  Wifi,
+  WifiOff,
+  Radio,
+  Pencil,
+  MoreVertical,
+  SlidersHorizontal,
+  ShieldCheck,
+  Database as DatabaseIcon,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { UserRole, Database } from "../lib/database.types";
@@ -64,6 +75,12 @@ import {
   getMicrophoneSupportProblem,
   type MicrophoneProblem,
 } from "@/lib/microphone-access";
+import {
+  enqueueVoiceNote,
+  getQueuedVoiceNotes,
+  removeQueuedVoiceNotes,
+  type QueuedVoiceNote,
+} from "@/features/sales/lib/offline-store";
 
 interface VoiceCapturePageProps {
   userRole: UserRole;
@@ -73,6 +90,7 @@ interface VoiceCapturePageProps {
 type RecordingState =
   | "idle"
   | "recording"
+  | "paused"
   | "recorded"
   | "processing"
   | "done"
@@ -104,6 +122,26 @@ interface RecordingFormat {
   previewTypes: string[];
 }
 
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<{
+    isFinal: boolean;
+    0: {
+      transcript: string;
+    };
+  }>;
+}
+
 type RecentCapture = Pick<
   Database["public"]["Tables"]["voice_captures"]["Row"],
   | "id"
@@ -115,6 +153,8 @@ type RecentCapture = Pick<
   | "sync_error"
   | "updated_at"
   | "user_id"
+  | "audio_storage_path"
+  | "linked_deal_id"
 > & {
   recorderName: string | null;
   recorderEmail: string | null;
@@ -130,6 +170,26 @@ interface VoiceCaptureStatusMeta {
   badgeVariant: "default" | "destructive" | "secondary";
   heading: string;
   summary: string;
+}
+
+type RecentStatusFilter = "all" | "synced" | "queued" | "needs_match";
+type RecentDateFilter = "all" | "today" | "week";
+
+interface RecentRecordingRow {
+  id: string;
+  source: "remote" | "queued";
+  title: string;
+  transcript: string | null;
+  createdAt: string;
+  durationSeconds: number | null;
+  recorder: string;
+  dealId: string | null;
+  syncStatus: "synced" | "queued" | "needs_match" | "review_sync" | "processing";
+  statusLabel: string;
+  statusDetail: string;
+  actionLabel: string;
+  audioStoragePath: string | null;
+  audioBlob?: Blob;
 }
 
 const DEAL_STAGE_LABELS: Record<string, string> = {
@@ -320,12 +380,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [selectedDealLabel, setSelectedDealLabel] = useState<string | null>(null);
   const [resolvedDealOption, setResolvedDealOption] = useState<DealLookupOption | null>(null);
   const [result, setResult] = useState<CaptureResult | null>(null);
-  const [editedTranscript, setEditedTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [microphoneProblem, setMicrophoneProblem] = useState<MicrophoneProblem | null>(null);
   const [processingStep, setProcessingStep] = useState(0);
-  const [transcriptCopied, setTranscriptCopied] = useState(false);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [pushingToHubspot, setPushingToHubspot] = useState(false);
   const [recentCaptures, setRecentCaptures] = useState<RecentCapture[]>([]);
   const [recentLoading, setRecentLoading] = useState(true);
@@ -333,8 +390,21 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const [recentCaptureLoading, setRecentCaptureLoading] = useState(false);
   const [selectedRecentCapture, setSelectedRecentCapture] = useState<RecentCaptureDetail | null>(null);
   const [recentAudioUrl, setRecentAudioUrl] = useState<string | null>(null);
-  const [tipsOpen, setTipsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
+  const [queuedVoiceNotes, setQueuedVoiceNotes] = useState<QueuedVoiceNote[]>([]);
+  const [queuedSyncing, setQueuedSyncing] = useState(false);
+  const [recentSearch, setRecentSearch] = useState("");
+  const [recentStatusFilter, setRecentStatusFilter] = useState<RecentStatusFilter>("all");
+  const [recentDateFilter, setRecentDateFilter] = useState<RecentDateFilter>("all");
+  const [inlineAudio, setInlineAudio] = useState<{
+    id: string;
+    url: string;
+    isObjectUrl: boolean;
+  } | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   // Track viewport width for responsive tooltip positioning (QUA-75)
   useEffect(() => {
@@ -366,11 +436,36 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
   const streamRef = useRef<MediaStream | null>(null);
   const stepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingFormatRef = useRef<RecordingFormat | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   // Load recent captures on mount
   useEffect(() => {
     void loadRecentCaptures();
+    void loadQueuedVoiceNotes();
   }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      void syncQueuedVoiceNotes();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [queuedSyncing]);
+
+  useEffect(() => {
+    return () => {
+      if (inlineAudio?.isObjectUrl) {
+        URL.revokeObjectURL(inlineAudio.url);
+      }
+    };
+  }, [inlineAudio]);
 
   useEffect(() => {
     const query = dealLookupQuery.trim();
@@ -494,10 +589,10 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     let query = supabase
       .from("voice_captures")
       .select(
-        "id, created_at, duration_seconds, sync_status, hubspot_deal_id, transcript, sync_error, updated_at, user_id",
+        "id, created_at, duration_seconds, sync_status, hubspot_deal_id, linked_deal_id, transcript, sync_error, updated_at, user_id, audio_storage_path",
       )
       .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(7);
     // Defense-in-depth: scope to own rows for non-elevated roles (RLS also enforces this)
     if (!isElevated) {
       query = query.eq("user_id", user.id);
@@ -539,6 +634,55 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       );
     }
     setRecentLoading(false);
+  }
+
+  async function loadQueuedVoiceNotes(): Promise<void> {
+    try {
+      const notes = await getQueuedVoiceNotes();
+      setQueuedVoiceNotes(notes.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt)));
+    } catch (err) {
+      console.warn("Could not load queued voice notes", err);
+      setQueuedVoiceNotes([]);
+    }
+  }
+
+  async function syncQueuedVoiceNotes(): Promise<void> {
+    if (queuedSyncing || typeof navigator !== "undefined" && !navigator.onLine) return;
+
+    const notes = await getQueuedVoiceNotes().catch(() => []);
+    if (notes.length === 0) {
+      setQueuedVoiceNotes([]);
+      return;
+    }
+
+    setQueuedSyncing(true);
+    const syncedIds: string[] = [];
+    try {
+      for (const note of notes) {
+        try {
+          await submitVoiceBlob(note.audioBlob, {
+            dealId: note.dealId,
+            fileName: note.fileName,
+          });
+          syncedIds.push(note.id);
+        } catch (err) {
+          console.warn("Queued voice note sync failed", err);
+          break;
+        }
+      }
+
+      if (syncedIds.length > 0) {
+        await removeQueuedVoiceNotes(syncedIds);
+        toast({
+          title: "Offline notes synced",
+          description: `${syncedIds.length} field note${syncedIds.length === 1 ? "" : "s"} reached QRM processing.`,
+        });
+      }
+    } finally {
+      setQueuedSyncing(false);
+      await loadQueuedVoiceNotes();
+      void loadRecentCaptures();
+    }
   }
 
   async function openRecentCapture(capture: RecentCapture): Promise<void> {
@@ -618,6 +762,55 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     };
   }, [recordingState]);
 
+  function startLiveTranscript(): void {
+    setLiveTranscript("");
+
+    const recognitionCtor =
+      typeof window === "undefined"
+        ? null
+        : ((window as unknown as {
+            SpeechRecognition?: new () => SpeechRecognitionLike;
+            webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+          }).SpeechRecognition ??
+          (window as unknown as {
+            webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+          }).webkitSpeechRecognition ??
+          null);
+
+    if (!recognitionCtor) return;
+
+    try {
+      const recognition = new recognitionCtor();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      recognition.onresult = (event) => {
+        let text = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          text += event.results[i][0].transcript;
+        }
+        setLiveTranscript((prev) => {
+          const next = `${prev} ${text}`.trim();
+          return next.length > 360 ? next.slice(next.length - 360) : next;
+        });
+      };
+      recognition.onerror = () => undefined;
+      speechRecognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      speechRecognitionRef.current = null;
+    }
+  }
+
+  function stopLiveTranscript(): void {
+    try {
+      speechRecognitionRef.current?.stop();
+    } catch {
+      // Browser speech recognition can throw if it already stopped.
+    }
+    speechRecognitionRef.current = null;
+  }
+
   const startRecording = useCallback(async () => {
     setErrorMessage(null);
     setMicrophoneProblem(null);
@@ -669,6 +862,7 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setRecordingState("recording");
     setElapsedSeconds(0);
     setMicrophoneProblem(null);
+    startLiveTranscript();
 
     timerRef.current = setInterval(() => {
       setElapsedSeconds((s) => s + 1);
@@ -681,10 +875,35 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
       timerRef.current = null;
     }
     mediaRecorderRef.current?.stop();
+    stopLiveTranscript();
     setRecordingState("recorded");
   }, []);
 
+  const pauseRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.pause();
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    stopLiveTranscript();
+    setRecordingState("paused");
+  }, []);
+
+  const resumeRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "paused") {
+      mediaRecorderRef.current.resume();
+    }
+    startLiveTranscript();
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((s) => s + 1);
+    }, 1000);
+    setRecordingState("recording");
+  }, []);
+
   const resetCapture = useCallback(() => {
+    stopLiveTranscript();
     if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
     setAudioBlob(null);
     setAudioBlobUrl(null);
@@ -696,11 +915,9 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setSelectedDealLabel(null);
     setResolvedDealOption(null);
     setResult(null);
-    setEditedTranscript("");
     setErrorMessage(null);
     setMicrophoneProblem(null);
-    setTranscriptOpen(false);
-    setTranscriptCopied(false);
+    setLiveTranscript("");
     setRecordingState("idle");
   }, [audioBlobUrl]);
 
@@ -775,43 +992,17 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setErrorMessage(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-
-      const form = new FormData();
       const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
-      form.append("audio", audioBlob, recordingFileName);
-      if (hubspotDealId.trim()) {
-        form.append("crm_deal_id", hubspotDealId.trim());
-      }
-
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-capture`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: form,
-        }
-      );
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error((err as { error?: string }).error ?? "Processing failed");
-      }
-
-      const data = (await res.json()) as CaptureResult;
+      const data = await submitVoiceBlob(audioBlob, {
+        dealId: hubspotDealId.trim() || null,
+        fileName: recordingFileName,
+      });
 
       // Mark final step complete before showing results
       setProcessingStep(3);
       await new Promise((r) => setTimeout(r, 600));
 
       setResult(data);
-      setEditedTranscript(data.transcript);
       setRecordingState("done");
       void loadRecentCaptures();
 
@@ -827,6 +1018,13 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
         });
       }
     } catch (err) {
+      if (isLikelyNetworkFailure(err)) {
+        await queueVoiceCaptureForLater(
+          audioBlob,
+          "The recording is stored on this device and will sync when connectivity returns.",
+        );
+        return;
+      }
       const message =
         err instanceof Error
           ? err.message
@@ -841,14 +1039,6 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     const m = Math.floor(seconds / 60).toString().padStart(2, "0");
     const s = (seconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
-  }
-
-  async function copyTranscript(): Promise<void> {
-    const text = editedTranscript || result?.transcript;
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
-    setTranscriptCopied(true);
-    setTimeout(() => setTranscriptCopied(false), 2000);
   }
 
   function handleDealLookupChange(value: string): void {
@@ -888,6 +1078,72 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     setDealLookupOptions([]);
   }
 
+  async function submitVoiceBlob(
+    blob: Blob,
+    opts: { dealId: string | null; fileName: string },
+  ): Promise<CaptureResult> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not authenticated");
+
+    const form = new FormData();
+    form.append("audio", blob, opts.fileName);
+    if (opts.dealId?.trim()) {
+      form.append("crm_deal_id", opts.dealId.trim());
+    }
+
+    const res = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/voice-capture`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: form,
+      },
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      throw new Error((err as { error?: string }).error ?? "Processing failed");
+    }
+
+    return (await res.json()) as CaptureResult;
+  }
+
+  function isLikelyNetworkFailure(err: unknown): boolean {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+    if (!(err instanceof Error)) return false;
+    return /failed to fetch|network|load failed|offline/i.test(err.message);
+  }
+
+  async function queueVoiceCaptureForLater(blob: Blob, reason: string): Promise<void> {
+    const recordingFileName = recordingFormatRef.current?.fileName ?? "recording.webm";
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `queued-${Date.now()}`;
+
+    await enqueueVoiceNote({
+      id,
+      audioBlob: blob,
+      mimeType: blob.type || recordingFormatRef.current?.mimeType || "audio/webm",
+      fileName: recordingFileName,
+      durationSeconds: elapsedSeconds,
+      dealId: hubspotDealId.trim() || null,
+      dealLabel: selectedDealLabel,
+      queuedAt: new Date().toISOString(),
+    });
+    await loadQueuedVoiceNotes();
+    toast({
+      title: "Saved offline",
+      description: reason,
+    });
+    resetCapture();
+  }
+
   function formatCaptureDateTime(value: string | null): string | null {
     if (!value) return null;
     return new Date(value).toLocaleString("en-US", {
@@ -898,11 +1154,98 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     });
   }
 
-  function renderRecentCaptureActionLabel(capture: RecentCapture): string {
-    if (capture.sync_status === "failed") return "Review note";
-    if (capture.sync_status === "processing") return "Check progress";
-    if (capture.sync_status === "synced") return "Open note";
-    return "Open note";
+  async function playRecentAudio(row: RecentRecordingRow): Promise<void> {
+    if (inlineAudio?.id === row.id) {
+      setInlineAudio(null);
+      return;
+    }
+
+    if (row.source === "queued" && row.audioBlob) {
+      setInlineAudio({
+        id: row.id,
+        url: URL.createObjectURL(row.audioBlob),
+        isObjectUrl: true,
+      });
+      return;
+    }
+
+    if (!row.audioStoragePath) return;
+    const { data } = await supabase.storage
+      .from("voice-recordings")
+      .createSignedUrl(row.audioStoragePath, 3600);
+    if (data?.signedUrl) {
+      setInlineAudio({
+        id: row.id,
+        url: data.signedUrl,
+        isObjectUrl: false,
+      });
+    }
+  }
+
+  function buildRemoteRow(cap: RecentCapture): RecentRecordingRow {
+    const hasDeal = Boolean(cap.hubspot_deal_id || cap.linked_deal_id);
+    const transcript = cap.transcript?.trim() || null;
+    let syncStatus: RecentRecordingRow["syncStatus"] = "review_sync";
+    let statusLabel = "Review & Sync";
+    let statusDetail = "Needs review before QRM timeline sync";
+    let actionLabel = "Review & Sync";
+
+    if (cap.sync_status === "processing") {
+      syncStatus = "processing";
+      statusLabel = "Review & Sync";
+      statusDetail = "Transcription and extraction are still running";
+      actionLabel = "Check progress";
+    } else if (cap.sync_status === "synced" && hasDeal) {
+      syncStatus = "synced";
+      statusLabel = "Synced to QRM";
+      statusDetail = cap.hubspot_deal_id || cap.linked_deal_id || "On deal timeline";
+      actionLabel = "Open note";
+    } else if (!hasDeal) {
+      syncStatus = "needs_match";
+      statusLabel = "Needs match";
+      statusDetail = "No deal matched";
+      actionLabel = "Match to deal";
+    } else if (cap.sync_status === "pending") {
+      syncStatus = "review_sync";
+      statusLabel = "Review & Sync";
+      statusDetail = "Ready to attach to QRM";
+      actionLabel = "Review & Sync";
+    }
+
+    return {
+      id: cap.id,
+      source: "remote",
+      title: transcript?.split(/[.!?\n]/)[0]?.slice(0, 54) || "Untitled field note",
+      transcript,
+      createdAt: cap.created_at,
+      durationSeconds: cap.duration_seconds,
+      recorder: cap.recorderName ?? cap.recorderEmail ?? "Recorder unavailable",
+      dealId: cap.hubspot_deal_id ?? cap.linked_deal_id ?? null,
+      syncStatus,
+      statusLabel,
+      statusDetail,
+      actionLabel,
+      audioStoragePath: cap.audio_storage_path,
+    };
+  }
+
+  function buildQueuedRow(note: QueuedVoiceNote): RecentRecordingRow {
+    return {
+      id: note.id,
+      source: "queued",
+      title: note.dealLabel ?? "Offline field note",
+      transcript: "Audio is stored on this device. Transcript and QRM extraction will run after sync.",
+      createdAt: note.queuedAt,
+      durationSeconds: note.durationSeconds,
+      recorder: _userEmail ?? "This device",
+      dealId: note.dealId,
+      syncStatus: "queued",
+      statusLabel: "Queued locally",
+      statusDetail: note.dealId ? "Will sync to selected deal" : "Will auto-match after upload",
+      actionLabel: "Manage offline",
+      audioStoragePath: null,
+      audioBlob: note.audioBlob,
+    };
   }
 
   function renderDealLookupField(inputId: string): React.JSX.Element {
@@ -983,555 +1326,519 @@ export function VoiceCapturePage({ userRole: _userRole, userEmail: _userEmail }:
     );
   }
 
+  const activeExtracted = result ? normalizeExtractedDealData(result.extracted_data) : null;
+  const activeDealId = (result?.hubspot_deal_id ?? hubspotDealId.trim()) || null;
+  const activeDealTitle = resolvedDealOption
+    ? resolvedDealOption.companyName
+      ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
+      : resolvedDealOption.name
+    : selectedDealLabel;
+  const matchConfidence = activeDealId ? "High" : dealLookupQuery.trim() ? "Needs review" : "Auto-match";
+  const matchConfidenceClass = activeDealId
+    ? "border-green-500/30 bg-green-500/10 text-green-300"
+    : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+
+  const recentRows = useMemo(() => {
+    const rows = [
+      ...queuedVoiceNotes.map((note) => buildQueuedRow(note)),
+      ...recentCaptures.map((cap) => buildRemoteRow(cap)),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const query = recentSearch.trim().toLowerCase();
+    const now = new Date();
+    return rows.filter((row) => {
+      if (recentStatusFilter !== "all" && row.syncStatus !== recentStatusFilter) return false;
+      if (query) {
+        const haystack = `${row.title} ${row.transcript ?? ""} ${row.recorder} ${row.dealId ?? ""}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (recentDateFilter !== "all") {
+        const created = new Date(row.createdAt);
+        const ageMs = now.getTime() - created.getTime();
+        if (recentDateFilter === "today" && created.toDateString() !== now.toDateString()) return false;
+        if (recentDateFilter === "week" && ageMs > 7 * 24 * 60 * 60 * 1000) return false;
+      }
+      return true;
+    });
+  }, [queuedVoiceNotes, recentCaptures, recentSearch, recentStatusFilter, recentDateFilter]);
+
+  const queuedCount = queuedVoiceNotes.length;
+  const liveTranscriptText =
+    liveTranscript ||
+    (recordingState === "recording"
+      ? "Listening for customer, equipment, stage, budget, and next steps..."
+      : result?.transcript ?? "Transcript preview appears here after recording.");
+
   return (
     <TooltipProvider>
-      <div className="flex-1 overflow-y-auto">
-        <div className="xl:max-w-5xl mx-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto bg-background">
+        <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 lg:px-7">
+          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-normal text-foreground">Field Note</h1>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Record a post-visit recap. Iron transcribes it, extracts the deal signals, and syncs the record to the QRM timeline.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-amber-400" />}
+              <span>{isOnline ? "Online" : "Offline"}</span>
+              <span className="rounded-full border border-border px-2 py-1">{queuedCount} notes queued</span>
+            </div>
+          </header>
 
-          {/* Page header */}
-          <div className="mb-6">
-            <h1 className="text-xl font-semibold text-foreground">Field Note</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Record a quick summary after your visit — we'll pull out the key details and push them into QRM.
-            </p>
-          </div>
-
-          <div className="xl:grid xl:grid-cols-12 xl:gap-8">
-
-          {/* Main recording area — 7 cols */}
-          <div className="xl:col-span-7 space-y-6">
-
-          {/* ── IDLE ──────────────────────────────────────────────────────────── */}
-          {recordingState === "idle" && (
-            <div className="space-y-6">
-              {/* QRM Deal input */}
-              <div className="space-y-1.5">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm" aria-label="QRM match bar">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_0.7fr_0.8fr_0.8fr] lg:items-end">
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="deal-id">QRM Deal ID</Label>
-                  <span className="text-xs text-muted-foreground">(optional)</span>
+                  <Label htmlFor="deal-id" className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    QRM Deal ID or search by deal / customer
+                  </Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="What is a QRM deal ID?"
-                        className="h-11 w-11 inline-flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange focus-visible:ring-offset-2"
-                      >
-                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                      <button type="button" aria-label="What is a QRM deal ID?" className="rounded-sm text-muted-foreground hover:text-foreground">
+                        <HelpCircle className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side={isMobile ? "bottom" : "right"} align={isMobile ? "start" : "center"} className="max-w-[200px]">
-                      Search by deal name or paste the QRM deal ID to link this note directly.
+                    <TooltipContent side={isMobile ? "bottom" : "right"} className="max-w-[220px]">
+                      Search by deal name or paste the QRM deal ID. Blank notes are auto-matched from customer details.
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 {renderDealLookupField("deal-id")}
               </div>
-
-              {/* Record button */}
-              <div className="flex flex-col items-center gap-3 pt-4">
-                <button
-                  onClick={startRecording}
-                  className="w-24 h-24 bg-primary rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  aria-label="Start recording"
-                >
-                  <Mic className="w-10 h-10 text-primary-foreground" />
-                </button>
-                <p className="text-sm text-muted-foreground">Tap to Record</p>
-                {microphoneProblem && (
-                  <div className="w-full max-w-md rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-left">
-                    <p className="text-sm font-medium text-destructive">{microphoneProblem.title}</p>
-                    <p className="mt-1 text-sm text-destructive/90">{microphoneProblem.description}</p>
-                    {microphoneProblem.recovery && (
-                      <p className="mt-1 text-xs text-destructive/80">{microphoneProblem.recovery}</p>
-                    )}
-                  </div>
-                )}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Match confidence</p>
+                <span className={cn("inline-flex h-9 items-center rounded-full border px-4 text-sm font-semibold", matchConfidenceClass)}>
+                  {matchConfidence}
+                  {activeDealId && <Check className="ml-2 h-3.5 w-3.5" />}
+                </span>
+              </div>
+              <div className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-muted/30 px-4 text-sm text-foreground">
+                <Sparkles className="h-4 w-4 text-qep-orange" />
+                Auto-match enabled
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="inline-flex items-center gap-2 text-green-300">
+                  <ShieldCheck className="h-4 w-4" />
+                  Offline-ready
+                </span>
+                <span className="inline-flex items-center gap-2 text-qep-orange">
+                  <DatabaseIcon className="h-4 w-4" />
+                  {queuedCount} queued
+                </span>
               </div>
             </div>
-          )}
+          </section>
 
-          {/* ── RECORDING ─────────────────────────────────────────────────────── */}
-          {recordingState === "recording" && (
-            <div className="flex flex-col items-center gap-6 pt-4">
-              <div className="relative flex items-center justify-center">
-                {/* Pulse rings */}
-                <span className="absolute inline-flex h-28 w-28 rounded-full bg-destructive opacity-20 animate-ping" />
-                <span className="absolute inline-flex h-24 w-24 rounded-full bg-destructive opacity-15 animate-ping [animation-delay:200ms]" />
-                <button
-                  onClick={stopRecording}
-                  className="relative z-10 w-24 h-24 bg-destructive rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  aria-label="Stop recording"
-                >
-                  <Square className="w-10 h-10 text-destructive-foreground fill-current" />
-                </button>
-              </div>
-
-              {/* Waveform */}
-              <div className="flex items-end gap-1 h-10" aria-hidden="true">
-                {Array.from({ length: 20 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="w-1.5 rounded-full bg-primary"
-                    style={{
-                      animation: `waveform 0.8s ease-in-out ${(i * 0.06).toFixed(2)}s infinite alternate`,
-                      height: `${20 + Math.sin(i * 0.9) * 14}px`,
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div className="text-center">
-                <p className="text-3xl font-mono font-semibold tabular-nums">
-                  {formatTime(elapsedSeconds)}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">Recording...</p>
-              </div>
-
-              {elapsedSeconds > 90 && (
-                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
-                  Try to keep it under 2 minutes for best results
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* ── RECORDED ──────────────────────────────────────────────────────── */}
-          {recordingState === "recorded" && audioBlob && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">Review Recording</CardTitle>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatTime(elapsedSeconds)}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {audioBlobUrl && !audioPreviewFailed && (
-                    <audio
-                      controls
-                      src={audioBlobUrl}
-                      className="w-full h-10"
-                      onError={() => setAudioPreviewFailed(true)}
-                    />
-                  )}
-                  {audioPreviewFailed && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                      Playback is not available in this browser, but your note is ready to process.
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <main className="space-y-4">
+              <section className="rounded-xl border border-border bg-card shadow-sm">
+                <div className="grid divide-y divide-border lg:grid-cols-[260px_minmax(0,1fr)_340px] lg:divide-x lg:divide-y-0">
+                  <div className="flex flex-col items-center justify-center gap-5 p-5">
+                    <p className="self-start text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Recording</p>
+                    <button
+                      type="button"
+                      onClick={recordingState === "recording" || recordingState === "paused" ? stopRecording : startRecording}
+                      className={cn(
+                        "relative flex h-36 w-36 items-center justify-center rounded-full border transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-qep-orange",
+                        recordingState === "recording"
+                          ? "border-red-400/40 bg-red-500/15 shadow-[0_0_0_18px_rgba(239,68,68,0.06)]"
+                          : recordingState === "paused"
+                            ? "border-amber-400/40 bg-amber-500/15"
+                            : "border-qep-orange/45 bg-qep-orange shadow-[0_0_0_18px_rgba(255,132,31,0.12)] hover:bg-qep-orange-hover",
+                      )}
+                      aria-label={recordingState === "recording" || recordingState === "paused" ? "Stop recording" : "Start recording"}
+                    >
+                      {recordingState === "recording" && <span className="absolute h-40 w-40 animate-ping rounded-full bg-red-500/15" />}
+                      {recordingState === "recording" || recordingState === "paused" ? (
+                        <Square className="relative h-14 w-14 fill-current text-red-100" />
+                      ) : (
+                        <Mic className="h-16 w-16 text-white" />
+                      )}
+                    </button>
+                    <div className="text-center">
+                      <p className="text-lg font-semibold text-foreground">
+                        {recordingState === "recording" ? "Recording" : recordingState === "paused" ? "Paused" : "Tap to record"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">or press Enter</p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Deal link (editable) */}
-              <div className="space-y-1.5">
-                <Label htmlFor="deal-id-review">QRM Deal ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                {renderDealLookupField("deal-id-review")}
-              </div>
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={resetCapture}
-                >
-                  Re-record
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={submitCapture}
-                >
-                  Process Note
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── PROCESSING ────────────────────────────────────────────────────── */}
-          {recordingState === "processing" && (
-            <Card>
-              <CardContent className="pt-6 pb-6">
-                <div className="space-y-4">
-                  {PROCESSING_STEPS.map((step, index) => {
-                    const isComplete = processingStep > index;
-                    const isActive = processingStep === index;
-                    const isPending = processingStep < index;
-                    const StepIcon = step.icon;
-                    return (
-                      <div
-                        key={step.label}
-                        className={cn(
-                          "flex items-center gap-3 transition-opacity duration-300",
-                          isPending && "opacity-35"
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors",
-                            isComplete && "bg-primary text-primary-foreground",
-                            isActive && "bg-primary/10 text-primary",
-                            isPending && "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {isComplete ? (
-                            <CheckCircle2 className="w-4 h-4" />
-                          ) : isActive ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <StepIcon className="w-4 h-4" />
-                          )}
-                        </div>
-                        <span
-                          className={cn(
-                            "text-sm font-medium transition-colors",
-                            isComplete && "text-primary",
-                            isActive && "text-foreground",
-                            isPending && "text-muted-foreground"
-                          )}
-                        >
-                          {step.label}
-                        </span>
-                        {index < PROCESSING_STEPS.length - 1 && (
-                          <div className="flex-1 border-b border-dashed border-border ml-auto w-4" />
-                        )}
+                    <div className="grid w-full grid-cols-3 gap-3 border-t border-border pt-4">
+                      <div>
+                        <p className="font-mono text-3xl text-foreground">{formatTime(elapsedSeconds)}</p>
+                        <p className="text-xs text-muted-foreground">Max 10:00</p>
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── ERROR ─────────────────────────────────────────────────────────── */}
-          {recordingState === "error" && (
-            <div className="space-y-4">
-              <Card className="border-destructive/50 bg-destructive/5">
-                <CardContent className="pt-4 flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-destructive">Processing failed</p>
-                    {errorMessage && (
-                      <p className="text-xs text-destructive/80 mt-1">{errorMessage}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-              <Button variant="outline" className="w-full" onClick={resetCapture}>
-                Start over
-              </Button>
-            </div>
-          )}
-
-          {/* ── DONE ──────────────────────────────────────────────────────────── */}
-          {recordingState === "done" && result && (
-            <div className="space-y-4">
-              {(() => {
-                const extracted = normalizeExtractedDealData(result.extracted_data);
-                const linkedDealId = result.hubspot_deal_id ?? hubspotDealId ?? null;
-                const linkedDealTitle = resolvedDealOption
-                  ? resolvedDealOption.companyName
-                    ? `${resolvedDealOption.name} · ${resolvedDealOption.companyName}`
-                    : resolvedDealOption.name
-                  : selectedDealLabel;
-                const crmSaved = result.local_crm_saved || result.hubspot_synced;
-
-                return (
-                  <>
-              {(() => {
-                if (!linkedDealId) {
-                  return null;
-                }
-
-                return (
-                  <ResultCard
-                    icon={<Building2 className="w-4 h-4" />}
-                    title="QRM Link"
-                  >
-                    <ExtractedField
-                      label="Linked deal"
-                      value={linkedDealTitle ?? "QRM deal linked"}
-                      icon={<Building2 className="w-3.5 h-3.5" />}
-                    />
-                    <ExtractedField
-                      label="Deal ID"
-                      value={linkedDealId}
-                      icon={<FileText className="w-3.5 h-3.5" />}
-                    />
-                  </ResultCard>
-                );
-              })()}
-
-              {/* QRM sync status */}
-              <div className={cn(
-                "flex items-center gap-3 rounded-lg border px-4 py-3",
-                crmSaved
-                  ? "border-green-200 bg-green-50"
-                  : "border-amber-200 bg-amber-50"
-              )}>
-                {crmSaved ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-green-800">Saved to QRM</p>
-                      <p className="text-xs text-green-600 mt-0.5">Note and follow-up task are attached to the local deal timeline.</p>
-                    </div>
-                    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
-                      On timeline
-                    </Badge>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-amber-800">Captured locally</p>
-                      <p className="text-xs text-amber-600 mt-0.5">This note is safe, but it still needs to be attached to a QRM deal timeline.</p>
-                    </div>
-                    <Badge variant="outline" className="text-amber-600 border-amber-300">
-                      Attach to QRM
-                    </Badge>
-                  </>
-                )}
-              </div>
-              <ExtractedSignalSummary extracted={extracted} />
-
-              {/* Transcript (collapsible, editable) */}
-              <Card>
-                <button
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-t-lg"
-                  onClick={() => setTranscriptOpen((o) => !o)}
-                  aria-expanded={transcriptOpen}
-                >
-                  <span>Full Transcript</span>
-                  <ChevronDown
-                    className={cn(
-                      "w-4 h-4 text-muted-foreground transition-transform duration-200",
-                      transcriptOpen && "rotate-180"
-                    )}
-                  />
-                </button>
-                {transcriptOpen && (
-                  <CardContent className="pt-0 space-y-3">
-                    <div className="relative">
-                      <textarea
-                        className="w-full text-sm text-foreground leading-relaxed font-mono bg-muted rounded-md p-3 pr-10 resize-y min-h-[120px] focus:outline-none focus:ring-2 focus:ring-qep-orange border-0"
-                        value={editedTranscript}
-                        onChange={(e) => setEditedTranscript(e.target.value)}
-                        aria-label="Edit transcript"
-                      />
                       <Button
-                        variant="ghost"
+                        type="button"
+                        variant="outline"
                         size="sm"
-                        className="absolute top-2 right-2 h-11 w-11 p-0"
-                        onClick={copyTranscript}
-                        aria-label="Copy transcript"
+                        onClick={recordingState === "paused" ? resumeRecording : pauseRecording}
+                        disabled={recordingState !== "recording" && recordingState !== "paused"}
                       >
-                        {transcriptCopied ? (
-                          <Check className="w-3.5 h-3.5 text-green-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
+                        {recordingState === "paused" ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                        {recordingState === "paused" ? "Resume" : "Pause"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={stopRecording}
+                        disabled={recordingState !== "recording" && recordingState !== "paused"}
+                      >
+                        <Square className="h-4 w-4" />
+                        Stop
                       </Button>
                     </div>
-                  </CardContent>
-                )}
-              </Card>
+                  </div>
 
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                {looksLikeCrmRecordId(result.hubspot_deal_id ?? hubspotDealId ?? "") && (
-                  <Button asChild variant="outline" className="flex-1">
-                    <Link to={`/crm/deals/${result.hubspot_deal_id ?? hubspotDealId}`}>
-                      Open QRM Deal
-                    </Link>
-                  </Button>
-                )}
-                {!(result.local_crm_saved || result.hubspot_synced) && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => void pushToHubspot()}
-                    disabled={pushingToHubspot}
-                  >
-                    {pushingToHubspot ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4 mr-2" />
+                  <div className="space-y-5 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live transcript</p>
+                      <span className={cn("inline-flex items-center gap-1.5 text-xs", recordingState === "recording" ? "text-green-400" : "text-muted-foreground")}>
+                        <span className="h-2 w-2 rounded-full bg-current" />
+                        {recordingState === "recording" ? "Live" : "Ready"}
+                      </span>
+                    </div>
+                    <div className="min-h-[132px] rounded-lg border border-border bg-background/50 p-4 text-base leading-7 text-foreground">
+                      {liveTranscriptText}
+                    </div>
+                    <div className="flex h-16 items-center gap-1 overflow-hidden rounded-lg border border-border bg-background/40 px-3" aria-label="Recording waveform">
+                      {Array.from({ length: 52 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={cn("w-1 rounded-full", i < 26 ? "bg-qep-orange" : "bg-muted-foreground/25")}
+                          style={{
+                            animation: recordingState === "recording" ? `waveform 0.8s ease-in-out ${(i * 0.035).toFixed(2)}s infinite alternate` : undefined,
+                            height: `${14 + Math.abs(Math.sin(i * 0.75)) * 32}px`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {recordingState === "recorded" && audioBlob && (
+                      <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-foreground">Preview before processing</p>
+                          <span className="font-mono text-xs text-muted-foreground">{formatTime(elapsedSeconds)}</span>
+                        </div>
+                        {audioBlobUrl && !audioPreviewFailed && (
+                          <audio controls src={audioBlobUrl} className="h-10 w-full" onError={() => setAudioPreviewFailed(true)} />
+                        )}
+                        {audioPreviewFailed && (
+                          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                            Playback is not available in this browser, but the note can still be processed.
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <Button variant="outline" className="flex-1" onClick={resetCapture}>Re-record</Button>
+                          <Button className="flex-1" onClick={submitCapture}>Process note</Button>
+                        </div>
+                      </div>
                     )}
-                    Add to QRM
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  className={cn("flex-1", (result.local_crm_saved || result.hubspot_synced) && "flex-none")}
-                  onClick={resetCapture}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  {result.local_crm_saved || result.hubspot_synced ? "Record Another" : "Discard"}
-                </Button>
-              </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* ── RECENT RECORDINGS ───────────────────────────────────────────── */}
-          {(recordingState === "idle" || recordingState === "done") && (
-            <div className="mt-8">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <h2 className="text-sm font-semibold text-foreground">Recent Recordings</h2>
-                </div>
-                <Link to="/voice/history" className="text-xs text-qep-orange hover:underline">
-                  View all
-                </Link>
-              </div>
-              {recentLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="h-12 bg-muted rounded-md animate-pulse" />
-                  ))}
-                </div>
-              ) : recentCaptures.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No recordings yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {recentCaptures.map((cap) => {
-                    const statusMeta = getVoiceCaptureStatusMeta(cap.sync_status, cap.sync_error);
-                    const snippet = cap.transcript
-                      ? cap.transcript.slice(0, 60) + (cap.transcript.length > 60 ? "…" : "")
-                      : "No transcript";
-                    return (
-                      <Card key={cap.id}>
-                        <CardContent className="py-3 px-4">
-                          <button
-                            type="button"
-                            onClick={() => void openRecentCapture(cap)}
-                            className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-foreground truncate">{snippet}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {formatCaptureDateTime(cap.created_at)}
-                                  {cap.duration_seconds != null && ` · ${formatTime(cap.duration_seconds)}`}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                  {statusMeta.summary}
-                                </p>
+                    {recordingState === "processing" && (
+                      <div className="grid gap-2 sm:grid-cols-4">
+                        {PROCESSING_STEPS.map((step, index) => {
+                          const StepIcon = step.icon;
+                          const active = processingStep === index;
+                          const complete = processingStep > index;
+                          return (
+                            <div key={step.label} className={cn("rounded-lg border border-border p-3 text-sm", active && "border-qep-orange/50 bg-qep-orange/10", complete && "border-green-500/40 bg-green-500/10")}>
+                              <div className="mb-2 flex items-center gap-2">
+                                {complete ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : active ? <Loader2 className="h-4 w-4 animate-spin text-qep-orange" /> : <StepIcon className="h-4 w-4 text-muted-foreground" />}
+                                <span className="font-medium text-foreground">{step.label}</span>
                               </div>
-                              <Badge variant={statusMeta.badgeVariant} className="text-xs shrink-0">
-                                {statusMeta.badgeLabel}
-                              </Badge>
                             </div>
-                          </button>
-                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs text-muted-foreground">
-                              {cap.recorderName ?? cap.recorderEmail ?? "Recorder unavailable"}
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => void openRecentCapture(cap)}
-                              >
-                                {renderRecentCaptureActionLabel(cap)}
-                              </Button>
-                              {looksLikeCrmRecordId(cap.hubspot_deal_id ?? "") && (
-                                <Button asChild variant="ghost" size="sm">
-                                  <Link to={`/crm/deals/${cap.hubspot_deal_id}`}>Open linked deal</Link>
-                                </Button>
-                              )}
-                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {recordingState === "error" && (
+                      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
+                          <div>
+                            <p className="text-sm font-semibold text-destructive">Processing failed</p>
+                            <p className="mt-1 text-sm text-destructive/90">{errorMessage}</p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          </div>{/* end main col */}
-
-          {/* Context panel — sidebar on xl+, collapsible on mobile/tablet */}
-          <aside className="xl:col-span-5 flex flex-col gap-4">
-            {/* Mobile: collapsible tips */}
-            <div className="xl:hidden">
-              <button
-                type="button"
-                onClick={() => setTipsOpen((v) => !v)}
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full py-2"
-              >
-                <HelpCircle className="h-4 w-4" />
-                Recording tips
-                <ChevronDown className={cn("h-3 w-3 ml-auto transition-transform", tipsOpen && "rotate-180")} />
-              </button>
-              {tipsOpen && (
-                <div className="space-y-3 pb-4">
-                  <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground text-xs uppercase tracking-wide">What to include</p>
-                    <p><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with</p>
-                    <p><span className="font-medium text-foreground">Equipment interest</span> — models, categories</p>
-                    <p><span className="font-medium text-foreground">Deal stage</span> — where in the buying process</p>
-                    <p><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers</p>
-                    <p><span className="font-medium text-foreground">Next steps</span> — follow-up, quote request</p>
+                        </div>
+                        <Button variant="outline" className="mt-3" onClick={resetCapture}>Start over</Button>
+                      </div>
+                    )}
+                    {microphoneProblem && (
+                      <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                        <p className="text-sm font-medium text-destructive">{microphoneProblem.title}</p>
+                        <p className="mt-1 text-sm text-destructive/90">{microphoneProblem.description}</p>
+                      </div>
+                    )}
                   </div>
-                  <div className="rounded-lg border border-border bg-card p-3 space-y-1.5 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground text-xs uppercase tracking-wide">Tips</p>
-                    <p>Keep recordings under 2 minutes. Speak clearly.</p>
-                    <p>Record right after the visit while details are fresh.</p>
+
+                  <div className="space-y-4 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Extracted details (preview)</p>
+                      <Button variant="ghost" size="icon" aria-label="Edit extracted details">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="space-y-4">
+                      {[
+                        { icon: User, label: "Customer", value: activeExtracted?.record.companyName ?? activeDealTitle ?? "Auto-match after transcript" },
+                        { icon: Tractor, label: "Equipment interest", value: getExtractedMachineLabel(activeExtracted ?? normalizeExtractedDealData({})) ?? "Models, categories, attachments" },
+                        { icon: TrendingUp, label: "Deal stage", value: formatStageLabel(activeExtracted?.opportunity.dealStage ?? null) ?? "Evaluation, quote, close risk" },
+                        { icon: DollarSign, label: "Budget / Timeline", value: activeExtracted?.opportunity.budgetRange ?? activeExtracted?.opportunity.timelineToBuy ?? "Budget, urgency, quarter" },
+                        { icon: ListTodo, label: "Next step", value: activeExtracted?.opportunity.nextStep ?? "Follow-up date or quote request" },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <div key={item.label} className="grid grid-cols-[24px_minmax(0,1fr)_32px] gap-3">
+                            <Icon className="mt-1 h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{item.label}</p>
+                              <p className="text-sm text-muted-foreground">{item.value}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" aria-label={`Edit ${item.label}`}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {recordingState === "done" && result && (
+                      <div className="space-y-3 border-t border-border pt-4">
+                        <div className={cn("rounded-lg border p-3", result.local_crm_saved || result.hubspot_synced ? "border-green-500/30 bg-green-500/10" : "border-amber-500/30 bg-amber-500/10")}>
+                          <p className="text-sm font-semibold text-foreground">
+                            {result.local_crm_saved || result.hubspot_synced ? "Synced to QRM" : "Needs match"}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {result.local_crm_saved || result.hubspot_synced ? "Saved to the deal timeline." : "Captured safely, but no deal timeline was matched."}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {looksLikeCrmRecordId(result.hubspot_deal_id ?? hubspotDealId ?? "") && (
+                            <Button asChild variant="outline" className="flex-1">
+                              <Link to={`/crm/deals/${result.hubspot_deal_id ?? hubspotDealId}`}>Open QRM Deal</Link>
+                            </Button>
+                          )}
+                          {!(result.local_crm_saved || result.hubspot_synced) && (
+                            <Button className="flex-1" onClick={() => void pushToHubspot()} disabled={pushingToHubspot}>
+                              {pushingToHubspot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                              Add to QRM
+                            </Button>
+                          )}
+                          <Button variant="ghost" onClick={resetCapture}>
+                            <XCircle className="h-4 w-4" />
+                            Record another
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
+              </section>
 
-            {/* Desktop: always-visible cards */}
-            <div className="hidden xl:flex xl:flex-col gap-4">
+              <section className="rounded-xl border border-border bg-card shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Recent recordings</h2>
+                    <p className="text-sm text-muted-foreground">Search, replay, match, and sync field notes without leaving the capture page.</p>
+                  </div>
+                  <Link to="/sales/field-note/history" className="text-sm font-semibold text-qep-orange hover:underline">
+                    View all
+                  </Link>
+                </div>
+                <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={recentSearch} onChange={(e) => setRecentSearch(e.target.value)} placeholder="Search notes..." className="pl-9" />
+                  </div>
+                  <select value={recentStatusFilter} onChange={(e) => setRecentStatusFilter(e.target.value as RecentStatusFilter)} className="h-11 rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
+                    <option value="all">All</option>
+                    <option value="synced">Synced</option>
+                    <option value="queued">Queued</option>
+                    <option value="needs_match">Needs match</option>
+                  </select>
+                  <select value={recentDateFilter} onChange={(e) => setRecentDateFilter(e.target.value as RecentDateFilter)} className="h-11 rounded-[8px] border border-border bg-card px-3 text-sm text-foreground">
+                    <option value="all">All time</option>
+                    <option value="today">Today</option>
+                    <option value="week">Last 7 days</option>
+                  </select>
+                  <Button variant="outline" aria-label="Open recording filters">
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[880px] text-left text-sm">
+                    <thead className="border-b border-border text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Note</th>
+                        <th className="px-4 py-3 font-semibold">Duration</th>
+                        <th className="px-4 py-3 font-semibold">Created</th>
+                        <th className="px-4 py-3 font-semibold">Owner</th>
+                        <th className="px-4 py-3 font-semibold">Status & destination</th>
+                        <th className="px-4 py-3 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {recentLoading && recentRows.length === 0 ? (
+                        Array.from({ length: 5 }).map((_, index) => (
+                          <tr key={index}>
+                            <td className="px-4 py-4" colSpan={6}>
+                              <div className="h-10 animate-pulse rounded-md bg-muted" />
+                            </td>
+                          </tr>
+                        ))
+                      ) : recentRows.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-8 text-center text-muted-foreground" colSpan={6}>No recordings match these filters.</td>
+                        </tr>
+                      ) : (
+                        recentRows.map((row) => {
+                          const cap = recentCaptures.find((item) => item.id === row.id);
+                          return (
+                            <tr key={row.id} className="align-top hover:bg-muted/25">
+                              <td className="px-4 py-3">
+                                <div className="flex items-start gap-3">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="mt-0.5 shrink-0 rounded-full"
+                                    onClick={() => void playRecentAudio(row)}
+                                    aria-label={`Play ${row.title}`}
+                                  >
+                                    {inlineAudio?.id === row.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                  </Button>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-foreground">{row.title}</p>
+                                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                      <span className="font-medium text-muted-foreground">Transcript preview:</span> {row.transcript ?? "No transcript captured yet."}
+                                    </p>
+                                    {inlineAudio?.id === row.id && (
+                                      <audio
+                                        controls
+                                        autoPlay
+                                        src={inlineAudio.url}
+                                        className="mt-3 h-8 w-full max-w-md"
+                                        onEnded={() => setInlineAudio(null)}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-muted-foreground">{row.durationSeconds == null ? "—" : formatTime(row.durationSeconds)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{formatCaptureDateTime(row.createdAt)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{row.recorder}</td>
+                              <td className="px-4 py-3">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "mb-1",
+                                    row.syncStatus === "synced" && "border-green-500/30 bg-green-500/10 text-green-300",
+                                    row.syncStatus === "queued" && "border-blue-500/30 bg-blue-500/10 text-blue-300",
+                                    row.syncStatus === "needs_match" && "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
+                                    row.syncStatus === "review_sync" && "border-qep-orange/30 bg-qep-orange/10 text-qep-orange",
+                                  )}
+                                >
+                                  {row.statusLabel}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground">{row.statusDetail}</p>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <Button type="button" variant={row.syncStatus === "review_sync" ? "default" : "ghost"} size="sm" onClick={() => cap && void openRecentCapture(cap)}>
+                                    {row.actionLabel}
+                                  </Button>
+                                  {row.dealId && (
+                                    <Button asChild variant="ghost" size="icon" aria-label="Open linked QRM deal">
+                                      <Link to={`/crm/deals/${row.dealId}`}>
+                                        <ExternalLink className="h-4 w-4" />
+                                      </Link>
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="icon" aria-label="More note actions">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </main>
+
+            <aside className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">What to include</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
+                    <CheckCircle2 className="h-4 w-4 text-green-400" />
+                    QRM match & destination
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span><span className="font-medium text-foreground">Customer name &amp; company</span> — who you met with and where</span>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border border-border bg-background/50 p-3">
+                    <p className="text-xs text-muted-foreground">Matched to</p>
+                    <p className="mt-1 font-semibold text-foreground">{activeDealTitle ?? "No deal matched yet"}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{activeDealId ?? "Orphan notes stay in Field Notes until matched."}</p>
+                    {activeDealId && (
+                      <Link to={`/crm/deals/${activeDealId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-qep-orange hover:underline">
+                        View in QRM
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span><span className="font-medium text-foreground">Equipment interest</span> — model numbers, categories, attachments discussed</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Confidence</span>
+                    <Badge variant="outline" className={matchConfidenceClass}>{activeDealId ? "High (92%)" : "Needs match"}</Badge>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span><span className="font-medium text-foreground">Deal stage</span> — where they are in the buying process</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span><span className="font-medium text-foreground">Budget &amp; timeline</span> — any numbers or urgency mentioned</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span><span className="font-medium text-foreground">Next steps</span> — follow-up date, callback, quote request</span>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                    This note will be saved to <span className="font-medium text-foreground">Field Notes &gt; Sales Activity</span> and synced to the customer timeline when matched.
                   </div>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">Tips for best results</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
+                    <RefreshCw className="h-4 w-4" />
+                    Get the best results
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p>Keep recordings under 2 minutes. Speak clearly and mention names and model numbers explicitly.</p>
+                  <p>Speak clearly and include names, equipment models, and numbers.</p>
+                  <p>Mention deal stage, budget, timeline, and next steps.</p>
                   <p>Record immediately after the visit while details are fresh.</p>
-                  <p>If you know the QRM deal ID, paste it before recording to link the note automatically.</p>
+                  <Button variant="outline" className="mt-2 w-full justify-start">
+                    <FileText className="h-4 w-4" />
+                    View recording tips
+                  </Button>
                 </CardContent>
               </Card>
-            </div>
-          </aside>
 
-          </div>{/* end grid */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
+                    {isOnline ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-amber-400" />}
+                    Offline & sync status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground">
+                  <p>
+                    {isOnline
+                      ? queuedCount > 0
+                        ? "Connection is back. Queued notes can sync automatically or manually now."
+                        : "You are online. Field notes process immediately after upload."
+                      : "You are offline. Notes are saved locally and will sync automatically when you are back online."}
+                  </p>
+                  <Button variant="ghost" className="px-0 text-qep-orange hover:bg-transparent" onClick={() => void syncQueuedVoiceNotes()} disabled={!isOnline || queuedSyncing || queuedCount === 0}>
+                    {queuedSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
+                    Manage offline notes
+                  </Button>
+                </CardContent>
+              </Card>
+            </aside>
+          </div>
         </div>
       </div>
       <Sheet open={recentCaptureSheetOpen} onOpenChange={(open) => {
