@@ -689,6 +689,11 @@ function LegacyCompanyCommandRedirect() {
     : <Navigate to="/qrm/companies" replace />;
 }
 
+function RedirectPreserveSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
+
 function AnimatedRoutes({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   return (
