@@ -48,6 +48,8 @@ import { DecisionRoomFuturePulse } from "../components/DecisionRoomFuturePulse";
 import { DecisionRoomLossLens } from "../components/DecisionRoomLossLens";
 import { DecisionRoomWinFormula } from "../components/DecisionRoomWinFormula";
 import { DecisionRoomBriefExport } from "../components/DecisionRoomBriefExport";
+import { DecisionRoomGymPicker } from "../components/DecisionRoomGymPicker";
+import { DecisionRoomReplayBanner } from "../components/DecisionRoomReplayBanner";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -331,6 +333,12 @@ export function DecisionRoomSimulatorPage() {
       />
       <QrmSubNav />
 
+      <DecisionRoomReplayBanner
+        lossReason={composite.lossFields?.lossReason ?? null}
+        competitor={composite.lossFields?.competitor ?? null}
+        dealName={board.dealName}
+      />
+
       <DecisionRoomCoachRead board={board} />
 
       <DecisionRoomScoreboard scores={board.scores} velocityDelta={velocityDelta} />
@@ -372,6 +380,8 @@ export function DecisionRoomSimulatorPage() {
         futureTicks={futureTicks}
         moveHistory={moveHistory}
       />
+
+      <DecisionRoomGymPicker currentDealId={dealId} />
 
       <DecisionRoomMoveBar
         board={board}
