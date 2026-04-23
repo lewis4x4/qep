@@ -721,13 +721,34 @@ export function QuoteBuilderV2Page() {
   // lookups hang on the draft's primary equipment brand_id which we
   // don't thread yet; enable later when Slice 09's full migration ships.
   const [marginGateOpen, setMarginGateOpen] = useState(false);
+  // Remember which quote+margin combo the rep already justified so we
+  // don't keep re-prompting them. Keyed by quote id + margin (rounded to
+  // 1 decimal) so editing the quote and making the margin worse re-asks,
+  // but a simple re-save at the same margin doesn't. Resets when the
+  // loaded quote changes (different rep session).
+  const [marginReasonCaptured, setMarginReasonCaptured] = useState<string | null>(null);
+  useEffect(() => {
+    setMarginReasonCaptured(null);
+  }, [existingQuote?.id]);
+
+  function marginKeyFor(quoteId: string | null, marginPctValue: number): string {
+    return `${quoteId ?? "new"}|${Math.round(marginPctValue * 10) / 10}`;
+  }
 
   async function handleSaveClick() {
     // Resolve threshold just-in-time so a new workspace-default created
     // in a sibling tab applies to this session without a refresh.
     const { threshold } = await getApplicableThreshold(null);
     const thresholdPct = threshold ? Number(threshold.min_margin_pct) : null;
-    if (isUnderThreshold(marginPct, thresholdPct)) {
+    const key = marginKeyFor(
+      (saveMutation.data?.quote?.id as string | undefined)
+        ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null),
+      marginPct,
+    );
+    // Re-prompting a rep who already captured a reason for the same
+    // (quote, margin) pair this session is pure annoyance — it doesn't
+    // add audit value. Once captured, a straight save just goes through.
+    if (isUnderThreshold(marginPct, thresholdPct) && marginReasonCaptured !== key) {
       setMarginGateOpen(true);
       return;
     }
@@ -757,6 +778,8 @@ export function QuoteBuilderV2Page() {
         reason:             payload.reason,
         repId:              profile.id,
       });
+      // Lock in so subsequent saves at this margin don't re-prompt.
+      setMarginReasonCaptured(marginKeyFor(savedId, marginPct));
     } catch {
       // saveMutation.error path handles user-visible feedback.
     }
@@ -792,15 +815,21 @@ export function QuoteBuilderV2Page() {
     || quoteStatus === "approved_with_conditions"
     || quoteStatus === "sent"
     || quoteStatus === "accepted";
+  // QEP rule: every quote requires owner approval (Ryan + Rylee).
+  // The old approvalState.requiresManagerApproval gate only fired for
+  // margin-flagged or big-amount quotes, which hid the button for
+  // acceptable-margin saves — leaving reps no way to request approval
+  // after they'd saved. Gate only on "have a saved quote with a branch,
+  // and we're not already past approval".
   const canSubmitForApproval =
-    approvalState.requiresManagerApproval
-    && Boolean(activeQuotePackageId)
+    Boolean(activeQuotePackageId)
     && Boolean(draft.branchSlug)
     && quoteStatus !== "sent"
     && quoteStatus !== "accepted"
     && !approvalPending
     && quoteStatus !== "approved"
     && quoteStatus !== "approved_with_conditions";
+  void approvalState.requiresManagerApproval; // retained in state; not used for gating
   const showQuoteActions = Boolean(activeQuotePackageId);
 
   const voiceMutation = useMutation({
