@@ -680,6 +680,11 @@ function LegacyCrmRedirect() {
   return <Navigate to={next} replace />;
 }
 
+function RedirectPreserveSearch({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
+
 function LegacyCompanyCommandRedirect() {
   const { pathname, search } = useLocation();
   const match = pathname.match(/^\/qrm\/companies\/([^/]+)\/command$/);
@@ -1010,6 +1015,7 @@ function App() {
                   <ChatPage userRole={profile.role} userEmail={profile.email} />
                 }
               />
+              <Route path="/iron" element={<RedirectPreserveSearch to="/chat" />} />
               <Route
                 path="/admin"
                 element={
@@ -1982,6 +1988,7 @@ function App() {
                   )
                 }
               />
+              <Route path="/qrm/approvals" element={<RedirectPreserveSearch to="/qrm/command/approvals" />} />
               {/* Slice 1.5 — Blocker Board */}
               <Route
                 path="/qrm/command/blockers"
