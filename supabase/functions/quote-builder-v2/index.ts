@@ -518,6 +518,153 @@ async function handlePublicDealRoomRead(url: URL, origin: string | null): Promis
   }, origin);
 }
 
+// Public trade-estimate handler. Token-gated like the rest of the public
+// surface — validates the share_token, then looks up comps in the same
+// tables the rep-side trade-book-value-range uses. Returns a low/mid/
+// high range plus a suggested conservative credit. No auction data, no
+// manufacturer MSRP sources are leaked to the customer — only the
+// aggregate range. Limited to 30 requests/hour per token at the Postgres
+// layer is a later slice; for now we bound the compute cost by capping
+// recent-comp windows.
+async function handlePublicTradeEstimate(
+  req: Request,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+  const body = await req.json().catch(() => ({}));
+  const make = typeof body.make === "string" ? body.make.trim().slice(0, 60) : "";
+  const model = typeof body.model === "string" ? body.model.trim().slice(0, 60) : "";
+  const year = typeof body.year === "number" && Number.isFinite(body.year) ? Math.floor(body.year) : null;
+  const hours = typeof body.hours === "number" && Number.isFinite(body.hours) ? Math.floor(body.hours) : null;
+  if (!make || !model) {
+    return safeJsonError("make and model required", 400, origin);
+  }
+
+  const admin = createAdminClient();
+  // Cheapest early-exit: confirm the token is real before hitting the
+  // valuation tables. Costs one indexed SELECT.
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to validate token", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const estimates: Array<{ low: number; mid: number; high: number; confidence: "high" | "medium" | "low" }> = [];
+
+  // Source 1: cached market valuations — already vetted, low variance.
+  {
+    let q = admin
+      .from("market_valuations")
+      .select("estimated_fmv, low_estimate, high_estimate, confidence_score")
+      .ilike("make", make)
+      .ilike("model", model)
+      .gte("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(3);
+    if (year) q = q.eq("year", year);
+    const { data } = await q;
+    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+      const fmv = Number(row.estimated_fmv ?? 0);
+      if (fmv <= 0) continue;
+      const low = Number(row.low_estimate ?? fmv * 0.9);
+      const high = Number(row.high_estimate ?? fmv * 1.1);
+      const conf = Number(row.confidence_score ?? 0.5);
+      estimates.push({
+        low,
+        mid: fmv,
+        high,
+        confidence: conf >= 0.75 ? "high" : conf >= 0.5 ? "medium" : "low",
+      });
+    }
+  }
+
+  // Source 2: auction comps (year band ±2). p25/p50/p75 over last 20.
+  {
+    let q = admin
+      .from("auction_results")
+      .select("hammer_price")
+      .ilike("make", make)
+      .ilike("model", model)
+      .order("auction_date", { ascending: false })
+      .limit(20);
+    if (year) q = q.gte("year", year - 2).lte("year", year + 2);
+    const { data } = await q;
+    const prices = ((data ?? []) as Array<Record<string, unknown>>)
+      .map((r) => Number(r.hammer_price ?? 0))
+      .filter((p) => p > 0)
+      .sort((a, b) => a - b);
+    if (prices.length >= 3) {
+      const pct = (p: number) => {
+        const idx = Math.max(0, Math.min(prices.length - 1, Math.floor(prices.length * p)));
+        return prices[idx] ?? 0;
+      };
+      estimates.push({
+        low: pct(0.25),
+        mid: pct(0.5),
+        high: pct(0.75),
+        confidence: prices.length >= 8 ? "high" : "medium",
+      });
+    }
+  }
+
+  if (estimates.length === 0) {
+    return safeJsonOk({
+      status: "no_data",
+      message: "No recent comparable sales found. Your rep can pull a manual valuation.",
+    }, origin);
+  }
+
+  // Blend the estimates — weight by confidence. High=3, medium=2, low=1.
+  const confWeight: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  let totalWeight = 0;
+  let lowSum = 0, midSum = 0, highSum = 0;
+  for (const e of estimates) {
+    const w = confWeight[e.confidence] ?? 1;
+    lowSum += e.low * w;
+    midSum += e.mid * w;
+    highSum += e.high * w;
+    totalWeight += w;
+  }
+  const low = Math.round(lowSum / totalWeight);
+  const mid = Math.round(midSum / totalWeight);
+  const high = Math.round(highSum / totalWeight);
+
+  // Hours adjustment: >5000 hrs = haircut, <2000 hrs = premium, band
+  // shifts ±10% within reason. Simple heuristic until we plug in real
+  // hours-depreciation curves.
+  let hoursAdjustment = 0;
+  if (hours != null) {
+    if (hours >= 5000) hoursAdjustment = -0.1;
+    else if (hours >= 3500) hoursAdjustment = -0.05;
+    else if (hours <= 1500) hoursAdjustment = 0.05;
+  }
+  const adjust = (v: number) => Math.round(v * (1 + hoursAdjustment));
+
+  // Dealer-side conservatism: suggested trade credit is the low end of
+  // the adjusted range. Keeps the customer's expectation in line with
+  // what a rep would realistically offer.
+  const suggestedCredit = adjust(low);
+
+  return safeJsonOk({
+    status: "ok",
+    range: {
+      low: adjust(low),
+      mid: adjust(mid),
+      high: adjust(high),
+    },
+    suggestedCredit,
+    comps: estimates.length,
+    hoursAdjustment,
+  }, origin);
+}
+
 function generateShareToken(): string {
   // 32 hex chars → 128 bits of entropy. UUID-shaped but dashes stripped
   // for a tidier URL. crypto.randomUUID is cryptographically random in
@@ -1212,6 +1359,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "GET" && publicAction === "public-attachments") {
       return await handlePublicAttachmentsRead(publicUrl, origin);
+    }
+    if (req.method === "POST" && publicAction === "public-trade-estimate") {
+      return await handlePublicTradeEstimate(req, publicUrl, origin);
     }
   } catch (err) {
     console.error("public-route dispatch error:", err);

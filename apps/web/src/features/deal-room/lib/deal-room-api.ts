@@ -101,6 +101,52 @@ export interface DealRoomAttachmentsPayload {
   attachments: DealRoomCompatibleAttachment[];
 }
 
+export interface TradeEstimateRequest {
+  make: string;
+  model: string;
+  year?: number | null;
+  hours?: number | null;
+}
+
+export type TradeEstimatePayload =
+  | {
+      status: "ok";
+      range: { low: number; mid: number; high: number };
+      suggestedCredit: number;
+      comps: number;
+      hoursAdjustment: number;
+    }
+  | {
+      status: "no_data";
+      message: string;
+    };
+
+export async function fetchPublicTradeEstimate(
+  token: string,
+  input: TradeEstimateRequest,
+): Promise<TradeEstimatePayload> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-trade-estimate?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      make: input.make,
+      model: input.model,
+      year: input.year ?? null,
+      hours: input.hours ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export async function fetchPublicDealRoomAttachments(token: string): Promise<DealRoomAttachmentsPayload> {
   const res = await fetch(`${QUOTE_FN_URL}/public-attachments?token=${encodeURIComponent(token)}`, {
     headers: {

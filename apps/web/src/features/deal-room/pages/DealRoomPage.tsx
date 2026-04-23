@@ -4,12 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchPublicDealRoom,
   fetchPublicDealRoomAttachments,
+  fetchPublicTradeEstimate,
   type DealRoomBranch,
   type DealRoomCompatibleAttachment,
   type DealRoomFinanceScenario,
   type DealRoomPayload,
   type DealRoomQuote,
+  type TradeEstimatePayload,
 } from "../lib/deal-room-api";
+import { useMutation } from "@tanstack/react-query";
 import {
   computePaymentFor,
   filterDisplayableScenarios,
@@ -216,19 +219,38 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
     ?? displayableScenarios[0]
     ?? null;
 
+  // Customer-applied trade credit. Seeds from whatever the rep included,
+  // overrides on "Apply" from the trade estimator.
+  const [tradeCredit, setTradeCredit] = useState<number>(quote.trade_credit ?? 0);
+  useEffect(() => {
+    setTradeCredit(quote.trade_credit ?? 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote.id]);
+
   // Adjusted quote reflects the customer's live choices: attachment
-  // configurator flips attachment_total, which ripples through subtotal
-  // / net_total / customer_total so every downstream surface (pricing
-  // summary, financing math, slider cap) sees the same number.
+  // configurator flips attachment_total + the trade estimator flips
+  // trade_credit, both rippling through subtotal / net_total /
+  // customer_total so every downstream surface (pricing summary,
+  // financing math, slider cap) sees the same number.
   const attachmentDelta = chosenAttachmentTotal - (quote.attachment_total ?? 0);
-  const adjustedQuote = useMemo<DealRoomQuote>(() => ({
-    ...quote,
-    attachment_total: chosenAttachmentTotal,
-    subtotal: (quote.subtotal ?? 0) + attachmentDelta,
-    net_total: (quote.net_total ?? 0) + attachmentDelta,
-    customer_total: (quote.customer_total ?? 0) + attachmentDelta,
-    amount_financed: Math.max(0, (quote.customer_total ?? 0) + attachmentDelta - cashDown),
-  }), [quote, chosenAttachmentTotal, attachmentDelta, cashDown]);
+  const tradeDelta = tradeCredit - (quote.trade_credit ?? 0);
+  const adjustedQuote = useMemo<DealRoomQuote>(() => {
+    const subtotal = (quote.subtotal ?? 0) + attachmentDelta;
+    // Trade credit reduces net_total + customer_total; the rep-side
+    // math on quote_packages treats trade as a credit line, so we
+    // subtract the delta on top of the attachment shift.
+    const net = (quote.net_total ?? 0) + attachmentDelta - tradeDelta;
+    const customerTotal = (quote.customer_total ?? 0) + attachmentDelta - tradeDelta;
+    return {
+      ...quote,
+      attachment_total: chosenAttachmentTotal,
+      trade_credit: tradeCredit,
+      subtotal,
+      net_total: net,
+      customer_total: customerTotal,
+      amount_financed: Math.max(0, customerTotal - cashDown),
+    };
+  }, [quote, chosenAttachmentTotal, attachmentDelta, tradeCredit, tradeDelta, cashDown]);
 
   const computed = useMemo<ComputedPayment | null>(() => {
     if (!activeScenario) return null;
@@ -273,6 +295,11 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
             attachmentTotal={chosenAttachmentTotal}
           />
         )}
+        <TradeEstimatorPanel
+          token={token}
+          currentCredit={tradeCredit}
+          onApply={setTradeCredit}
+        />
         <div className="mt-9 grid gap-5 sm:grid-cols-[1.15fr_1fr]">
           <PricingSummary quote={adjustedQuote} cashDownOverride={cashDown} computed={computed} />
           <FinancingPanel
@@ -817,6 +844,176 @@ function ConfiguratorPanel({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function TradeEstimatorPanel({
+  token, currentCredit, onApply,
+}: {
+  token: string;
+  currentCredit: number;
+  onApply: (credit: number) => void;
+}) {
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState<string>("");
+  const [hours, setHours] = useState<string>("");
+
+  const mutation = useMutation<TradeEstimatePayload>({
+    mutationFn: () => fetchPublicTradeEstimate(token, {
+      make: make.trim(),
+      model: model.trim(),
+      year: year.trim() ? Number(year) : null,
+      hours: hours.trim() ? Number(hours) : null,
+    }),
+  });
+
+  const canSubmit = make.trim().length >= 2 && model.trim().length >= 1 && !mutation.isPending;
+  const result = mutation.data ?? null;
+  const errorMessage = mutation.isError
+    ? (mutation.error instanceof Error ? mutation.error.message : "Estimate unavailable")
+    : null;
+
+  return (
+    <section className="mt-9 rounded-2xl border border-slate-200 p-6 sm:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Have a trade?
+          </div>
+          <p className="mt-1 text-sm text-slate-700">
+            Tell us what you're running now and we'll pull a live range from recent comps + auction data.
+            Applying it updates your financed amount in real time.
+          </p>
+        </div>
+        {currentCredit > 0 && (
+          <div className="text-right">
+            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Applied credit</div>
+            <div className="text-lg font-extrabold tabular-nums text-emerald-600">
+              −{formatCurrency(currentCredit, 0)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Make</span>
+          <input
+            type="text"
+            value={make}
+            onChange={(e) => setMake(e.target.value)}
+            placeholder="e.g. Case"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Model</span>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="e.g. SR175"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Year</span>
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            min={1990}
+            max={new Date().getFullYear()}
+            placeholder="2018"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Hours</span>
+          <input
+            type="number"
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            min={0}
+            placeholder="3200"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={!canSubmit}
+          onClick={() => mutation.mutate()}
+          className="rounded-lg bg-[#E87722] px-5 py-2 text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {mutation.isPending ? "Pulling comps…" : "Estimate trade value"}
+        </button>
+        {errorMessage && (
+          <span className="text-xs text-rose-500">{errorMessage}</span>
+        )}
+      </div>
+
+      {result && result.status === "no_data" && (
+        <div className="mt-5 rounded-lg bg-slate-50 px-4 py-3 text-[13px] text-slate-600">
+          {result.message}
+        </div>
+      )}
+
+      {result && result.status === "ok" && (
+        <div className="mt-5 rounded-xl bg-emerald-50 p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+                Estimated value range
+              </div>
+              <div className="mt-1 text-[13px] text-emerald-900">
+                <span className="font-bold tabular-nums">{formatCurrency(result.range.low, 0)}</span>
+                <span className="text-emerald-600"> — </span>
+                <span className="font-bold tabular-nums">{formatCurrency(result.range.high, 0)}</span>
+                <span className="ml-2 text-[11px] text-emerald-600">
+                  {result.comps} comp source{result.comps === 1 ? "" : "s"}
+                  {result.hoursAdjustment !== 0 && (
+                    <> · hours adjustment {result.hoursAdjustment > 0 ? "+" : ""}{Math.round(result.hoursAdjustment * 100)}%</>
+                  )}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+                Suggested credit
+              </div>
+              <div className="text-2xl font-extrabold tabular-nums text-emerald-900">
+                {formatCurrency(result.suggestedCredit, 0)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onApply(result.suggestedCredit)}
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Apply to this quote
+            </button>
+            {currentCredit > 0 && (
+              <button
+                type="button"
+                onClick={() => onApply(0)}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Clear
+              </button>
+            )}
+            <div className="ml-auto text-[11px] italic text-emerald-700">
+              Final credit is confirmed by your rep after in-person inspection.
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
