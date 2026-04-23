@@ -86,8 +86,8 @@ create policy "qbgsj_select_elevated"
   for select
   to authenticated
   using (
-    workspace_id = public.get_my_workspace()
-    and public.get_my_role() in ('admin', 'manager', 'owner')
+    workspace_id = (select public.get_my_workspace())
+    and (select public.get_my_role()) in ('admin', 'manager', 'owner')
   );
 
 -- Writes are service-role only. The edge function runs under service_role

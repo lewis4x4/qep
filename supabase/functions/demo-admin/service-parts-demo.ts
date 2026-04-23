@@ -157,6 +157,17 @@ export async function seedServicePartsDemoData(
   });
   if (pwErr) throw pwErr;
 
+  // Upsert canonical branches first — parts_demand_forecasts and
+  // parts_reorder_profiles both have composite FKs to branches(workspace_id, slug),
+  // so inventory seeded against these slugs only survives if the branches exist.
+  const canonicalBranches = [
+    { workspace_id: WS, slug: BR.mainYard, display_name: "Main Yard", notes: "Demo primary yard" },
+    { workspace_id: WS, slug: BR.lakecity, display_name: "Lake City", notes: "Lake City demo branch" },
+    { workspace_id: WS, slug: BR.gulfDepot, display_name: "Gulf Depot", notes: "Gulf Coast demo depot" },
+  ];
+  const { error: brErr } = await admin.from("branches").upsert(canonicalBranches, { onConflict: "workspace_id,slug" });
+  if (brErr) throw brErr;
+
   const branchRows = [
     {
       id: SP.branchConfig.mainYard,
