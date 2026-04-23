@@ -1,19 +1,20 @@
 /**
- * DecisionRoomSimulatorPage — Phase 1 moonshot.
+ * DecisionRoomSimulatorPage — Phase 1 + Phase 2 moonshot.
  *
- * A top-down conference-table visualization of the humans who decide every
- * equipment deal, with ghost seats for the archetypes the room expects but
- * hasn't filled yet. Four real scores (Decision Velocity, Coverage,
- * Consensus Risk, Latent Veto) replace the old count tiles; each seat has
- * an evidence chain and a persona-backed "Ask this seat" surface.
- *
- * Extension points are explicit:
- *   - Phase 2 (try-a-move): drop a chat bar at the bottom; seats get
- *     reaction bubbles via the same seat id.
- *   - Phase 3 (ghost inference): findGuidance on ghost seats is already
- *     structured for Tavily + exec title enrichment.
- *   - Phase 4 (time scrubber): buildDecisionRoomBoard takes a `now` param;
- *     swap in a selected timestamp and re-score.
+ * Top-down conference-table view of the humans who decide every equipment
+ * deal. Surfaces:
+ *   - Coach's Read — one tight paragraph from the model, grounded on the
+ *     board state. Cached per (dealId, seat-stance hash).
+ *   - Real scores — Decision Velocity, Coverage, Consensus Risk, Latent
+ *     Veto. Velocity tile animates a delta chip after each tried move.
+ *   - Conference-table canvas — named seats + archetype ghost seats,
+ *     roving-tabindex keyboard nav, click opens the seat drawer.
+ *   - Recommended Moves — three concrete ranked next actions; clicking
+ *     one pre-fills the Try-a-move bar.
+ *   - Try-a-move — the simulator that simulates. Rep types a move, edge
+ *     function fans out parallel persona reactions, page animates to the
+ *     new velocity and grows the Move History panel.
+ *   - Seat drawer — per-seat evidence + ghost find-guidance + persona chat.
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -30,6 +31,7 @@ import {
   type DecisionRoomSeat,
 } from "../lib/decision-room-simulator";
 import { buildRelationshipMapBoard, type RelationshipMapBoard } from "../lib/relationship-map";
+import { buildRecommendedMoves, type RecommendedMove } from "../lib/decision-room-moves";
 import { useBlockers } from "../command-center/hooks/useBlockers";
 import { groupBlockedDeals } from "../command-center/lib/blockerTypes";
 import { QrmPageHeader } from "../components/QrmPageHeader";
@@ -37,6 +39,10 @@ import { QrmSubNav } from "../components/QrmSubNav";
 import { DecisionRoomCanvas } from "../components/DecisionRoomCanvas";
 import { DecisionRoomScoreboard } from "../components/DecisionRoomScoreboard";
 import { DecisionRoomSeatDrawer } from "../components/DecisionRoomSeatDrawer";
+import { DecisionRoomCoachRead } from "../components/DecisionRoomCoachRead";
+import { DecisionRoomRecommendedMoves } from "../components/DecisionRoomRecommendedMoves";
+import { DecisionRoomMoveBar, type TriedMove } from "../components/DecisionRoomMoveBar";
+import { DecisionRoomMoveHistory } from "../components/DecisionRoomMoveHistory";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -49,6 +55,8 @@ export function DecisionRoomSimulatorPage() {
   const blockers = useBlockers();
   const [selectedSeat, setSelectedSeat] = useState<DecisionRoomSeat | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moveHistory, setMoveHistory] = useState<TriedMove[]>([]);
+  const [movePrefill, setMovePrefill] = useState<string | null>(null);
 
   const compositeQuery = useQuery({
     queryKey: ["decision-room-simulator", dealId, "composite"],
@@ -182,6 +190,11 @@ export function DecisionRoomSimulatorPage() {
     });
   }, [composite, relationshipQuery.data, roomSummary, blocker, dealId]);
 
+  const recommendedMoves = useMemo(
+    () => (board ? buildRecommendedMoves(board) : []),
+    [board],
+  );
+
   if (!dealId) {
     return <Navigate to="/qrm/deals" replace />;
   }
@@ -209,10 +222,29 @@ export function DecisionRoomSimulatorPage() {
 
   const namedCount = board.seats.filter((s) => s.status === "named").length;
   const ghostCount = board.seats.length - namedCount;
+  const latestMove = moveHistory[0] ?? null;
+  const velocityDelta = latestMove?.aggregate.velocityDelta ?? null;
 
   function handleSelectSeat(seat: DecisionRoomSeat) {
     setSelectedSeat(seat);
     setDrawerOpen(true);
+  }
+
+  function handlePickRecommendedMove(move: RecommendedMove) {
+    if (move.seatId) {
+      const seat = board!.seats.find((s) => s.id === move.seatId) ?? null;
+      if (seat) {
+        setSelectedSeat(seat);
+        setDrawerOpen(true);
+      }
+    }
+    if (move.tryMovePrompt) {
+      setMovePrefill(move.tryMovePrompt);
+    }
+  }
+
+  function handleMoveResult(result: TriedMove) {
+    setMoveHistory((prev) => [result, ...prev].slice(0, 20));
   }
 
   return (
@@ -247,7 +279,9 @@ export function DecisionRoomSimulatorPage() {
       />
       <QrmSubNav />
 
-      <DecisionRoomScoreboard scores={board.scores} />
+      <DecisionRoomCoachRead board={board} />
+
+      <DecisionRoomScoreboard scores={board.scores} velocityDelta={velocityDelta} />
 
       <DecisionRoomCanvas
         seats={board.seats}
@@ -255,6 +289,24 @@ export function DecisionRoomSimulatorPage() {
         onSelectSeat={handleSelectSeat}
         companyName={board.companyName}
         dealName={board.dealName}
+      />
+
+      <DecisionRoomRecommendedMoves
+        moves={recommendedMoves}
+        onPickMove={handlePickRecommendedMove}
+      />
+
+      <DecisionRoomMoveBar
+        board={board}
+        onMoveResult={handleMoveResult}
+        prefill={movePrefill}
+        onPrefillConsumed={() => setMovePrefill(null)}
+      />
+
+      <DecisionRoomMoveHistory
+        history={moveHistory}
+        seats={board.seats}
+        onPickSeat={handleSelectSeat}
       />
 
       {/* Legend / read-me */}
@@ -281,7 +333,7 @@ export function DecisionRoomSimulatorPage() {
             <span>= decision power</span>
           </span>
           <span className="ml-auto text-[11px] italic">
-            Tap any seat to see evidence and ask them a grounded question.
+            Tap any seat to see evidence and ask them a grounded question. Use arrow keys to cycle seats.
           </span>
         </div>
       </DeckSurface>

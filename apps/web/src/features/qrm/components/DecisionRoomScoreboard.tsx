@@ -13,6 +13,9 @@ import type { ConfidenceLevel } from "../lib/decision-room-archetype";
 
 interface Props {
   scores: DecisionRoomScores;
+  /** Velocity delta from the most recent tried move — positive = slower,
+   *  negative = faster. Renders as an animated chip on the Velocity tile. */
+  velocityDelta?: number | null;
 }
 
 function levelTone(level: ConfidenceLevel, invert: boolean): string {
@@ -68,9 +71,10 @@ interface TileProps {
   trace: string[];
   progressPct?: number;
   progressTone?: string;
+  deltaChip?: { text: string; tone: string } | null;
 }
 
-function Tile({ icon, label, value, sub, tone, trace, progressPct, progressTone }: TileProps) {
+function Tile({ icon, label, value, sub, tone, trace, progressPct, progressTone, deltaChip }: TileProps) {
   const [open, setOpen] = useState(false);
   return (
     <div
@@ -85,7 +89,19 @@ function Tile({ icon, label, value, sub, tone, trace, progressPct, progressTone 
           {label}
         </p>
       </div>
-      <p className={cn("mt-2 text-2xl font-semibold", tone)}>{value}</p>
+      <div className="mt-2 flex items-center gap-2">
+        <p className={cn("text-2xl font-semibold", tone)}>{value}</p>
+        {deltaChip ? (
+          <span
+            className={cn(
+              "animate-in fade-in slide-in-from-left-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+              deltaChip.tone,
+            )}
+          >
+            {deltaChip.text}
+          </span>
+        ) : null}
+      </div>
       <p className="text-[11px] text-muted-foreground">{sub}</p>
       {progressPct != null ? (
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
@@ -116,9 +132,22 @@ function Tile({ icon, label, value, sub, tone, trace, progressPct, progressTone 
   );
 }
 
-export function DecisionRoomScoreboard({ scores }: Props) {
+export function DecisionRoomScoreboard({ scores, velocityDelta }: Props) {
   const velocityDays = scores.decisionVelocity.days;
   const coveragePct = Math.round(scores.coverage.value * 100);
+
+  const velocityDeltaChip =
+    typeof velocityDelta === "number" && velocityDelta !== 0
+      ? velocityDelta < 0
+        ? {
+            text: `${Math.abs(velocityDelta)}d faster`,
+            tone: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
+          }
+        : {
+            text: `${velocityDelta}d slower`,
+            tone: "border-red-400/40 bg-red-500/10 text-red-200",
+          }
+      : null;
 
   return (
     <div className="grid gap-3 md:grid-cols-4">
@@ -129,6 +158,7 @@ export function DecisionRoomScoreboard({ scores }: Props) {
         sub={levelLabel(scores.decisionVelocity.confidence, false)}
         tone={velocityTone(velocityDays)}
         trace={scores.decisionVelocity.trace}
+        deltaChip={velocityDeltaChip}
       />
       <Tile
         icon={<Users className="h-4 w-4" aria-hidden />}

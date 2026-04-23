@@ -385,6 +385,16 @@ verify_jwt = false
 [functions.decision-room-seat-chat]
 verify_jwt = false
 
+# Decision Room coach's read — one-paragraph executive summary of a live
+# decision room. Same ES256 + access-check pattern as seat-chat.
+[functions.decision-room-coach-read]
+verify_jwt = false
+
+# Decision Room try-a-move — fans out parallel persona reactions for a
+# proposed move. Same ES256 + access-check pattern.
+[functions.decision-room-try-move]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 

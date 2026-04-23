@@ -12,7 +12,7 @@
  * scale together. Seat sizes clamp between a mobile floor and desktop
  * ceiling so they never collide on narrow screens.
  */
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +116,31 @@ function stanceTone(seat: DecisionRoomSeat): { ring: string; bg: string; glow: s
 
 export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, companyName, dealName }: Props) {
   const positioned = useMemo(() => placeSeats(seats), [seats]);
+  const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  function focusSeatAt(index: number) {
+    if (seats.length === 0) return;
+    const safeIndex = ((index % seats.length) + seats.length) % seats.length;
+    const target = seats[safeIndex];
+    const el = target ? buttonRefs.current.get(target.id) : null;
+    el?.focus();
+  }
+
+  function handleSeatKey(event: React.KeyboardEvent, seatIndex: number) {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      focusSeatAt(seatIndex + 1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      focusSeatAt(seatIndex - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      focusSeatAt(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      focusSeatAt(seats.length - 1);
+    }
+  }
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-qep-deck-rule bg-gradient-to-b from-qep-deck-elevated/60 to-black/60">
@@ -163,17 +188,27 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
           </div>
         </div>
 
-        {/* Seats */}
-        {positioned.map(({ seat, xPct, yPct }) => {
+        {/* Seats — roving tabindex: one seat is tab-focusable at a time,
+            arrows move focus between the rest. Use the selected seat when
+            one is picked, otherwise the first seat. */}
+        {positioned.map(({ seat, xPct, yPct }, index) => {
           const size = sizeForPower(seat.powerWeight);
           const tone = stanceTone(seat);
           const selected = selectedSeatId === seat.id;
+          const rovingAnchor = selectedSeatId
+            ? selectedSeatId === seat.id
+            : index === 0;
 
           return (
             <button
               key={seat.id}
+              ref={(el) => {
+                if (el) buttonRefs.current.set(seat.id, el);
+                else buttonRefs.current.delete(seat.id);
+              }}
               type="button"
               onClick={() => onSelectSeat(seat)}
+              onKeyDown={(event) => handleSeatKey(event, index)}
               className={cn(
                 "group absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 transition-transform duration-150",
                 "hover:scale-105 focus-visible:scale-105 focus-visible:outline-none",
@@ -181,6 +216,7 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
               style={{ left: `${xPct}%`, top: `${yPct}%`, width: 108 }}
               aria-label={`${seat.name ?? `${seat.archetypeLabel} (ghost)`} — ${seat.archetypeLabel}`}
               aria-pressed={selected}
+              tabIndex={rovingAnchor ? 0 : -1}
             >
               <div className="relative">
                 <div
