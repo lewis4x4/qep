@@ -1955,7 +1955,11 @@ export function QuoteBuilderV2Page() {
 
           {saveMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">
-              <p className="text-sm text-red-400">Failed to save quote. Try again.</p>
+              <p className="text-sm text-red-400">
+                {saveMutation.error instanceof Error
+                  ? saveMutation.error.message
+                  : "Failed to save the quote."}
+              </p>
             </Card>
           )}
         </div>
