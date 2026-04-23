@@ -11,6 +11,7 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { parseJsonBody } from "../_shared/parse-json-body.ts";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireAuthenticatedUser } from "../_shared/service-auth.ts";
 import {
   buildPmKitLinesFromJobCode,
   deterministicPmReason,
@@ -1118,10 +1119,9 @@ Deno.serve(async (req) => {
       })
       : null;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return safeJsonError("Unauthorized", 401, origin);
-    }
+    const auth = await requireAuthenticatedUser(authHeader, origin);
+    if (!auth.ok) return auth.response;
+    const user = { id: auth.userId };
 
     // Verify caller is a portal customer (not internal staff using wrong API)
     const { data: portalCustomer } = await supabase

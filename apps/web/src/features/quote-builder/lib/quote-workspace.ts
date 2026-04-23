@@ -97,6 +97,15 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
     marginPct,
     reason: marginPct < 10 ? "Margin is below the 10% approval threshold." : null,
   };
+  const approvalSatisfied = !approvalState.requiresManagerApproval
+    ? true
+    : draft.quoteStatus === "approved"
+      || draft.quoteStatus === "sent"
+      || draft.quoteStatus === "accepted";
+  const approvalMissingLabel =
+    draft.quoteStatus === "pending_approval"
+      ? "manager approval pending"
+      : "manager approval (margin below 10%)";
 
   return {
     equipmentTotal,
@@ -119,16 +128,16 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
         missing: draftMissing,
       },
       send: {
-        ready: sendMissing.length === 0 && !approvalState.requiresManagerApproval,
-        missing: approvalState.requiresManagerApproval
-          ? [...sendMissing, "manager approval (margin below 10%)"]
-          : sendMissing,
+        ready: sendMissing.length === 0 && approvalSatisfied,
+        missing: approvalSatisfied
+          ? sendMissing
+          : [...sendMissing, approvalMissingLabel]
       },
       canSave: draftMissing.length === 0,
-      canSend: sendMissing.length === 0 && !approvalState.requiresManagerApproval,
-      missing: approvalState.requiresManagerApproval
-        ? [...sendMissing, "manager approval (margin below 10%)"]
-        : sendMissing,
+      canSend: sendMissing.length === 0 && approvalSatisfied,
+      missing: approvalSatisfied
+        ? sendMissing
+        : [...sendMissing, approvalMissingLabel],
     },
   };
 }

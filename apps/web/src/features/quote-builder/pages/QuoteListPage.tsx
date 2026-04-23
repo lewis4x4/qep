@@ -145,6 +145,8 @@ const STATUS_FILTERS = ["all", "draft", "ready", "sent", "accepted"] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
+  pending_approval: "bg-amber-500/10 text-amber-300",
+  approved: "bg-emerald-500/10 text-emerald-400",
   ready: "bg-blue-500/10 text-blue-400",
   sent: "bg-qep-orange/10 text-qep-orange",
   viewed: "bg-amber-500/10 text-amber-400",
@@ -159,7 +161,7 @@ const ENTRY_ICONS: Record<string, typeof FileText> = {
   manual: FileText,
 };
 
-const OPEN_STATUSES = new Set(["draft", "ready", "sent", "viewed"]);
+const OPEN_STATUSES = new Set(["draft", "pending_approval", "approved", "ready", "sent", "viewed"]);
 const OPEN_STATES_FOR_OUTCOME = new Set(["sent", "viewed"]);
 
 /**

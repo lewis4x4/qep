@@ -321,7 +321,7 @@ export function TradeWalkaroundPage() {
                   Generated in {valuationResult.pipeline_duration_ms}ms
                 </p>
                 <Button asChild size="sm" variant="outline">
-                  <Link to={`/quote?crm_deal_id=${dealId}${deal?.primaryContactId ? `&crm_contact_id=${deal?.primaryContactId}` : ""}`}>
+                  <Link to={`/quote-v2?crm_deal_id=${dealId}${deal?.primaryContactId ? `&crm_contact_id=${deal?.primaryContactId}` : ""}`}>
                     Open quote builder
                   </Link>
                 </Button>

@@ -7,12 +7,13 @@
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export type ApprovalType = "margin" | "deposit" | "trade" | "demo";
+export type ApprovalType = "margin" | "deposit" | "trade" | "demo" | "quote";
 
 export interface ApprovalItem {
   id: string;
   type: ApprovalType;
   dealId: string | null;
+  viewHref: string | null;
   dealName: string;
   contactName: string;
   amount: number;
@@ -102,6 +103,26 @@ export interface DemoRow {
   crm_deals: { name: string } | { name: string }[] | null;
 }
 
+export interface QuoteApprovalRow {
+  id: string;
+  workflow_slug: string;
+  subject: string;
+  detail: string | null;
+  status: string;
+  requested_at: string;
+  due_at: string | null;
+  escalate_at: string | null;
+  context_summary: {
+    quote_package_id?: string | null;
+    deal_id?: string | null;
+    quote_number?: string | null;
+    customer_name?: string | null;
+    customer_company?: string | null;
+    net_total?: number | null;
+    margin_pct?: number | null;
+  } | null;
+}
+
 // ─── Normalizer ────────────────────────────────────────────────────────────
 
 export function normalizeApprovals(
@@ -109,6 +130,7 @@ export function normalizeApprovals(
   deposits: DepositRow[] | null,
   trades: TradeRow[] | null,
   demos: DemoRow[] | null,
+  quotes: QuoteApprovalRow[] | null,
   nowTime: number = Date.now(),
 ): ApprovalItem[] {
   const items: ApprovalItem[] = [];
@@ -121,6 +143,7 @@ export function normalizeApprovals(
       id: deal.id,
       type: "margin",
       dealId: deal.id,
+      viewHref: deal.id ? `/qrm/deals/${deal.id}` : null,
       dealName: deal.name ?? "Untitled deal",
       contactName: contactName(contact),
       amount: deal.amount ?? 0,
@@ -139,6 +162,7 @@ export function normalizeApprovals(
       id: dep.id,
       type: "deposit",
       dealId: dep.deal_id,
+      viewHref: dep.deal_id ? `/qrm/deals/${dep.deal_id}` : null,
       dealName: dealNameFromJoin(dep.crm_deals),
       contactName: "—", // deposits don't join contacts directly
       amount: dep.amount ?? 0,
@@ -156,6 +180,7 @@ export function normalizeApprovals(
       id: trade.id,
       type: "trade",
       dealId: trade.deal_id,
+      viewHref: trade.deal_id ? `/qrm/deals/${trade.deal_id}` : null,
       dealName: dealNameFromJoin(trade.crm_deals),
       contactName: "—",
       amount: trade.preliminary_value ?? 0,
@@ -173,6 +198,7 @@ export function normalizeApprovals(
       id: demo.id,
       type: "demo",
       dealId: demo.deal_id,
+      viewHref: demo.deal_id ? `/qrm/deals/${demo.deal_id}` : null,
       dealName: dealNameFromJoin(demo.crm_deals),
       contactName: "—",
       amount: 0,
@@ -182,6 +208,46 @@ export function normalizeApprovals(
       meta: {
         needsAssessment: demo.needs_assessment_complete,
         buyingIntent: demo.buying_intent_confirmed,
+      },
+    });
+  }
+
+  for (const approval of quotes ?? []) {
+    const context = approval.context_summary ?? {};
+    const quotePackageId = context.quote_package_id ?? null;
+    const dealId = context.deal_id ?? null;
+    const customerCompany = context.customer_company?.trim() ?? "";
+    const customerName = context.customer_name?.trim() ?? "";
+    const quoteNumber = context.quote_number?.trim() ?? "";
+    const marginPct = typeof context.margin_pct === "number"
+      ? context.margin_pct
+      : Number(context.margin_pct ?? NaN);
+    const amount = typeof context.net_total === "number"
+      ? context.net_total
+      : Number(context.net_total ?? 0);
+    const headline = customerCompany || customerName || approval.subject || "Quote approval";
+    const detailBits = [
+      quoteNumber ? `Quote ${quoteNumber}` : null,
+      Number.isFinite(marginPct) ? `Margin ${marginPct.toFixed(1)}%` : null,
+      approval.detail,
+    ].filter(Boolean);
+
+    items.push({
+      id: approval.id,
+      type: "quote",
+      dealId,
+      viewHref: quotePackageId ? `/quote-v2?package_id=${encodeURIComponent(quotePackageId)}` : (dealId ? `/qrm/deals/${dealId}` : null),
+      dealName: headline,
+      contactName: customerCompany && customerName ? customerName : "—",
+      amount: Number.isFinite(amount) ? amount : 0,
+      detail: detailBits.join(" · ") || "Quote awaiting sales manager approval",
+      createdAt: approval.requested_at,
+      urgency: urgency(approval.requested_at, nowTime),
+      meta: {
+        approvalId: approval.id,
+        quotePackageId,
+        decisionWorkflow: approval.workflow_slug,
+        status: approval.status,
       },
     });
   }

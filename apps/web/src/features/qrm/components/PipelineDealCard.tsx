@@ -121,7 +121,7 @@ export function PipelineDealCard({
         </Button>
         <Button asChild size="sm" variant="outline" className="h-8 px-2 text-xs">
           <Link
-            to={`/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
+            to={`/quote-v2?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`}
           >
             <FileText className="mr-1 h-3.5 w-3.5" />
             Quote

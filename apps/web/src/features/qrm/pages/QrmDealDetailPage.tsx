@@ -315,12 +315,12 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
-              to={`/quote?crm_deal_id=${dealId}${
+              to={`/quote-v2?crm_deal_id=${dealId}${
                 dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""
               }`}
             >
               <FileText className="mr-2 h-4 w-4" />
-              New Quote
+              Open Quote
             </Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
@@ -398,8 +398,8 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                     <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link to={`/quote?crm_deal_id=${dealId}${dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""}`}>
-                      New Quote
+                    <Link to={`/quote-v2?crm_deal_id=${dealId}${dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""}`}>
+                      Open Quote
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">

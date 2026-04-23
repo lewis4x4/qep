@@ -25,6 +25,7 @@ import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { reconcileSucceededPayment } from "../_shared/portal-stripe-reconcile.ts";
+import { requireAuthenticatedUser } from "../_shared/service-auth.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -44,21 +45,15 @@ Deno.serve(async (req) => {
     }
 
     // All other routes require auth
-    const authHeader = req.headers.get("Authorization")?.trim();
-    if (!authHeader) return safeJsonError("Unauthorized", 401, origin);
+    const authHeader = req.headers.get("Authorization")?.trim() ?? null;
+    const auth = await requireAuthenticatedUser(authHeader, origin);
+    if (!auth.ok) return auth.response;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return safeJsonError("Unauthorized", 401, origin);
+    const user = { id: auth.userId };
 
     const workspace = await resolveProfileActiveWorkspaceId(supabaseAdmin, user.id);
 

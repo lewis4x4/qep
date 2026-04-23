@@ -33,6 +33,7 @@ import { priceFileImported } from "../_shared/flow-workflows/price-file-imported
 import { equipmentHoursCrossedInterval } from "../_shared/flow-workflows/equipment-hours-crossed-interval.ts";
 import { rentalNearingEnd } from "../_shared/flow-workflows/rental-nearing-end.ts";
 import { competitorSignalFromVoice } from "../_shared/flow-workflows/competitor-signal-from-voice.ts";
+import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 import { IRON_FLOW_DEFINITIONS } from "../_shared/flow-workflows/iron-flows.ts";
 
 /** All workflow files known to this build. Auto-synced into the DB on every tick. */
@@ -47,6 +48,7 @@ const REGISTERED_WORKFLOWS: FlowWorkflowDefinition[] = [
   equipmentHoursCrossedInterval,
   rentalNearingEnd,
   competitorSignalFromVoice,
+  quoteManagerApproval,
   // Wave 7 Iron Companion conversational flows (6 v1 flows)
   ...IRON_FLOW_DEFINITIONS,
 ];

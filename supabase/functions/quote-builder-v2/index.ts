@@ -19,7 +19,11 @@ import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { sendResendEmail } from "../_shared/resend-email.ts";
 import { computeQuoteDocumentHash } from "../_shared/quote-document-hash.ts";
+import { quoteManagerApproval } from "../_shared/flow-workflows/quote-manager-approval.ts";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const QUOTE_APPROVAL_WORKFLOW_SLUG = quoteManagerApproval.slug;
 
 function extractQuoteText(value: Record<string, unknown> | null, keyA: string, keyB: string): string | null {
   const raw = (typeof value?.[keyA] === "string" ? value[keyA] : typeof value?.[keyB] === "string" ? value[keyB] : null) as string | null;
@@ -276,7 +280,8 @@ function calculateFinancingScenarios(
 }
 
 async function resolveFirstOpenDealStageId(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
 ): Promise<string> {
   const { data, error } = await supabase
     .from("crm_deal_stages")
@@ -293,7 +298,8 @@ async function resolveFirstOpenDealStageId(
 }
 
 async function createDraftDealForQuote(input: {
-  supabase: ReturnType<typeof createClient>;
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
   userId: string;
   customerName: string | null;
   customerCompany: string | null;
@@ -320,6 +326,58 @@ async function createDraftDealForQuote(input: {
   if (error) throw new Error(error.message);
   if (!data?.id) throw new Error("Draft CRM deal creation returned no id");
   return String(data.id);
+}
+
+function createAdminClient() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.");
+  }
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+  });
+}
+
+async function ensureQuoteApprovalWorkflow(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+): Promise<string> {
+  const { data: existing, error: loadError } = await admin
+    .from("flow_workflow_definitions")
+    .select("id, enabled")
+    .eq("workspace_id", "default")
+    .eq("slug", QUOTE_APPROVAL_WORKFLOW_SLUG)
+    .maybeSingle();
+
+  if (loadError) throw new Error(loadError.message);
+  if (existing?.id) {
+    if (existing.enabled === false) {
+      throw new Error("Quote approval flow is disabled in Flow Admin.");
+    }
+    return String(existing.id);
+  }
+
+  const { data: created, error: createError } = await admin
+    .from("flow_workflow_definitions")
+    .insert({
+      workspace_id: "default",
+      slug: quoteManagerApproval.slug,
+      name: quoteManagerApproval.name,
+      description: quoteManagerApproval.description,
+      owner_role: quoteManagerApproval.owner_role,
+      trigger_event_pattern: quoteManagerApproval.trigger_event_pattern,
+      condition_dsl: quoteManagerApproval.conditions,
+      action_chain: quoteManagerApproval.actions,
+      affects_modules: quoteManagerApproval.affects_modules,
+      enabled: quoteManagerApproval.enabled !== false,
+      dry_run: quoteManagerApproval.dry_run ?? false,
+      surface: quoteManagerApproval.surface ?? "automated",
+    })
+    .select("id")
+    .single();
+
+  if (createError) throw new Error(createError.message);
+  if (!created?.id) throw new Error("Quote approval workflow registration returned no id.");
+  return String(created.id);
 }
 
 Deno.serve(async (req) => {
@@ -902,16 +960,26 @@ Deno.serve(async (req) => {
         return safeJsonOk({ observations }, origin);
       }
 
+      const packageId = url.searchParams.get("package_id");
       const dealId = url.searchParams.get("deal_id");
-      if (!dealId) return safeJsonError("deal_id required", 400, origin);
+      if (!packageId && !dealId) {
+        return safeJsonError("deal_id or package_id required", 400, origin);
+      }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("quote_packages")
-        .select("*, quote_signatures(*)")
-        .eq("deal_id", dealId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .select("*, quote_signatures(*)");
+
+      if (packageId) {
+        query = query.eq("id", packageId);
+      } else {
+        query = query
+          .eq("deal_id", dealId!)
+          .order("created_at", { ascending: false })
+          .limit(1);
+      }
+
+      const { data, error } = await query.maybeSingle();
 
       if (error) return safeJsonError("Failed to load quote", 500, origin);
       return safeJsonOk({ quote: data }, origin);
@@ -1557,6 +1625,154 @@ Deno.serve(async (req) => {
       return safeJsonOk({ already_viewed: false, status: "viewed", viewed_at: nowIso }, origin);
     }
 
+    // ── POST /submit-approval: route quote to sales manager ───────────
+    if (action === "submit-approval") {
+      if (!body.quote_package_id) {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+      if (!canRevise) {
+        return safeJsonError("Quote approval submission requires rep, manager, or owner role", 403, origin);
+      }
+
+      const { data: pkg, error: pkgErr } = await supabase
+        .from("quote_packages")
+        .select("id, workspace_id, quote_number, deal_id, customer_name, customer_company, net_total, margin_pct, status")
+        .eq("id", body.quote_package_id)
+        .maybeSingle();
+
+      if (pkgErr) return safeJsonError("Failed to load quote package", 500, origin);
+      if (!pkg) return safeJsonError("Quote package not found", 404, origin);
+
+      const pkgRow = pkg as {
+        id: string;
+        workspace_id: string;
+        quote_number: string | null;
+        deal_id: string;
+        customer_name: string | null;
+        customer_company: string | null;
+        net_total: number | null;
+        margin_pct: number | null;
+        status: string;
+      };
+
+      if (pkgRow.status === "pending_approval") {
+        const admin = createAdminClient();
+        const { data: existingApproval, error: existingErr } = await admin
+          .from("flow_approvals")
+          .select("id")
+          .eq("workflow_slug", QUOTE_APPROVAL_WORKFLOW_SLUG)
+          .in("status", ["pending", "escalated"])
+          .contains("context_summary", { quote_package_id: pkgRow.id })
+          .order("requested_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (existingErr) return safeJsonError(existingErr.message, 500, origin);
+        if (!existingApproval?.id) {
+          return safeJsonError("Quote is already awaiting approval.", 409, origin);
+        }
+        return safeJsonOk({
+          approval_id: existingApproval.id,
+          status: "pending_approval",
+          already_pending: true,
+        }, origin);
+      }
+
+      if (pkgRow.status === "approved") {
+        return safeJsonError("Quote is already approved.", 409, origin);
+      }
+      if (pkgRow.status === "sent" || pkgRow.status === "accepted") {
+        return safeJsonError("Only unsent quotes can be submitted for approval.", 409, origin);
+      }
+
+      const admin = createAdminClient();
+      const workflowId = await ensureQuoteApprovalWorkflow(admin);
+
+      const { data: runRow, error: runErr } = await admin
+        .from("flow_workflow_runs")
+        .insert({
+          workspace_id: pkgRow.workspace_id || "default",
+          workflow_id: workflowId,
+          workflow_slug: QUOTE_APPROVAL_WORKFLOW_SLUG,
+          status: "running",
+          dry_run: false,
+          resolved_context: {
+            quote_package_id: pkgRow.id,
+            deal_id: pkgRow.deal_id,
+            customer_name: pkgRow.customer_name,
+            customer_company: pkgRow.customer_company,
+            net_total: pkgRow.net_total,
+            margin_pct: pkgRow.margin_pct,
+          },
+          metadata: {
+            source: "quote_builder_v2",
+            submitted_by: user.id,
+            quote_package_id: pkgRow.id,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (runErr || !runRow?.id) {
+        return safeJsonError(runErr?.message ?? "Failed to create approval flow run", 500, origin);
+      }
+
+      const customerLabel = pkgRow.customer_company || pkgRow.customer_name || "Quote";
+      const marginLabel = Number.isFinite(Number(pkgRow.margin_pct))
+        ? `Margin ${Number(pkgRow.margin_pct).toFixed(1)}%`
+        : "Margin review required";
+      const totalLabel = Number.isFinite(Number(pkgRow.net_total))
+        ? `$${Number(pkgRow.net_total).toLocaleString()}`
+        : "amount unavailable";
+
+      const { data: approvalId, error: approvalErr } = await admin.rpc("request_flow_approval", {
+        p_run_id: runRow.id,
+        p_step_id: null,
+        p_workflow_slug: QUOTE_APPROVAL_WORKFLOW_SLUG,
+        p_subject: pkgRow.quote_number
+          ? `Quote ${pkgRow.quote_number} needs sales manager approval`
+          : `${customerLabel} quote needs sales manager approval`,
+        p_detail: `${marginLabel} · ${totalLabel}. Review the quote before it can be sent to the customer.`,
+        p_assigned_role: "manager",
+        p_assigned_to: null,
+        p_due_in_hours: 24,
+        p_escalate_in_hours: 48,
+        p_context_summary: {
+          type: "quote_approval",
+          quote_package_id: pkgRow.id,
+          deal_id: pkgRow.deal_id,
+          quote_number: pkgRow.quote_number,
+          customer_name: pkgRow.customer_name,
+          customer_company: pkgRow.customer_company,
+          net_total: pkgRow.net_total,
+          margin_pct: pkgRow.margin_pct,
+        },
+      });
+
+      if (approvalErr || !approvalId) {
+        await admin
+          .from("flow_workflow_runs")
+          .update({
+            status: "cancelled",
+            finished_at: new Date().toISOString(),
+            error_text: approvalErr?.message ?? "request_flow_approval failed",
+          })
+          .eq("id", runRow.id);
+        return safeJsonError(approvalErr?.message ?? "Failed to request approval", 500, origin);
+      }
+
+      const { error: statusErr } = await supabase
+        .from("quote_packages")
+        .update({ status: "pending_approval" })
+        .eq("id", body.quote_package_id);
+
+      if (statusErr) return safeJsonError(statusErr.message, 500, origin);
+
+      return safeJsonOk({
+        approval_id: approvalId,
+        status: "pending_approval",
+      }, origin);
+    }
+
     // ── POST /sign: Save quote signature ───────────────────────────────
     // State-machine guard (Slice 2.1h): the package must be in `sent` or
     // `viewed`. Signing from `draft` or `expired` is rejected so a
@@ -1667,7 +1883,7 @@ Deno.serve(async (req) => {
       // Fetch quote package with contact email
       const { data: pkg, error: pkgErr } = await supabase
         .from("quote_packages")
-        .select("id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, crm_contacts(first_name, last_name, email)")
+        .select("id, deal_id, contact_id, equipment, equipment_total, net_total, trade_allowance, sent_at, status, margin_pct, crm_contacts(first_name, last_name, email)")
         .eq("id", body.quote_package_id)
         .single();
 
@@ -1680,6 +1896,13 @@ Deno.serve(async (req) => {
       const toEmail = contact?.email;
       if (!toEmail) {
         return safeJsonError("No email address found for this contact. Update the contact record and try again.", 422, origin);
+      }
+
+      if ((pkg.status ?? "draft") === "pending_approval") {
+        return safeJsonError("This quote is still awaiting manager approval.", 409, origin);
+      }
+      if (typeof pkg.margin_pct === "number" && pkg.margin_pct < 10 && pkg.status !== "approved") {
+        return safeJsonError("Submit this quote for manager approval before sending it.", 409, origin);
       }
 
       // Compose email body

@@ -7,7 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { MarginRow, DepositRow, TradeRow, DemoRow } from "../lib/approvalTypes";
+import type { MarginRow, DepositRow, TradeRow, DemoRow, QuoteApprovalRow } from "../lib/approvalTypes";
 
 const QUERY_KEY = ["qrm", "approvals"];
 
@@ -17,7 +17,7 @@ export function useApprovals() {
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: async () => {
-      const [marginRes, depositsRes, tradesRes, demosRes] = await Promise.all([
+      const [marginRes, depositsRes, tradesRes, demosRes, quotesRes] = await Promise.all([
         supabase
           .from("crm_deals")
           .select("id, name, amount, margin_pct, margin_amount, margin_check_status, updated_at, crm_contacts(first_name, last_name)")
@@ -40,6 +40,13 @@ export function useApprovals() {
           .select("id, deal_id, status, equipment_category, scheduled_date, needs_assessment_complete, buying_intent_confirmed, created_at, crm_deals(name)")
           .eq("status", "requested")
           .limit(100),
+        supabase
+          .from("flow_approvals")
+          .select("id, workflow_slug, subject, detail, status, requested_at, due_at, escalate_at, context_summary")
+          .eq("workflow_slug", "quote-manager-approval")
+          .in("status", ["pending", "escalated"])
+          .order("requested_at", { ascending: false })
+          .limit(100),
       ]);
 
       // Log errors but don't throw — individual types degrade gracefully
@@ -47,6 +54,7 @@ export function useApprovals() {
       if (depositsRes.error) console.error("[approvals] deposits query failed:", depositsRes.error.message);
       if (tradesRes.error) console.error("[approvals] trades query failed:", tradesRes.error.message);
       if (demosRes.error) console.error("[approvals] demos query failed:", demosRes.error.message);
+      if (quotesRes.error) console.error("[approvals] quote query failed:", quotesRes.error.message);
 
       // Normalize Supabase joined relations (arrays → single objects)
       const normalizeJoin = <T extends Record<string, unknown>>(rows: T[] | null): T[] =>
@@ -65,6 +73,7 @@ export function useApprovals() {
         deposits: normalizeJoin(depositsRes.data) as DepositRow[],
         trades: normalizeJoin(tradesRes.data) as TradeRow[],
         demos: normalizeJoin(demosRes.data) as DemoRow[],
+        quotes: normalizeJoin(quotesRes.data) as QuoteApprovalRow[],
       };
     },
     staleTime: 30_000,
@@ -138,5 +147,29 @@ export function useApproveDemo() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+  });
+}
+
+export function useDecideQuoteApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      approvalId: string;
+      decision: "approved" | "rejected";
+      reason?: string;
+    }) => {
+      const { error: approvalError } = await supabase.rpc("decide_flow_approval", {
+        p_approval_id: input.approvalId,
+        p_decision: input.decision,
+        p_reason: input.reason ?? null,
+      });
+      if (approvalError) throw new Error(approvalError.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ["flow-approvals-pending"] });
+      qc.invalidateQueries({ queryKey: ["flow-admin-recent-runs"] });
+      qc.invalidateQueries({ queryKey: ["quote-builder", "list"] });
+    },
   });
 }

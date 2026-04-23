@@ -82,13 +82,21 @@ export type ServiceAuthResult =
   }
   | { ok: false; response: Response };
 
-/**
- * Rejects service_role key; requires valid user JWT + allowed profile role.
- */
-export async function requireServiceUser(
+export type AuthenticatedUserResult =
+  | {
+    ok: true;
+    supabase: SupabaseClient;
+    userId: string;
+  }
+  | { ok: false; response: Response };
+
+async function validateUserJwt(
   authHeader: string | null,
   origin: string | null,
-): Promise<ServiceAuthResult> {
+): Promise<
+  | { ok: true; supabase: SupabaseClient; userId: string }
+  | { ok: false; response: Response }
+> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -112,9 +120,6 @@ export async function requireServiceUser(
     };
   }
 
-  // Extract the raw JWT — used to both call GoTrue for validation and
-  // as the Authorization header on the supabase-js client so RLS sees
-  // the user identity on subsequent queries.
   const token = authHeader.slice("Bearer ".length).trim();
   if (!token) {
     return { ok: false, response: safeJsonError("Missing bearer token", 401, origin) };
@@ -124,11 +129,6 @@ export async function requireServiceUser(
     global: { headers: { Authorization: authHeader } },
   });
 
-  // Validate the token by asking GoTrue directly — /auth/v1/user has
-  // the project's actual signing key and handles whatever algorithm
-  // the project is currently on (HS256, ES256, RS256). Side-steps the
-  // supabase-js local verifier which rejects ES256.
-  let user: { id: string } | null = null;
   try {
     const userResp = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
@@ -151,7 +151,7 @@ export async function requireServiceUser(
     if (!userBody || typeof userBody.id !== "string") {
       return { ok: false, response: safeJsonError("Unauthorized: malformed user", 401, origin) };
     }
-    user = { id: userBody.id };
+    return { ok: true, supabase, userId: userBody.id };
   } catch (e) {
     return {
       ok: false,
@@ -162,11 +162,30 @@ export async function requireServiceUser(
       ),
     };
   }
+}
+
+export async function requireAuthenticatedUser(
+  authHeader: string | null,
+  origin: string | null,
+): Promise<AuthenticatedUserResult> {
+  return validateUserJwt(authHeader, origin);
+}
+
+/**
+ * Rejects service_role key; requires valid user JWT + allowed profile role.
+ */
+export async function requireServiceUser(
+  authHeader: string | null,
+  origin: string | null,
+): Promise<ServiceAuthResult> {
+  const auth = await validateUserJwt(authHeader, origin);
+  if (!auth.ok) return auth;
+  const { supabase, userId } = auth;
 
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
     .select("role, active_workspace_id")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   if (profErr || !profile) {
@@ -179,5 +198,5 @@ export async function requireServiceUser(
   }
 
   const workspaceId = (profile.active_workspace_id as string | null) ?? "default";
-  return { ok: true, supabase, userId: user.id, role, workspaceId };
+  return { ok: true, supabase, userId, role, workspaceId };
 }

@@ -13,9 +13,10 @@ import { sendQuotePackage } from "../lib/quote-api";
 interface SendQuoteSectionProps {
   quotePackageId: string;
   contactName?: string;
+  onSent?: (result: { toEmail: string }) => void;
 }
 
-export function SendQuoteSection({ quotePackageId, contactName }: SendQuoteSectionProps) {
+export function SendQuoteSection({ quotePackageId, contactName, onSent }: SendQuoteSectionProps) {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -26,6 +27,7 @@ export function SendQuoteSection({ quotePackageId, contactName }: SendQuoteSecti
     try {
       const result = await sendQuotePackage(quotePackageId);
       setSentTo(result.to_email);
+      onSent?.({ toEmail: result.to_email });
       setState("sent");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to send quote");

@@ -393,3 +393,40 @@ verify_jwt = false
 
 [functions.embed-crm]
 verify_jwt = false
+
+# Legacy frontend/integration cohort surfaced by the auth audit. These
+# functions authenticate internally or are invoked from managed backends, so
+# gateway JWT verification stays off until each function is migrated to a
+# stricter explicit auth surface.
+[functions.onedrive-oauth]
+verify_jwt = false
+
+[functions.portal-api]
+verify_jwt = false
+
+[functions.portal-stripe]
+verify_jwt = false
+
+[functions.iron-knowledge]
+verify_jwt = false
+
+[functions.iron-tts]
+verify_jwt = false
+
+[functions.qb-ai-scenarios]
+verify_jwt = false
+
+[functions.qb-parse-request]
+verify_jwt = false
+
+[functions.rental-ops]
+verify_jwt = false
+
+[functions.document-onedrive-mirror]
+verify_jwt = false
+
+[functions.document-plays-run]
+verify_jwt = false
+
+[functions.document-twin]
+verify_jwt = false

@@ -203,7 +203,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
             Edit Contact
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link to={`/quote?crm_contact_id=${contactId}`}>
+            <Link to={`/quote-v2?crm_contact_id=${contactId}`}>
               <FileText className="mr-2 h-4 w-4" />
               New Quote
             </Link>
@@ -350,7 +350,7 @@ export function QrmContactDetailPage({ userId, userRole }: QrmContactDetailPageP
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{deal.amount ? `$${deal.amount.toLocaleString()}` : "Amount TBD"}</span>
                         <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
-                          <Link to={`/quote?crm_contact_id=${contactId}&crm_deal_id=${deal.id}`}>
+                          <Link to={`/quote-v2?crm_contact_id=${contactId}&crm_deal_id=${deal.id}`}>
                             Quote
                           </Link>
                         </Button>

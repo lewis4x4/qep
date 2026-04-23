@@ -92,7 +92,7 @@ export function buildDealCoachBoard(input: {
             input.quote.requiresRequote ? "Quote is flagged for requote." : "No requote flag present.",
           ],
           actionLabel: "Open quote flow",
-          href: `/quote?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`,
+          href: `/quote-v2?crm_deal_id=${deal.id}${deal.primaryContactId ? `&crm_contact_id=${deal.primaryContactId}` : ""}`,
         }
       : null,
   );

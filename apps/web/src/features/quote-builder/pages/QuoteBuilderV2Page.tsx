@@ -60,6 +60,7 @@ import {
   saveQuoteSignature,
   savePortalRevisionDraft,
   searchCatalog,
+  submitQuoteForApproval,
   submitPortalRevision,
   type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
@@ -230,6 +231,7 @@ export function QuoteBuilderV2Page() {
     customerEmail: "",
     customerSignals: null,
     customerWarmth: null,
+    quoteStatus: "draft",
   });
   const [aiPrompt, setAiPrompt] = useState("");
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
@@ -476,8 +478,8 @@ export function QuoteBuilderV2Page() {
   // Slice 20a: when QRM deep-links into Quote Builder with ?contact_id= or
   // ?deal_id=, hydrate the customer from CRM so the Customer step renders
   // a real name/company + intel panel on arrival instead of an empty form.
-  // Intentionally one-shot: only fires if no customer is already set (avoids
-  // clobbering what the AI/Voice intake or rep typed).
+  // Only runs while there is no saved quote to hydrate and no customer is
+  // already present, which avoids clobbering rep-entered edits.
   useEffect(() => {
     const hasCustomer = Boolean(
       draft.customerName?.trim() || draft.customerCompany?.trim(),
@@ -591,10 +593,31 @@ export function QuoteBuilderV2Page() {
         ?? (result as { deal_id?: string }).deal_id
         ?? draft.dealId
         ?? undefined;
-      if (!resolvedDealId) return;
-      setDraft((current) => current.dealId === resolvedDealId
-        ? current
-        : { ...current, dealId: resolvedDealId });
+      const nextStatus =
+        (result.quote as { status?: string } | undefined)?.status
+        ?? "draft";
+      setDraft((current) => ({
+        ...current,
+        dealId: resolvedDealId ?? current.dealId,
+        quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
+      }));
+    },
+  });
+
+  const submitApprovalMutation = useMutation({
+    mutationFn: async () => {
+      const quotePackageId = activeQuotePackageId;
+      if (!quotePackageId) {
+        throw new Error("Save the quote before submitting it for approval.");
+      }
+      return submitQuoteForApproval(quotePackageId);
+    },
+    onSuccess: () => {
+      setDraft((current) => ({ ...current, quoteStatus: "pending_approval" }));
+      queryClient.invalidateQueries({ queryKey: ["quote-builder", "list"] });
+      if (draft.dealId) {
+        queryClient.invalidateQueries({ queryKey: ["quote-builder", "saved-quote", packageId, draft.dealId] });
+      }
     },
   });
 
@@ -646,12 +669,15 @@ export function QuoteBuilderV2Page() {
     }
   }
 
-  const savedQuotePackageId = saveMutation.data?.quote?.id ?? saveMutation.data?.id ?? null;
+  const activeQuotePackageId =
+    saveMutation.data?.quote?.id
+    ?? saveMutation.data?.id
+    ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null);
 
   const portalRevisionQuery = useQuery({
     queryKey: ["quote-builder", "portal-revision", draft.dealId],
     queryFn: () => getPortalRevision(draft.dealId!),
-    enabled: Boolean(savedQuotePackageId && draft.dealId),
+    enabled: Boolean(activeQuotePackageId && draft.dealId),
     staleTime: 5_000,
   });
 
@@ -667,12 +693,29 @@ export function QuoteBuilderV2Page() {
     setRevisionSummary(currentVersion?.revision_summary ?? "");
   }, [portalRevisionQuery.data]);
 
+  const quoteStatus = draft.quoteStatus ?? "draft";
+  const approvalPending = quoteStatus === "pending_approval";
+  const approvalGranted = quoteStatus === "approved" || quoteStatus === "sent" || quoteStatus === "accepted";
+  const canSubmitForApproval =
+    approvalState.requiresManagerApproval
+    && Boolean(activeQuotePackageId)
+    && quoteStatus !== "sent"
+    && quoteStatus !== "accepted"
+    && !approvalPending
+    && !approvalGranted;
+  const canShowSendSection =
+    Boolean(activeQuotePackageId)
+    && packetReadiness.send.ready
+    && quoteStatus !== "sent"
+    && quoteStatus !== "accepted";
+  const showQuoteActions = Boolean(activeQuotePackageId);
+
   const voiceMutation = useMutation({
     mutationFn: async (payload: { blob: Blob; fileName: string }) => {
       const voiceResult = await submitVoiceToQrm({
         audioBlob: payload.blob,
         fileName: payload.fileName,
-        dealId: dealId || undefined,
+        dealId: draft.dealId || undefined,
       });
       if (!("transcript" in voiceResult) || !voiceResult.transcript) {
         throw new Error("Voice note did not return a usable transcript.");
@@ -710,7 +753,7 @@ export function QuoteBuilderV2Page() {
 
   const signMutation = useMutation({
     mutationFn: async () => {
-      const quotePackageId = saveMutation.data?.quote?.id ?? saveMutation.data?.id;
+      const quotePackageId = activeQuotePackageId;
       if (!quotePackageId) throw new Error("Save the quote before capturing signature.");
       const dataUrl = sigRef.current?.toDataUrl();
       const base64 = dataUrl ? signatureDataUrlToRawBase64(dataUrl) : "";
@@ -726,10 +769,10 @@ export function QuoteBuilderV2Page() {
 
   const revisionDraftMutation = useMutation({
     mutationFn: async () => {
-      if (!draft.dealId || !savedQuotePackageId) throw new Error("Save the quote before drafting a portal revision.");
+      if (!draft.dealId || !activeQuotePackageId) throw new Error("Save the quote before drafting a portal revision.");
       return savePortalRevisionDraft({
         deal_id: draft.dealId,
-        quote_package_id: savedQuotePackageId,
+        quote_package_id: activeQuotePackageId,
         quote_data: buildPortalRevisionQuoteData(
           draft,
           {
@@ -941,6 +984,26 @@ export function QuoteBuilderV2Page() {
             </div>
           </div>
         </Card>
+
+        {existingQuoteQuery.isError && (
+          <Card className="border-red-500/30 bg-red-500/5 p-4">
+            <p className="text-sm text-red-300">
+              {existingQuoteQuery.error instanceof Error
+                ? existingQuoteQuery.error.message
+                : "Unable to load the saved quote."}
+            </p>
+          </Card>
+        )}
+
+        {!existingQuoteQuery.isError && existingQuote && (
+          <Card className="border-blue-500/20 bg-blue-500/5 p-4">
+            <p className="text-sm text-blue-300">
+              Editing saved quote{typeof existingQuote.quote_number === "string" && existingQuote.quote_number
+                ? ` ${existingQuote.quote_number}`
+                : ""}. Update any step below, then save to keep working in the same quote.
+            </p>
+          </Card>
+        )}
 
       <div className="flex gap-2">
         {([
@@ -1225,7 +1288,7 @@ export function QuoteBuilderV2Page() {
               <DealCoachSidebar
                 draft={draft}
                 computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
-                quotePackageId={savedQuotePackageId}
+                quotePackageId={activeQuotePackageId}
               />
             )}
           </div>
@@ -1592,10 +1655,22 @@ export function QuoteBuilderV2Page() {
               <div className="rounded-lg border border-border/70 bg-background/60 p-3">
                 <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Approval</p>
                 <p className="mt-1 text-sm font-medium text-foreground">
-                  {approvalState.requiresManagerApproval ? "Manager approval required" : "Ready to proceed"}
+                  {approvalPending
+                    ? "Submitted to sales manager"
+                    : approvalGranted && approvalState.requiresManagerApproval
+                      ? "Manager approved"
+                      : approvalState.requiresManagerApproval
+                        ? "Manager approval required"
+                        : "Ready to proceed"}
                 </p>
-                {approvalState.reason && (
-                  <p className="mt-1 text-xs text-muted-foreground">{approvalState.reason}</p>
+                {(approvalState.reason || approvalPending || approvalGranted) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {approvalPending
+                      ? "The quote is waiting in Approval Center for manager review."
+                      : approvalGranted && approvalState.requiresManagerApproval
+                        ? "Approval is complete. You can now send the quote."
+                        : approvalState.reason}
+                  </p>
                 )}
               </div>
               <div className="rounded-lg border border-border/70 bg-background/60 p-3">
@@ -1626,6 +1701,16 @@ export function QuoteBuilderV2Page() {
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("financing")}><ArrowLeft className="mr-1 h-4 w-4" /> Back</Button>
             <div className="flex gap-2">
+              {canSubmitForApproval && (
+                <Button
+                  variant="outline"
+                  onClick={() => { void submitApprovalMutation.mutateAsync(); }}
+                  disabled={submitApprovalMutation.isPending || !packetReadiness.draft.ready}
+                >
+                  {submitApprovalMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileText className="mr-1 h-4 w-4" />}
+                  {submitApprovalMutation.isPending ? "Submitting..." : "Submit for Approval"}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => downloadPDF({
@@ -1683,7 +1768,7 @@ export function QuoteBuilderV2Page() {
               </Button>
               <Button
                 onClick={() => { void handleSaveClick(); }}
-                disabled={saveMutation.isPending || !packetReadiness.draft.ready}
+                disabled={saveMutation.isPending || submitApprovalMutation.isPending || !packetReadiness.draft.ready}
               >
                 <Save className="mr-1 h-4 w-4" />
                 {saveMutation.isPending ? "Saving..." : "Save Quote"}
@@ -1709,186 +1794,220 @@ export function QuoteBuilderV2Page() {
           )}
 
           {saveMutation.isSuccess && (
-            <>
-              <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
-                <p className="text-sm text-emerald-400">Quote saved successfully.</p>
-              </Card>
-              {(() => {
-                const savedId = saveMutation.data?.quote?.id ?? saveMutation.data?.id;
-                const canPublish = ["manager", "owner"].includes(userRoleQuery.data ?? "");
-                const portalRevision = portalRevisionQuery.data;
-                const compareSnapshot = portalRevision?.draft?.compareSnapshot;
-                const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
-                return savedId ? (
-                  <>
-                    <IncentiveStack quotePackageId={savedId} />
-                    {packetReadiness.send.ready ? (
-                      <SendQuoteSection
-                        quotePackageId={savedId}
-                        contactName={draft.customerName || draft.customerCompany || "customer"}
-                      />
-                    ) : (
-                      <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-                        <p className="text-sm font-medium text-amber-400">Quote saved, but not ready to send</p>
-                        <p className="mt-1 text-xs text-amber-300">
-                          Missing: {packetReadiness.send.missing.join(", ")}
-                        </p>
-                      </Card>
-                    )}
-                    {portalRevision?.review && (
-                      <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Portal Revision</p>
-                            <p className="text-xs text-muted-foreground">
-                              Publish a revised customer proposal from this quote workflow with manager approval.
-                            </p>
-                          </div>
-                          <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
-                            {publicationStatus.replace(/_/g, " ")}
-                          </span>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current portal proposal</p>
-                            <p className="mt-2 text-sm font-semibold text-foreground">
-                              {portalRevision.review.current_version?.version_number
-                                ? `Version ${portalRevision.review.current_version.version_number}`
-                                : "Legacy live proposal"}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Last dealer summary: {portalRevision.review.current_version?.revision_summary ?? "None recorded"}
-                            </p>
-                          </div>
-                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Latest customer request</p>
-                            <p className="mt-2 text-sm text-foreground">
-                              {portalRevision.publishState?.latestCustomerRequestSnapshot ?? "No requested changes are recorded on the active portal proposal."}
-                            </p>
-                          </div>
-                        </div>
-
-                        <label className="block space-y-1 text-sm">
-                          <span className="text-muted-foreground">Dealer response message</span>
-                          <textarea
-                            value={dealerMessage}
-                            onChange={(event) => setDealerMessage(event.target.value)}
-                            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                            placeholder="Explain what changed and what the customer should notice in the revised proposal."
-                          />
-                        </label>
-
-                        <label className="block space-y-1 text-sm">
-                          <span className="text-muted-foreground">Revision summary</span>
-                          <textarea
-                            value={revisionSummary}
-                            onChange={(event) => setRevisionSummary(event.target.value)}
-                            className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                            placeholder="Summarize the revision in one concise line."
-                          />
-                        </label>
-
-                        {compareSnapshot?.hasChanges && (
-                          <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Compare preview</p>
-                            <div className="mt-2 space-y-2 text-sm text-foreground">
-                              {(compareSnapshot.priceChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                              {(compareSnapshot.equipmentChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                              {(compareSnapshot.financingChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                              {(compareSnapshot.termsChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                              {compareSnapshot.dealerMessageChange ? <p>{compareSnapshot.dealerMessageChange}</p> : null}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => revisionDraftMutation.mutate()}
-                            disabled={revisionDraftMutation.isPending || !dealerMessage.trim() || !revisionSummary.trim()}
-                          >
-                            {revisionDraftMutation.isPending ? "Saving..." : "Save draft"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => revisionSubmitMutation.mutate()}
-                            disabled={revisionSubmitMutation.isPending || publicationStatus === "awaiting_approval"}
-                          >
-                            {revisionSubmitMutation.isPending ? "Submitting..." : "Submit for approval"}
-                          </Button>
-                          {canPublish && publicationStatus === "awaiting_approval" && (
-                            <Button
-                              variant="outline"
-                              onClick={() => revisionReturnMutation.mutate()}
-                              disabled={revisionReturnMutation.isPending}
-                            >
-                              {revisionReturnMutation.isPending ? "Returning..." : "Return to draft"}
-                            </Button>
-                          )}
-                          {canPublish && (
-                            <Button
-                              onClick={() => revisionPublishMutation.mutate()}
-                              disabled={revisionPublishMutation.isPending || publicationStatus === "none"}
-                            >
-                              {revisionPublishMutation.isPending ? "Publishing..." : "Approve & publish"}
-                            </Button>
-                          )}
-                        </div>
-
-                        {(revisionDraftMutation.error || revisionSubmitMutation.error || revisionReturnMutation.error || revisionPublishMutation.error) && (
-                          <p className="text-xs text-red-400">
-                            {[
-                              revisionDraftMutation.error,
-                              revisionSubmitMutation.error,
-                              revisionReturnMutation.error,
-                              revisionPublishMutation.error,
-                            ].find(Boolean) instanceof Error
-                              ? ([
-                                revisionDraftMutation.error,
-                                revisionSubmitMutation.error,
-                                revisionReturnMutation.error,
-                                revisionPublishMutation.error,
-                              ].find(Boolean) as Error).message
-                              : "Portal revision action failed"}
-                          </p>
-                        )}
-                      </Card>
-                    )}
-                    <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <PenTool className="h-4 w-4 text-qep-orange" />
-                        <p className="text-sm font-medium text-foreground">E-signature</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Capture signer name, IP, timestamp, and signature image for the quote package.
-                      </p>
-                      <Input
-                        value={signerName}
-                        onChange={(event) => setSignerName(event.target.value)}
-                        placeholder="Signer full name"
-                      />
-                      <PortalSignaturePad ref={sigRef} />
-                      <Button
-                        onClick={() => signMutation.mutate()}
-                        disabled={signMutation.isPending || !signerName.trim()}
-                      >
-                        {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
-                      </Button>
-                      {signMutation.isSuccess && (
-                        <p className="text-xs text-emerald-400">Signature captured successfully.</p>
-                      )}
-                      {signMutation.isError && (
-                        <p className="text-xs text-red-400">
-                          {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
-                        </p>
-                      )}
-                    </Card>
-                  </>
-                ) : null;
-              })()}
-            </>
+            <Card className="border-emerald-500/30 bg-emerald-500/5 p-4">
+              <p className="text-sm text-emerald-400">Quote saved successfully.</p>
+            </Card>
           )}
+
+          {submitApprovalMutation.isError && (
+            <Card className="border-red-500/30 bg-red-500/5 p-4">
+              <p className="text-sm text-red-400">
+                {submitApprovalMutation.error instanceof Error
+                  ? submitApprovalMutation.error.message
+                  : "Failed to submit the quote for approval."}
+              </p>
+            </Card>
+          )}
+
+          {showQuoteActions && (() => {
+            const savedId = activeQuotePackageId;
+            const canPublish = ["manager", "owner"].includes(userRoleQuery.data ?? "");
+            const portalRevision = portalRevisionQuery.data;
+            const compareSnapshot = portalRevision?.draft?.compareSnapshot;
+            const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
+            return savedId ? (
+              <>
+                <IncentiveStack quotePackageId={savedId} />
+
+                {canShowSendSection ? (
+                  <SendQuoteSection
+                    quotePackageId={savedId}
+                    contactName={draft.customerName || draft.customerCompany || "customer"}
+                    onSent={() => {
+                      setDraft((current) => ({ ...current, quoteStatus: "sent" }));
+                    }}
+                  />
+                ) : quoteStatus === "sent" || quoteStatus === "accepted" ? (
+                  <Card className="border-emerald-500/20 bg-emerald-500/5 p-4">
+                    <p className="text-sm font-medium text-emerald-400">
+                      {quoteStatus === "accepted" ? "Quote accepted" : "Quote already sent"}
+                    </p>
+                  </Card>
+                ) : approvalPending ? (
+                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+                    <p className="text-sm font-medium text-amber-400">Approval requested</p>
+                    <p className="mt-1 text-xs text-amber-300">
+                      This quote is waiting in Approval Center for sales manager review.
+                    </p>
+                  </Card>
+                ) : approvalState.requiresManagerApproval && !approvalGranted ? (
+                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+                    <p className="text-sm font-medium text-amber-400">Manager approval required before send</p>
+                    <p className="mt-1 text-xs text-amber-300">
+                      Save the quote, then use Submit for Approval to route it to the sales manager.
+                    </p>
+                  </Card>
+                ) : (
+                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+                    <p className="text-sm font-medium text-amber-400">Quote saved, but not ready to send</p>
+                    <p className="mt-1 text-xs text-amber-300">
+                      Missing: {packetReadiness.send.missing.join(", ")}
+                    </p>
+                  </Card>
+                )}
+
+                {portalRevision?.review && (
+                  <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Portal Revision</p>
+                        <p className="text-xs text-muted-foreground">
+                          Publish a revised customer proposal from this quote workflow with manager approval.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
+                        {publicationStatus.replace(/_/g, " ")}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current portal proposal</p>
+                        <p className="mt-2 text-sm font-semibold text-foreground">
+                          {portalRevision.review.current_version?.version_number
+                            ? `Version ${portalRevision.review.current_version.version_number}`
+                            : "Legacy live proposal"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Last dealer summary: {portalRevision.review.current_version?.revision_summary ?? "None recorded"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Latest customer request</p>
+                        <p className="mt-2 text-sm text-foreground">
+                          {portalRevision.publishState?.latestCustomerRequestSnapshot ?? "No requested changes are recorded on the active portal proposal."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-muted-foreground">Dealer response message</span>
+                      <textarea
+                        value={dealerMessage}
+                        onChange={(event) => setDealerMessage(event.target.value)}
+                        className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                        placeholder="Explain what changed and what the customer should notice in the revised proposal."
+                      />
+                    </label>
+
+                    <label className="block space-y-1 text-sm">
+                      <span className="text-muted-foreground">Revision summary</span>
+                      <textarea
+                        value={revisionSummary}
+                        onChange={(event) => setRevisionSummary(event.target.value)}
+                        className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                        placeholder="Summarize the revision in one concise line."
+                      />
+                    </label>
+
+                    {compareSnapshot?.hasChanges && (
+                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Compare preview</p>
+                        <div className="mt-2 space-y-2 text-sm text-foreground">
+                          {(compareSnapshot.priceChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                          {(compareSnapshot.equipmentChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                          {(compareSnapshot.financingChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                          {(compareSnapshot.termsChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
+                          {compareSnapshot.dealerMessageChange ? <p>{compareSnapshot.dealerMessageChange}</p> : null}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => revisionDraftMutation.mutate()}
+                        disabled={revisionDraftMutation.isPending || !dealerMessage.trim() || !revisionSummary.trim()}
+                      >
+                        {revisionDraftMutation.isPending ? "Saving..." : "Save draft"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => revisionSubmitMutation.mutate()}
+                        disabled={revisionSubmitMutation.isPending || publicationStatus === "awaiting_approval"}
+                      >
+                        {revisionSubmitMutation.isPending ? "Submitting..." : "Submit for approval"}
+                      </Button>
+                      {canPublish && publicationStatus === "awaiting_approval" && (
+                        <Button
+                          variant="outline"
+                          onClick={() => revisionReturnMutation.mutate()}
+                          disabled={revisionReturnMutation.isPending}
+                        >
+                          {revisionReturnMutation.isPending ? "Returning..." : "Return to draft"}
+                        </Button>
+                      )}
+                      {canPublish && (
+                        <Button
+                          onClick={() => revisionPublishMutation.mutate()}
+                          disabled={revisionPublishMutation.isPending || publicationStatus === "none"}
+                        >
+                          {revisionPublishMutation.isPending ? "Publishing..." : "Approve & publish"}
+                        </Button>
+                      )}
+                    </div>
+
+                    {(revisionDraftMutation.error || revisionSubmitMutation.error || revisionReturnMutation.error || revisionPublishMutation.error) && (
+                      <p className="text-xs text-red-400">
+                        {[
+                          revisionDraftMutation.error,
+                          revisionSubmitMutation.error,
+                          revisionReturnMutation.error,
+                          revisionPublishMutation.error,
+                        ].find(Boolean) instanceof Error
+                          ? ([
+                            revisionDraftMutation.error,
+                            revisionSubmitMutation.error,
+                            revisionReturnMutation.error,
+                            revisionPublishMutation.error,
+                          ].find(Boolean) as Error).message
+                          : "Portal revision action failed"}
+                      </p>
+                    )}
+                  </Card>
+                )}
+                <Card className="border-border/60 bg-card/60 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PenTool className="h-4 w-4 text-qep-orange" />
+                    <p className="text-sm font-medium text-foreground">E-signature</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Capture signer name, IP, timestamp, and signature image for the quote package.
+                  </p>
+                  <Input
+                    value={signerName}
+                    onChange={(event) => setSignerName(event.target.value)}
+                    placeholder="Signer full name"
+                  />
+                  <PortalSignaturePad ref={sigRef} />
+                  <Button
+                    onClick={() => signMutation.mutate()}
+                    disabled={signMutation.isPending || !signerName.trim()}
+                  >
+                    {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
+                  </Button>
+                  {signMutation.isSuccess && (
+                    <p className="text-xs text-emerald-400">Signature captured successfully.</p>
+                  )}
+                  {signMutation.isError && (
+                    <p className="text-xs text-red-400">
+                      {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
+                    </p>
+                  )}
+                </Card>
+              </>
+            ) : null;
+          })()}
 
           {saveMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">
@@ -1906,7 +2025,7 @@ export function QuoteBuilderV2Page() {
             <DealCoachSidebar
               draft={draft}
               computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
-              quotePackageId={savedQuotePackageId}
+              quotePackageId={activeQuotePackageId}
             />
           )}
         </div>
@@ -1917,7 +2036,7 @@ export function QuoteBuilderV2Page() {
         open={dealAssistantOpen}
         onClose={() => setDealAssistantOpen(false)}
         onScenarioSelect={handleScenarioSelection}
-        dealId={dealId || undefined}
+        dealId={draft.dealId || undefined}
       />
     </div>
   );

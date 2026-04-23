@@ -117,6 +117,46 @@ describe("computeQuoteWorkspace", () => {
     expect(result.packetReadiness.send.missing).toContain("manager approval (margin below 10%)");
   });
 
+  test("approved low-margin quotes become send-ready", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      quoteStatus: "approved",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
+      attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
+      commercialDiscountType: "percent",
+      commercialDiscountValue: 10,
+      tradeAllowance: 12_500,
+      taxTotal: 4_500,
+      cashDown: 20_000,
+    }));
+
+    expect(result.approvalState.requiresManagerApproval).toBe(true);
+    expect(result.packetReadiness.send.ready).toBe(true);
+    expect(result.packetReadiness.canSend).toBe(true);
+    expect(result.packetReadiness.send.missing).not.toContain("manager approval (margin below 10%)");
+  });
+
+  test("pending approval keeps the send gate closed with explicit status", () => {
+    const result = computeQuoteWorkspace(makeDraft({
+      branchSlug: "lake-city",
+      customerName: "Anderson",
+      customerEmail: "buyer@example.com",
+      quoteStatus: "pending_approval",
+      equipment: [{ kind: "equipment", title: "Bobcat E85", quantity: 1, unitPrice: 105_000 }],
+      attachments: [{ kind: "attachment", title: "Mulcher", quantity: 1, unitPrice: 10_000 }],
+      commercialDiscountType: "percent",
+      commercialDiscountValue: 10,
+      tradeAllowance: 12_500,
+      taxTotal: 4_500,
+      cashDown: 20_000,
+    }));
+
+    expect(result.packetReadiness.canSend).toBe(false);
+    expect(result.packetReadiness.send.missing).toContain("manager approval pending");
+  });
+
   test("save readiness no longer requires branch or linked deal", () => {
     const result = computeQuoteWorkspace(makeDraft({
       customerName: "Walk-in prospect",

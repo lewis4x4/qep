@@ -22,13 +22,14 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
-  DollarSign,
+  FileText,
   GitCompare,
   Loader2,
   MonitorPlay,
   Scale,
   ShieldCheck,
   Wallet,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -37,6 +38,7 @@ import {
   useVerifyDeposit,
   useApproveTrade,
   useApproveDemo,
+  useDecideQuoteApproval,
 } from "../hooks/useApprovals";
 import { normalizeApprovals, type ApprovalItem, type ApprovalType } from "../lib/approvalTypes";
 
@@ -50,6 +52,7 @@ const PIVOTS = [
   { key: "deposit" as const, label: "Deposits" },
   { key: "trade" as const, label: "Trades" },
   { key: "demo" as const, label: "Demos" },
+  { key: "quote" as const, label: "Quotes" },
 ];
 
 const TYPE_CONFIG: Record<ApprovalType, { icon: LucideIcon; color: string; bg: string; border: string; label: string; actionLabel: string }> = {
@@ -57,6 +60,7 @@ const TYPE_CONFIG: Record<ApprovalType, { icon: LucideIcon; color: string; bg: s
   deposit: { icon: Wallet, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", label: "Deposit", actionLabel: "Verify Deposit" },
   trade: { icon: GitCompare, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", label: "Trade", actionLabel: "Approve Trade" },
   demo: { icon: MonitorPlay, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", label: "Demo", actionLabel: "Approve Demo" },
+  quote: { icon: FileText, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "Quote", actionLabel: "Approve Quote" },
 };
 
 import { formatCurrency } from "@/lib/format";
@@ -95,15 +99,18 @@ const cardVariants = {
 function ApprovalCard({
   item,
   onApprove,
+  onReject,
   isApproving,
 }: {
   item: ApprovalItem;
   onApprove: () => void;
+  onReject?: () => void;
   isApproving: boolean;
 }) {
   const config = TYPE_CONFIG[item.type];
   const Icon = config.icon;
   const valueLabel = item.amount > 0 ? formatCurrency(item.amount) : null;
+  const viewHref = item.viewHref ?? (item.dealId ? `/qrm/deals/${item.dealId}` : null);
 
   return (
     <motion.div
@@ -136,7 +143,7 @@ function ApprovalCard({
 
           <div className="mt-2">
             <Link
-              to={item.dealId ? `/qrm/deals/${item.dealId}` : "#"}
+              to={viewHref ?? "#"}
               className="text-sm font-medium text-white hover:text-qep-orange transition-colors"
             >
               {item.dealName}
@@ -156,13 +163,26 @@ function ApprovalCard({
 
         {/* Right: action buttons */}
         <div className="flex items-center gap-2 shrink-0 sm:ml-4">
-          {item.dealId && (
+          {viewHref && (
             <Link
-              to={`/qrm/deals/${item.dealId}`}
+              to={viewHref}
               className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-white transition-colors min-h-[44px] px-2"
             >
               View <ArrowRight className="h-3 w-3" />
             </Link>
+          )}
+          {onReject && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onReject}
+              disabled={isApproving}
+              aria-label={`Reject ${config.label.toLowerCase()} for ${item.dealName}`}
+              className="min-h-[44px] px-4 text-xs font-semibold text-rose-300 hover:text-rose-200"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Reject
+            </Button>
           )}
           <Button
             size="sm"
@@ -203,13 +223,14 @@ export function ApprovalCenterPage() {
   const verifyDeposit = useVerifyDeposit();
   const approveTrade = useApproveTrade();
   const approveDemo = useApproveDemo();
+  const decideQuote = useDecideQuoteApproval();
 
   // Pending mutation IDs for optimistic fade-out
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   const items = useMemo(() => {
     if (!data) return [];
-    return normalizeApprovals(data.margin, data.deposits, data.trades, data.demos);
+    return normalizeApprovals(data.margin, data.deposits, data.trades, data.demos, data.quotes);
   }, [data]);
 
   const filtered = useMemo(() => {
@@ -223,9 +244,10 @@ export function ApprovalCenterPage() {
     deposit: items.filter((i) => i.type === "deposit").length,
     trade: items.filter((i) => i.type === "trade").length,
     demo: items.filter((i) => i.type === "demo").length,
+    quote: items.filter((i) => i.type === "quote").length,
   }), [items]);
 
-  function handleApprove(item: ApprovalItem) {
+  function handleDecision(item: ApprovalItem, decision: "approved" | "rejected" = "approved") {
     setPendingIds((prev) => new Set(prev).add(item.id));
 
     const onError = () => {
@@ -249,6 +271,13 @@ export function ApprovalCenterPage() {
       case "demo":
         approveDemo.mutate(item.id, { onError });
         break;
+      case "quote": {
+        decideQuote.mutate({
+          approvalId: item.id,
+          decision,
+        }, { onError });
+        break;
+      }
     }
   }
 
@@ -305,7 +334,7 @@ export function ApprovalCenterPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <MetricCard
           label="Total Pending"
           value={counts.total}
@@ -316,6 +345,7 @@ export function ApprovalCenterPage() {
         <MetricCard label="Deposits" value={counts.deposit} icon={Wallet} tone="border-amber-500/20 bg-amber-500/[0.04] text-amber-400" />
         <MetricCard label="Trades" value={counts.trade} icon={GitCompare} tone="border-violet-500/20 bg-violet-500/[0.04] text-violet-400" />
         <MetricCard label="Demos" value={counts.demo} icon={MonitorPlay} tone="border-blue-500/20 bg-blue-500/[0.04] text-blue-400" />
+        <MetricCard label="Quotes" value={counts.quote} icon={FileText} tone="border-emerald-500/20 bg-emerald-500/[0.04] text-emerald-400" />
       </div>
 
       {/* Filter toggle */}
@@ -338,7 +368,8 @@ export function ApprovalCenterPage() {
               <ApprovalCard
                 key={`${item.type}-${item.id}`}
                 item={item}
-                onApprove={() => handleApprove(item)}
+                onApprove={() => handleDecision(item, "approved")}
+                onReject={item.type === "quote" ? () => handleDecision(item, "rejected") : undefined}
                 isApproving={isApprovingItem(item.id)}
               />
             ))}

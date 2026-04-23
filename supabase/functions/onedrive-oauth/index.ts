@@ -7,6 +7,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptOneDriveToken } from "../_shared/integration-crypto.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireAuthenticatedUser } from "../_shared/service-auth.ts";
 const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
@@ -46,21 +47,11 @@ Deno.serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const auth = await requireAuthenticatedUser(authHeader, origin);
+    if (!auth.ok) {
       return respondError("Not authenticated", mode, origin, 401);
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    const user = authData.user;
-    if (authError || !user) {
-      return respondError("Not authenticated", mode, origin, 401);
-    }
+    const user = { id: auth.userId };
 
     const tokenRes = await fetch(TOKEN_URL, {
       method: "POST",

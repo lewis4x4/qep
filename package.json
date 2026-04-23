@@ -22,7 +22,6 @@
     "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
     "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
-    "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "kb:eval": "node ./scripts/kb-eval/run-eval.mjs",
     "kb:eval:report": "node ./scripts/kb-eval/eval-report.mjs",
     "kb:workspace-isolation": "node ./scripts/kb-eval/workspace-isolation.mjs",

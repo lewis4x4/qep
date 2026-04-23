@@ -104,7 +104,7 @@ export function PipelineDealTableRow({
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
             <Link
-              to={`/quote?crm_deal_id=${effectiveDeal.id}${effectiveDeal.primaryContactId ? `&crm_contact_id=${effectiveDeal.primaryContactId}` : ""}`}
+              to={`/quote-v2?crm_deal_id=${effectiveDeal.id}${effectiveDeal.primaryContactId ? `&crm_contact_id=${effectiveDeal.primaryContactId}` : ""}`}
             >
               <FileText className="mr-1 h-4 w-4" />
               New Quote
