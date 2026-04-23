@@ -121,6 +121,33 @@ export type TradeEstimatePayload =
       message: string;
     };
 
+export interface ConciergeMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function sendConciergeChat(
+  token: string,
+  message: string,
+  history: ConciergeMessage[],
+): Promise<{ reply: string }> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-chat?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export async function fetchPublicTradeEstimate(
   token: string,
   input: TradeEstimateRequest,

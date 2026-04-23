@@ -19,6 +19,7 @@ import {
   scenarioKey,
   type ComputedPayment,
 } from "../lib/financing-math";
+import { ConciergeChat } from "../components/ConciergeChat";
 
 function formatCurrency(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -317,6 +318,12 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
         <RepContact branch={branch} />
         <Footer branch={branch} refBadge={refBadge} />
       </div>
+      <ConciergeChat
+        token={token}
+        repName={branch?.name ?? null}
+        repEmail={branch?.email ?? null}
+        repPhone={branch?.phone ?? null}
+      />
     </div>
   );
 }

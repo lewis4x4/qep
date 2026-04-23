@@ -665,6 +665,139 @@ async function handlePublicTradeEstimate(
   }, origin);
 }
 
+// Public concierge chat. Token-gated like the rest of the public surface.
+// Stateless server-side: the client sends the transcript back on each
+// turn so we don't pay for session storage + don't retain customer text
+// past the response. System prompt is grounded in the saved quote
+// (primary machine, financing context, branch contact) so the model can
+// only answer "about this deal" — it refuses when asked to compare to
+// competitors, quote pricing outside the proposal, or commit to changes
+// the rep hasn't authorized.
+async function handlePublicChatTurn(
+  req: Request,
+  url: URL,
+  origin: string | null,
+): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+  if (!OPENAI_API_KEY) {
+    return safeJsonError("Chat is temporarily offline. Message your rep directly.", 503, origin);
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
+  if (!message) return safeJsonError("message required", 400, origin);
+  const historyRaw = Array.isArray(body.history) ? body.history : [];
+  // Cap transcript so a malicious caller can't blow up the OpenAI
+  // context via a megabyte-sized history array.
+  const history = historyRaw.slice(-20).flatMap((row: unknown) => {
+    if (!row || typeof row !== "object") return [];
+    const r = row as { role?: unknown; content?: unknown };
+    if (typeof r.role !== "string" || typeof r.content !== "string") return [];
+    if (!["user", "assistant"].includes(r.role)) return [];
+    const content = r.content.slice(0, 1000);
+    if (!content.trim()) return [];
+    return [{ role: r.role as "user" | "assistant", content }];
+  });
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, equipment, customer_name, customer_company, customer_total, amount_financed, financing_scenarios, branch_slug, ai_recommendation")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const branchSlug = typeof quote.branch_slug === "string" ? quote.branch_slug : null;
+  let branch: Record<string, unknown> | null = null;
+  if (branchSlug) {
+    const { data } = await admin
+      .from("branches")
+      .select("name, address_line1, city, state, phone, email, website")
+      .eq("slug", branchSlug)
+      .maybeSingle();
+    branch = data ?? null;
+  }
+
+  // Compact quote context — enough for the model to answer spec /
+  // logistics questions, small enough that most of the prompt budget
+  // goes to the actual conversation.
+  const equipment = Array.isArray(quote.equipment) ? quote.equipment : [];
+  const primary = equipment[0] as Record<string, unknown> | undefined;
+  const machineLabel = primary
+    ? [primary.make, primary.model, primary.year ? `(${primary.year})` : null].filter(Boolean).join(" ")
+    : "the machine on this proposal";
+  const recommendationReasoning = quote.ai_recommendation && typeof quote.ai_recommendation === "object"
+    ? (quote.ai_recommendation as Record<string, unknown>).reasoning
+    : null;
+  const scenarios = Array.isArray(quote.financing_scenarios) ? quote.financing_scenarios : [];
+  const scenarioSummary = scenarios.slice(0, 3).map((s: Record<string, unknown>) => {
+    const label = typeof s.label === "string" ? s.label : (typeof s.type === "string" ? s.type : "option");
+    const monthly = typeof s.monthly_payment === "number" ? `$${Math.round(s.monthly_payment)}/mo` : "—";
+    const term = typeof s.term_months === "number" ? `${s.term_months} mo` : "—";
+    return `${label}: ${monthly}, ${term}`;
+  }).join("; ");
+
+  const systemPrompt = `You are the concierge for Quality Equipment & Parts on a customer-facing proposal page. You help the customer understand the equipment and logistics on THIS quote only.
+
+Quote context:
+- Customer: ${typeof quote.customer_name === "string" && quote.customer_name ? quote.customer_name : "(unnamed)"}
+${quote.customer_company ? `- Company: ${quote.customer_company}` : ""}
+- Primary equipment: ${machineLabel}
+- Customer total: ${typeof quote.customer_total === "number" ? `$${Math.round(quote.customer_total).toLocaleString()}` : "—"}
+${scenarioSummary ? `- Financing options: ${scenarioSummary}` : ""}
+${recommendationReasoning ? `- Why we recommended this machine: ${String(recommendationReasoning).slice(0, 500)}` : ""}
+${branch ? `- Dealership: ${branch.name ?? "QEP"}${branch.phone ? `, ${branch.phone}` : ""}${branch.email ? `, ${branch.email}` : ""}` : ""}
+
+Rules:
+- Answer spec questions (dimensions, weight, typical capacities) honestly; when you don't know, say "let me get your rep to confirm" and suggest they message the rep.
+- Do NOT change the price, discount, or financing terms. Those are the rep's call.
+- Do NOT compare this quote to a competitor dealership's price or pitch a different model not on this proposal.
+- Keep answers under 100 words unless the customer asked for detail.
+- If the customer wants to accept, schedule delivery, or talk financing structure, route them to the rep's phone or email shown in the quote.
+- Never make up availability or delivery dates. If asked, point to the rep.`;
+
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    ...history,
+    { role: "user" as const, content: message },
+  ];
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages,
+        max_tokens: 400,
+        temperature: 0.4,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      console.error("public chat openai error:", res.status, await res.text().catch(() => ""));
+      return safeJsonError("Chat is temporarily unavailable — try again, or reach out to your rep.", 503, origin);
+    }
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!reply) {
+      return safeJsonError("No reply generated — try rephrasing, or contact your rep.", 502, origin);
+    }
+    return safeJsonOk({ reply }, origin);
+  } catch (err) {
+    console.error("public chat error:", err);
+    return safeJsonError("Chat timed out. Please try again.", 504, origin);
+  }
+}
+
 function generateShareToken(): string {
   // 32 hex chars → 128 bits of entropy. UUID-shaped but dashes stripped
   // for a tidier URL. crypto.randomUUID is cryptographically random in
@@ -1362,6 +1495,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && publicAction === "public-trade-estimate") {
       return await handlePublicTradeEstimate(req, publicUrl, origin);
+    }
+    if (req.method === "POST" && publicAction === "public-chat") {
+      return await handlePublicChatTurn(req, publicUrl, origin);
     }
   } catch (err) {
     console.error("public-route dispatch error:", err);
