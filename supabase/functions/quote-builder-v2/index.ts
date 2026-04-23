@@ -931,6 +931,105 @@ async function handlePublicAccept(
   }, origin, 201);
 }
 
+// Public social-proof — "why should I trust this machine choice?".
+// Two data sources, both token-gated:
+//   1) accepted quotes of the same make/model (dealership's own velocity)
+//   2) auction_results for the same make/model ±2 yr (market resale)
+// Everything aggregate — no customer names, no prices tied to a specific
+// deal. Zero / insufficient-data silently omits a section so a fresh
+// model isn't forced to display empty cards.
+async function handlePublicSocialProof(url: URL, origin: string | null): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+
+  const admin = createAdminClient();
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("id, equipment")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) return safeJsonError("Failed to load quote", 500, origin);
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  const equipment = Array.isArray(quote.equipment) ? quote.equipment : [];
+  const primary = equipment[0] as Record<string, unknown> | undefined;
+  const make = typeof primary?.make === "string" ? primary.make : "";
+  const model = typeof primary?.model === "string" ? primary.model : "";
+  const year = typeof primary?.year === "number" ? primary.year : null;
+  const primaryPrice = typeof primary?.price === "number" ? primary.price : null;
+
+  if (!make || !model) {
+    return safeJsonOk({ deals: null, resale: null }, origin);
+  }
+
+  // ── Dealership velocity: accepted + post-accept quotes on this model.
+  const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: historical } = await admin
+    .from("quote_packages")
+    .select("id, equipment, customer_total, status, created_at")
+    .in("status", ["accepted", "converted_to_deal", "sent", "viewed"])
+    .gte("created_at", cutoff)
+    .limit(200);
+  const matchingDeals = (historical ?? []).filter((row: Record<string, unknown>) => {
+    const eq = Array.isArray(row.equipment) ? row.equipment : [];
+    const first = eq[0] as Record<string, unknown> | undefined;
+    if (!first) return false;
+    const rowMake = typeof first.make === "string" ? first.make : "";
+    const rowModel = typeof first.model === "string" ? first.model : "";
+    return rowMake.toLowerCase() === make.toLowerCase()
+      && rowModel.toLowerCase() === model.toLowerCase();
+  });
+  const totals = matchingDeals
+    .map((r) => Number((r as Record<string, unknown>).customer_total ?? 0))
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+
+  const dealsPayload = matchingDeals.length >= 3 ? {
+    count: matchingDeals.length,
+    median_customer_total: totals[Math.floor(totals.length / 2)] ?? null,
+    timespan_days: 180,
+  } : null;
+
+  // ── Market resale: auction comps with retention vs list price.
+  let resalePayload: {
+    count: number;
+    median_price: number;
+    retention_pct_vs_primary: number | null;
+    timespan_days: number;
+  } | null = null;
+  {
+    let q = admin
+      .from("auction_results")
+      .select("hammer_price, auction_date")
+      .ilike("make", make)
+      .ilike("model", model)
+      .order("auction_date", { ascending: false })
+      .limit(20);
+    if (year) q = q.gte("year", year - 3).lte("year", year + 3);
+    const { data: auctions } = await q;
+    const prices = ((auctions ?? []) as Array<Record<string, unknown>>)
+      .map((r) => Number(r.hammer_price ?? 0))
+      .filter((p) => p > 0)
+      .sort((a, b) => a - b);
+    if (prices.length >= 3) {
+      const median = prices[Math.floor(prices.length / 2)] ?? 0;
+      resalePayload = {
+        count: prices.length,
+        median_price: median,
+        retention_pct_vs_primary: primaryPrice && primaryPrice > 0
+          ? Math.round((median / primaryPrice) * 100)
+          : null,
+        timespan_days: 730,
+      };
+    }
+  }
+
+  return safeJsonOk({ deals: dealsPayload, resale: resalePayload }, origin);
+}
+
 function generateShareToken(): string {
   // 32 hex chars → 128 bits of entropy. UUID-shaped but dashes stripped
   // for a tidier URL. crypto.randomUUID is cryptographically random in
@@ -1634,6 +1733,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && publicAction === "public-accept") {
       return await handlePublicAccept(req, publicUrl, origin);
+    }
+    if (req.method === "GET" && publicAction === "public-social-proof") {
+      return await handlePublicSocialProof(publicUrl, origin);
     }
   } catch (err) {
     console.error("public-route dispatch error:", err);

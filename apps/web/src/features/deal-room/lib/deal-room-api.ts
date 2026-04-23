@@ -166,6 +166,35 @@ export async function acceptPublicQuote(
   return res.json();
 }
 
+export interface SocialProofPayload {
+  deals: {
+    count: number;
+    median_customer_total: number | null;
+    timespan_days: number;
+  } | null;
+  resale: {
+    count: number;
+    median_price: number;
+    retention_pct_vs_primary: number | null;
+    timespan_days: number;
+  } | null;
+}
+
+export async function fetchPublicSocialProof(token: string): Promise<SocialProofPayload> {
+  const res = await fetch(`${QUOTE_FN_URL}/public-social-proof?token=${encodeURIComponent(token)}`, {
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string }).error ?? `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export async function sendConciergeChat(
   token: string,
   message: string,

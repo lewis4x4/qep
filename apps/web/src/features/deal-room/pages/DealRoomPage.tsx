@@ -5,12 +5,14 @@ import {
   acceptPublicQuote,
   fetchPublicDealRoom,
   fetchPublicDealRoomAttachments,
+  fetchPublicSocialProof,
   fetchPublicTradeEstimate,
   type DealRoomBranch,
   type DealRoomCompatibleAttachment,
   type DealRoomFinanceScenario,
   type DealRoomPayload,
   type DealRoomQuote,
+  type SocialProofPayload,
   type TradeEstimatePayload,
 } from "../lib/deal-room-api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -304,6 +306,7 @@ function DealRoomView({ payload }: { payload: DealRoomPayload }) {
         {quote.ai_recommendation && (
           <WhyThisMachine recommendation={quote.ai_recommendation} />
         )}
+        <SocialProofPanel token={token} primaryPrice={hero?.price ?? null} />
         {rest.length + includedAttachments.length > 0 && (
           <AdditionalItems equipment={rest} attachments={includedAttachments} />
         )}
@@ -1051,6 +1054,60 @@ function TradeEstimatorPanel({
             <div className="ml-auto text-[11px] italic text-emerald-700">
               Final credit is confirmed by your rep after in-person inspection.
             </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SocialProofPanel({ token, primaryPrice }: { token: string; primaryPrice: number | null }) {
+  // Social proof loads in parallel with the main quote fetch; silently
+  // hides if neither dataset has enough comps to be meaningful.
+  const { data } = useQuery<SocialProofPayload>({
+    queryKey: ["deal-room", token, "social-proof"],
+    queryFn: () => fetchPublicSocialProof(token),
+    enabled: token.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  if (!data || (!data.deals && !data.resale)) return null;
+
+  return (
+    <section className="mt-8 grid gap-4 sm:grid-cols-2">
+      {data.deals && (
+        <div className="rounded-xl border border-slate-200 p-5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Deal velocity
+          </div>
+          <div className="mt-2 text-3xl font-extrabold tabular-nums text-slate-900">
+            {data.deals.count}
+          </div>
+          <div className="mt-1 text-[13px] text-slate-600">
+            customers chose this model in the last {Math.round(data.deals.timespan_days / 30)} months
+            {data.deals.median_customer_total != null && (
+              <> · median deal {formatCurrency(data.deals.median_customer_total, 0)}</>
+            )}
+          </div>
+        </div>
+      )}
+      {data.resale && (
+        <div className="rounded-xl border border-slate-200 p-5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            Market resale
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <div className="text-3xl font-extrabold tabular-nums text-slate-900">
+              {formatCurrency(data.resale.median_price, 0)}
+            </div>
+            {data.resale.retention_pct_vs_primary != null && primaryPrice && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                {data.resale.retention_pct_vs_primary}% retention
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[13px] text-slate-600">
+            median used auction price across {data.resale.count} recent sales
           </div>
         </div>
       )}
