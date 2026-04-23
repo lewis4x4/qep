@@ -46,8 +46,12 @@ interface AuthState {
   error: string | null;
 }
 
-const AUTH_REQUEST_TIMEOUT_MS = 8000;
-const AUTH_TIMEOUT_RETRIES = 2;
+// Shorter than it used to be (was 8s × 2 retries = 24s) because Supabase's
+// /user endpoint periodically times out mid-request on real infrastructure
+// incidents; better to fail fast, fall through to the cached-profile path,
+// and let the user work than stare at a spinner for 24 seconds.
+const AUTH_REQUEST_TIMEOUT_MS = 4000;
+const AUTH_TIMEOUT_RETRIES = 1;
 const PROFILE_REQUEST_TIMEOUT_MS = 8000;
 const PROFILE_TIMEOUT_RETRIES = 2;
 
@@ -242,25 +246,36 @@ export function useAuth(): AuthState {
         initializedRef.current = true;
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setTimeout(() => {
         if (!initializedRef.current) return;
         void (async () => {
           try {
             if (session?.user) {
               applyCachedProfileIfAvailable(session);
-              const sessionValidation = await validateSessionToken();
-              if (sessionValidation === "expired") {
-                await supabase.auth.signOut();
-                setState({
-                  user: null,
-                  session: null,
-                  profile: null,
-                  loading: false,
-                  error:
-                    "Your session token is invalid or expired. Please sign in again.",
-                });
-                return;
+
+              // The session came from an event supabase-js just processed
+              // (SIGNED_IN means the /token POST succeeded and we have a
+              // fresh, server-issued JWT). Skip the revalidation round-trip
+              // in that case — Supabase's /user endpoint periodically times
+              // out for 20–25 seconds, and re-verifying a token we just
+              // received buys nothing except a broken "Signing In…" UX.
+              const shouldSkipRevalidation = event === "SIGNED_IN" || event === "TOKEN_REFRESHED";
+
+              if (!shouldSkipRevalidation) {
+                const sessionValidation = await validateSessionToken();
+                if (sessionValidation === "expired") {
+                  await supabase.auth.signOut();
+                  setState({
+                    user: null,
+                    session: null,
+                    profile: null,
+                    loading: false,
+                    error:
+                      "Your session token is invalid or expired. Please sign in again.",
+                  });
+                  return;
+                }
               }
               const { profile, error } = await fetchProfile(session.user.id);
               if (!profile && error && applyCachedProfileIfAvailable(session)) {
