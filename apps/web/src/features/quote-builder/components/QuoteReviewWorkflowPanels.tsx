@@ -277,23 +277,35 @@ export function QuoteReviewWorkflowPanels({
                 : "This quote is waiting in Approval Center for sales manager review."}
           </p>
         </Card>
-      ) : requiresManagerApproval && !approvalGranted ? (
+      ) : !approvalGranted ? (
+        // QEP workflow: every quote must be owner-approved before it
+        // can be sent. If the approval case hasn't been created yet,
+        // point the rep at Submit for Approval. If there's a send-
+        // readiness gap (missing fields) surface those too so they
+        // don't submit against an incomplete packet.
         <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-          <p className="text-sm font-medium text-amber-400">Manager approval required before send</p>
+          <p className="text-sm font-medium text-amber-400">
+            Awaiting owner approval before send
+          </p>
           <p className="mt-1 text-xs text-amber-300">
             {draft.branchSlug
-              ? "Save the quote, then use Submit for Approval to route it to the branch sales manager."
-              : "Select a quoting branch, save the quote, then submit it for approval."}
+              ? "Click Submit for Approval to route this quote to Ryan + Rylee. Once approved, Download PDF and Send unlock."
+              : "Select a quoting branch, then Submit for Approval routes this quote to Ryan + Rylee."}
           </p>
+          {sendReadiness.missing.length > 0 && (
+            <p className="mt-1 text-xs text-amber-300">
+              Still missing: {sendReadiness.missing.join(", ")}
+            </p>
+          )}
         </Card>
-      ) : (
+      ) : sendReadiness.missing.length > 0 ? (
         <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-          <p className="text-sm font-medium text-amber-400">Quote saved, but not ready to send</p>
+          <p className="text-sm font-medium text-amber-400">Approved — packet incomplete before send</p>
           <p className="mt-1 text-xs text-amber-300">
             Missing: {sendReadiness.missing.join(", ")}
           </p>
         </Card>
-      )}
+      ) : null}
 
       {portalRevision?.review && (
         <Card className="border-border/60 bg-card/60 p-4 space-y-3">
