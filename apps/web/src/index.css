@@ -158,6 +158,43 @@
   background-size: 24px 24px;
 }
 
+/* Slice: The Floor — diamond-plate background texture.
+   The Floor is a dealership shop floor — the surface underfoot is
+   literal diamond plate. 2% opacity keeps it invisible unless the
+   eye hunts for it, but the character it adds at a glance is
+   unmistakable. Pattern is a single 32x32 SVG tile of offset
+   diamonds in the QEP orange at very low alpha. */
+.floor-texture {
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>\
+<g fill='none' stroke='%23F28A07' stroke-width='0.6' opacity='0.05'>\
+<path d='M0 16 L16 0 L32 16 L16 32 Z'/>\
+<path d='M16 16 L24 8 L32 16 L24 24 Z'/>\
+<path d='M0 16 L8 8 L16 16 L8 24 Z'/>\
+</g></svg>");
+  background-size: 32px 32px;
+}
+
+/* Narrative breathing bar — replaces the tiny dot with a deliberate
+   full-width orange thread that gently pulses when the narrative is
+   fresh. Stops when stale (class removed). */
+@keyframes floor-breathe {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.95; }
+}
+.floor-breathe { animation: floor-breathe 2.8s ease-in-out infinite; }
+
+/* Staggered widget enter — used on the Floor widget grid so widgets
+   fade up rather than all popping at once. Paired with per-item
+   animation-delay in JSX. */
+@keyframes floor-widget-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.floor-widget-in {
+  animation: floor-widget-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* Soft inner glow for surfaces that carry live signal */
 .deck-glow {
   box-shadow:

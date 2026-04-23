@@ -63,6 +63,9 @@ interface TopBarProps {
   onLogout: () => void;
   quoteBuilderEnabled?: boolean;
   quoteBuilderLoading?: boolean;
+  /** Slice: The Floor — when true, the Back-to-Floor chip (36px) is
+   *  pinned above TopBar, so TopBar shifts down to clear it. */
+  floorMode?: boolean;
 }
 
 const BELL_STORAGE_KEY = "qep-bell-last-click";
@@ -277,7 +280,7 @@ function useTopBarBell(profileId: string) {
   };
 }
 
-export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBuilderLoading = false }: TopBarProps) {
+export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBuilderLoading = false, floorMode = false }: TopBarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState("");
@@ -416,7 +419,7 @@ export function TopBar({ profile, onLogout, quoteBuilderEnabled = true, quoteBui
 
   return (
     <>
-      <div className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 sm:px-6 lg:px-8 pointer-events-none">
+      <div className={`fixed ${floorMode ? "top-[52px]" : "top-4"} inset-x-0 z-50 flex justify-center px-4 sm:px-6 lg:px-8 pointer-events-none`}>
         <header
           className="w-full max-w-7xl flex items-center px-6 py-3.5 gap-4 bg-slate-900/80 dark:bg-white/[0.05] border border-white/10 backdrop-blur-xl rounded-full shadow-2xl pointer-events-auto"
           role="banner"

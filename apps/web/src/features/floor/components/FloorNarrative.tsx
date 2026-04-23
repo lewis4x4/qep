@@ -51,22 +51,34 @@ export function FloorNarrative({ role, userFirstName, fresh = true }: FloorNarra
     <div
       role="status"
       aria-live="polite"
-      className="flex shrink-0 items-start gap-2.5 border-b border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))] px-4 py-3 sm:h-12 sm:py-0"
+      className="relative flex shrink-0 items-start gap-2.5 bg-[hsl(var(--qep-deck))] px-6 py-3 sm:h-14 sm:py-0"
     >
-      {/* Fresh dot — orange, pulses when fresh */}
-      <span className="mt-1.5 flex shrink-0 items-center justify-center sm:mt-[18px]">
+      {/* Slice: The Floor v2 — breathing orange thread.
+          A 2px full-width bar at the bottom of the narrative strip
+          gently breathes when the narrative is fresh (<15m). Replaces
+          the barely-visible tiny dot with deliberate brand chrome —
+          reads as "this line is alive" at a glance. */}
+      <span
+        aria-hidden="true"
+        className={`absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[hsl(var(--qep-orange))] to-transparent ${
+          fresh ? "floor-breathe" : "opacity-30"
+        }`}
+      />
+
+      {/* Marker icon — sparkle when stale, pulse when fresh */}
+      <span className="mt-1.5 flex shrink-0 items-center justify-center sm:mt-[22px]">
         {fresh ? (
-          <>
-            <span className="absolute h-1.5 w-1.5 animate-pulse-ring rounded-full bg-[hsl(var(--qep-orange))]" />
+          <span className="relative flex h-2 w-2 items-center justify-center">
+            <span className="absolute h-2 w-2 animate-pulse-ring rounded-full bg-[hsl(var(--qep-orange))]/60" />
             <span className="relative h-1.5 w-1.5 rounded-full bg-[hsl(var(--qep-orange))]" />
-          </>
+          </span>
         ) : (
           <Sparkles className="h-3 w-3 text-muted-foreground" />
         )}
       </span>
 
-      {/* Sentence */}
-      <p className="min-w-0 flex-1 self-center text-sm font-medium leading-snug text-foreground sm:truncate">
+      {/* Sentence — bumped to 15pt Inter semibold so it reads as a headline, not a caption */}
+      <p className="min-w-0 flex-1 self-center text-[15px] font-medium leading-snug text-foreground sm:truncate">
         {text}
       </p>
     </div>

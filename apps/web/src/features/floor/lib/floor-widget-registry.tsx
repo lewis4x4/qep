@@ -55,6 +55,7 @@ import { PartsReplenishQueueWidget } from "@/features/dashboards/widgets/impls/p
 // docs/floor/widget-wiring-punch-list.md for the selection rationale.
 import { OwnerBriefCard } from "@/features/owner/components/OwnerBriefCard";
 import { CustomerHealthListWidget } from "../widgets/CustomerHealthListWidget";
+import { CrmCustomerSearchWidget } from "../widgets/CrmCustomerSearchWidget";
 
 import { FloorStubWidget } from "../components/FloorStubWidget";
 
@@ -411,6 +412,100 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
       "Service parts hub",
       "Parts picked + staged for today's service jobs.",
       "Sample: 6 jobs ready · 2 waiting on backorder",
+    ),
+  },
+
+  // ── Slice: The Floor v2 — CRM search as a first-class Floor widget ──
+  // Universal "find a customer" reflex. Autofocused input, 5 hits max,
+  // click-through to /qrm/companies/{id}. Works for every role that
+  // picks up the phone or walks in with a customer.
+  "crm.customer-search": {
+    id: "crm.customer-search",
+    title: "Customer search",
+    purpose: "Find any customer by name, DBA, or phone — deep-links to their record.",
+    allowedRoles: [
+      "iron_manager",
+      "iron_advisor",
+      "iron_woman",
+      "iron_parts_counter",
+      "iron_parts_manager",
+      "iron_owner",
+    ],
+    size: "wide",
+    component: CrmCustomerSearchWidget,
+  },
+
+  // ── Slice: The Floor v2 — role-optimized stubs (real impl lands later) ──
+  "exec.revenue-pace": {
+    id: "exec.revenue-pace",
+    title: "Revenue pace",
+    purpose: "Month-to-date revenue vs. target — and what's in flight.",
+    allowedRoles: ["iron_owner", "iron_manager"],
+    size: "normal",
+    component: stub(
+      "Revenue pace",
+      "MTD revenue vs. your monthly target with the in-flight pipeline that could close it.",
+      "Sample: $412K booked · 67% of $615K target · $248K in flight",
+    ),
+  },
+  "exec.deal-velocity": {
+    id: "exec.deal-velocity",
+    title: "Deal velocity",
+    purpose: "How fast deals are moving through the pipeline.",
+    allowedRoles: ["iron_owner", "iron_manager"],
+    size: "normal",
+    component: stub(
+      "Deal velocity",
+      "Average days per stage across the team — highlights the bottleneck stage.",
+      "Sample: 4.2d quote → 11.8d proposal → 3.1d close",
+    ),
+  },
+  "iron-woman.pending-invoices": {
+    id: "iron-woman.pending-invoices",
+    title: "Pending invoices",
+    purpose: "Approved deals waiting on invoicing — ordered by age.",
+    allowedRoles: ["iron_woman", "iron_manager"],
+    size: "normal",
+    component: stub(
+      "Pending invoices",
+      "Deals that are approved but not yet invoiced — aged and ready to send.",
+      "Sample: 7 pending · oldest 4 days",
+    ),
+  },
+  "iron-man.open-service-tickets": {
+    id: "iron-man.open-service-tickets",
+    title: "Open service tickets",
+    purpose: "Service work in progress across today's bay.",
+    allowedRoles: ["iron_man", "iron_manager"],
+    size: "normal",
+    component: stub(
+      "Open service tickets",
+      "In-progress jobs with part status, tech assignment, and customer waiting time.",
+      "Sample: 4 in progress · 1 waiting on parts · 2 ready for pickup",
+    ),
+  },
+  "parts.lost-sales": {
+    id: "parts.lost-sales",
+    title: "Lost parts sales",
+    purpose: "Recent parts we didn't close — with the reason code for each.",
+    allowedRoles: ["iron_parts_manager", "iron_manager"],
+    size: "normal",
+    component: stub(
+      "Lost parts sales",
+      "Parts quotes that didn't convert this week, grouped by reason (no stock / price / timing / competitor).",
+      "Sample: 6 lost · top reason: no stock (4)",
+    ),
+  },
+  "parts.supplier-health": {
+    id: "parts.supplier-health",
+    title: "Supplier health",
+    purpose: "Open POs + vendor fill rates + backorder exposure at a glance.",
+    allowedRoles: ["iron_parts_manager"],
+    size: "normal",
+    component: stub(
+      "Supplier health",
+      "Active purchase orders, vendor fill rate this month, and dollars exposed to backorder.",
+      "Sample: 14 open POs · 94% fill · $12.4K backordered",
     ),
   },
 };

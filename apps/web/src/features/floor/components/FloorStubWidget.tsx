@@ -25,8 +25,15 @@ export function FloorStubWidget({ title, purpose, sample }: FloorStubWidgetProps
     <div
       role="figure"
       aria-label={`${title} (preview — not yet live)`}
-      className="group relative flex h-full min-h-[168px] flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))]/60 bg-[hsl(var(--qep-deck-elevated))] p-4 transition-colors hover:border-[hsl(var(--qep-gray))]/40"
+      className="floor-widget-in group relative flex h-full min-h-[168px] flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] transition-all duration-150 ease-out hover:border-[hsl(var(--qep-orange))]/40 hover:translate-y-[-1px]"
     >
+      {/* Slice: The Floor v2 chrome — 2px orange left-rule identifies
+          every Floor widget at a glance as QEP brand chrome. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-[2px] bg-[hsl(var(--qep-orange))]/60"
+      />
+
       {/* Header row */}
       <div className="flex items-center justify-between gap-2">
         <h3 className="truncate font-kpi text-[11px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-gray))]">

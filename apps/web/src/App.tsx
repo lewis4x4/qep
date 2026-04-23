@@ -704,6 +704,13 @@ function AnimatedRoutes({ children }: { children: React.ReactNode }) {
  * SalesOrAppLayout — renders children directly when on /sales/* routes
  * (Sales Companion has its own SalesShell via SalesRoutes), otherwise
  * wraps in the standard AppLayout.
+ *
+ * Slice: The Floor — /floor and /floor/compose also bypass AppLayout
+ * so the Floor's own FloorTopBar is the sole header chrome. Without
+ * this bypass two top bars stack, which the user explicitly called
+ * out as confusing. When the user navigates away from /floor AND
+ * their profile has floor_mode=true, AppLayout renders a "Back to
+ * Floor" chip so the user can always return home.
  */
 function SalesOrAppLayout({
   profile,
@@ -715,9 +722,10 @@ function SalesOrAppLayout({
   const location = useLocation();
   const isSalesRoute = location.pathname.startsWith("/sales");
   const isPartsCompanionRoute = location.pathname.startsWith("/parts/companion");
+  const isFloorRoute = location.pathname.startsWith("/floor");
 
-  if (isSalesRoute || isPartsCompanionRoute) {
-    // Companion apps render their own shell; skip AppLayout
+  if (isSalesRoute || isPartsCompanionRoute || isFloorRoute) {
+    // Companion apps (and the Floor) render their own shell; skip AppLayout.
     return <>{children}</>;
   }
 

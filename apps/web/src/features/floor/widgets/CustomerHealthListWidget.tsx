@@ -66,8 +66,12 @@ export function CustomerHealthListWidget() {
     <div
       role="figure"
       aria-label="Customer health — top 5 at risk"
-      className="flex h-full min-h-[200px] flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))]/60 bg-[hsl(var(--qep-deck-elevated))] p-4"
+      className="floor-widget-in relative flex h-full min-h-[200px] flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] transition-all duration-150 ease-out hover:border-[hsl(var(--qep-orange))]/40 hover:translate-y-[-1px]"
     >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-[2px] bg-[hsl(var(--qep-orange))]/60"
+      />
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">

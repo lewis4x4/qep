@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useLocation, NavLink } from "react-router-dom";
-import { Menu, Lock } from "lucide-react";
+import { useLocation, NavLink, Link } from "react-router-dom";
+import { Menu, Lock, ArrowLeft, Wrench } from "lucide-react";
 import { BRAND_NAME, BrandLogo } from "@/components/BrandLogo";
 import { OmniCommand } from "@/components/OmniCommand";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -27,6 +27,10 @@ interface Profile {
   is_support: boolean;
   /** Nullable to match useAuth.Profile — Slice 08 M4 fix. */
   active_workspace_id: string | null;
+  /** Slice: The Floor — when true, the user opted into the /floor
+   *  simplified surface. AppLayout renders a persistent "Back to Floor"
+   *  chip so the user can always return home from any admin route. */
+  floor_mode?: boolean;
 }
 
 export interface AppLayoutProps {
@@ -312,18 +316,32 @@ export function AppLayout({
   return (
     <div className="flex min-h-screen bg-transparent relative z-0">
       <AmbientMatrix />
-      
+
+      {/* Slice: The Floor — Back-to-Floor chip for users who opted in.
+          Renders on EVERY admin surface (anything that isn't /floor/*)
+          so a Floor-mode user who navigates into a widget's deep link
+          can always return home. The chip is visually compact and
+          styled to feel like Floor chrome — orange gear mark +
+          uppercase Bebas Neue — so the user's eye tracks it
+          instantly. When the user is on /floor itself this layout
+          isn't rendered (see SalesOrAppLayout). */}
+      {profile.floor_mode && <BackToFloorChip />}
+
       {/* Desktop: enhanced top bar */}
-      <TopBar 
-        profile={profile} 
-        onLogout={onLogout} 
+      <TopBar
+        profile={profile}
+        onLogout={onLogout}
         quoteBuilderEnabled={quoteBuilderEnabled}
         quoteBuilderLoading={quoteBuilderLoading}
+        floorMode={profile.floor_mode}
       />
 
       {/* Mobile: top header */}
       <div
-        className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10"
+        className={cn(
+          "lg:hidden fixed left-0 right-0 z-40 flex items-center justify-between px-4 h-14 bg-qep-dark border-b border-white/10",
+          profile.floor_mode ? "top-9" : "top-0",
+        )}
         role="banner"
       >
         <div className="flex min-w-0 items-center gap-2">
@@ -362,7 +380,15 @@ export function AppLayout({
       {/* Main content */}
       {/* pt-20: clears mobile top header; pb-16: clears mobile bottom tab bar */}
       {/* lg:pt-[104px]: clears desktop floating top bar; lg:pb-8; no left margin */}
-      <main className="flex-1 pt-20 pb-16 lg:pt-[104px] lg:pb-8 min-h-screen">
+      {/* When floor_mode is on, a 36px chip is pinned above TopBar; add clearance. */}
+      <main
+        className={cn(
+          "flex-1 pb-16 lg:pb-8 min-h-screen",
+          profile.floor_mode
+            ? "pt-[116px] lg:pt-[140px]"
+            : "pt-20 lg:pt-[104px]",
+        )}
+      >
         {children}
       </main>
 
@@ -373,3 +399,40 @@ export function AppLayout({
 }
 
 export default AppLayout;
+
+/**
+ * BackToFloorChip — persistent one-line chip that keeps a Floor-mode
+ * user tethered to their home surface.
+ *
+ * Sits as a full-width strip at the very top of the app (above TopBar
+ * on desktop, above the mobile header on small screens). Styled to
+ * feel like Floor chrome — charcoal base, orange gear mark, Bebas
+ * Neue caps — so the user's eye tracks it instantly when they land
+ * on an admin detail surface.
+ */
+function BackToFloorChip() {
+  return (
+    <div className="fixed left-0 right-0 top-0 z-50 h-9 bg-[hsl(217,28%,10%)] border-b border-[hsl(var(--qep-orange))]/30">
+      <div className="mx-auto flex h-full max-w-[1800px] items-center justify-between gap-2 px-4">
+        <Link
+          to="/floor"
+          className="group inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--qep-orange))] transition-colors hover:text-[hsl(var(--qep-orange-hover))]"
+        >
+          <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="flex h-4 w-4 items-center justify-center rounded-sm bg-[hsl(var(--qep-orange))] text-[hsl(217,28%,10%)]"
+            >
+              <Wrench className="h-2.5 w-2.5" />
+            </span>
+            Back to The Floor
+          </span>
+        </Link>
+        <span className="hidden text-[10px] uppercase tracking-[0.18em] text-white/40 sm:inline">
+          Office view
+        </span>
+      </div>
+    </div>
+  );
+}

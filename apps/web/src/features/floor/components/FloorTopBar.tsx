@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { LogOut, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { FloorJumpMenu } from "./FloorJumpMenu";
 
 export interface FloorTopBarProps {
   userDisplayName: string;
@@ -42,8 +43,12 @@ export function FloorTopBar({
         </span>
       </Link>
 
-      {/* Right — user identity + admin link + sign-out */}
+      {/* Right — jump menu + user identity + admin link + sign-out */}
       <div className="flex items-center gap-3">
+        {/* Jump-to dropdown — minimal escape to the 5 operator domains */}
+        <div className="hidden sm:block">
+          <FloorJumpMenu />
+        </div>
         {isAdmin && (
           <Link
             to="/floor/compose"

@@ -124,15 +124,19 @@ function QuickActionButton({
     <Link
       to={action.route}
       className={[
-        "group relative flex min-h-[100px] flex-col justify-between overflow-hidden rounded-xl border bg-[hsl(var(--qep-deck-elevated))] p-4 transition-all duration-150 ease-out",
-        "hover:scale-[1.01] hover:border-[hsl(var(--qep-orange))] active:scale-[0.99]",
-        isPrimary
-          ? "border-[hsl(var(--qep-deck-rule))]"
-          : "border-[hsl(var(--qep-deck-rule))]",
+        // Slice: The Floor v2 — bigger, brighter, clearer primary-vs-secondary.
+        // 140px height (up from 100), inner bevel highlight, orange radial
+        // glow on hover. Primary action gets a 4px orange left-rule AND a
+        // subtle orange wash behind the icon — signals "this is the one."
+        "group relative flex min-h-[140px] flex-col justify-between overflow-hidden rounded-xl border bg-[hsl(var(--qep-deck-elevated))] p-5 transition-all duration-150 ease-out",
+        "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]",
+        "hover:scale-[1.01] hover:border-[hsl(var(--qep-orange))] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_0_32px_-8px_hsl(var(--qep-orange))]",
+        "active:scale-[0.99]",
+        "border-[hsl(var(--qep-deck-rule))]",
       ].join(" ")}
       aria-label={`${action.label}${action.subLabel ? ` — ${action.subLabel}` : ""}`}
     >
-      {/* Orange left-rule on primary */}
+      {/* Orange left-rule (4px) on primary — the widest brand signal on the Floor */}
       {isPrimary && (
         <span
           aria-hidden="true"
@@ -140,25 +144,32 @@ function QuickActionButton({
         />
       )}
 
-      {/* Icon row */}
-      <div className="flex items-center justify-between">
-        <Icon
-          className={`h-6 w-6 ${isPrimary ? "text-[hsl(var(--qep-orange))]" : "text-foreground"}`}
+      {/* Icon row — icon scaled up from 24 → 40px; primary gets an orange backing square */}
+      <div className="flex items-start justify-between">
+        <span
+          className={[
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-lg transition-colors",
+            isPrimary
+              ? "bg-[hsl(var(--qep-orange))]/10 text-[hsl(var(--qep-orange))]"
+              : "bg-[hsl(var(--qep-deck))] text-foreground group-hover:text-[hsl(var(--qep-orange))]",
+          ].join(" ")}
           aria-hidden="true"
-        />
+        >
+          <Icon className="h-6 w-6" />
+        </span>
         <ArrowRight
           className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
           aria-hidden="true"
         />
       </div>
 
-      {/* Label */}
+      {/* Label — Bebas Neue 24pt, roomier tracking, sublabel in Inter 12 */}
       <div className="mt-3">
-        <p className="font-display text-xl leading-tight tracking-[0.04em] text-foreground">
+        <p className="font-display text-2xl leading-tight tracking-[0.04em] text-foreground">
           {action.label}
         </p>
         {action.subLabel && (
-          <p className="mt-0.5 text-[11px] font-semibold text-muted-foreground">
+          <p className="mt-1 text-xs font-semibold text-muted-foreground">
             {action.subLabel}
           </p>
         )}

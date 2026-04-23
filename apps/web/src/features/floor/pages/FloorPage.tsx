@@ -19,6 +19,7 @@ import { FloorNarrative } from "../components/FloorNarrative";
 import { FloorHero } from "../components/FloorHero";
 import { FloorWidgetGrid } from "../components/FloorWidgetGrid";
 import { FloorFooter } from "../components/FloorFooter";
+import { FloorZoneLabel } from "../components/FloorZoneLabel";
 import { useFloorLayout } from "../hooks/useFloorLayout";
 
 export interface FloorPageProps {
@@ -60,8 +61,10 @@ export function FloorPage({
   const firstName = displayName.split(" ").filter(Boolean)[0] ?? "";
   const isAdmin = ADMIN_ROLES.includes(userRole);
 
+  const hasQuickActions = layout.quickActions.length > 0;
+
   return (
-    <div className="flex min-h-screen flex-col bg-[hsl(var(--qep-deck))] text-foreground antialiased">
+    <div className="floor-texture flex min-h-screen flex-col bg-[hsl(var(--qep-deck))] text-foreground antialiased">
       <FloorTopBar
         userDisplayName={displayName || ironRole.display}
         roleDisplayName={ironRole.display}
@@ -69,11 +72,20 @@ export function FloorPage({
       />
 
       {layout.showNarrative && !isLoading && (
-        <FloorNarrative role={ironRole.role} userFirstName={firstName} />
+        <>
+          <FloorZoneLabel index="01" label="NARRATIVE" />
+          <FloorNarrative role={ironRole.role} userFirstName={firstName} />
+        </>
       )}
 
-      <FloorHero actions={layout.quickActions} />
+      {hasQuickActions && (
+        <>
+          <FloorZoneLabel index="02" label="ACTIONS" className="mt-2" />
+          <FloorHero actions={layout.quickActions} />
+        </>
+      )}
 
+      <FloorZoneLabel index="03" label="THE FLOOR" className="mt-4" />
       <FloorWidgetGrid widgets={layout.widgets} isAdmin={isAdmin} />
 
       <FloorFooter showOfficeLink={isAdmin} layoutUpdatedAt={updatedAt} />
