@@ -56,6 +56,13 @@ import {
 } from "../lib/quote-api";
 import { computeQuoteWorkspace } from "../lib/quote-workspace";
 import { hydrateDraftFromSavedQuote } from "../lib/saved-quote-draft";
+import {
+  buildLocalDraftKey,
+  clearLocalDraft,
+  isDraftEmpty,
+  loadLocalDraft,
+  saveLocalDraft,
+} from "../lib/local-draft";
 import { useActiveBranches } from "@/hooks/useBranches";
 import { BranchDocumentHeader, BranchDocumentFooter } from "@/components/BranchDocumentHeader";
 import { useQuotePDF } from "../hooks/useQuotePDF";
@@ -413,6 +420,60 @@ export function QuoteBuilderV2Page() {
     setStep(readPersistedStep(nextKey) ?? "review");
   }, [dealId, existingQuote, packageId]);
 
+  // Local draft persistence: lets a rep leave the builder mid-entry and
+  // resume from the deal page without losing their partial work. DB save
+  // requires customer + at least one equipment line, so partial drafts
+  // can't be persisted server-side; we keep them in localStorage keyed
+  // by (userId, deal/contact). User-scoping prevents shared-device leaks
+  // where one rep would see another rep's draft after sign-in. DB quote
+  // wins on hydration — local restore only runs when no saved quote
+  // exists and we know who the user is.
+  const userId = profile?.id ?? "";
+  const localDraftKey = useMemo(
+    () => userId
+      ? buildLocalDraftKey({
+        userId,
+        dealId: dealId || draft.dealId,
+        contactId: contactId || draft.contactId,
+      })
+      : null,
+    [userId, dealId, contactId, draft.dealId, draft.contactId],
+  );
+  const [localDraftHydrationComplete, setLocalDraftHydrationComplete] = useState(false);
+  const [localPersistEnabled, setLocalPersistEnabled] = useState(true);
+
+  useEffect(() => {
+    if (localDraftHydrationComplete) return;
+    if (!localDraftKey) return;
+    if (existingQuoteQuery.isFetching || existingQuoteQuery.isLoading) return;
+    if (existingQuote) {
+      setLocalDraftHydrationComplete(true);
+      return;
+    }
+    const stored = loadLocalDraft(localDraftKey);
+    if (stored && !isDraftEmpty(stored)) {
+      setDraft((current) => ({ ...current, ...stored }));
+    }
+    setLocalDraftHydrationComplete(true);
+  }, [
+    existingQuote,
+    existingQuoteQuery.isFetching,
+    existingQuoteQuery.isLoading,
+    localDraftHydrationComplete,
+    localDraftKey,
+  ]);
+
+  useEffect(() => {
+    if (!localDraftHydrationComplete) return;
+    if (!localPersistEnabled) return;
+    if (!localDraftKey) return;
+    if (isDraftEmpty(draft)) {
+      clearLocalDraft(localDraftKey);
+      return;
+    }
+    saveLocalDraft(localDraftKey, draft);
+  }, [draft, localDraftHydrationComplete, localDraftKey, localPersistEnabled]);
+
   const financingInput = useMemo<QuoteFinancingRequest>(() => ({
     packageSubtotal: subtotal,
     discountTotal,
@@ -611,6 +672,14 @@ export function QuoteBuilderV2Page() {
         dealId: resolvedDealId ?? current.dealId,
         quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
       }));
+      // DB is authoritative now. Clear the local draft and stop mirroring
+      // further edits so a follow-up refresh hydrates from the saved row,
+      // not a stale localStorage overlay.
+      if (localDraftKey) clearLocalDraft(localDraftKey);
+      if (userId && resolvedDealId && resolvedDealId !== dealId) {
+        clearLocalDraft(buildLocalDraftKey({ userId, dealId: resolvedDealId }));
+      }
+      setLocalPersistEnabled(false);
       queryClient.invalidateQueries({ queryKey: ["quote-builder", "approval-case"] });
     },
   });

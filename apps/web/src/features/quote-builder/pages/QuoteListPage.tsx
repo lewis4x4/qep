@@ -125,6 +125,12 @@ import {
   type ProposalStreakBreakReport,
 } from "../lib/proposal-streak-breaks";
 import type { QuoteListItem } from "../../../../../../shared/qep-moonshot-contracts";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  clearLocalDraft,
+  listLocalDraftsForUser,
+  type LocalDraftRecord,
+} from "../lib/local-draft";
 
 /**
  * Quote list page — the rep's home base for every open + closed quote.
@@ -197,11 +203,39 @@ function fmtCompactCurrency(amount: number): string {
 
 export function QuoteListPage() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [outcomeTarget, setOutcomeTarget] = useState<string | null>(null);
+  const [localDrafts, setLocalDrafts] = useState<LocalDraftRecord[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Surfaces partially-entered quotes stored in localStorage under the
+  // current user's scope. They represent work the rep started but never
+  // persisted server-side (usually because the DB save requires a
+  // customer + at least one equipment line). Labeled "this device only"
+  // because localStorage doesn't sync across devices.
+  useEffect(() => {
+    if (!profile?.id) {
+      setLocalDrafts([]);
+      return;
+    }
+    setLocalDrafts(listLocalDraftsForUser(profile.id));
+  }, [profile?.id]);
+
+  function handleClearLocalDraft(key: string) {
+    clearLocalDraft(key);
+    if (profile?.id) setLocalDrafts(listLocalDraftsForUser(profile.id));
+  }
+
+  function handleResumeLocalDraft(record: LocalDraftRecord) {
+    const params = new URLSearchParams();
+    if (record.dealId) params.set("crm_deal_id", record.dealId);
+    if (record.contactId) params.set("crm_contact_id", record.contactId);
+    const qs = params.toString();
+    navigate(qs ? `/quote-v2?${qs}` : "/quote-v2");
+  }
 
   // Debounce search input
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -749,6 +783,14 @@ export function QuoteListPage() {
         </div>
       )}
 
+      {localDrafts.length > 0 && (
+        <LocalDraftsSection
+          drafts={localDrafts}
+          onResume={handleResumeLocalDraft}
+          onClear={handleClearLocalDraft}
+        />
+      )}
+
       {/* Slice 20f: scorer calibration card — manager/owner only.
           Rendered above the filter row. Three display states:
             - loading / forbidden (rep): nothing rendered
@@ -903,6 +945,85 @@ export function QuoteListPage() {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
+
+function LocalDraftsSection({
+  drafts,
+  onResume,
+  onClear,
+}: {
+  drafts: LocalDraftRecord[];
+  onResume: (record: LocalDraftRecord) => void;
+  onClear: (key: string) => void;
+}) {
+  return (
+    <Card className="border-qep-orange/30 bg-qep-orange/5 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-qep-orange">
+            Unsaved Drafts
+          </p>
+          <p className="mt-1 text-sm text-foreground">
+            Partial quotes you started on this device. Pick up where you left off.
+          </p>
+        </div>
+        <Badge variant="outline" className="border-qep-orange/40 text-qep-orange">
+          This device only
+        </Badge>
+      </div>
+      <div className="mt-3 space-y-2">
+        {drafts.map((record) => (
+          <LocalDraftRow
+            key={record.key}
+            record={record}
+            onResume={() => onResume(record)}
+            onClear={() => onClear(record.key)}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function LocalDraftRow({
+  record,
+  onResume,
+  onClear,
+}: {
+  record: LocalDraftRecord;
+  onResume: () => void;
+  onClear: () => void;
+}) {
+  const name = record.draft.customerName?.trim() || record.draft.customerCompany?.trim() || "Untitled draft";
+  const equipmentCount = record.draft.equipment?.length ?? 0;
+  const attachmentCount = record.draft.attachments?.length ?? 0;
+  const firstEquip = record.draft.equipment?.[0];
+  const equipmentLabel = firstEquip
+    ? [firstEquip.make, firstEquip.model].filter(Boolean).join(" ") || firstEquip.title || "Equipment selected"
+    : null;
+  const savedAt = record.savedAt ? new Date(record.savedAt) : null;
+  const savedLabel = savedAt && !Number.isNaN(savedAt.getTime())
+    ? savedAt.toLocaleString()
+    : null;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border/60 bg-background/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-foreground truncate">{name}</p>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {equipmentLabel
+            ? <span>{equipmentLabel}{equipmentCount > 1 ? ` +${equipmentCount - 1} more` : ""}</span>
+            : <span>No equipment yet</span>}
+          {attachmentCount > 0 && <span>{attachmentCount} attachment{attachmentCount === 1 ? "" : "s"}</span>}
+          {savedLabel && <span>Last edited {savedLabel}</span>}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={onResume}>Resume</Button>
+        <Button size="sm" variant="outline" onClick={onClear}>Discard</Button>
+      </div>
+    </div>
+  );
+}
 
 function Stat({
   label, value, hint, emphasis,
