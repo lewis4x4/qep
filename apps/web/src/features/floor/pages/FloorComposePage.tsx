@@ -16,7 +16,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Check,
   GripVertical,
   Loader2,
@@ -369,6 +371,30 @@ function RoleBar({
 }
 
 // ── Preview pane ────────────────────────────────────────────────────────
+//
+// WYSIWYG-style rendering: the preview draws the REAL Floor components
+// (FloorNarrative · FloorHero · actual widget components) so Brian sees
+// exactly what the target role will see. Widget bodies are wrapped in
+// pointer-events-none; the compose chrome (position badge, remove,
+// up/down) lives in a pointer-events-auto overlay above.
+//
+// Drag-drop model:
+//   • Each card's onDragOver decides insertion position based on cursor
+//     Y relative to the card's mid-line (top half = insert before me,
+//     bottom half = insert after me) and writes `insertion` state with
+//     { index, before }.
+//   • A thin orange line renders ABOVE the card at `insertion.index`
+//     when `before=true`, or BELOW at `insertion.index + 1` when
+//     `before=false`.
+//   • onDrop reads DND_MIME_PALETTE (new widget) or DND_MIME_REORDER
+//     (existing widget index) and commits the move.
+//   • onDragEnd clears insertion state so a cancelled drag leaves
+//     no orphan indicator.
+//
+// Up/down arrow buttons are a keyboard-friendly fallback for the
+// drag-averse (or touch devices).
+
+type Insertion = { index: number; before: boolean } | null;
 
 function PreviewPane({
   selectedRole,
@@ -389,41 +415,73 @@ function PreviewPane({
   onRemoveWidget: (id: string) => void;
   onMoveWidget: (from: number, to: number) => void;
 }) {
-  const [dropIndicator, setDropIndicator] = useState<number | null>(null);
+  const [insertion, setInsertion] = useState<Insertion>(null);
+  const [dragSource, setDragSource] = useState<number | null>(null);
   const firstName = (userFullName ?? "").split(" ").filter(Boolean)[0] ?? "";
 
-  // Accept drops on the grid container — widget id from palette.
-  const onGridDragOver = (e: React.DragEvent) => {
-    const types = e.dataTransfer.types;
-    if (
-      types.includes(DND_MIME_PALETTE) ||
-      types.includes(DND_MIME_REORDER)
-    ) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = types.includes(DND_MIME_PALETTE) ? "copy" : "move";
-    }
+  const computeInsertionForCard = (e: React.DragEvent, index: number) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const before = e.clientY < midY;
+    setInsertion((prev) => {
+      if (prev && prev.index === index && prev.before === before) return prev;
+      return { index, before };
+    });
   };
 
-  const onGridDrop = (e: React.DragEvent) => {
+  const resolveTargetIndex = (ins: Insertion): number => {
+    if (!ins) return layout.widgets.length;
+    return ins.before ? ins.index : ins.index + 1;
+  };
+
+  const onCardDragOver = (e: React.DragEvent, index: number) => {
+    const types = e.dataTransfer.types;
+    if (!types.includes(DND_MIME_PALETTE) && !types.includes(DND_MIME_REORDER)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = types.includes(DND_MIME_PALETTE) ? "copy" : "move";
+    computeInsertionForCard(e, index);
+  };
+
+  const onGridDragOver = (e: React.DragEvent) => {
+    const types = e.dataTransfer.types;
+    if (!types.includes(DND_MIME_PALETTE) && !types.includes(DND_MIME_REORDER)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = types.includes(DND_MIME_PALETTE) ? "copy" : "move";
+    // If nothing's set yet (user dragged into empty grid area), default
+    // to "append at end".
+    setInsertion((prev) =>
+      prev ?? { index: Math.max(0, layout.widgets.length - 1), before: false },
+    );
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
     const paletteId = e.dataTransfer.getData(DND_MIME_PALETTE);
     const reorderIdxRaw = e.dataTransfer.getData(DND_MIME_REORDER);
-    setDropIndicator(null);
+    const target = resolveTargetIndex(insertion);
+
     if (paletteId) {
-      onAddFromPalette(paletteId, dropIndicator ?? undefined);
-      e.preventDefault();
+      onAddFromPalette(paletteId, target);
     } else if (reorderIdxRaw) {
       const from = Number(reorderIdxRaw);
-      if (Number.isFinite(from) && dropIndicator != null) {
-        onMoveWidget(from, dropIndicator);
-      }
-      e.preventDefault();
+      if (Number.isFinite(from)) onMoveWidget(from, target);
     }
+    setInsertion(null);
+    setDragSource(null);
+  };
+
+  const handleDragEnd = () => {
+    setInsertion(null);
+    setDragSource(null);
   };
 
   return (
     <div className="h-full overflow-auto">
       <div className="pointer-events-none sticky top-0 z-10 bg-gradient-to-b from-[hsl(var(--qep-deck))] to-transparent p-3">
-        <FloorZoneLabel index="PREVIEW" label={IRON_ROLE_DISPLAY_NAMES[selectedRole].toUpperCase()} />
+        <FloorZoneLabel
+          index="PREVIEW"
+          label={IRON_ROLE_DISPLAY_NAMES[selectedRole].toUpperCase()}
+        />
       </div>
 
       {isLoading ? (
@@ -451,14 +509,13 @@ function PreviewPane({
 
           <div
             onDragOver={onGridDragOver}
-            onDrop={onGridDrop}
+            onDrop={handleDrop}
             className={cn(
               "mx-4 mt-2 rounded-xl border-2 border-dashed p-3 transition-colors sm:mx-6",
-              "border-[hsl(var(--qep-deck-rule))]/60",
-              "data-[over=true]:border-[hsl(var(--qep-orange))]/70",
-              "data-[over=true]:bg-[hsl(var(--qep-orange))]/5",
+              insertion != null
+                ? "border-[hsl(var(--qep-orange))]/70 bg-[hsl(var(--qep-orange))]/5"
+                : "border-[hsl(var(--qep-deck-rule))]/60",
             )}
-            data-over={dropIndicator != null ? "true" : undefined}
           >
             {layout.widgets.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
@@ -471,30 +528,42 @@ function PreviewPane({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {layout.widgets.map((w, i) => (
-                  <PreviewWidget
-                    key={w.id}
-                    position={i}
-                    widgetId={w.id}
-                    isLast={i === layout.widgets.length - 1}
-                    onRemove={() => onRemoveWidget(w.id)}
-                    onDragEnter={() => setDropIndicator(i)}
-                    onDragLeave={() => setDropIndicator((v) => (v === i ? null : v))}
-                  />
-                ))}
+                {layout.widgets.map((w, i) => {
+                  const isBeingDragged = dragSource === i;
+                  const showIndicatorAbove =
+                    insertion != null && insertion.index === i && insertion.before;
+                  const showIndicatorBelow =
+                    insertion != null && insertion.index === i && !insertion.before;
+                  return (
+                    <PreviewWidget
+                      key={w.id}
+                      position={i}
+                      widgetId={w.id}
+                      totalCount={layout.widgets.length}
+                      isBeingDragged={isBeingDragged}
+                      showIndicatorAbove={showIndicatorAbove}
+                      showIndicatorBelow={showIndicatorBelow}
+                      onRemove={() => onRemoveWidget(w.id)}
+                      onDragStart={() => setDragSource(i)}
+                      onDragOver={(e) => onCardDragOver(e, i)}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      onMoveUp={() => i > 0 && onMoveWidget(i, i - 1)}
+                      onMoveDown={() =>
+                        i < layout.widgets.length - 1 && onMoveWidget(i, i + 2)
+                      }
+                    />
+                  );
+                })}
                 {!atCap && (
-                  <button
-                    type="button"
-                    onDragEnter={() => setDropIndicator(layout.widgets.length)}
-                    onDragLeave={() =>
-                      setDropIndicator((v) => (v === layout.widgets.length ? null : v))
-                    }
-                    className="flex min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed border-[hsl(var(--qep-deck-rule))]/60 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--qep-orange))]/60 hover:text-[hsl(var(--qep-orange))]"
-                    aria-label="Drop target — append widget"
-                    onClick={() => { /* click handled elsewhere */ }}
+                  <div
+                    onDragOver={onGridDragOver}
+                    onDrop={handleDrop}
+                    className="flex min-h-[140px] items-center justify-center rounded-xl border-2 border-dashed border-[hsl(var(--qep-deck-rule))]/60 px-3 text-xs text-muted-foreground transition-colors hover:border-[hsl(var(--qep-orange))]/60"
+                    aria-label="Drop zone — append widget"
                   >
-                    Drop or add a widget
-                  </button>
+                    Drop here to append · or drag a palette card
+                  </div>
                 )}
               </div>
             )}
@@ -506,88 +575,151 @@ function PreviewPane({
 }
 
 // ── Preview widget card ─────────────────────────────────────────────────
+//
+// Renders the REAL widget component inside a pointer-events-none shell
+// so Brian sees the widget exactly as Rylee/David/Juan will. A floating
+// overlay in the top-right carries the compose controls (grip, remove,
+// up/down) and IS interactive. Orange insertion indicators render on
+// top or bottom based on the parent's hover resolution.
 
 function PreviewWidget({
   position,
   widgetId,
-  isLast,
+  totalCount,
+  isBeingDragged,
+  showIndicatorAbove,
+  showIndicatorBelow,
   onRemove,
-  onDragEnter,
-  onDragLeave,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  onMoveUp,
+  onMoveDown,
 }: {
   position: number;
   widgetId: string;
-  isLast: boolean;
+  totalCount: number;
+  isBeingDragged: boolean;
+  showIndicatorAbove: boolean;
+  showIndicatorBelow: boolean;
   onRemove: () => void;
-  onDragEnter: () => void;
-  onDragLeave: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const descriptor = resolveFloorWidget(widgetId);
   const title = descriptor?.title ?? widgetId;
-  const purpose = descriptor?.purpose ?? "Unregistered widget — will be hidden on the Floor.";
   const size = descriptor?.size ?? "normal";
-  void isLast;
+  const Component = descriptor?.component ?? null;
 
-  const onDragStart = (e: React.DragEvent) => {
+  const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData(DND_MIME_REORDER, String(position));
     e.dataTransfer.effectAllowed = "move";
+    onDragStart();
   };
+
+  const canMoveUp = position > 0;
+  const canMoveDown = position < totalCount - 1;
 
   return (
     <div
       draggable
-      onDragStart={onDragStart}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
+      onDragStart={handleDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={cn(
-        "floor-widget-in relative flex min-h-[120px] cursor-grab flex-col overflow-hidden rounded-xl border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck-elevated))] p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] transition-all hover:border-[hsl(var(--qep-orange))]/40 active:cursor-grabbing",
+        "group relative",
         size === "wide" ? "md:col-span-2" : "",
+        isBeingDragged ? "opacity-40" : "",
       )}
     >
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-0 left-0 w-[2px] bg-[hsl(var(--qep-orange))]/60"
-      />
-      {/* Header: drag handle + title + position badge + remove */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-start gap-2">
-          <GripVertical
-            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-gray))]">
-                #{position + 1}
+      {/* Insertion indicator above */}
+      {showIndicatorAbove && <InsertionLine />}
+
+      <div
+        className={cn(
+          "relative flex min-h-[140px] cursor-grab flex-col overflow-hidden rounded-xl border bg-[hsl(var(--qep-deck-elevated))] transition-all active:cursor-grabbing",
+          "border-[hsl(var(--qep-deck-rule))] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]",
+          "hover:border-[hsl(var(--qep-orange))]/40 hover:shadow-[0_0_24px_-12px_hsl(var(--qep-orange))]",
+        )}
+      >
+        {/* Compose chrome overlay — interactive */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-2">
+          <div className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 px-1.5 py-1 text-[10px] font-kpi font-extrabold uppercase tracking-[0.14em] backdrop-blur">
+            <GripVertical
+              className="h-3 w-3 text-[hsl(var(--qep-orange))]"
+              aria-hidden="true"
+            />
+            <span className="text-foreground">#{position + 1}</span>
+            {size === "wide" && (
+              <span className="rounded border border-[hsl(var(--qep-orange))]/40 bg-[hsl(var(--qep-orange))]/10 px-1 py-0.5 text-[9px] text-[hsl(var(--qep-orange))]">
+                Wide
               </span>
-              {size === "wide" && (
-                <span className="rounded border border-[hsl(var(--qep-orange))]/40 bg-[hsl(var(--qep-orange))]/5 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-[hsl(var(--qep-orange))]">
-                  Wide
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm font-semibold text-foreground">{title}</p>
+            )}
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-0.5 rounded-md border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/90 p-0.5 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={!canMoveUp}
+              aria-label={`Move ${title} up`}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-[hsl(var(--qep-orange))]/10 hover:text-[hsl(var(--qep-orange))] disabled:opacity-40"
+            >
+              <ArrowUp className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={!canMoveDown}
+              aria-label={`Move ${title} down`}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-[hsl(var(--qep-orange))]/10 hover:text-[hsl(var(--qep-orange))] disabled:opacity-40"
+            >
+              <ArrowDown className="h-3 w-3" />
+            </button>
+            <span className="mx-0.5 h-4 w-px bg-[hsl(var(--qep-deck-rule))]" />
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={`Remove ${title}`}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${title}`}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-[hsl(var(--qep-deck))] hover:text-rose-400"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+
+        {/* Real widget rendering — disabled for interaction. The compose
+            chrome above sits on top in the z-order. */}
+        <div className="pointer-events-none h-full flex-1">
+          {Component ? (
+            <Component />
+          ) : (
+            <div className="flex h-full min-h-[140px] items-center justify-center p-4 text-center text-xs text-muted-foreground">
+              Unregistered widget (<code className="font-mono">{widgetId}</code>) — will be hidden on the Floor.
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Body: purpose */}
-      <p className="mt-2 text-xs leading-snug text-muted-foreground">{purpose}</p>
-
-      <div className="mt-auto pt-2">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-          Drag to reorder · drop on × to remove
-        </p>
-      </div>
+      {/* Insertion indicator below */}
+      {showIndicatorBelow && <InsertionLine />}
     </div>
+  );
+}
+
+/** Thin 2px orange line with soft glow — drop-position indicator. */
+function InsertionLine() {
+  return (
+    <div
+      aria-hidden="true"
+      className="relative my-1 h-[2px] w-full rounded-full bg-[hsl(var(--qep-orange))] shadow-[0_0_12px_0_hsl(var(--qep-orange))]"
+    />
   );
 }
 
