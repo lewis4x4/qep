@@ -307,13 +307,18 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
                   )}
                   style={{ width: size, height: size }}
                 >
-                  {seat.status === "ghost" && ARCHETYPE_AVATAR[seat.archetype] ? (
+                  {ARCHETYPE_AVATAR[seat.archetype] ? (
                     <>
                       <img
                         src={ARCHETYPE_AVATAR[seat.archetype]}
                         alt=""
                         aria-hidden
-                        className="absolute inset-0 h-full w-full object-cover opacity-80 saturate-[0.55] transition-[filter,opacity] duration-200 group-hover:opacity-100 group-hover:saturate-100 group-focus-visible:opacity-100 group-focus-visible:saturate-100"
+                        className={cn(
+                          "absolute inset-0 h-full w-full object-cover transition-[filter,opacity] duration-200",
+                          seat.status === "ghost"
+                            ? "opacity-80 saturate-[0.55] group-hover:opacity-100 group-hover:saturate-100 group-focus-visible:opacity-100 group-focus-visible:saturate-100"
+                            : "opacity-100",
+                        )}
                         draggable={false}
                       />
                       <div
