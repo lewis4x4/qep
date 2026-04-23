@@ -113,13 +113,23 @@ async function main() {
   }
 
   // Apply in ascending version order, one at a time, stopping on first failure.
-  for (const m of pending) {
+  // The Management API keys migrations by a "now" timestamp at second
+  // precision (schema_migrations.version is YYYYMMDDHHMMSS). Two back-to-back
+  // POSTs that land in the same second collide on the primary key and the
+  // second POST 400s with a duplicate-key error, even though the SQL is
+  // fine. Sleep past a whole second between applies to guarantee each
+  // gets a distinct version slot.
+  for (let i = 0; i < pending.length; i++) {
+    const m = pending[i];
     info(`applying ${m.filename}...`);
     const result = await applyOne(projectRef, token, m);
     if (!result.ok) {
       fail(`${m.filename} failed:\n${result.error}`);
     }
     info(`  ✓ ${m.filename}`);
+    if (i < pending.length - 1) {
+      await new Promise((r) => setTimeout(r, 1100));
+    }
   }
 
   // Verify drift is now zero.
