@@ -97,3 +97,5 @@ export function NoProfileShell({ authError }: { authError: string | null }) {
     </>
   );
 }
+
+export default NoProfileShell;

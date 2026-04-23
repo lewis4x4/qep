@@ -40,15 +40,11 @@ const DashboardPage = lazy(() =>
 const OfflineBanner = lazy(() =>
   import("./components/OfflineBanner").then((m) => ({ default: m.OfflineBanner }))
 );
-const SessionExpiredModal = lazy(() =>
-  import("./components/SessionExpiredModal").then((m) => ({ default: m.SessionExpiredModal }))
-);
+const SessionExpiredModal = lazy(() => import("./components/SessionExpiredModal"));
 const NotFoundPage = lazy(() =>
   import("./components/NotFoundPage").then((m) => ({ default: m.NotFoundPage }))
 );
-const NoProfileShell = lazy(() =>
-  import("./components/NoProfileShell").then((m) => ({ default: m.NoProfileShell }))
-);
+const NoProfileShell = lazy(() => import("./components/NoProfileShell"));
 const FlareProvider = lazy(() =>
   import("@/lib/flare/FlareProvider").then((m) => ({ default: m.FlareProvider }))
 );

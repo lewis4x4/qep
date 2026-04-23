@@ -50,3 +50,5 @@ export function SessionExpiredModal({
     </Dialog>
   );
 }
+
+export default SessionExpiredModal;
