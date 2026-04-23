@@ -1,4 +1,20 @@
-# The Floor — Widget Wiring Punch List (Top 5)
+# The Floor — Widget Wiring Punch List
+
+**Status as of 2026-04-23:**
+
+- ✅ **Shipped Week 1:** `exec.owner-brief` (10-min direct wrap) and
+  `nervous.customer-health` (new list wrapper). Ryan's Owner Floor now
+  renders 3 real widgets + 1 stub (up from 2 real + 2 stubs).
+- 🔁 **Pivoted away from Week 1:** `exec.morning-brief`. On inspection
+  the existing `AdvisorMorningBriefingCard` is the SLA+leads card
+  already in use by `qrm.advisor-brief`, not an overnight narrative.
+  A real morning briefing needs the queued `floor-narrative` edge fn
+  to mean anything distinct — re-queued for a later slice once that
+  edge fn lands.
+- ⏳ **Remaining:** `parts.serial-first` (#1), `sales.commission-to-date`
+  (#2), `parts.quote-drafts` (#4).
+
+
 
 **Context:** The Floor shell is live at `/floor` on production
 (`qualityequipmentparts.netlify.app`). Of the 29 widget ids registered in
@@ -15,13 +31,14 @@ heaviest adopters; their Floors should be the most real, the soonest.
 
 ## Ranking summary
 
-| # | Widget id | Role | Effort | Unlock |
-|---|---|---|---|---|
-| 1 | `parts.serial-first` | iron_parts_counter | **M** | Juan's Floor becomes functional, not cosmetic |
-| 2 | `sales.commission-to-date` | iron_advisor, iron_manager | **M** | Sales adoption lever (per handoff §7, "make-or-break") |
-| 3 | `exec.morning-brief` | iron_manager, iron_advisor, iron_owner | **S** | "AI Briefing" rename (C6) lands with substance for three roles |
-| 4 | `parts.quote-drafts` | iron_parts_counter, iron_parts_manager | **M** | Pairs with #1 — counter gets lookup + drafts on one surface |
-| 5 | `nervous.customer-health` | iron_manager, iron_owner | **S** | Ryan's Owner Floor goes from 2 real / 2 stubs → 3 real / 1 stub |
+| # | Widget id | Role | Effort | Unlock | Status |
+|---|---|---|---|---|---|
+| 1 | `parts.serial-first` | iron_parts_counter | **M** | Juan's Floor becomes functional, not cosmetic | ⏳ pending |
+| 2 | `sales.commission-to-date` | iron_advisor, iron_manager | **M** | Sales adoption lever (per handoff §7, "make-or-break") | ⏳ pending QA-R2 |
+| 3 | `exec.morning-brief` | iron_manager, iron_advisor, iron_owner | ~~**S**~~ **M** | "AI Briefing" rename (C6) lands with substance for three roles | 🔁 deferred — needs narrative edge fn |
+| 4 | `parts.quote-drafts` | iron_parts_counter, iron_parts_manager | **M** | Pairs with #1 — counter gets lookup + drafts on one surface | ⏳ pending QA-N1 |
+| 5 | `nervous.customer-health` | iron_manager, iron_owner | **S** | Ryan's Owner Floor goes from 2 real / 2 stubs → 3 real / 1 stub | ✅ shipped |
+| + | `exec.owner-brief` | iron_owner, iron_manager | **XS** | Zero-prop wrap of OwnerBriefCard — fastest unlock for Ryan | ✅ shipped |
 
 **Effort legend:** S ≤ 2 hours (wraps existing component), M ≤ 4 hours
 (new component + data query), L > 4 hours (new schema + component).

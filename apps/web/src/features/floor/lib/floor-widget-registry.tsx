@@ -49,6 +49,13 @@ import {
 } from "@/features/dashboards/widgets/impls/iron-man-widgets";
 import { PartsReplenishQueueWidget } from "@/features/dashboards/widgets/impls/parts-widgets";
 
+// ── Slice: The Floor widget wirings (Week 1) ────────────────────────────
+// Real-component wrappers replacing earlier stubs. Each maps to an
+// existing feature-owned component and fetches its own data — see
+// docs/floor/widget-wiring-punch-list.md for the selection rationale.
+import { OwnerBriefCard } from "@/features/owner/components/OwnerBriefCard";
+import { CustomerHealthListWidget } from "../widgets/CustomerHealthListWidget";
+
 import { FloorStubWidget } from "../components/FloorStubWidget";
 
 export interface FloorWidgetDescriptor {
@@ -215,11 +222,12 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "The one-page read of the business for the owner.",
     allowedRoles: ["iron_owner", "iron_manager"],
     size: "wide",
-    component: stub(
-      "Owner brief",
-      "Today's business at a glance — revenue pace, stale deals, risks.",
-      "Sample: $412K pipeline · 3 blockers · 1 at-risk customer",
-    ),
+    // Slice: The Floor Week 1 wiring — wraps the feature-owned
+    // OwnerBriefCard directly. It fetches its own narrative via
+    // fetchOwnerMorningBrief (with a local-synth fallback when the
+    // edge fn is pending) and its own event feed. Zero-prop component,
+    // self-contained.
+    component: OwnerBriefCard,
   },
   "exec.morning-brief": {
     id: "exec.morning-brief",
@@ -239,11 +247,11 @@ export const FLOOR_WIDGET_REGISTRY: Record<string, FloorWidgetDescriptor> = {
     purpose: "At-risk customer scores with the one signal driving each.",
     allowedRoles: ["iron_manager", "iron_owner"],
     size: "normal",
-    component: stub(
-      "Customer health",
-      "Customers trending at-risk with a reason pinned to each drop.",
-      "Sample: 4 customers below 50 · top driver: missed service windows",
-    ),
+    // Slice: The Floor Week 1 wiring — compact list of the 5
+    // lowest-scoring customer profiles. Scoring is done by the
+    // nervous-system feature's nightly refresh; this widget just
+    // reads the current snapshot.
+    component: CustomerHealthListWidget,
   },
   "qrm.decision-room-scoreboard": {
     id: "qrm.decision-room-scoreboard",
