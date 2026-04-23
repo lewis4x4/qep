@@ -45,6 +45,7 @@ import { DecisionRoomRecommendedMoves } from "../components/DecisionRoomRecommen
 import { DecisionRoomMoveBar, type TriedMove } from "../components/DecisionRoomMoveBar";
 import { DecisionRoomMoveHistory } from "../components/DecisionRoomMoveHistory";
 import { DecisionRoomFuturePulse } from "../components/DecisionRoomFuturePulse";
+import { DecisionRoomLossLens } from "../components/DecisionRoomLossLens";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -304,6 +305,13 @@ export function DecisionRoomSimulatorPage() {
       />
 
       {futureTicks.length > 0 ? <DecisionRoomFuturePulse ticks={futureTicks} /> : null}
+
+      <DecisionRoomLossLens
+        dealId={dealId}
+        companyId={composite.company?.id ?? null}
+        companyName={board.companyName}
+        dealAmount={composite.deal.amount ?? null}
+      />
 
       <DecisionRoomMoveBar
         board={board}

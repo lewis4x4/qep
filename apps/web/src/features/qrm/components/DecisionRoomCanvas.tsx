@@ -45,6 +45,33 @@ function placeSeats(seats: DecisionRoomSeat[]): SeatPosition[] {
   });
 }
 
+/** Influence arrows: visualize the power graph inside the room. Each arrow
+ *  runs from a champion to a higher-power seat they plausibly influence.
+ *  Ghost seats never draw influence arrows (we don't know the graph yet). */
+function influenceEdges(positions: SeatPosition[]): Array<{ fromIdx: number; toIdx: number }> {
+  const edges: Array<{ fromIdx: number; toIdx: number }> = [];
+  positions.forEach(({ seat }, fromIdx) => {
+    if (seat.status !== "named") return;
+    if (seat.archetype !== "champion" && seat.stance !== "champion") return;
+    // Influence flows toward the highest-power named decider / economic buyer.
+    let bestIdx = -1;
+    let bestWeight = seat.powerWeight;
+    positions.forEach(({ seat: target }, targetIdx) => {
+      if (targetIdx === fromIdx) return;
+      if (target.status !== "named") return;
+      if (target.archetype !== "economic_buyer" && target.archetype !== "operations" && target.archetype !== "executive_sponsor") {
+        return;
+      }
+      if (target.powerWeight > bestWeight) {
+        bestIdx = targetIdx;
+        bestWeight = target.powerWeight;
+      }
+    });
+    if (bestIdx >= 0) edges.push({ fromIdx, toIdx: bestIdx });
+  });
+  return edges;
+}
+
 function initials(seat: DecisionRoomSeat): string {
   if (seat.status === "ghost" && !seat.name) return "?";
   const source = seat.name ?? seat.archetypeLabel;
@@ -116,6 +143,7 @@ function stanceTone(seat: DecisionRoomSeat): { ring: string; bg: string; glow: s
 
 export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, companyName, dealName }: Props) {
   const positioned = useMemo(() => placeSeats(seats), [seats]);
+  const edges = useMemo(() => influenceEdges(positioned), [positioned]);
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   function focusSeatAt(index: number) {
@@ -166,6 +194,49 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
 
       {/* Aspect-ratio wrapper keeps seat angles consistent across viewports. */}
       <div className="relative aspect-[16/10] min-h-[380px] w-full sm:min-h-[440px]">
+        {/* Influence arrows — light SVG lines from champions toward the
+            highest-power decider they plausibly influence. */}
+        {edges.length > 0 ? (
+          <svg
+            aria-hidden
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <marker
+                id="decision-room-influence-arrow"
+                viewBox="0 0 6 6"
+                refX="5"
+                refY="3"
+                markerWidth="3"
+                markerHeight="3"
+                orient="auto"
+              >
+                <path d="M0,0 L6,3 L0,6 z" fill="hsl(var(--qep-orange) / 0.45)" />
+              </marker>
+            </defs>
+            {edges.map(({ fromIdx, toIdx }, i) => {
+              const from = positioned[fromIdx];
+              const to = positioned[toIdx];
+              if (!from || !to) return null;
+              return (
+                <line
+                  key={`${fromIdx}-${toIdx}-${i}`}
+                  x1={from.xPct}
+                  y1={from.yPct}
+                  x2={to.xPct}
+                  y2={to.yPct}
+                  stroke="hsl(var(--qep-orange) / 0.35)"
+                  strokeWidth="0.25"
+                  strokeDasharray="0.7 0.6"
+                  vectorEffect="non-scaling-stroke"
+                  markerEnd="url(#decision-room-influence-arrow)"
+                />
+              );
+            })}
+          </svg>
+        ) : null}
         {/* The table — an oval in the center of the canvas */}
         <div
           className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01]"
