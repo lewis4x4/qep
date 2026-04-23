@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, GitCompare, Plus } from "lucide-react";
+import { ArrowLeft, FileText, GitCompare, Plus, Link as LinkIcon, Check } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
@@ -8,6 +8,7 @@ import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "../components/command-deck";
 import { QrmPageHeader } from "../components/QrmPageHeader";
+import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
 import { useCrmActivityBodyMutation } from "../hooks/useCrmActivityBodyMutation";
 import { useCrmActivityDeliveryMutation } from "../hooks/useCrmActivityDeliveryMutation";
 import { useCrmActivityOccurredAtMutation } from "../hooks/useCrmActivityOccurredAtMutation";
@@ -99,6 +100,28 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
   const [competitor, setCompetitor] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [shareStateByQuote, setShareStateByQuote] = useState<Record<string, { status: "idle" | "copied" | "error"; message?: string }>>({});
+
+  const handleShareQuote = async (quoteId: string) => {
+    setShareStateByQuote((cur) => ({ ...cur, [quoteId]: { status: "idle" } }));
+    try {
+      const { token } = await issueShareToken(quoteId);
+      const url = `${window.location.origin}/q/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        // Clipboard can be blocked (insecure origin, permissions). Still
+        // surface the URL so the rep can copy it manually.
+        window.prompt("Copy this deal-room link:", url);
+      }
+      setShareStateByQuote((cur) => ({ ...cur, [quoteId]: { status: "copied", message: url } }));
+    } catch (err) {
+      setShareStateByQuote((cur) => ({
+        ...cur,
+        [quoteId]: { status: "error", message: err instanceof Error ? err.message : "Share failed" },
+      }));
+    }
+  };
 
   const compositeQuery = useQuery({
     queryKey: dealCompositeQueryKey(dealId!),
@@ -513,12 +536,29 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                             {quote.expires_at ? <span>Expires {new Date(quote.expires_at).toLocaleDateString()}</span> : null}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button asChild size="sm" variant={activeQuote?.id === quote.id ? "default" : "outline"}>
                             <Link to={rowHref}>
                               {activeQuote?.id === quote.id ? "Resume current" : "Open quote"}
                             </Link>
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { void handleShareQuote(quote.id); }}
+                            title="Copy a customer-shareable link to this proposal"
+                          >
+                            {shareStateByQuote[quote.id]?.status === "copied" ? (
+                              <><Check className="mr-1 h-3.5 w-3.5" /> Copied</>
+                            ) : (
+                              <><LinkIcon className="mr-1 h-3.5 w-3.5" /> Share link</>
+                            )}
+                          </Button>
+                          {shareStateByQuote[quote.id]?.status === "error" && (
+                            <span className="text-[11px] text-rose-400">
+                              {shareStateByQuote[quote.id]?.message}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

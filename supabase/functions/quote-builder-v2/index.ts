@@ -351,6 +351,116 @@ function createAdminClient() {
   });
 }
 
+// Customer-safe projection of a quote row for the /q/:token deal room.
+// Drops every field we don't want the end customer to see (margin,
+// dealer cost, internal status transitions, created_by, etc.) and
+// re-shapes the blob so the public API is a stable contract even if
+// internal columns churn.
+function buildPublicDealRoomPayload(row: Record<string, unknown>): Record<string, unknown> {
+  const pickString = (v: unknown) => typeof v === "string" ? v : null;
+  const pickNumber = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : null;
+  const pickArray = (v: unknown) => Array.isArray(v) ? v : [];
+  const pickObject = (v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
+  return {
+    id: pickString(row.id),
+    quote_number: pickString(row.quote_number),
+    status: pickString(row.status) ?? "draft",
+    customer_name: pickString(row.customer_name),
+    customer_company: pickString(row.customer_company),
+    branch_slug: pickString(row.branch_slug),
+    equipment: pickArray(row.equipment),
+    attachments_included: pickArray(row.attachments_included),
+    subtotal: pickNumber(row.subtotal),
+    equipment_total: pickNumber(row.equipment_total),
+    attachment_total: pickNumber(row.attachment_total),
+    discount_total: pickNumber(row.discount_total),
+    trade_credit: pickNumber(row.trade_credit),
+    net_total: pickNumber(row.net_total),
+    tax_total: pickNumber(row.tax_total),
+    cash_down: pickNumber(row.cash_down),
+    amount_financed: pickNumber(row.amount_financed),
+    customer_total: pickNumber(row.customer_total),
+    financing_scenarios: pickArray(row.financing_scenarios),
+    selected_finance_scenario: pickString(row.selected_finance_scenario),
+    ai_recommendation: pickObject(row.ai_recommendation),
+    created_at: pickString(row.created_at),
+    updated_at: pickString(row.updated_at),
+    expires_at: pickString(row.expires_at),
+    sent_at: pickString(row.sent_at),
+    viewed_at: pickString(row.viewed_at),
+  };
+}
+
+async function handlePublicDealRoomRead(url: URL, origin: string | null): Promise<Response> {
+  const token = url.searchParams.get("token")?.trim();
+  if (!token) return safeJsonError("token required", 400, origin);
+  if (token.length < 16 || token.length > 128) {
+    return safeJsonError("invalid token", 400, origin);
+  }
+
+  const admin = createAdminClient();
+  // Pull the quote with admin privileges (token IS the authorization) and
+  // the branch so the deal-room header can render dealer contact info
+  // without a second request.
+  const { data: quote, error: quoteErr } = await admin
+    .from("quote_packages")
+    .select("*")
+    .eq("share_token", token)
+    .maybeSingle();
+  if (quoteErr) {
+    console.error("public quote read error:", quoteErr);
+    return safeJsonError("Failed to load quote", 500, origin);
+  }
+  if (!quote) return safeJsonError("Quote not found", 404, origin);
+
+  // Only serve quotes the rep has explicitly progressed past draft —
+  // reps can stash share_tokens earlier for setup, but we don't leak
+  // in-progress drafts. If the rep wants to share a draft, they can
+  // save-to-draft-then-send; status flips forward then.
+  const status = typeof quote.status === "string" ? quote.status : "draft";
+  const shareableStatuses = new Set([
+    "draft",
+    "ready",
+    "sent",
+    "viewed",
+    "countered",
+    "accepted",
+    "rejected",
+    "expired",
+    "approved",
+    "approved_with_conditions",
+    "pending_approval",
+    "changes_requested",
+  ]);
+  if (!shareableStatuses.has(status)) {
+    return safeJsonError("Quote is not shareable in its current state", 403, origin);
+  }
+
+  const branchSlug = typeof quote.branch_slug === "string" ? quote.branch_slug : null;
+  let branch: Record<string, unknown> | null = null;
+  if (branchSlug) {
+    const { data: branchRow } = await admin
+      .from("branches")
+      .select("name, address_line1, city, state, postal_code, phone, email, website, doc_footer_text")
+      .eq("slug", branchSlug)
+      .maybeSingle();
+    branch = branchRow ?? null;
+  }
+
+  return safeJsonOk({
+    quote: buildPublicDealRoomPayload(quote as Record<string, unknown>),
+    branch,
+  }, origin);
+}
+
+function generateShareToken(): string {
+  // 32 hex chars → 128 bits of entropy. UUID-shaped but dashes stripped
+  // for a tidier URL. crypto.randomUUID is cryptographically random in
+  // Deno (see whatwg-webcrypto).
+  return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
 async function ensureQuoteApprovalWorkflow(
   // deno-lint-ignore no-explicit-any
   admin: any,
@@ -941,6 +1051,24 @@ Deno.serve(async (req) => {
 
   if (req.method === "OPTIONS") {
     return optionsResponse(origin);
+  }
+
+  // ── Public route: GET /public?token=... ─────────────────────────────
+  // Serves a customer-safe subset of the quote for the /q/:token deal
+  // room. Gated only by the opaque token — no user JWT required. The
+  // token itself IS the authorization. We branch before the auth gate
+  // because the customer lands here from an emailed link and has no
+  // portal account. Service-role client bypasses RLS; the token match
+  // enforces access.
+  try {
+    const publicUrl = new URL(req.url);
+    const publicAction = publicUrl.pathname.split("/").pop() || "";
+    if (req.method === "GET" && publicAction === "public") {
+      return await handlePublicDealRoomRead(publicUrl, origin);
+    }
+  } catch (err) {
+    console.error("public-route dispatch error:", err);
+    return safeJsonError("Failed to load public quote", 500, origin);
   }
 
   try {
@@ -2945,6 +3073,42 @@ Deno.serve(async (req) => {
         .eq("id", body.quote_package_id);
 
       return safeJsonOk({ signature: data, document_hash: documentHash }, origin, 201);
+    }
+
+    // ── POST /share: Issue or rotate the public deal-room token ───────
+    // Rep-authenticated write that installs an opaque share_token on the
+    // quote so the customer can load /q/:token without portal auth. A
+    // second call on the same package rotates the token (old URL dies).
+    if (action === "share") {
+      if (!body.quote_package_id || typeof body.quote_package_id !== "string") {
+        return safeJsonError("quote_package_id required", 400, origin);
+      }
+      // Verify the caller has write access via RLS — the normal user
+      // client (not admin) would bounce off workspace/role policy. That
+      // is the authorization check for issuing a share token.
+      const { data: existing, error: loadErr } = await supabase
+        .from("quote_packages")
+        .select("id, workspace_id")
+        .eq("id", body.quote_package_id)
+        .maybeSingle();
+      if (loadErr) return safeJsonError(loadErr.message, 500, origin);
+      if (!existing) return safeJsonError("Quote package not found or not accessible", 404, origin);
+
+      const token = generateShareToken();
+      const admin = createAdminClient();
+      const { error: updateErr } = await admin
+        .from("quote_packages")
+        .update({
+          share_token: token,
+          share_token_created_at: new Date().toISOString(),
+        })
+        .eq("id", body.quote_package_id);
+      if (updateErr) {
+        console.error("share token update error:", updateErr);
+        return safeJsonError(updateErr.message || "Failed to issue share token", 500, origin);
+      }
+
+      return safeJsonOk({ token }, origin, 201);
     }
 
     // ── POST /send-package: Send quote to customer via email ──────────

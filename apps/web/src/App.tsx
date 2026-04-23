@@ -136,6 +136,9 @@ const ServiceShopInvoicePage = lazy(() =>
 const ServicePublicTrackPage = lazy(() =>
   import("./features/service/pages/ServicePublicTrackPage").then((m) => ({ default: m.ServicePublicTrackPage }))
 );
+const DealRoomPage = lazy(() =>
+  import("./features/deal-room/pages/DealRoomPage").then((m) => ({ default: m.DealRoomPage }))
+);
 const IntakeKanbanPage = lazy(() =>
   import("./features/ops/pages/IntakeKanbanPage").then((m) => ({ default: m.IntakeKanbanPage }))
 );
@@ -866,6 +869,7 @@ function App() {
             <Routes>
               <Route path="/service/track" element={<ServicePublicTrackPage />} />
               <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
+              <Route path="/q/:token" element={<DealRoomPage />} />
               <Route path="/portal/login" element={<PortalLoginPage authError={error} />} />
               <Route path="/portal/*" element={<Navigate to="/portal/login" replace />} />
               <Route path="*" element={<LoginPage authError={error} />} />
@@ -1194,6 +1198,7 @@ function App() {
                 }
               />
               <Route path="/vendor/pricing/:accessKey" element={<VendorPricingPortalPage />} />
+              <Route path="/q/:token" element={<DealRoomPage />} />
               <Route
                 path="/service/efficiency"
                 element={
