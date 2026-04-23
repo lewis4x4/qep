@@ -99,7 +99,7 @@ export const NAV_ITEMS: NavItemDefinition[] = [
   },
   {
     label: "Quotes",
-    href: "/quote",
+    href: "/sales/quotes",
     icon: FileText,
     roles: ["rep", "admin", "manager", "owner"],
     primaryHeaderId: "sales",

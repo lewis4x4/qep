@@ -19,6 +19,8 @@ import type {
 
 const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-builder-v2`;
 
+export type QuoteListAction = "resume" | "resend" | "duplicate" | "mark_sent" | "archive" | "discard";
+
 export interface QuotePackageSaveResponse {
   id?: string;
   deal_id?: string;
@@ -105,11 +107,7 @@ export async function listQuotePackages(params?: {
   status?: string;
   search?: string;
 }): Promise<{ items: QuoteListItem[] }> {
-  const qs = new URLSearchParams();
-  if (params?.status && params.status !== "all") qs.set("status", params.status);
-  if (params?.search) qs.set("search", params.search);
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/list${suffix}`);
+  const res = await fetchWithSessionRetry(buildQuoteListUrl(params));
   if (!res.ok) {
     // Preserve the real server detail. The edge function returns a
     // structured { error: string } body on 4xx/5xx; bubble it up so the
@@ -132,6 +130,42 @@ export async function listQuotePackages(params?: {
     throw new Error(detail.trim() || `Failed to list quotes (HTTP ${res.status})`);
   }
   return res.json();
+}
+
+export function buildQuoteListUrl(params?: { status?: string; search?: string }): string {
+  const qs = new URLSearchParams();
+  if (params?.status && params.status !== "all") qs.set("status", params.status);
+  if (params?.search) qs.set("search", params.search);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return `${QUOTE_API_URL}/list${suffix}`;
+}
+
+export function buildQuoteListActionPayload(input: {
+  quotePackageId: string;
+  action: Exclude<QuoteListAction, "resume" | "resend">;
+}): { quote_package_id: string; action: Exclude<QuoteListAction, "resume" | "resend"> } {
+  return {
+    quote_package_id: input.quotePackageId,
+    action: input.action,
+  };
+}
+
+export async function performQuoteListAction(input: {
+  quotePackageId: string;
+  action: Exclude<QuoteListAction, "resume" | "resend">;
+}): Promise<{ ok: true; quote?: QuoteListItem | null }> {
+  const res = await fetchWithSessionRetry(`${QUOTE_API_URL}/list-action`, {
+    method: "POST",
+    body: JSON.stringify(buildQuoteListActionPayload(input)),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = (body as { error?: string; message?: string }).error
+      ?? (body as { message?: string }).message
+      ?? "";
+    throw new Error(detail.trim() || `Quote action failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<{ ok: true; quote?: QuoteListItem | null }>;
 }
 
 /**
