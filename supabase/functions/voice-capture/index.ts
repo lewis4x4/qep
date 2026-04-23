@@ -25,6 +25,7 @@ import {
 } from "../_shared/voice-capture-crm.ts";
 import { processVoiceNoteIntelligence } from "../_shared/voice-note-intelligence.ts";
 import { safeCorsHeaders } from "../_shared/safe-cors.ts";
+import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 type ExtractedDealData = VoiceCaptureExtractedDealData;
@@ -89,7 +90,8 @@ Deno.serve(async (req) => {
     }
 
     // ── Upload audio to Supabase Storage ──────────────────────────────────────
-    const extension = getAudioExtension(audioFile.type);
+    const audioMimeType = canonicalizeAudioMimeType(audioFile.type);
+    const extension = audioExtensionFromMimeType(audioMimeType);
     const storagePath = `${user.id}/${Date.now()}.${extension}`;
     let audioBuffer: ArrayBuffer;
     try {
@@ -106,7 +108,7 @@ Deno.serve(async (req) => {
     const { error: uploadError } = await supabaseAdmin.storage
       .from("voice-recordings")
       .upload(storagePath, audioBuffer, {
-        contentType: audioFile.type,
+        contentType: audioMimeType,
         upsert: false,
       });
 
@@ -156,7 +158,7 @@ Deno.serve(async (req) => {
 
     try {
       const whisperForm = new FormData();
-      whisperForm.append("file", new Blob([audioBuffer], { type: audioFile.type }), `audio.${extension}`);
+      whisperForm.append("file", new Blob([audioBuffer], { type: audioMimeType }), `audio.${extension}`);
       whisperForm.append("model", "whisper-1");
       whisperForm.append("language", "en");
       whisperForm.append("response_format", "verbose_json");
@@ -715,18 +717,6 @@ async function checkVoiceCaptureRateLimit(
   }
 
   return true;
-}
-
-function getAudioExtension(mimeType: string): string {
-  const map: Record<string, string> = {
-    "audio/webm": "webm",
-    "audio/mp4": "mp4",
-    "audio/ogg": "ogg",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/x-m4a": "m4a",
-  };
-  return map[mimeType] ?? "webm";
 }
 
 function humanizeVoiceCaptureError(

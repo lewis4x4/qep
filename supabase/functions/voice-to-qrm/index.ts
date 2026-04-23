@@ -20,6 +20,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { requireServiceUser } from "../_shared/service-auth.ts";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
+import { audioExtensionFromMimeType, canonicalizeAudioMimeType } from "../_shared/audio-mime.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 import { resolveProfileActiveWorkspaceId } from "../_shared/workspace.ts";
@@ -279,7 +280,8 @@ Deno.serve(async (req) => {
 
     // ── 2. Upload audio to storage ────────��───────────────────────────────
     const audioBuffer = await audioFile.arrayBuffer();
-    const ext = audioFile.name?.split(".").pop() || "webm";
+    const audioMimeType = canonicalizeAudioMimeType(audioFile.type);
+    const ext = audioFile.name?.split(".").pop()?.toLowerCase() || audioExtensionFromMimeType(audioMimeType);
     // Keep Voice Quote recordings in the same private bucket + user-folder
     // layout as the working voice-capture pipeline so storage policy and
     // operator expectations stay aligned.
@@ -288,7 +290,7 @@ Deno.serve(async (req) => {
     const { error: uploadError } = await supabaseAdmin.storage
       .from("voice-recordings")
       .upload(storagePath, audioBuffer, {
-        contentType: audioFile.type || "audio/webm",
+        contentType: audioMimeType,
         upsert: false,
       });
 
@@ -304,7 +306,7 @@ Deno.serve(async (req) => {
     }
 
     const whisperForm = new FormData();
-    whisperForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioFile.type || "audio/webm" }));
+    whisperForm.append("file", new File([audioBuffer], `recording.${ext}`, { type: audioMimeType }));
     whisperForm.append("model", "whisper-1");
 
     const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
