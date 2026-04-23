@@ -85,6 +85,12 @@ export default {
           "Consolas",
           "monospace",
         ],
+        // Slice: The Floor — brand-compliant display + KPI typefaces.
+        // Usage: `font-display` for hero + section labels (Bebas Neue),
+        // `font-kpi` for big-number metrics + subheads (Montserrat).
+        // Body stays on Inter via the existing default cascade.
+        display: ["Bebas Neue", "Impact", "Oswald", "ui-sans-serif", "sans-serif"],
+        kpi: ["Montserrat", "ui-sans-serif", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

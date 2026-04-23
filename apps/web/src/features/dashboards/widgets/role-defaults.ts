@@ -35,4 +35,21 @@ export const DEFAULT_WIDGETS: Record<IronRole, string[]> = {
     "iron.demo-schedule",
     "iron.return-inspections",
   ],
+  // ── Slice: The Floor — three QEP-specific roles ──
+  // These defaults feed BOTH the legacy Iron dashboards AND The Floor's
+  // seed layouts. The Floor's curated lists (6 widgets) are in
+  // docs/floor/widget-inventory.md §5; these entries are the narrower
+  // fallback used when a workspace has no row in `floor_layouts`.
+  iron_owner: [
+    "iron.inventory-aging",
+    "iron.approval-queue",
+    "parts.replenish-queue",
+  ],
+  iron_parts_counter: [
+    "parts.replenish-queue",
+  ],
+  iron_parts_manager: [
+    "parts.replenish-queue",
+    "iron.inventory-aging",
+  ],
 };

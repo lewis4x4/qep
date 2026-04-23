@@ -8,7 +8,17 @@
  * update this file in the same PR — there is no codegen step.
  */
 
-export type IronRole = "iron_advisor" | "iron_manager" | "iron_woman" | "iron_man";
+// MUST stay in sync with apps/web/src/features/qrm/lib/iron-roles.ts AND
+// supabase/migrations/374_floor_layouts_and_iron_role_expansion.sql.
+// The Floor extended the enum with three QEP-specific roles.
+export type IronRole =
+  | "iron_advisor"
+  | "iron_manager"
+  | "iron_woman"
+  | "iron_man"
+  | "iron_owner"
+  | "iron_parts_counter"
+  | "iron_parts_manager";
 
 export type CommandCenterScope = "mine" | "team" | "branch" | "company";
 

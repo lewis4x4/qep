@@ -70,6 +70,13 @@ const QuoteListPage = lazy(() =>
 const DashboardRouter = lazy(() =>
   import("./features/dashboards/pages/DashboardRouter").then((m) => ({ default: m.DashboardRouter }))
 );
+// Slice: The Floor — simplified, Brian-curated, team-facing landing surface.
+const FloorPage = lazy(() =>
+  import("./features/floor/pages/FloorPage").then((m) => ({ default: m.FloorPage }))
+);
+const FloorComposePage = lazy(() =>
+  import("./features/floor/pages/FloorComposePage").then((m) => ({ default: m.FloorComposePage }))
+);
 const ServiceCommandCenterPage = lazy(() =>
   import("./features/service/pages/ServiceCommandCenterPage").then((m) => ({ default: m.ServiceCommandCenterPage }))
 );
@@ -944,6 +951,32 @@ function App() {
                     userRole={profile.role}
                     ironRoleFromProfile={profile.iron_role}
                   />
+                }
+              />
+              {/* Slice: The Floor — parallel to /dashboard, team-facing */}
+              <Route
+                path="/floor"
+                element={
+                  <FloorPage
+                    userId={profile.id}
+                    userRole={profile.role}
+                    userFullName={profile.full_name}
+                    ironRoleFromProfile={profile.iron_role}
+                  />
+                }
+              />
+              <Route
+                path="/floor/compose"
+                element={
+                  ["admin", "manager", "owner"].includes(profile.role) ? (
+                    <FloorComposePage
+                      userId={profile.id}
+                      userRole={profile.role}
+                      userFullName={profile.full_name}
+                    />
+                  ) : (
+                    <Navigate to="/floor" replace />
+                  )
                 }
               />
               <Route

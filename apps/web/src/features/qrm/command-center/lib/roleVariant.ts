@@ -73,6 +73,17 @@ export function getSectionOrder(role: IronRole): RoleVariantSection[] {
       return WOMAN_ORDER;
     case "iron_man":
       return MAN_ORDER;
+    // ── Slice: The Floor role extensions ──
+    // The QRM Command Center falls back to the nearest existing variant
+    // for these roles; the real surface for them is /floor (see
+    // FloorPage). Owner ≈ manager lens; parts counter ≈ advisor lens;
+    // parts manager ≈ manager lens.
+    case "iron_owner":
+      return MANAGER_ORDER;
+    case "iron_parts_counter":
+      return ADVISOR_ORDER;
+    case "iron_parts_manager":
+      return MANAGER_ORDER;
   }
 }
 
@@ -97,6 +108,22 @@ export function getRoleHeadline(role: IronRole): { title: string; subtitle: stri
       return {
         title: "QRM Command Center",
         subtitle: "Equipment readiness and prep tasks driving today's revenue.",
+      };
+    // ── Slice: The Floor role extensions (fallback headlines) ──
+    case "iron_owner":
+      return {
+        title: "QRM Command Center",
+        subtitle: "Business at a glance — approvals, aging fleet, customer health.",
+      };
+    case "iron_parts_counter":
+      return {
+        title: "QRM Command Center",
+        subtitle: "Serial-first parts quoting and counter pipeline.",
+      };
+    case "iron_parts_manager":
+      return {
+        title: "QRM Command Center",
+        subtitle: "Parts demand, replenishment, and stock health.",
       };
   }
 }

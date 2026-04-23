@@ -1,6 +1,22 @@
 import type { UserRole } from "@/lib/database.types";
 
-export type IronRole = "iron_manager" | "iron_advisor" | "iron_woman" | "iron_man";
+/**
+ * Iron role enum. MUST stay in sync with the CHECK constraint on
+ * `public.profiles.iron_role` and `public.profile_role_blend.iron_role`
+ * (see supabase/migrations/374_floor_layouts_and_iron_role_expansion.sql).
+ *
+ * Slice: The Floor — three QEP-specific roles (owner, parts_counter,
+ * parts_manager) added alongside the original four so every team member
+ * has a Floor built for them.
+ */
+export type IronRole =
+  | "iron_manager"
+  | "iron_advisor"
+  | "iron_woman"
+  | "iron_man"
+  | "iron_owner"
+  | "iron_parts_counter"
+  | "iron_parts_manager";
 
 export interface IronRoleInfo {
   role: IronRole;
@@ -56,6 +72,22 @@ const IRON_ROLE_INFO: Record<IronRole, IronRoleInfo> = {
     display: "Iron Man",
     description: "Support tech — service-specific flows, customer site response",
   },
+  // ── Slice: The Floor — QEP-specific role additions ──
+  iron_owner: {
+    role: "iron_owner",
+    display: "Owner",
+    description: "Dealership owner — reads the business at a glance, approves strategic signals",
+  },
+  iron_parts_counter: {
+    role: "iron_parts_counter",
+    display: "Parts Counter",
+    description: "Counter parts sales — serial-first lookup, fast quote creation, draft tracking",
+  },
+  iron_parts_manager: {
+    role: "iron_parts_manager",
+    display: "Parts Manager",
+    description: "Parts inventory health — demand forecast, replenishment approvals, stock variance",
+  },
 };
 
 const LEGACY_ROLE_MAP: Record<string, IronRole> = {
@@ -78,7 +110,10 @@ export function isIronRole(value: string | null | undefined): value is IronRole 
     value === "iron_manager" ||
     value === "iron_advisor" ||
     value === "iron_woman" ||
-    value === "iron_man"
+    value === "iron_man" ||
+    value === "iron_owner" ||
+    value === "iron_parts_counter" ||
+    value === "iron_parts_manager"
   );
 }
 
