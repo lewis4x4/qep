@@ -10,8 +10,9 @@
   },
   "scripts": {
     "dev": "bun run --filter @qep/web dev",
-    "build": "bun run migrations:check && bun run audit:edges && bun run --filter @qep/web build",
+    "build": "bun run migrations:check && bun run audit:rls-initplan && bun run audit:edges && bun run --filter @qep/web build",
     "build:web": "bun run --filter @qep/web build",
+    "audit:rls-initplan": "node ./scripts/check-rls-initplan.mjs",
     "audit:edges": "bun ./scripts/check-edge-function-auth.mjs",
     "pressure:parts": "bun ./scripts/parts-service-pressure/run.mjs",
     "test:edge:dge": "deno test supabase/functions/_shared/market-valuation-logic.test.ts supabase/functions/_shared/dge-refresh-state.test.ts supabase/functions/_shared/dge-refresh-jobs.test.ts supabase/functions/_shared/dge-auth.test.ts",
