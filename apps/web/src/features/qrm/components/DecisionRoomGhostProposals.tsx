@@ -9,11 +9,12 @@
  * contact" action that upserts a crm_contacts row.
  */
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Search, UserCheck } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, ExternalLink, Loader2, Search, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 interface Proposal {
   name: string;
@@ -27,6 +28,16 @@ interface Props {
   dealId: string;
   archetype: string;
   companyName: string | null;
+  companyId: string | null;
+}
+
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
 }
 
 async function fetchProposals(input: {
@@ -62,11 +73,56 @@ function confidenceCls(level: Proposal["confidence"]): string {
   }
 }
 
-export function DecisionRoomGhostProposals({ dealId, archetype, companyName }: Props) {
+export function DecisionRoomGhostProposals({ dealId, archetype, companyName, companyId }: Props) {
   const [fired, setFired] = useState(false);
+  const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
+  const [savingName, setSavingName] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const mutation = useMutation({
     mutationFn: () => fetchProposals({ dealId, archetype, companyName: companyName ?? "" }),
   });
+
+  async function handleSaveContact(proposal: Proposal) {
+    if (!companyId || savingName) return;
+    setSavingName(proposal.name);
+    try {
+      const { firstName, lastName } = splitName(proposal.name);
+      const { error } = await supabase.from("crm_contacts").insert({
+        first_name: firstName || proposal.name,
+        last_name: lastName || "(unknown)",
+        title: proposal.title,
+        primary_company_id: companyId,
+        metadata: {
+          decision_room_source: {
+            archetype,
+            profile_url: proposal.profileUrl,
+            confidence: proposal.confidence,
+            evidence: proposal.evidence,
+            deal_id: dealId,
+          },
+        },
+      });
+      if (error) throw error;
+
+      setSavedNames((prev) => new Set([...prev, proposal.name]));
+      toast({
+        title: "Saved as contact",
+        description: `${proposal.name} added to this company. The decision room will reflect them once it refreshes.`,
+      });
+      // Re-run the relationship query so the ghost seat becomes named.
+      await queryClient.invalidateQueries({ queryKey: ["decision-room-simulator", dealId, "relationship"] });
+    } catch (err) {
+      toast({
+        title: "Couldn't save contact",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingName(null);
+    }
+  }
 
   if (!companyName) {
     return (
@@ -136,35 +192,72 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName }: P
         ) : null}
       </div>
       <ul className="space-y-2">
-        {proposals.map((p, i) => (
-          <li
-            key={`${p.name}-${i}`}
-            className={cn(
-              "flex items-start gap-3 rounded-lg border p-3",
-              confidenceCls(p.confidence),
-            )}
-          >
-            <UserCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
-              {p.title ? (
-                <p className="truncate text-xs text-foreground/80">{p.title}</p>
+        {proposals.map((p, i) => {
+          const saved = savedNames.has(p.name);
+          const savingThis = savingName === p.name;
+          return (
+            <li
+              key={`${p.name}-${i}`}
+              className={cn(
+                "flex flex-col gap-2 rounded-lg border p-3",
+                confidenceCls(p.confidence),
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <UserCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
+                  {p.title ? (
+                    <p className="truncate text-xs text-foreground/80">{p.title}</p>
+                  ) : null}
+                  <p className="mt-1 text-[10px] italic text-muted-foreground">{p.evidence}</p>
+                </div>
+                {p.profileUrl ? (
+                  <a
+                    href={p.profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-qep-orange hover:text-orange-300"
+                    aria-label={`Open LinkedIn profile for ${p.name}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+              </div>
+              {companyId ? (
+                <div className="flex justify-end">
+                  {saved ? (
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-300">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Saved to CRM
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={savingThis}
+                      onClick={() => handleSaveContact(p)}
+                      className="h-7 gap-1 text-[11px]"
+                    >
+                      {savingThis ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-3 w-3" />
+                          Save as contact
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               ) : null}
-              <p className="mt-1 text-[10px] italic text-muted-foreground">{p.evidence}</p>
-            </div>
-            {p.profileUrl ? (
-              <a
-                href={p.profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-qep-orange hover:text-orange-300"
-                aria-label={`Open LinkedIn profile for ${p.name}`}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            ) : null}
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
       <p className="text-[10px] italic text-muted-foreground">
         Candidates are web-sourced starting points, not verified facts. Confirm with your champion before outreach.

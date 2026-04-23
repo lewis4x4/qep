@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
 import { DecisionRoomGhostProposals } from "./DecisionRoomGhostProposals";
+import { DecisionRoomEmailDraft } from "./DecisionRoomEmailDraft";
 
 interface PersonaMessage {
   role: "rep" | "seat";
@@ -41,8 +42,10 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dealId: string;
+  companyId: string | null;
   companyName: string | null;
   dealName: string | null;
+  repName: string | null;
 }
 
 function evidenceKindLabel(kind: string): string {
@@ -131,7 +134,16 @@ async function askSeatPersona(input: {
   return text;
 }
 
-export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, companyName, dealName }: Props) {
+export function DecisionRoomSeatDrawer({
+  seat,
+  open,
+  onOpenChange,
+  dealId,
+  companyId,
+  companyName,
+  dealName,
+  repName,
+}: Props) {
   const [messages, setMessages] = useState<PersonaMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState(false);
@@ -315,8 +327,25 @@ export function DecisionRoomSeatDrawer({ seat, open, onOpenChange, dealId, compa
                   dealId={dealId}
                   archetype={seat.archetype}
                   companyName={companyName}
+                  companyId={companyId}
                 />
               </div>
+            </section>
+          ) : null}
+
+          {/* Email draft (named seats only — you can't email a ghost yet). */}
+          {seat.status === "named" ? (
+            <section>
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Outreach
+              </h3>
+              <DecisionRoomEmailDraft
+                seat={seat}
+                dealId={dealId}
+                dealName={dealName}
+                companyName={companyName}
+                repName={repName}
+              />
             </section>
           ) : null}
 

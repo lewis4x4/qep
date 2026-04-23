@@ -400,6 +400,11 @@ verify_jwt = false
 [functions.decision-room-ghost-propose]
 verify_jwt = false
 
+# Decision Room email draft — generates a seat-targeted outreach email
+# grounded on that seat's evidence. Same access-gated pattern.
+[functions.decision-room-draft-email]
+verify_jwt = false
+
 [functions.generate-daily-briefing]
 verify_jwt = false
 

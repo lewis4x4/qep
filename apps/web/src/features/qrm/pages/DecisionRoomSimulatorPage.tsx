@@ -16,7 +16,7 @@
  *     new velocity and grows the Move History panel.
  *   - Seat drawer — per-seat evidence + ghost find-guidance + persona chat.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
@@ -53,6 +53,36 @@ const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   unmatchedStakeholders: [],
 };
 
+const MOVE_HISTORY_STORAGE_VERSION = 1;
+const MOVE_HISTORY_MAX_ENTRIES = 20;
+
+function moveHistoryStorageKey(dealId: string): string {
+  return `qep:decision-room:moves:v${MOVE_HISTORY_STORAGE_VERSION}:${dealId}`;
+}
+
+function loadMoveHistory(dealId: string): TriedMove[] {
+  try {
+    const raw = localStorage.getItem(moveHistoryStorageKey(dealId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, MOVE_HISTORY_MAX_ENTRIES) as TriedMove[];
+  } catch {
+    return [];
+  }
+}
+
+function persistMoveHistory(dealId: string, history: TriedMove[]): void {
+  try {
+    localStorage.setItem(
+      moveHistoryStorageKey(dealId),
+      JSON.stringify(history.slice(0, MOVE_HISTORY_MAX_ENTRIES)),
+    );
+  } catch {
+    // Out-of-quota or private-mode — ignore silently.
+  }
+}
+
 export function DecisionRoomSimulatorPage() {
   const { dealId } = useParams<{ dealId: string }>();
   const blockers = useBlockers();
@@ -60,6 +90,18 @@ export function DecisionRoomSimulatorPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moveHistory, setMoveHistory] = useState<TriedMove[]>([]);
   const [movePrefill, setMovePrefill] = useState<string | null>(null);
+
+  // Restore move history when the dealId changes (including first mount).
+  useEffect(() => {
+    if (!dealId) return;
+    setMoveHistory(loadMoveHistory(dealId));
+  }, [dealId]);
+
+  // Persist after every history update so nothing is lost on refresh.
+  useEffect(() => {
+    if (!dealId) return;
+    persistMoveHistory(dealId, moveHistory);
+  }, [dealId, moveHistory]);
 
   const compositeQuery = useQuery({
     queryKey: ["decision-room-simulator", dealId, "composite"],
@@ -360,8 +402,10 @@ export function DecisionRoomSimulatorPage() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         dealId={dealId}
+        companyId={composite.company?.id ?? null}
         companyName={board.companyName}
         dealName={board.dealName}
+        repName={null}
       />
     </div>
   );
