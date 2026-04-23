@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, Loader2, Search, UserCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Loader2, Search, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +22,10 @@ interface Proposal {
   profileUrl: string | null;
   confidence: "high" | "medium" | "low";
   evidence: string;
+  /** Why this proposal is weak (only present on low-confidence cards).
+   *  Surfaced in the save-confirm guardrail. Optional for backward-compat
+   *  with cached proposals written before the field existed. */
+  mismatchReason?: string | null;
 }
 
 interface Props {
@@ -80,6 +84,10 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
   const [fired, setFired] = useState(false);
   const [savedNames, setSavedNames] = useState<Set<string>>(new Set());
   const [savingName, setSavingName] = useState<string | null>(null);
+  /** Low-confidence candidates are hidden by default — the rep opts in to see them. */
+  const [showWeaker, setShowWeaker] = useState(false);
+  /** Name of the low-confidence proposal currently awaiting save-confirm, or null. */
+  const [confirmName, setConfirmName] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -205,6 +213,133 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
     );
   }
 
+  // Split into strong (high + medium company match) vs weak (low / partial).
+  // Weak candidates are almost always wrong-company false positives — we
+  // hide them behind an explicit opt-in so the default view stays honest.
+  const strongProposals = proposals.filter((p) => p.confidence !== "low");
+  const weakProposals = proposals.filter((p) => p.confidence === "low");
+
+  const renderCard = (p: Proposal, key: string) => {
+    const saved = savedNames.has(p.name);
+    const savingThis = savingName === p.name;
+    const isLow = p.confidence === "low";
+    const awaitingConfirm = confirmName === p.name;
+    return (
+      <li
+        key={key}
+        className={cn(
+          "flex flex-col gap-2 rounded-lg border p-3",
+          confidenceCls(p.confidence),
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <UserCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
+            {p.title ? (
+              <p className="truncate text-xs text-foreground/80">{p.title}</p>
+            ) : null}
+            <p className="mt-1 text-[10px] italic text-muted-foreground">{p.evidence}</p>
+          </div>
+          {p.profileUrl ? (
+            <a
+              href={p.profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-qep-orange hover:text-orange-300"
+              aria-label={`Open LinkedIn profile for ${p.name}`}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : null}
+        </div>
+        {companyId ? (
+          saved ? (
+            <div className="flex justify-end">
+              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-300">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Saved to CRM
+              </span>
+            </div>
+          ) : awaitingConfirm ? (
+            <div
+              role="alert"
+              className="flex flex-col gap-2 rounded-md border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] text-amber-100"
+            >
+              <div className="flex items-start gap-1.5">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                <p>
+                  <span className="font-semibold">Weak match.</span>{" "}
+                  {p.mismatchReason ?? `Could not confirm "${companyName}" on this profile.`} Save anyway?
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmName(null)}
+                  className="h-7 text-[11px]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={savingThis}
+                  onClick={() => {
+                    setConfirmName(null);
+                    void handleSaveContact(p);
+                  }}
+                  className="h-7 gap-1 text-[11px]"
+                >
+                  {savingThis ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save anyway"
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={savingThis}
+                onClick={() => {
+                  // Low-confidence saves route through an inline confirm
+                  // so the rep sees *why* the match is weak before creating
+                  // a CRM contact they might not mean to.
+                  if (isLow) setConfirmName(p.name);
+                  else void handleSaveContact(p);
+                }}
+                className="h-7 gap-1 text-[11px]"
+              >
+                {savingThis ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-3 w-3" />
+                    Save as contact
+                  </>
+                )}
+              </Button>
+            </div>
+          )
+        ) : null}
+      </li>
+    );
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -213,74 +348,42 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
           <span className="text-[10px] italic">from cache</span>
         ) : null}
       </div>
-      <ul className="space-y-2">
-        {proposals.map((p, i) => {
-          const saved = savedNames.has(p.name);
-          const savingThis = savingName === p.name;
-          return (
-            <li
-              key={`${p.name}-${i}`}
-              className={cn(
-                "flex flex-col gap-2 rounded-lg border p-3",
-                confidenceCls(p.confidence),
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <UserCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
-                  {p.title ? (
-                    <p className="truncate text-xs text-foreground/80">{p.title}</p>
-                  ) : null}
-                  <p className="mt-1 text-[10px] italic text-muted-foreground">{p.evidence}</p>
-                </div>
-                {p.profileUrl ? (
-                  <a
-                    href={p.profileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-qep-orange hover:text-orange-300"
-                    aria-label={`Open LinkedIn profile for ${p.name}`}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                ) : null}
-              </div>
-              {companyId ? (
-                <div className="flex justify-end">
-                  {saved ? (
-                    <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-300">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Saved to CRM
-                    </span>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={savingThis}
-                      onClick={() => handleSaveContact(p)}
-                      className="h-7 gap-1 text-[11px]"
-                    >
-                      {savingThis ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Saving…
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-3 w-3" />
-                          Save as contact
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      {strongProposals.length > 0 ? (
+        <ul className="space-y-2">
+          {strongProposals.map((p, i) => renderCard(p, `strong-${p.name}-${i}`))}
+        </ul>
+      ) : (
+        <p className="rounded-md border border-white/10 bg-white/[0.02] p-3 text-xs text-muted-foreground">
+          No strong matches for {companyName}. The web search returned only partial-company hits, which are usually wrong-company false positives. Ask your champion directly or expand weaker candidates below.
+        </p>
+      )}
+
+      {weakProposals.length > 0 ? (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowWeaker((v) => !v)}
+            aria-expanded={showWeaker}
+            className="flex w-full items-center justify-between rounded-md border border-white/10 bg-white/[0.02] px-3 py-1.5 text-[11px] text-muted-foreground transition hover:bg-white/[0.04]"
+          >
+            <span>
+              {showWeaker ? "Hide" : "Show"} {weakProposals.length} weaker candidate
+              {weakProposals.length === 1 ? "" : "s"}
+            </span>
+            {showWeaker ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+          {showWeaker ? (
+            <ul className="mt-2 space-y-2">
+              {weakProposals.map((p, i) => renderCard(p, `weak-${p.name}-${i}`))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
       <p className="text-[10px] italic text-muted-foreground">
         Candidates are web-sourced starting points, not verified facts. Confirm with your champion before outreach.
       </p>

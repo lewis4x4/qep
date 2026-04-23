@@ -85,6 +85,42 @@ interface Proposal {
   profileUrl: string | null;
   confidence: "high" | "medium" | "low";
   evidence: string;
+  /** Why the match dropped to a lower confidence — surfaced in the save
+   *  guardrail so the rep sees *why* a candidate is weak, not just that
+   *  they are. Null when nothing to warn about. */
+  mismatchReason: string | null;
+}
+
+/** Tokens stripped before comparing company names. Corporate suffixes and
+ *  filler words match too broadly ("LLC" ↔ "LLC" is meaningless signal). */
+const COMPANY_STOPWORDS = new Set([
+  "llc",
+  "inc",
+  "incorporated",
+  "co",
+  "company",
+  "corp",
+  "corporation",
+  "ltd",
+  "limited",
+  "lp",
+  "llp",
+  "plc",
+  "the",
+  "and",
+  "of",
+  "&",
+]);
+
+/** Break a company name into comparable tokens — lowercased, stopword-free,
+ *  punctuation-stripped. Returns an empty array if nothing significant is left. */
+function companyTokens(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s&]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 1 && !COMPANY_STOPWORDS.has(t));
 }
 
 function normString(value: unknown, maxLen: number): string | null {
@@ -166,23 +202,73 @@ function scoreProposal(profile: ArchetypeProfile, result: TavilyResult, companyN
   const hayTitle = `${parsed.title ?? ""} ${result.excerpt}`.toLowerCase();
   const titleHit = profile.titleKeywords.some((kw) => hayTitle.includes(kw));
 
-  const hayExcerpt = result.excerpt.toLowerCase();
-  const companyHit = companyName
-    ? hayExcerpt.includes(companyName.toLowerCase()) || result.title.toLowerCase().includes(companyName.toLowerCase())
-    : false;
+  // Company match is the single biggest source of false positives. We
+  // evaluate three bands:
+  //   exactHit   — the full normalized company string appears contiguous
+  //                (e.g. "gulf coast land clearing" as a phrase)
+  //   fullTokens — every significant token appears somewhere (phrase can
+  //                be scrambled or abbreviated but no tokens missing)
+  //   partialTokens — only some tokens match (this is the Gary Tyler trap:
+  //                "Gulf Coast" matches "Gulf Coast Land Clearing" and
+  //                "Gulf Coast Building" alike — NOT enough to trust)
+  const haystack = `${result.title} ${result.excerpt}`.toLowerCase();
+  const targetPhrase = companyName.trim().toLowerCase();
+  const targetTokens = companyTokens(companyName);
+  const matchedTokens = targetTokens.filter((tok) => haystack.includes(tok));
+
+  const exactHit = targetPhrase.length > 0 && haystack.includes(targetPhrase);
+  const fullTokensHit = targetTokens.length > 0 && matchedTokens.length === targetTokens.length;
+  const partialHit = !fullTokensHit && matchedTokens.length > 0;
+
+  // Extract the candidate's own company from their LinkedIn title
+  // ("President/Owner at Gulf Coast Building…") so we can tell the rep
+  // exactly which company the candidate belongs to when it disagrees.
+  const candidateCompany = parsed.title
+    ? parsed.title.match(/\bat\s+(.+?)(?:\s*[|·]|$)/i)?.[1]?.trim() ?? null
+    : null;
 
   let confidence: "high" | "medium" | "low";
-  if (isLinkedIn && titleHit && companyHit) confidence = "high";
-  else if ((isLinkedIn && titleHit) || (titleHit && companyHit)) confidence = "medium";
-  else confidence = "low";
+  if (isLinkedIn && titleHit && exactHit) {
+    confidence = "high";
+  } else if (isLinkedIn && titleHit && fullTokensHit) {
+    confidence = "medium";
+  } else {
+    // Anything short of a full-token company match is weak — this is
+    // where false positives used to slip through as "medium".
+    confidence = "low";
+  }
 
   const evidence = [
     isLinkedIn ? "LinkedIn profile" : "web result",
     titleHit ? `title fits ${profile.label.toLowerCase()}` : null,
-    companyHit ? `${companyName} referenced` : null,
+    exactHit
+      ? `"${companyName}" in result`
+      : fullTokensHit
+      ? `all company tokens present`
+      : partialHit
+      ? `partial company match (${matchedTokens.length}/${targetTokens.length} tokens)`
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");
+
+  // Build the human-readable mismatch reason the UI shows before save when
+  // confidence is "low". Prefer naming the candidate's own company so the
+  // rep sees the exact disagreement.
+  let mismatchReason: string | null = null;
+  if (confidence === "low") {
+    if (candidateCompany && !fullTokensHit) {
+      mismatchReason = `Profile lists "${candidateCompany}", not "${companyName}".`;
+    } else if (partialHit) {
+      mismatchReason = `Only ${matchedTokens.length} of ${targetTokens.length} words in "${companyName}" appear on this profile.`;
+    } else if (!isLinkedIn) {
+      mismatchReason = `Result is not a LinkedIn profile.`;
+    } else if (!titleHit) {
+      mismatchReason = `Title does not include any ${profile.label.toLowerCase()} keywords.`;
+    } else {
+      mismatchReason = `Company "${companyName}" not confirmed on the profile.`;
+    }
+  }
 
   return {
     name: parsed.name,
@@ -190,6 +276,7 @@ function scoreProposal(profile: ArchetypeProfile, result: TavilyResult, companyN
     profileUrl: result.url || null,
     confidence,
     evidence,
+    mismatchReason,
   };
 }
 
