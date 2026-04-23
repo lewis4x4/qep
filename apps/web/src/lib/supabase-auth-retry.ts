@@ -50,12 +50,31 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/**
+ * Clear any half-loaded sb-*-auth-token row from localStorage before the
+ * sign-in call. Occasionally supabase-js gets wedged mid-refresh on a
+ * corrupt or algo-mismatched token and signInWithPassword never resolves;
+ * flushing storage first breaks the deadlock without forcing a signOut
+ * round-trip. Called on first attempt only — subsequent retries don't
+ * need to re-flush.
+ */
+function flushStaleAuthTokens(): void {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // Private mode / quota — ignore; the sign-in attempt can still proceed.
+  }
+}
+
 export async function signInWithPasswordWithRetry(params: {
   email: string;
   password: string;
 }): Promise<{ error: AuthError | null }> {
   let lastError: AuthError | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt === 0) flushStaleAuthTokens();
     try {
       const { error } = await withTimeout(
         supabase.auth.signInWithPassword(params),
@@ -89,6 +108,7 @@ export async function signInWithOtpWithRetry(params: {
 }): Promise<{ error: AuthError | null }> {
   let lastError: AuthError | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt === 0) flushStaleAuthTokens();
     try {
       const { error } = await withTimeout(
         supabase.auth.signInWithOtp(params),
