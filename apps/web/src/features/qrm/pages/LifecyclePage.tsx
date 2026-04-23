@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { Phone, FileText, ShoppingBag, Wrench, Shield, MessageSquare, AlertTriangle, RotateCcw, XCircle,
@@ -10,6 +10,7 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { fetchAccount360 } from "../lib/account-360-api";
 import { buildAccountCommandHref } from "../lib/account-command";
 import { eventLabel, summarizeCustomerTimeline, type CustomerTimelineEvent } from "../lib/customer-timeline";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
 interface LifecycleEvent extends CustomerTimelineEvent {
   id: string;
@@ -54,10 +55,9 @@ export function LifecyclePage() {
   const { data: timelineData, isLoading, isError } = useQuery({
     queryKey: ["lifecycle", resolvedCompanyId],
     queryFn: async () => {
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (c: string, v: string) => Promise<{ data: LifecycleEvent[] | null; error: unknown }> } };
-      }).from("customer_lifecycle_events")
-        .select("id, company_id, event_type, event_at, source_table, crm_companies(name)")
+      const { data, error } = await supabase
+        .from("customer_lifecycle_events")
+        .select("id, company_id, event_type, event_at, source_table, metadata")
         .eq("company_id", resolvedCompanyId!)
         .order("event_at", { ascending: true })
         .limit(500);
@@ -91,12 +91,20 @@ export function LifecyclePage() {
     );
   }
 
-  const summary = summarizeCustomerTimeline((timelineData ?? []).map((event) => ({
+  const timelineRows = timelineData ?? [];
+  const summary = summarizeCustomerTimeline(timelineRows.map((event) => ({
     id: event.id,
     eventType: event.event_type,
     eventAt: event.event_at,
     sourceTable: event.source_table,
+    metadata: (event.metadata ?? {}) as Record<string, unknown>,
   })));
+  const counts = useMemo(() => ({
+    firstContactCount: timelineRows.filter((event) => event.event_type === "first_contact").length,
+    firstQuoteCount: timelineRows.filter((event) => event.event_type === "first_quote").length,
+    firstPurchaseCount: timelineRows.filter((event) => event.event_type === "first_purchase").length,
+    firstServiceCount: timelineRows.filter((event) => event.event_type === "first_service").length,
+  }), [timelineRows]);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
@@ -118,28 +126,28 @@ export function LifecyclePage() {
             {EVENT_META["first_contact"].icon}
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Contact</p>
           </div>
-          <p className="mt-3 text-2xl font-semibold text-foreground">{String(summary.firstContactCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(counts.firstContactCount)}</p>
         </DeckSurface>
         <DeckSurface className="p-4">
           <div className="flex items-center gap-2">
             {EVENT_META["first_quote"].icon}
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Quote</p>
           </div>
-          <p className="mt-3 text-2xl font-semibold text-foreground">{String(summary.firstQuoteCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(counts.firstQuoteCount)}</p>
         </DeckSurface>
         <DeckSurface className="p-4">
           <div className="flex items-center gap-2">
             {EVENT_META["first_purchase"].icon}
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Purchase</p>
           </div>
-          <p className="mt-3 text-2xl font-semibold text-foreground">{String(summary.firstPurchaseCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(counts.firstPurchaseCount)}</p>
         </DeckSurface>
         <DeckSurface className="p-4">
           <div className="flex items-center gap-2">
             {EVENT_META["first_service"].icon}
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Service</p>
           </div>
-          <p className="mt-3 text-2xl font-semibold text-foreground">{String(summary.firstServiceCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(counts.firstServiceCount)}</p>
         </DeckSurface>
       </div>
 
@@ -172,7 +180,7 @@ export function LifecyclePage() {
         </DeckSurface>
       )}
 
-      {!isLoading && !isError && timelineData.length === 0 && (
+      {!isLoading && !isError && timelineRows.length === 0 && (
         <DeckSurface className="border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">No lifecycle events yet.</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -181,9 +189,9 @@ export function LifecyclePage() {
         </DeckSurface>
       )}
 
-      {!isLoading && !isError && timelineData.length > 0 && (
+      {!isLoading && !isError && timelineRows.length > 0 && (
         <div className="space-y-3">
-          {timelineData.map((event) => {
+          {timelineRows.map((event) => {
             const meta = EVENT_META[event.event_type];
             return (
               <div key={event.id} className="relative pl-10">

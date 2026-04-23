@@ -41,16 +41,15 @@ export function DealCoachPage() {
 
   const timeBankQuery = useQuery({
     queryKey: ["deal-coach", dealId, "time-bank", workspaceId],
-    enabled: Boolean(dealId) && workspaceId,
+    enabled: Boolean(dealId) && Boolean(workspaceId),
     queryFn: async (): Promise<TimeBankRow | null> => {
-      const { data, error } = await (supabase as unknown as {
-        rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: TimeBankRow[] | null; error: { message?: string } | null }>;
-      }).rpc("qrm_time_bank", {
+      const { data, error } = await supabase.rpc("qrm_time_bank", {
         p_workspace_id: workspaceId,
         p_default_budget_days: 14,
       });
       if (error) throw new Error(error.message ?? "Failed to load Time Bank.");
-      return (data ?? []).find((row) => row.deal_id === dealId) ?? null;
+      const rows = (data ?? []) as Array<TimeBankRow & { deal_id?: string }>;
+      return rows.find((row) => row.deal_id === dealId) ?? null;
     },
     staleTime: 60_000,
   });
@@ -66,7 +65,8 @@ export function DealCoachPage() {
 
   const blocker = blockers.data
     ? groupBlockedDeals(blockers.data.deals, blockers.data.deposits, blockers.data.anomalies).groups
-        .find((group) => group.dealId === dealId)
+        .flatMap((group) => group.deals)
+        .find((item) => item.dealId === dealId) ?? null
     : null;
 
   const loading =
@@ -76,12 +76,18 @@ export function DealCoachPage() {
     quoteVelocity.isLoading ||
     blockers.isLoading;
 
-  const error =
-    compositeQuery.error ||
-    workspaceQuery.error ||
-    timeBankQuery.error ||
-    quoteVelocity.error ||
-    blockers.error;
+  const errorMessage =
+    compositeQuery.error instanceof Error
+      ? compositeQuery.error.message
+      : workspaceQuery.error instanceof Error
+        ? workspaceQuery.error.message
+        : timeBankQuery.error instanceof Error
+          ? timeBankQuery.error.message
+          : quoteVelocity.error instanceof Error
+            ? quoteVelocity.error.message
+            : blockers.error instanceof Error
+              ? blockers.error.message
+              : null;
 
   const board = useMemo(
     () =>
@@ -89,7 +95,11 @@ export function DealCoachPage() {
         ? buildDealCoachBoard({
             composite,
             quote,
+            timeBank: timeBankQuery.data ?? null,
             blocker,
+            voiceSignals: composite.activities
+              .map((activity) => readVoiceCaptureTimelineSignals(activity))
+              .filter((signal): signal is NonNullable<ReturnType<typeof readVoiceCaptureTimelineSignals>> => signal != null),
           })
         : null,
     [composite, quote, blocker, timeBankQuery.data],
@@ -108,21 +118,11 @@ export function DealCoachPage() {
     );
   }
 
-  if (error || !composite) {
+  if (errorMessage || !composite) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            {compositeQuery.error instanceof Error
-              ? compositeQuery.error.message
-              : timeBankQuery.error instanceof Error
-                ? timeBankQuery.error.message
-                : quoteVelocity.error instanceof Error
-                  ? quoteVelocity.error.message
-                  : blockers.error instanceof Error
-                    ? blockers.error.message
-                    : "Deal coaching is unavailable right now."}
-          </p>
+          <p className="text-sm text-muted-foreground">{errorMessage ?? "Deal coaching is unavailable right now."}</p>
         </DeckSurface>
       </div>
     );
@@ -159,17 +159,9 @@ export function DealCoachPage() {
 
       {loading ? (
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading deal coaching…</DeckSurface>
-      ) : error || !composite || !board ? (
+      ) : errorMessage || !composite || !board ? (
         <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {compositeQuery.error instanceof Error
-            ? compositeQuery.error.message
-            : timeBankQuery.error instanceof Error
-              ? timeBankQuery.error.message
-                : quoteVelocity.error instanceof Error
-                  ? quoteVelocity.error.message
-                    : blockers.error instanceof Error
-                      ? blockers.error.message
-                      : "Deal coaching is unavailable right now."}
+          {errorMessage ?? "Deal coaching is unavailable right now."}
         </DeckSurface>
       ) : (
         <>
@@ -213,7 +205,7 @@ export function DealCoachPage() {
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link to={board.refreshStrategistHref}>
+                <Link to={`/qrm/deals/${dealId}/room`}>
                   Refresh strategist <ArrowUpRight className="ml-1 h-3 w-3" />
                 </Link>
               </Button>
@@ -245,7 +237,7 @@ export function DealCoachPage() {
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
-                <Link to={board.timelineHref}>
+                <Link to={`/qrm/deals/${dealId}`}>
                   Open timeline <ArrowUpRight className="ml-1 h-3 w-3" />
                 </Link>
               </Button>

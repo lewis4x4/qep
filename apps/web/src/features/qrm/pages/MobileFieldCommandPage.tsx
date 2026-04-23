@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
-import { Brain, Mic, Route, Building2, Timer, Map as MapIcon, AlertTriangle, Lock, DollarSign, Clock4 } from "lucide-react";
+import { Brain, Mic, Route, Building2, Timer, Map as MapIcon, AlertTriangle, Lock, DollarSign, Clock4, ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIronRoleBlend } from "../lib/useIronRoleBlend";
 import { resolveIronRoleAndBlend } from "../lib/iron-roles";
@@ -126,6 +126,7 @@ export function MobileFieldCommandPage() {
                 const laneClass = {
                   blockers: "border-red-500/30 text-red-400",
                   revenue_at_risk: "border-amber-500/30 text-amber-400",
+                  revenue_ready: "border-emerald-500/30 text-emerald-400",
                   default: "border-border bg-card",
                 }[item.lane] || "border-border bg-card";
 

@@ -28,7 +28,7 @@ export function RepRealityReflectionPage() {
         supabase.rpc("qrm_time_bank", {
           p_workspace_id: profile?.active_workspace_id ?? "default",
           p_default_budget_days: 14,
-        }) as { data: { data: unknown[] | null; error: { message?: string } | null } },
+        }),
         supabase
           .from("voice_captures")
           .select("id")
@@ -51,9 +51,8 @@ export function RepRealityReflectionPage() {
       if (companiesResult.error) throw new Error(companiesResult.error.message);
 
       const companyNameById = new Map((companiesResult.data ?? []).map((row) => [row.id, row.name]));
-      const timeBankByDeal = new Map(
-        ((timeBankResult.data ?? []) as Array<{ deal_id: string; pct_used: number; is_over: boolean }>).map((row) => [row.deal_id, row]),
-      );
+      const timeBankRows = (timeBankResult.data ?? []) as Array<{ deal_id: string; pct_used: number; is_over: boolean }>;
+      const timeBankByDeal = new Map(timeBankRows.map((row) => [row.deal_id, row]));
 
       return {
         deals: (dealsResult.data ?? []).map((row) => ({
@@ -74,7 +73,10 @@ export function RepRealityReflectionPage() {
     refetchInterval: 120_000,
   });
 
-  const board = boardQuery.data;
+  const board = useMemo(
+    () => (boardQuery.data ? buildRepRealityBoard(boardQuery.data) : null),
+    [boardQuery.data],
+  );
   const isLoading = boardQuery.isLoading;
   const isError = boardQuery.isError;
 
@@ -98,15 +100,17 @@ export function RepRealityReflectionPage() {
 
       {isLoading ? (
         <div className="space-y-3">
-          <DeckSurface className="h-8 bg-muted/20 rounded-sm animate-pulse" />
-          <DeckSurface className="h-8 bg-muted/20 rounded-sm animate-pulse" />
+          <DeckSurface className="h-8 bg-muted/20 rounded-sm animate-pulse"><div className="h-full" /></DeckSurface>
+          <DeckSurface className="h-8 bg-muted/20 rounded-sm animate-pulse"><div className="h-full" /></DeckSurface>
         </div>
       ) : isError || !board ? (
         <div className="space-y-3">
           <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
+            <div>
             <p className="text-sm text-muted-foreground">
               {boardQuery.error instanceof Error ? boardQuery.error.message : "Your reflection is unavailable right now."}
             </p>
+            </div>
           </DeckSurface>
         </div>
       ) : (
@@ -117,7 +121,7 @@ export function RepRealityReflectionPage() {
                 <TrendingUp className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pipeline</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{formatCurrency(board.summary.pipelineValue)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{formatCurrency(board.summary.weightedRevenue)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Weighted opportunity value across all open deals.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
@@ -125,8 +129,8 @@ export function RepRealityReflectionPage() {
                 <Timer className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Time Bank</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{board.summary.pctUsedAvg != null ? `${(board.summary.pctUsedAvg * 100).toFixed(0)}%` : "—"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Average time budget used across weighted deals.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.overTimeDeals)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Deals currently over their stage time budget.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
@@ -139,10 +143,10 @@ export function RepRealityReflectionPage() {
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Eye className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Touches</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Overdue Follow-ups</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.touches7d)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">CRM activities captured in last 7 days.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.overdueFollowUps)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Open deals that already missed their next follow-up date.</p>
             </DeckSurface>
           </div>
 
@@ -164,10 +168,10 @@ export function RepRealityReflectionPage() {
 
           <DeckSurface className="p-4">
             <div className="space-y-3">
-              {board.deals.length === 0 ? (
+              {board.focusDeals.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No deals assigned to you yet.</p>
               ) : (
-                board.deals.slice(0, 10).map((deal) => (
+                board.focusDeals.slice(0, 10).map((deal) => (
                   <DeckSurface key={deal.dealId} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0">

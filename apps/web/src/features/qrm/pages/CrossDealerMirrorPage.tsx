@@ -250,7 +250,7 @@ export function CrossDealerMirrorPage() {
         ? row.metadata
         : {} as Record<string, unknown>;
       const attachments = Array.isArray(metadata.attachments)
-        ? metadata.attachments.filter((item) => item != null)
+        ? metadata.attachments.filter((item: unknown) => item != null)
         : [];
       return {
         equipmentId: row.id,

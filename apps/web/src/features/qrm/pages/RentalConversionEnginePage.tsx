@@ -28,6 +28,7 @@ import { QrmSubNav } from "../components/QrmSubNav";
 
 export function RentalConversionEnginePage() {
   const { accountId } = useParams<{ accountId: string }>();
+  if (!accountId) return <Navigate to="/qrm/companies" replace />;
 
   const accountQuery = useQuery({
     queryKey: ["rental-conversion", accountId, "account"],
@@ -72,9 +73,9 @@ export function RentalConversionEnginePage() {
         .limit(200);
       if (invoicesError) throw new Error(invoicesError.message);
 
-      const openQuotes = (invoices.data ?? []).length;
+      const openQuotes = (invoices ?? []).length;
 
-      const equipmentIds = links.map((link) => link.equipment_id);
+      const equipmentIds = (links ?? []).map((link) => link.equipment_id);
 
       const { data: equipment, error: equipmentError } = await supabase
         .from("crm_equipment")
@@ -84,34 +85,34 @@ export function RentalConversionEnginePage() {
         .limit(200);
       if (equipmentError) throw new Error(equipmentError.message);
 
-      const rentalFleet = (equipment.data ?? []).filter((e) => e.ownership === "rental_fleet");
+      const rentalFleet = (equipment ?? []).filter((e) => e.ownership === "rental_fleet");
 
-      return {
+      return buildRentalConversionBoard({
         deals: (deals ?? []).map((row) => ({
           id: row.id,
           name: row.name,
           createdAt: row.created_at,
         })),
-        rentalLinks: (links ?? []).map((row) => ({
-          dealId: row.deal_id,
-          equipmentId: row.equipment_id,
-        })),
+        rentalLinks: (links ?? []).flatMap((row) => {
+          const equipmentJoin = rentalFleet.find((equipmentRow) => equipmentRow.id === row.equipment_id);
+          if (!equipmentJoin) return [];
+          return [{
+            dealId: row.deal_id,
+            equipmentId: row.equipment_id,
+            make: equipmentJoin.make,
+            model: equipmentJoin.model,
+            year: equipmentJoin.year,
+            name: equipmentJoin.name,
+            dailyRentalRate: equipmentJoin.daily_rental_rate,
+            currentMarketValue: equipmentJoin.current_market_value,
+          }];
+        }),
         voiceSignals: (voice ?? []).map((row) => ({
           createdAt: row.created_at,
           extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
         })),
-        rentalFleet: rentalFleet.map((row) => ({
-          id: row.id,
-          name: row.name,
-          make: row.make,
-          model: row.model,
-          year: row.year,
-          ownership: row.ownership,
-          dailyRentalRate: row.daily_rental_rate,
-          currentMarketValue: row.current_market_value,
-        })),
         openQuoteCount: openQuotes,
-      };
+      });
     },
     staleTime: 60_000,
   });
@@ -173,7 +174,7 @@ export function RentalConversionEnginePage() {
                 <RefreshCcw className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Repeat Renters</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.repeatRenters)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.repeatRentalCandidates)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Customers who have rented the same unit more than once in the last 90 days.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
@@ -181,7 +182,7 @@ export function RentalConversionEnginePage() {
                 <Truck className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Rental Intent</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.rentalIntent)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.rentalIntentSignals)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Rental signals: rent-first vs rent-to-own behavior.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
@@ -189,7 +190,7 @@ export function RentalConversionEnginePage() {
                 <ShoppingCart className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Purchase Ready</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.purchaseReady)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.purchaseReadySignals)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Accounts showing purchase readiness signals and active quotes.</p>
             </DeckSurface>
             <DeckSurface className="p-4">

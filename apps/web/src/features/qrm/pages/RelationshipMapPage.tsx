@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
@@ -127,6 +128,7 @@ export function RelationshipMapPage() {
           email: row.email,
           phone: row.phone,
         })),
+        deals,
         assessments: (assessmentsResult.data ?? []).map((row) => ({
           contactId: row.contact_id,
           decisionMakerName: row.decision_maker_name,
@@ -171,6 +173,8 @@ export function RelationshipMapPage() {
       </div>
     );
   }
+
+  const account = accountQuery.data;
 
   const board = useMemo(
     () =>
@@ -250,7 +254,7 @@ export function RelationshipMapPage() {
         </div>
       </DeckSurface>
 
-      {board.summary.totalContacts > 0 && (
+      {board.summary.contacts > 0 && (
         <DeckSurface className="p-4">
           <div className="grid gap-4 md:grid-cols-4">
             <DeckSurface className="p-4">
@@ -258,34 +262,32 @@ export function RelationshipMapPage() {
                 <UsersRound className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Contacts</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalContacts)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.contacts)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Account contacts linked to deals and activities.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
-                <Handshake className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Assessments</p>
+                <UserCheck className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Deciders</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalAssessments)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Needs assessments with decision-maker status tracking.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.deciders)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Mapped decision makers on the account.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Signature className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Quotes Signed</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Signers</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.totalSignatures)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Quote signatures across all account deals.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.signers)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Contacts with signing evidence on this account.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
-                <div className="h-4 w-4 bg-qep-deck-elevated/40 text-center flex items-center justify-center rounded-full">
-                  <span className="text-xs font-semibold text-qep-orange">{formatDate(board.summary.latestAssessment)}</span>
-                </div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Latest Activity</p>
+                <Handshake className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Unmatched</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">Today</p>
-              <p className="mt-1 text-xs text-muted-foreground">{board.summary.todayContactCount} contacts engaged.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.unmatchedStakeholders.length)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Named stakeholders still missing CRM contact resolution.</p>
             </DeckSurface>
           </div>
         </DeckSurface>

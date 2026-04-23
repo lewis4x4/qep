@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, Brain, CalendarDays, Dna, MapPinned } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DeckSurface } from "../components/command-deck";
 import { CustomerInsightCard } from "@/features/dge/components/CustomerInsightCard";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { fetchAccount360 } from "../lib/account-360-api";

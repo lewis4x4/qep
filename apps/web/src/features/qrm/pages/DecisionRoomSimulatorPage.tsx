@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import type { ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
@@ -153,17 +152,22 @@ export function DecisionRoomSimulatorPage() {
     approvalsQuery.isLoading ||
     blockers.isLoading;
 
-  const error =
-    compositeQuery.error ||
-    relationshipQuery.error ||
-    approvalsQuery.error ||
-    blockers.error;
+  const errorMessage =
+    compositeQuery.error instanceof Error
+      ? compositeQuery.error.message
+      : relationshipQuery.error instanceof Error
+        ? relationshipQuery.error.message
+        : approvalsQuery.error instanceof Error
+          ? approvalsQuery.error.message
+          : blockers.error instanceof Error
+            ? blockers.error.message
+            : null;
 
   const board = useMemo(
     () =>
       composite && relationshipQuery.data && roomSummary
         ? buildDecisionRoomBoard({
-            dealId,
+            dealId: dealId!,
             relationship: relationshipQuery.data,
             needsAssessment: composite.needsAssessment,
             blockerPresent: Boolean(blocker),
@@ -191,21 +195,11 @@ export function DecisionRoomSimulatorPage() {
     );
   }
 
-  if (error || !composite) {
+  if (errorMessage || !composite) {
     return (
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            {compositeQuery.error instanceof Error
-              ? compositeQuery.error.message
-              : relationshipQuery.error instanceof Error
-                ? relationshipQuery.error.message
-                  : approvalsQuery.error instanceof Error
-                    ? approvalsQuery.error.message
-                      : blockers.error instanceof Error
-                        ? blockers.error.message
-                          : "Decision room simulator is unavailable right now."}
-          </p>
+          <p className="text-sm text-muted-foreground">{errorMessage ?? "Decision room simulator is unavailable right now."}</p>
         </DeckSurface>
       </div>
     );
@@ -243,17 +237,9 @@ export function DecisionRoomSimulatorPage() {
 
       {loading ? (
         <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-6 text-center text-sm text-muted-foreground">Loading decision room simulator…</DeckSurface>
-      ) : error || !composite || !board ? (
+      ) : errorMessage || !composite || !board ? (
         <DeckSurface className="border-red-500/20 bg-red-500/5 p-6 text-sm text-red-300">
-          {compositeQuery.error instanceof Error
-            ? compositeQuery.error.message
-              : relationshipQuery.error instanceof Error
-                ? relationshipQuery.error.message
-                  : approvalsQuery.error instanceof Error
-                    ? approvalsQuery.error.message
-                      : blockers.error instanceof Error
-                        ? blockers.error.message
-                          : "Decision room simulator is unavailable right now."}
+          {errorMessage ?? "Decision room simulator is unavailable right now."}
         </DeckSurface>
       ) : (
         <>
@@ -263,28 +249,28 @@ export function DecisionRoomSimulatorPage() {
                 <Users className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Named Participants</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(roomSummary?.openTaskCount ?? 0)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.namedParticipants)}</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <UserRoundX className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Ghost Participants</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(roomSummary?.openTaskCount ?? 0)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.ghostParticipants)}</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Blockers</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(roomSummary?.blockerCount ?? 0)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.blockerCount)}</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <MessagesSquare className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scenarios</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(roomSummary?.scenarioCount ?? 0)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.scenarioCount)}</p>
             </DeckSurface>
           </div>
 
@@ -354,27 +340,5 @@ export function DecisionRoomSimulatorPage() {
         </>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  tone?: "default" | "warn";
-}) {
-  return (
-    <DeckSurface className="p-4">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 ${tone === "warn" ? "text-amber-400" : "text-qep-orange"}`} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-    </DeckSurface>
   );
 }

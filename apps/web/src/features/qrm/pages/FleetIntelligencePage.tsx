@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, ArrowUpRight, Clock3, PackagePlus, Radar, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import { fetchAccount360 } from "../lib/account-360-api";
 import { fetchCustomerProfile } from "@/features/dge/lib/dge-api";
 import { buildAccountCommandHref, buildAccountFleetIntelligenceHref, buildAccountGenomeHref, buildAccountOperatingProfileHref } from "../lib/account-command";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { buildFleetIntelligenceBoard } from "../lib/fleet-intelligence";
 
 function replacementWindowTone(value: "now" | "30d" | "60d" | "90d" | "future" | "none"): string {
   switch (value) {
@@ -99,10 +99,12 @@ export function FleetIntelligencePage() {
   }
 
   const account = accountQuery.data;
-  const board = {
-    fleet: equipmentQuery.data ?? [],
-    serviceJobs: account.service ?? [],
-  };
+  const board = buildFleetIntelligenceBoard({
+    fleet: account.fleet,
+    service: account.service,
+    predictions: profileQuery.data?.fleet ?? [],
+    equipmentMetadata: equipmentQuery.data ?? [],
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -150,7 +152,7 @@ export function FleetIntelligencePage() {
                 <PackagePlus className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Owned Machines</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.fleet.length)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.ownedMachines)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Account-owned equipment on file.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
@@ -158,23 +160,25 @@ export function FleetIntelligencePage() {
                 <Clock3 className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Average Age</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">N/A</p>
-              <p className="mt-1 text-xs text-muted-foreground">No service hours are tracked in the fleet table.</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">
+                {board.summary.avgAgeYears != null ? board.summary.avgAgeYears.toFixed(1) : "—"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Average age across owned machines.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Radar className="h-4 w-4 text-qep-orange" />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Service Jobs</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.serviceJobs.length)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(account.service.length)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Active service jobs associated with this account.</p>
             </DeckSurface>
-            <DeckSurface className={`p-4 ${board.fleet.length > 0 ? "" : "border-qep-warm/40"}`}>
+            <DeckSurface className={`p-4 ${board.summary.attachmentGaps > 0 ? "border-qep-warm/40" : ""}`}>
               <div className="flex items-center gap-2">
-                <AlertTriangle className={`h-4 w-4 ${board.fleet.length > 0 ? "text-qep-warm" : "text-qep-orange"}`} />
+                <AlertTriangle className={`h-4 w-4 ${board.summary.attachmentGaps > 0 ? "text-qep-warm" : "text-qep-orange"}`} />
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Attachment Gaps</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.fleet.filter(m => m.attachmentCount > 0).length)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.attachmentGaps)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Machines without registered attachments in the system.</p>
             </DeckSurface>
             <DeckSurface className="p-4">
@@ -183,18 +187,16 @@ export function FleetIntelligencePage() {
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Replacement Windows</p>
               </div>
               <div className="mt-3 space-y-3">
-                {board.fleet.length === 0 ? (
+                {board.machines.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No fleet data available to assess replacement windows.</p>
                 ) : (
-                  board.fleet.map((machine) => (
+                  board.machines.map((machine) => (
                     <div key={machine.equipmentId} className="rounded-sm border border-qep-deck-rule/60 bg-qep-deck-elevated/40 p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">
-                              {machine.label ?? `S/N ${machine.make} ${machine.model}`}
-                            </p>
-                            {machine.attachmentCount > 0 ? (
+                            <p className="text-sm font-semibold text-foreground">{machine.label}</p>
+                            {machine.hasAttachmentGap ? (
                               <span className={`text-[11px] font-medium text-qep-warm`}>
                                 Attachment gap
                               </span>
@@ -236,7 +238,7 @@ export function FleetIntelligencePage() {
                           </div>
                         </div>
                         <Button asChild size="sm" variant="outline">
-                          <Link to={`/equipment/${machine.equipmentId}`}>
+                          <Link to={buildAccountFleetIntelligenceHref(accountId)}>
                             Machine <ArrowUpRight className="ml-1 h-3 w-3" />
                           </Link>
                         </Button>

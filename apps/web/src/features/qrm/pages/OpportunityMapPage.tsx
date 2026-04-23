@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { MapWithSidebar, MapLibreCanvas, type MapMarker, type MapOverlay } from "@/components/primitives";
@@ -12,6 +12,7 @@ import { buildAccountCommandHref } from "../lib/account-command";
 import { buildOpportunityMapBoard } from "../lib/opportunity-map";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
+import { DeckSurface } from "../components/command-deck";
 
 const DEFAULT_OVERLAYS: MapOverlay[] = [
   { key: "open_revenue", label: "Open revenue", enabled: true },
@@ -115,6 +116,20 @@ export function OpportunityMapPage() {
       );
     });
   }, [boardQuery.data?.rows, overlays]);
+  const markers: MapMarker[] = useMemo(
+    () => visibleRows.map((row) => {
+      const companyId = row.companyId;
+      return {
+        id: row.id,
+        lat: row.lat,
+        lng: row.lng,
+        label: row.label,
+        tone: row.kind === "rental" ? "violet" : row.tradeSignalCount > 0 ? "orange" : row.visitTargetCount > 0 ? "green" : "blue",
+        onClick: companyId ? () => navigate(buildAccountCommandHref(companyId)) : undefined,
+      };
+    }),
+    [navigate, visibleRows],
+  );
 
   if (!profile) {
     return <Navigate to="/qrm/companies" replace />;
@@ -137,6 +152,32 @@ export function OpportunityMapPage() {
       <div className="grid gap-3">
         <div className="flex-1">
           <MapWithSidebar
+            sidebar={
+              <div className="space-y-2 p-2">
+                  {visibleRows.map((row) => (
+                    <Card key={row.id} className="p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{row.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {row.kind === "rental" ? "Rental marker" : "Account marker"}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Open revenue {formatCurrency(row.openRevenue)} · Visit targets {row.visitTargetCount} · Trade signals {row.tradeSignalCount}
+                        </p>
+                      </div>
+                      {row.companyId ? (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link to={buildAccountCommandHref(row.companyId)}>
+                            Open <ArrowUpRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            }
             sidebarHeader={
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">
@@ -203,15 +244,5 @@ export function OpportunityMapPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <DeckSurface className="p-4">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </DeckSurface>
   );
 }

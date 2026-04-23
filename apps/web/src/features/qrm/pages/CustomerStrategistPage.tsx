@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ComponentType } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -30,6 +29,7 @@ import {
 } from "../lib/customer-operating-profile";
 import { buildRelationshipMapBoard } from "../lib/relationship-map";
 import { buildRentalConversionBoard } from "../lib/rental-conversion";
+import { buildWhiteSpaceMapBoard } from "../lib/white-space-map";
 import { buildCustomerStrategistBoard, type StrategistPlan } from "../lib/customer-strategist";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
@@ -221,12 +221,12 @@ export function CustomerStrategistPage() {
       parts: account.parts,
       profile: profileQuery.data ?? null,
       predictions: profileQuery.data?.fleet ?? [],
-      equipment: signals.equipment.map((row) => {
+      equipmentSignals: signals.equipment.map((row) => {
         const metadata = (row.metadata && typeof row.metadata === "object"
           ? row.metadata
           : {}) as Record<string, unknown>;
         const attachments = Array.isArray(metadata.attachments)
-          ? metadata.attachments.filter((item) => item != null)
+          ? metadata.attachments.filter((item: unknown) => item != null)
           : [];
         return {
           equipmentId: row.id,
@@ -290,6 +290,11 @@ export function CustomerStrategistPage() {
           currentMarketValue: equipmentJoin.current_market_value,
         }];
       }),
+      voiceSignals: signals.voiceSignals.map((row) => ({
+        createdAt: row.created_at,
+        extractedData: (row.extracted_data ?? null) as ExtractedDealData | null,
+      })),
+      openQuoteCount: account.open_quotes.length,
     });
 
     return buildCustomerStrategistBoard({

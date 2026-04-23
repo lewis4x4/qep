@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import type { ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
@@ -23,14 +22,11 @@ import {
   buildAccountOperatingProfileHref,
   buildAccountStrategistHref,
 } from "../lib/account-command";
-import {
-  buildEcosystemLayerBoard,
-  type EcosystemLayerSignal,
-} from "../lib/ecosystem-layer";
+import { buildEcosystemLayerBoard, type EcosystemConfidence } from "../lib/ecosystem-layer";
 import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 
-function signalTone(signal: EcosystemLayerSignal["signal"]): string {
+function signalTone(signal: EcosystemConfidence): string {
   switch (signal) {
     case "high":
       return "text-emerald-400";
@@ -96,11 +92,63 @@ export function EcosystemLayerPage() {
       if (voiceResult.error) throw new Error(voiceResult.error.message);
       if (equipmentResult.error) throw new Error(equipmentResult.error.message);
 
+      const dealIds = (dealsResult.data ?? []).map((row) => row.id);
+      const [assessmentsResult, financeRatesResult, oemSignalsResult, auctionSignalsResult] = await Promise.all([
+        dealIds.length > 0
+          ? supabase
+              .from("needs_assessments")
+              .select("deal_id, financing_preference, monthly_payment_target, brand_preference, budget_type")
+              .in("deal_id", dealIds)
+              .limit(200)
+          : Promise.resolve({ data: [], error: null }),
+        supabase
+          .from("financing_rate_matrix")
+          .select("lender_name, customer_type, apr, term_months, min_amount, max_amount, end_date")
+          .eq("is_active", true)
+          .limit(50),
+        supabase
+          .from("manufacturer_incentives")
+          .select("oem_name, name, end_date, requires_approval, discount_type, discount_value")
+          .eq("is_active", true)
+          .limit(50),
+        supabase
+          .from("auction_results")
+          .select("make, model, year, auction_date, hammer_price, location")
+          .order("auction_date", { ascending: false })
+          .limit(50),
+      ]);
+
+      if (assessmentsResult.error) throw new Error(assessmentsResult.error.message);
+      if (financeRatesResult.error) throw new Error(financeRatesResult.error.message);
+      if (oemSignalsResult.error) throw new Error(oemSignalsResult.error.message);
+      if (auctionSignalsResult.error) throw new Error(auctionSignalsResult.error.message);
+
       return {
-        deals: dealsResult.data ?? [],
-        contacts: contactsResult.data ?? [],
-        voiceSignals: voiceResult.data ?? [],
-        equipment: equipmentResult.data ?? [],
+        assessments: (assessmentsResult.data ?? []).map((row) => ({
+          dealId: row.deal_id,
+          financingPreference: row.financing_preference,
+          monthlyPaymentTarget: row.monthly_payment_target,
+          brandPreference: row.brand_preference,
+          budgetType: row.budget_type,
+        })),
+        financeRates: financeRatesResult.data ?? [],
+        coverage: (equipmentResult.data ?? []).map((row) => ({
+          equipmentId: row.id,
+          label: [row.make, row.model, row.year].filter(Boolean).join(" ") || "Equipment",
+          warrantyExpiry: null,
+          warrantyType: null,
+          nextServiceDue: null,
+        })),
+        transport: [],
+        oemSignals: (oemSignalsResult.data ?? []).map((row) => ({
+          oemName: row.oem_name,
+          programName: row.name,
+          endDate: row.end_date,
+          requiresApproval: row.requires_approval,
+          discountType: row.discount_type,
+          discountValue: row.discount_value,
+        })),
+        auctionSignals: auctionSignalsResult.data ?? [],
       };
     },
     staleTime: 30_000,
@@ -137,10 +185,28 @@ export function EcosystemLayerPage() {
 
     return buildEcosystemLayerBoard({
       accountId,
-      deals: signals.deals ?? [],
-      contacts: signals.contacts ?? [],
-      voiceSignals: signals.voiceSignals ?? [],
-      equipment: signals.equipment ?? [],
+      amountAnchor: account.open_quotes[0]?.net_total ?? null,
+      assessments: signals.assessments ?? [],
+      financeRates: (signals.financeRates ?? []).map((row) => ({
+        lenderName: row.lender_name,
+        creditTier: row.customer_type ?? "standard",
+        ratePct: row.apr ?? 0,
+        termMonths: row.term_months ?? 0,
+        minAmount: row.min_amount ?? null,
+        maxAmount: row.max_amount ?? null,
+        expiryDate: row.end_date ?? null,
+      })),
+      coverage: signals.coverage ?? [],
+      transport: signals.transport ?? [],
+      oemSignals: signals.oemSignals ?? [],
+      auctionSignals: (signals.auctionSignals ?? []).map((row) => ({
+        make: row.make,
+        model: row.model,
+        year: row.year,
+        auctionDate: row.auction_date,
+        hammerPrice: row.hammer_price,
+        location: row.location ?? null,
+      })),
     });
   }, [account, accountId, signals]);
 
@@ -188,23 +254,30 @@ export function EcosystemLayerPage() {
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Deals</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Lender Lanes</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.dealCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.lenderLanes)}</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <CalendarSync className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Contacts</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Coverage Alerts</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.contactCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.coverageAlerts)}</p>
             </DeckSurface>
             <DeckSurface className="p-4">
               <div className="flex items-center gap-2">
                 <Layers className="h-4 w-4 text-qep-orange" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Equipment</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Transport Moves</p>
               </div>
-              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.equipmentCount)}</p>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.transportMoves)}</p>
+            </DeckSurface>
+            <DeckSurface className="p-4">
+              <div className="flex items-center gap-2">
+                <Share2 className="h-4 w-4 text-qep-orange" />
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Market Signals</p>
+              </div>
+              <p className="mt-3 text-2xl font-semibold text-foreground">{String(board.summary.marketSignals)}</p>
             </DeckSurface>
           </div>
 

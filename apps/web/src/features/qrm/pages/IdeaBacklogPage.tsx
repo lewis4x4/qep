@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Lightbulb, Plus, Mic, Loader2, Check, X, Clock, Rocket,
+  Route, Building2, Timer, Map as MapIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DeckSurface } from "../components/command-deck";
@@ -44,16 +46,14 @@ export function IdeaBacklogPage() {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!draft.title.trim()) throw new Error("Title required");
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { insert: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("qrm_idea_backlog").insert({
+      const { error } = await supabase.from("qrm_idea_backlog").insert({
         title: draft.title.trim(),
         body: draft.body.trim() || null,
         priority: draft.priority,
         source: "text",
         status: "new",
       });
-      if (error) throw new Error(String((error as { message?: string }).message ?? "Insert failed"));
+      if (error) throw new Error(error.message ?? "Insert failed");
     },
     onSuccess: () => {
       setDraft({ title: "", body: "", priority: "medium" });
@@ -67,10 +67,8 @@ export function IdeaBacklogPage() {
       const patch: Record<string, unknown> = { status: input.status };
       if (input.status === "shipped") patch.shipped_at = new Date().toISOString();
       if (input.status === "triaged") patch.triaged_at = new Date().toISOString();
-      const { error } = await (supabase as unknown as {
-        from: (t: string) => { update: (v: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } };
-      }).from("qrm_idea_backlog").update(patch).eq("id", input.id);
-      if (error) throw new Error("Update failed");
+      const { error } = await supabase.from("qrm_idea_backlog").update(patch).eq("id", input.id);
+      if (error) throw new Error(error.message ?? "Update failed");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["idea-backlog"] }),
   });
