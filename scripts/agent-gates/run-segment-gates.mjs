@@ -186,6 +186,18 @@ await pushCheck({
 });
 
 await pushCheck({
+  id: "qa.floor-layout-validation",
+  command: "bun run floor:validate-layouts",
+  required: true,
+});
+
+await pushCheck({
+  id: "qa.quote-status-constraint-smoke",
+  command: "bun run quote:status-smoke",
+  required: true,
+});
+
+await pushCheck({
   id: "qa.parts-pressure-matrix",
   command: "bun run pressure:parts",
   required: true,
@@ -267,6 +279,9 @@ const report = {
   artifacts: [
     "/tmp/qep-design-review-report.json",
     "/tmp/qep-mobile-admin-rep-redirect.png",
+    "test-results/design-review/floor-desktop.png",
+    "test-results/design-review/floor-mobile.png",
+    "test-results/design-review/floor-compose-desktop.png",
   ],
 };
 

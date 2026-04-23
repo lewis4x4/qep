@@ -17857,42 +17857,60 @@ export type Database = {
         Row: {
           catalog_entry_id: string | null
           created_at: string
+          description: string | null
+          display_order: number
+          extended_price: number | null
           id: string
+          line_type: string
           make: string | null
+          metadata: Json
           model: string | null
           quantity: number | null
           quote_package_id: string
           quoted_dealer_cost: number | null
           quoted_list_price: number | null
           source_location: string | null
+          unit_price: number | null
           workspace_id: string
           year: number | null
         }
         Insert: {
           catalog_entry_id?: string | null
           created_at?: string
+          description?: string | null
+          display_order?: number
+          extended_price?: number | null
           id?: string
+          line_type?: string
           make?: string | null
+          metadata?: Json
           model?: string | null
           quantity?: number | null
           quote_package_id: string
           quoted_dealer_cost?: number | null
           quoted_list_price?: number | null
           source_location?: string | null
+          unit_price?: number | null
           workspace_id?: string
           year?: number | null
         }
         Update: {
           catalog_entry_id?: string | null
           created_at?: string
+          description?: string | null
+          display_order?: number
+          extended_price?: number | null
           id?: string
+          line_type?: string
           make?: string | null
+          metadata?: Json
           model?: string | null
           quantity?: number | null
           quote_package_id?: string
           quoted_dealer_cost?: number | null
           quoted_list_price?: number | null
           source_location?: string | null
+          unit_price?: number | null
           workspace_id?: string
           year?: number | null
         }
@@ -17948,6 +17966,7 @@ export type Database = {
           margin_pct: number | null
           net_total: number | null
           originating_log_id: string | null
+          opportunity_description: string | null
           pdf_generated_at: string | null
           pdf_url: string | null
           photos_included: Json | null
@@ -17964,6 +17983,7 @@ export type Database = {
           trade_in_valuation_id: string | null
           updated_at: string
           video_url: string | null
+          voice_transcript: string | null
           viewed_at: string | null
           workspace_id: string
         }
@@ -17994,6 +18014,7 @@ export type Database = {
           margin_pct?: number | null
           net_total?: number | null
           originating_log_id?: string | null
+          opportunity_description?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -18010,6 +18031,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          voice_transcript?: string | null
           viewed_at?: string | null
           workspace_id?: string
         }
@@ -18040,6 +18062,7 @@ export type Database = {
           margin_pct?: number | null
           net_total?: number | null
           originating_log_id?: string | null
+          opportunity_description?: string | null
           pdf_generated_at?: string | null
           pdf_url?: string | null
           photos_included?: Json | null
@@ -18056,6 +18079,7 @@ export type Database = {
           trade_in_valuation_id?: string | null
           updated_at?: string
           video_url?: string | null
+          voice_transcript?: string | null
           viewed_at?: string | null
           workspace_id?: string
         }

@@ -1,5 +1,6 @@
-export type QuoteEntryMode = "voice" | "ai_chat" | "manual";
+export type QuoteEntryMode = "voice" | "ai_chat" | "manual" | "trade_photo";
 export type QuoteCommercialDiscountType = "flat" | "percent";
+export type QuoteLineItemKind = "equipment" | "attachment" | "warranty" | "financing" | "custom";
 export type QuoteTaxProfile =
   | "standard"
   | "agriculture_exempt"
@@ -8,8 +9,11 @@ export type QuoteTaxProfile =
   | "resale_exempt";
 
 export interface QuoteLineItemDraft {
-  kind: "equipment" | "attachment";
+  kind: QuoteLineItemKind;
   id?: string;
+  sourceCatalog?: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
+  sourceId?: string | null;
+  dealerCost?: number | null;
   title: string;
   make?: string;
   model?: string;
@@ -22,6 +26,12 @@ export interface QuoteRecommendation {
   machine: string;
   attachments: string[];
   reasoning: string;
+  trigger?: {
+    triggerType: "voice_transcript" | "ai_chat_prompt" | "manual_request" | "quote_event";
+    sourceField: string;
+    excerpt: string | null;
+    createdAt?: string | null;
+  } | null;
   alternative?: {
     machine: string;
     attachments: string[];
@@ -253,7 +263,7 @@ export interface QuoteApprovalPolicy {
 export interface QuoteVersionLineSnapshot {
   id: string | null;
   title: string;
-  kind: "equipment" | "attachment";
+  kind: QuoteLineItemKind;
   make: string | null;
   model: string | null;
   quantity: number;
@@ -409,19 +419,19 @@ export function buildQuoteVersionSnapshot(input: {
   amountFinanced: number;
   marginPct?: number | null;
   amount?: number | null;
-  equipment: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: "equipment" | "attachment" }>;
-  attachments: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: "equipment" | "attachment" }>;
+  equipment: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: QuoteLineItemKind }>;
+  attachments: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: QuoteLineItemKind }>;
   quoteStatus?: QuoteWorkspaceDraft["quoteStatus"];
   savedAt?: string | null;
 }): QuoteVersionSnapshot {
   function normalizeLines(
-    kind: "equipment" | "attachment",
-    rows: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null }>,
+    kind: QuoteLineItemKind,
+    rows: Array<QuoteLineItemDraft | { id?: string | null; title?: string | null; make?: string | null; model?: string | null; quantity?: number | null; unitPrice?: number | null; kind?: QuoteLineItemKind }>,
   ): QuoteVersionLineSnapshot[] {
     return rows.map((row) => ({
       id: row.id ?? null,
       title: row.title ?? "",
-      kind,
+      kind: row.kind ?? kind,
       make: row.make ?? null,
       model: row.model ?? null,
       quantity: Number(row.quantity ?? 1) || 1,

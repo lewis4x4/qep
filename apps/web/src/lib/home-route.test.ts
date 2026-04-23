@@ -8,10 +8,13 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("manager")).toBe("/qrm");
   });
 
-  test("keeps reps on sales unless their iron role maps to another department", () => {
-    expect(resolveHomeRoute("rep", "iron_advisor")).toBe("/sales/today");
-    expect(resolveHomeRoute("rep", "iron_woman")).toBe("/parts/companion/queue");
-    expect(resolveHomeRoute("rep", "iron_man")).toBe("/service");
+  test("sends every assigned iron role to the Floor role-home", () => {
+    expect(resolveHomeRoute("rep", "iron_advisor")).toBe("/floor");
+    expect(resolveHomeRoute("rep", "iron_woman")).toBe("/floor");
+    expect(resolveHomeRoute("rep", "iron_man")).toBe("/floor");
+    expect(resolveHomeRoute("owner", "iron_owner")).toBe("/floor");
+    expect(resolveHomeRoute("rep", "iron_parts_counter")).toBe("/floor");
+    expect(resolveHomeRoute("manager", "iron_parts_manager")).toBe("/floor");
   });
 
   test("supports future department roles directly", () => {
@@ -21,11 +24,13 @@ describe("resolveHomeRoute", () => {
     expect(resolveHomeRoute("rentals")).toBe("/rentals");
   });
 
-  test("routes stakeholders to /brief regardless of role or iron role", () => {
+  test("routes stakeholders without an iron role to /brief", () => {
     expect(resolveHomeRoute("client_stakeholder", null, "stakeholder")).toBe("/brief");
-    // Audience overrides even a role that would otherwise route elsewhere.
     expect(resolveHomeRoute("owner", null, "stakeholder")).toBe("/brief");
-    expect(resolveHomeRoute("rep", "iron_man", "stakeholder")).toBe("/brief");
+  });
+
+  test("lets stakeholder viewers with assigned iron roles land on the Floor", () => {
+    expect(resolveHomeRoute("rep", "iron_man", "stakeholder")).toBe("/floor");
   });
 
   test("does not route internal users to /brief", () => {

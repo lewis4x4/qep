@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "bun run --filter @qep/web dev",
-    "build": "bun run migrations:check && bun run audit:rls-initplan && bun run audit:edges && bun run --filter @qep/web build",
+    "build": "bun run migrations:check && bun run floor:validate-layouts && bun run audit:rls-initplan && bun run audit:edges && bun run --filter @qep/web build",
     "build:web": "bun run --filter @qep/web build",
     "audit:rls-initplan": "node ./scripts/check-rls-initplan.mjs",
     "audit:edges": "bun ./scripts/check-edge-function-auth.mjs",
@@ -23,6 +23,10 @@
     "test:kb-integration": "deno test supabase/functions/knowledge-base.integration.test.ts --allow-env --allow-net --allow-read",
     "test:pricing": "bun test apps/web/src/lib/pricing apps/web/src/lib/programs",
     "migrations:check": "bun ./scripts/check-migration-order.mjs",
+    "floor:validate-layouts": "bun ./scripts/floor/validate-floor-layouts.mjs",
+    "floor:seed-layouts": "bun ./scripts/floor/seed-layouts-for-workspace.mjs",
+    "floor:verify-production": "bun ./scripts/verify/floor-production-audit.mjs",
+    "quote:status-smoke": "bun ./scripts/verify/quote-status-constraint-smoke.mjs",
     "kb:eval": "node ./scripts/kb-eval/run-eval.mjs",
     "kb:eval:report": "node ./scripts/kb-eval/eval-report.mjs",
     "kb:workspace-isolation": "node ./scripts/kb-eval/workspace-isolation.mjs",
@@ -44,6 +48,7 @@
     "parts:hydrate": "bun ./scripts/hydrate-parts-intelligence.ts"
   },
   "devDependencies": {
+    "playwright": "^1.52.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
   }
 }

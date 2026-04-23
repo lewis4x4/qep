@@ -746,6 +746,12 @@ function SalesOrAppLayout({
   );
 }
 
+function IronShellMount() {
+  const location = useLocation();
+  if (location.pathname.startsWith("/floor")) return null;
+  return <IronShell />;
+}
+
 function App() {
   const { user, profile, loading, error } = useAuth();
   const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
@@ -963,14 +969,7 @@ function App() {
               <Route path="/" element={<Navigate to={homeRoute} replace />} />
               <Route
                 path="/dashboard"
-                element={
-                  <DashboardRouter
-                    userId={profile.id}
-                    userRole={profile.role}
-                    ironRoleFromProfile={profile.iron_role}
-                    floorMode={profile.floor_mode}
-                  />
-                }
+                element={<Navigate to="/floor" replace />}
               />
               {/* Slice: The Floor — parallel to /dashboard, team-facing */}
               <Route
@@ -2788,7 +2787,7 @@ function App() {
                     <Route path="*" element={<NotFoundPage />} />
                   </AnimatedRoutes>
                 </SalesOrAppLayout>
-                <IronShell />
+                <IronShellMount />
               </FlareProvider>
             </IronStoreProvider>
           </AppErrorBoundary>

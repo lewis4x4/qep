@@ -29,7 +29,6 @@ import {
 } from "./DirectWrapWidgets";
 import {
   getPrepHomeTransitionPlan,
-  groupQuotesByHomeStatus,
   isUnquotedCounterInquiry,
   orderCounterInquiriesForHome,
 } from "./role-home-utils";
@@ -139,16 +138,6 @@ type BlockerType =
   | "waiting_transfer"
   | "waiting_haul"
   | "other";
-
-const QUOTE_STATUS_ORDER: QuoteStatus[] = [
-  "draft",
-  "sent",
-  "viewed",
-  "approved",
-  "accepted",
-  "rejected",
-  "expired",
-];
 
 const BLOCKER_OPTIONS: Array<{ value: BlockerType; label: string }> = [
   { value: "parts_shortage", label: "Parts shortage" },
@@ -321,23 +310,20 @@ export function MyQuotesByStatusWidget() {
     refetchOnWindowFocus: false,
   });
 
-  const grouped = useMemo(() => {
-    return groupQuotesByHomeStatus(query.data ?? []);
-  }, [query.data]);
-
   const activeCount = (query.data ?? []).length;
   const totalValue = (query.data ?? []).reduce((sum, row) => sum + Number(row.net_total ?? 0), 0);
+  const visibleRows = (query.data ?? []).slice(0, 8);
 
   return (
     <FloorWidgetShell
-      title="My quotes by status"
+      title="My quotes"
       icon={<FileText className="h-3.5 w-3.5" aria-hidden="true" />}
       to="/quote"
       linkLabel="Quotes"
-      minHeight="min-h-[300px]"
+      minHeight="min-h-[360px]"
     >
       {query.isLoading ? <LoadingLine /> : null}
-      {query.isError ? <ErrorLine>Couldn't load quote statuses.</ErrorLine> : null}
+      {query.isError ? <ErrorLine>Couldn't load quotes.</ErrorLine> : null}
       {!query.isLoading && !query.isError ? (
         activeCount > 0 ? (
           <div className="space-y-3">
@@ -345,37 +331,61 @@ export function MyQuotesByStatusWidget() {
               <MiniMetric label="Open quotes" value={String(activeCount)} detail="Draft through expired" />
               <MiniMetric label="Quoted value" value={currency(totalValue)} detail="Current visible rows" />
             </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              {QUOTE_STATUS_ORDER.map((status) => {
-                const rows = grouped.get(status) ?? [];
-                return (
-                  <div
-                    key={status}
-                    className="rounded-lg border border-[hsl(var(--qep-deck-rule))] bg-[hsl(var(--qep-deck))]/45 p-2"
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <p className="font-kpi text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
-                        {statusLabel(status)}
-                      </p>
-                      <span className="font-kpi text-xs font-extrabold text-[hsl(var(--qep-orange))]">
-                        {rows.length}
-                      </span>
-                    </div>
-                    {rows.slice(0, 2).map((row) => (
-                      <CompactRow
-                        key={row.id}
-                        title={row.customer_company ?? row.customer_name ?? "Quote"}
-                        detail={`${equipmentSummary(row.equipment)} · ${daysSince(row.sent_at ?? row.updated_at)}d`}
-                        value={currency(row.net_total)}
-                        to={row.deal_id ? `/quote-v2?deal_id=${row.deal_id}` : "/quote-v2"}
-                      />
-                    ))}
-                    {rows.length === 0 ? (
-                      <p className="py-2 text-[11px] text-muted-foreground">No rows</p>
-                    ) : null}
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto rounded-lg border border-[hsl(var(--qep-deck-rule))]">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="bg-[hsl(var(--qep-deck))]/70 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Quote ID</th>
+                    <th className="px-3 py-2 font-semibold">Customer</th>
+                    <th className="px-3 py-2 font-semibold">Equipment</th>
+                    <th className="px-3 py-2 text-right font-semibold">Value</th>
+                    <th className="px-3 py-2 font-semibold">Status</th>
+                    <th className="px-3 py-2 text-right font-semibold">Days sent</th>
+                    <th className="px-3 py-2 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[hsl(var(--qep-deck-rule))]/70">
+                  {visibleRows.map((row) => {
+                    const quoteHref = `/quote-v2?package_id=${encodeURIComponent(row.id)}${row.deal_id ? `&crm_deal_id=${encodeURIComponent(row.deal_id)}` : ""}`;
+                    const action = quoteActionLabel(row.status);
+                    return (
+                      <tr key={row.id} className="bg-[hsl(var(--qep-deck))]/35">
+                        <td className="px-3 py-2 font-kpi font-extrabold text-foreground">
+                          {row.quote_number ?? row.id.slice(0, 8)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <p className="max-w-[180px] truncate font-semibold text-foreground">
+                            {row.customer_company ?? row.customer_name ?? "Unassigned"}
+                          </p>
+                          {one(row.deal)?.name ? (
+                            <p className="max-w-[180px] truncate text-[11px] text-muted-foreground">{one(row.deal)?.name}</p>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 max-w-[170px] truncate text-muted-foreground">{equipmentSummary(row.equipment)}</td>
+                        <td className="px-3 py-2 text-right font-kpi font-extrabold text-[hsl(var(--qep-orange))]">
+                          {currency(row.net_total)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded-full border border-[hsl(var(--qep-deck-rule))] bg-background/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                            {statusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-kpi text-muted-foreground">
+                          {row.sent_at ? `${daysSince(row.sent_at)}d` : "--"}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Link
+                            to={quoteHref}
+                            className="inline-flex items-center rounded-md border border-[hsl(var(--qep-orange))]/40 px-2 py-1 font-semibold text-[hsl(var(--qep-orange))] transition hover:bg-[hsl(var(--qep-orange))]/10"
+                          >
+                            {action}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : (
@@ -388,6 +398,14 @@ export function MyQuotesByStatusWidget() {
       ) : null}
     </FloorWidgetShell>
   );
+}
+
+function quoteActionLabel(status: string): string {
+  if (status === "draft" || status === "changes_requested") return "Continue";
+  if (status === "approved" || status === "approved_with_conditions") return "Send";
+  if (status === "sent" || status === "viewed") return "Follow up";
+  if (status === "expired" || status === "rejected") return "Requote";
+  return "Open";
 }
 
 export function CounterInquiriesWidget() {

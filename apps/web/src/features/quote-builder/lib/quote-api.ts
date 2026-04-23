@@ -21,12 +21,28 @@ const QUOTE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/quote-b
 
 export type QuoteListAction = "resume" | "resend" | "duplicate" | "mark_sent" | "archive" | "discard";
 
+export const QUOTE_PACKAGE_STATUS_VALUES = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "approved_with_conditions",
+  "changes_requested",
+  "sent",
+  "viewed",
+  "accepted",
+  "declined",
+  "rejected",
+  "expired",
+  "converted_to_deal",
+  "archived",
+] as const;
+
 export interface QuotePackageSaveResponse {
   id?: string;
   deal_id?: string;
   quote_package_version_id?: string | null;
   version_number?: number | null;
-  quote?: { id?: string; deal_id?: string; status?: string };
+  quote?: { id?: string; deal_id?: string; status?: string; updated_at?: string };
 }
 
 export interface PortalRevisionEnvelope {
@@ -693,7 +709,65 @@ export function buildQuoteSavePayload(
    *  quote_packages.win_probability_snapshot. Optional so legacy
    *  callers keep working. */
   winProbabilitySnapshot?: Record<string, unknown> | null,
+  options?: {
+    expectedUpdatedAt?: string | null;
+    saveMode?: "manual" | "autosave";
+  },
 ): Record<string, unknown> {
+  const lineItems = [
+    ...draft.equipment.map((item, index) => ({
+      id: item.id,
+      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      line_type: "equipment",
+      description: item.title,
+      make: item.make,
+      model: item.model,
+      year: item.year,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      extended_price: item.unitPrice * item.quantity,
+      quoted_dealer_cost: item.dealerCost ?? undefined,
+      display_order: index,
+      metadata: {
+        source_catalog: item.sourceCatalog ?? "qb_equipment_models",
+        source_id: item.sourceId ?? item.id ?? null,
+      },
+    })),
+    ...draft.attachments.map((item, index) => ({
+      id: item.id,
+      catalog_entry_id: item.sourceCatalog === "catalog_entries" ? item.sourceId ?? item.id : undefined,
+      line_type: item.kind,
+      description: item.title,
+      make: item.make,
+      model: item.model,
+      year: item.year,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      extended_price: item.unitPrice * item.quantity,
+      quoted_dealer_cost: item.dealerCost ?? undefined,
+      display_order: draft.equipment.length + index,
+      metadata: {
+        source_catalog: item.sourceCatalog ?? (item.kind === "attachment" ? "qb_attachments" : "manual"),
+        source_id: item.sourceId ?? item.id ?? null,
+      },
+    })),
+  ];
+  const recommendationTrigger = draft.recommendation
+    ? draft.recommendation.trigger ?? {
+        triggerType: draft.entryMode === "voice"
+          ? "voice_transcript"
+          : draft.entryMode === "ai_chat"
+            ? "ai_chat_prompt"
+            : "manual_request",
+        sourceField: draft.entryMode === "voice" ? "voice_transcript" : "opportunity_description",
+        excerpt: draft.voiceSummary ? draft.voiceSummary.trim().slice(0, 240) : null,
+        createdAt: new Date().toISOString(),
+      }
+    : null;
+  const recommendation = draft.recommendation
+    ? { ...draft.recommendation, trigger: recommendationTrigger }
+    : null;
+
   return {
     deal_id: draft.dealId,
     contact_id: draft.contactId || undefined,
@@ -705,15 +779,28 @@ export function buildQuoteSavePayload(
     company_id: draft.companyId || undefined,
     equipment: draft.equipment.map((item) => ({
       id: item.id,
+      kind: item.kind,
+      sourceCatalog: item.sourceCatalog,
+      sourceId: item.sourceId ?? item.id,
+      dealerCost: item.dealerCost ?? null,
       make: item.make,
       model: item.model,
       year: item.year,
+      quantity: item.quantity,
+      title: item.title,
       price: item.unitPrice,
     })),
     attachments_included: draft.attachments.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      sourceCatalog: item.sourceCatalog,
+      sourceId: item.sourceId ?? item.id,
+      dealerCost: item.dealerCost ?? null,
       name: item.title,
+      quantity: item.quantity,
       price: item.unitPrice,
     })),
+    line_items: lineItems,
     trade_in_valuation_id: draft.tradeValuationId,
     trade_allowance: draft.tradeAllowance,
     financing_scenarios: financeScenarios.map((scenario) => ({
@@ -743,15 +830,19 @@ export function buildQuoteSavePayload(
     selected_finance_scenario: draft.selectedFinanceScenario,
     margin_amount: computed.marginAmount,
     margin_pct: computed.marginPct,
-    ai_recommendation: draft.recommendation,
+    ai_recommendation: recommendation,
     entry_mode: draft.entryMode,
     status: "draft",
     customer_name: draft.customerName || null,
     customer_company: draft.customerCompany || null,
     customer_phone: draft.customerPhone || null,
     customer_email: draft.customerEmail || null,
+    opportunity_description: draft.voiceSummary || null,
+    voice_transcript: draft.entryMode === "voice" ? draft.voiceSummary || null : null,
     originating_log_id: draft.originatingLogId ?? null,
     win_probability_snapshot: winProbabilitySnapshot ?? null,
+    expected_updated_at: options?.expectedUpdatedAt ?? null,
+    save_mode: options?.saveMode ?? "manual",
   };
 }
 
@@ -879,6 +970,9 @@ export async function searchCatalog(query: string) {
       }));
     return {
       id: row.id,
+      sourceCatalog: "qb_equipment_models" as const,
+      sourceId: row.id,
+      dealerCost: null,
       make,
       model: row.model_code ?? "",
       year: row.model_year ?? null,

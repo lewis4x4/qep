@@ -4,29 +4,19 @@ export function resolveHomeRoute(
   audience?: string | null,
   floorMode?: boolean | null,
 ): string {
+  // The Floor is now the role-home surface. Any user with an assigned
+  // Iron role lands there; /floor resolves the exact role layout at render
+  // time. This also lets stakeholder viewers with real Iron roles (Ryan,
+  // Rylee, etc.) inspect the same operator home they are accountable for.
+  if (floorMode || isFloorIronRole(ironRole)) {
+    return "/floor";
+  }
+
   // Stakeholder audience (external QEP USA build observers — Ryan, Rylee,
   // Juan, Angela) always lands on the Build Hub regardless of role/iron role.
   // Internal operators keep their role-based routing below.
   if (audience === "stakeholder") {
     return "/brief";
-  }
-
-  // Slice: The Floor — profiles.floor_mode = true sends the user to the
-  // simplified Brian-curated Floor surface. This wins over role-based
-  // routing because the whole point of the flag is to opt specific team
-  // members into The Floor while the rest of the roster keeps their
-  // existing home. The Floor itself still picks the right layout
-  // internally based on iron_role.
-  if (floorMode) {
-    return "/floor";
-  }
-
-  // Iron role is the most reliable routing signal — check it first.
-  // This handles cases where role is generic ("rep") but iron_role
-  // is explicitly set to a department-specific persona.
-  if (ironRole) {
-    const resolved = resolveByIronRole(ironRole);
-    if (resolved) return resolved;
   }
 
   const normalizedRole = (userRole ?? "").trim().toLowerCase();
@@ -51,6 +41,18 @@ export function resolveHomeRoute(
   }
 }
 
+function isFloorIronRole(ironRole: string | null | undefined): boolean {
+  return (
+    ironRole === "iron_manager" ||
+    ironRole === "iron_advisor" ||
+    ironRole === "iron_woman" ||
+    ironRole === "iron_man" ||
+    ironRole === "iron_owner" ||
+    ironRole === "iron_parts_counter" ||
+    ironRole === "iron_parts_manager"
+  );
+}
+
 export function canUseElevatedQrmScopes(
   userRole: string | null | undefined,
   ironRole?: string | null,
@@ -62,19 +64,4 @@ export function canUseElevatedQrmScopes(
     normalizedRole === "manager" ||
     ironRole === "iron_manager"
   );
-}
-
-function resolveByIronRole(ironRole: string): string | null {
-  switch (ironRole) {
-    case "iron_woman":
-      return "/parts/companion/queue";
-    case "iron_man":
-      return "/service";
-    case "iron_manager":
-      return "/qrm";
-    case "iron_advisor":
-      return "/sales/today";
-    default:
-      return null;
-  }
 }

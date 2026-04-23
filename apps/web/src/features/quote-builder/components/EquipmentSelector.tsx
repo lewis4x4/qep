@@ -7,6 +7,9 @@ import { searchCatalog, getAiEquipmentRecommendation } from "../lib/quote-api";
 
 interface CatalogEntry {
   id: string;
+  sourceCatalog?: "qb_equipment_models" | "qb_attachments" | "catalog_entries" | "manual";
+  sourceId?: string | null;
+  dealerCost?: number | null;
   make: string;
   model: string;
   year: number | null;

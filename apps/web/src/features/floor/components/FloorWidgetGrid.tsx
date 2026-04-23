@@ -13,10 +13,10 @@
 import { Link } from "react-router-dom";
 import { Cog } from "lucide-react";
 import { resolveFloorWidget } from "../lib/floor-widget-registry";
-import type { FloorLayoutWidget } from "../lib/layout-types";
+import type { FloorWidgetWithAttention } from "../lib/attention";
 
 export interface FloorWidgetGridProps {
-  widgets: FloorLayoutWidget[];
+  widgets: FloorWidgetWithAttention[];
   isAdmin: boolean;
   isLoading?: boolean;
 }
@@ -24,7 +24,7 @@ export interface FloorWidgetGridProps {
 export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWidgetGridProps) {
   const resolved = widgets
     .map((w) => ({ ...w, descriptor: resolveFloorWidget(w.id) }))
-    .filter((w): w is FloorLayoutWidget & { descriptor: NonNullable<ReturnType<typeof resolveFloorWidget>> } => !!w.descriptor);
+    .filter((w): w is FloorWidgetWithAttention & { descriptor: NonNullable<ReturnType<typeof resolveFloorWidget>> } => !!w.descriptor);
 
   if (isLoading) {
     return <FloorLoadingGrid />;
@@ -48,6 +48,7 @@ export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWi
               key={`${w.id}-${i}`}
               style={{ animationDelay: `${delay}ms` }}
               className={[
+                "relative",
                 "floor-widget-in",
                 w.descriptor.size === "wide"
                   ? "md:col-span-2 xl:col-span-2"
@@ -56,6 +57,11 @@ export function FloorWidgetGrid({ widgets, isAdmin, isLoading = false }: FloorWi
                 .filter(Boolean)
                 .join(" ")}
             >
+              {w.attentionPinned && w.attention?.reason && (
+                <div className="pointer-events-none absolute right-3 top-3 z-10 rounded border border-[hsl(var(--qep-orange))]/50 bg-[hsl(var(--qep-deck))]/90 px-2 py-1 font-kpi text-[9px] font-extrabold uppercase tracking-[0.14em] text-[hsl(var(--qep-orange))] shadow-[0_0_18px_-10px_hsl(var(--qep-orange))] backdrop-blur">
+                  Attention · {w.attention.reason}
+                </div>
+              )}
               <Component />
             </div>
           );

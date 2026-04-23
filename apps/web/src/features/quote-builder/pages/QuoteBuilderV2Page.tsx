@@ -1,8 +1,15 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Mic,
   MessageSquare,
@@ -13,6 +20,18 @@ import {
   Save,
   MapPin,
   Loader2,
+  Camera,
+  ChevronDown,
+  ChevronRight,
+  DollarSign,
+  Link2,
+  Mail,
+  PackagePlus,
+  Printer,
+  Send,
+  Smartphone,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
@@ -32,6 +51,7 @@ import { IntelligencePanel } from "../components/IntelligencePanel";
 import { EquipmentSelector } from "../components/EquipmentSelector";
 import { FinancingCalculator } from "../components/FinancingCalculator";
 import { DealCoachSidebar } from "../components/DealCoachSidebar";
+import { SendQuoteSection } from "../components/SendQuoteSection";
 import { MarginFloorGate } from "../components/MarginFloorGate";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -79,6 +99,7 @@ import {
   DealAssistantTrigger,
   type ScenarioSelection,
 } from "../components/ConversationalDealEngine";
+import { issueShareToken } from "@/features/deal-room/lib/deal-room-api";
 import type {
   QuoteEntryMode,
   QuoteFinanceScenario,
@@ -94,6 +115,8 @@ import type {
 // selection entirely. Splitting the step makes "who is this quote for?"
 // explicit and is the anchor for the Customer Digital Twin intel panel.
 type Step = "entry" | "customer" | "equipment" | "tradeIn" | "financing" | "review";
+type BuilderMode = "workspace" | "guided";
+type AutoSaveState = "idle" | "local" | "saving" | "saved" | "error";
 
 const STEP_STORAGE_PREFIX = "qep.quote-builder.last-step.";
 const STEP_LABELS: Record<Step, string> = {
@@ -107,6 +130,9 @@ const STEP_LABELS: Record<Step, string> = {
 
 interface CatalogEntryMatch {
   id?: string;
+  sourceCatalog?: QuoteLineItemDraft["sourceCatalog"];
+  sourceId?: string | null;
+  dealerCost?: number | null;
   make: string;
   model: string;
   year: number | null;
@@ -159,6 +185,9 @@ function buildEquipmentLine(entry: CatalogEntryMatch): QuoteLineItemDraft {
   return {
     kind: "equipment",
     id: entry.id,
+    sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+    sourceId: entry.sourceId ?? entry.id ?? null,
+    dealerCost: entry.dealerCost ?? null,
     title: `${entry.make} ${entry.model}`,
     make: entry.make,
     model: entry.model,
@@ -181,6 +210,9 @@ function buildEquipmentLineFromRecommendation(
   const [firstToken, ...rest] = text.split(/\s+/);
   return {
     kind: "equipment",
+    sourceCatalog: "manual",
+    sourceId: null,
+    dealerCost: null,
     title: text,
     make: firstToken ?? text,
     model: rest.join(" "),
@@ -225,6 +257,25 @@ function persistStep(quotePackageId: string | null, step: Step): void {
   window.sessionStorage.setItem(`${STEP_STORAGE_PREFIX}${quotePackageId}`, step);
 }
 
+function money(value: number): string {
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function shortDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function statusLabel(status: string | null | undefined): string {
+  return (status ?? "draft").replace(/_/g, " ");
+}
+
 const QuoteReviewWorkflowPanels = lazy(() =>
   import("../components/QuoteReviewWorkflowPanels").then((module) => ({
     default: module.QuoteReviewWorkflowPanels,
@@ -237,6 +288,22 @@ export function QuoteBuilderV2Page() {
   const dealId = searchParams.get("deal_id") || searchParams.get("crm_deal_id") || "";
   const contactId = searchParams.get("contact_id") || searchParams.get("crm_contact_id") || "";
   const [step, setStep] = useState<Step>("entry");
+  const [builderMode, setBuilderMode] = useState<BuilderMode>("workspace");
+  const [reviewSendOpen, setReviewSendOpen] = useState(false);
+  const [tradeExpanded, setTradeExpanded] = useState(false);
+  const [termsExpanded, setTermsExpanded] = useState(false);
+  const [digitalTwinExpanded, setDigitalTwinExpanded] = useState(false);
+  const [marginWaterfallExpanded, setMarginWaterfallExpanded] = useState(false);
+  const [packageToolsOpen, setPackageToolsOpen] = useState(false);
+  const [customLineTitle, setCustomLineTitle] = useState("");
+  const [customLinePrice, setCustomLinePrice] = useState(0);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const lastAutoSaveSignatureRef = useRef<string>("");
   const [customFinanceEnabled, setCustomFinanceEnabled] = useState(false);
   const [customFinanceRate, setCustomFinanceRate] = useState<number | null>(null);
   const [customFinanceTermMonths, setCustomFinanceTermMonths] = useState<number | null>(null);
@@ -684,6 +751,8 @@ export function QuoteBuilderV2Page() {
         dealId: resolvedDealId ?? current.dealId,
         quoteStatus: nextStatus as QuoteWorkspaceDraft["quoteStatus"],
       }));
+      setLastSavedAt(new Date().toISOString());
+      setAutoSaveState("saved");
       // DB is authoritative now. Clear the local draft and stop mirroring
       // further edits so a follow-up refresh hydrates from the saved row,
       // not a stale localStorage overlay.
@@ -842,6 +911,84 @@ export function QuoteBuilderV2Page() {
     && quoteStatus !== "approved_with_conditions";
   void approvalState.requiresManagerApproval; // retained in state; not used for gating
   const showQuoteActions = Boolean(activeQuotePackageId);
+  const displayedSavedAt = lastSavedAt ?? activeQuoteUpdatedAt;
+  const displayedSavedLabel = shortDateTime(displayedSavedAt);
+  const financeMethodLabel =
+    selectedFinanceScenario?.label
+    ?? draft.selectedFinanceScenario
+    ?? (amountFinanced > 0 ? "Cash / TBD" : "Cash");
+  const quoteTitle =
+    activeQuoteNumber
+    ?? (activeQuotePackageId ? `Quote ${activeQuotePackageId.slice(0, 8)}` : "New quote");
+  const draftSaveSignature = useMemo(() => JSON.stringify({
+    draft,
+    computed: {
+      equipmentTotal,
+      attachmentTotal,
+      subtotal,
+      discountTotal,
+      tradeAllowance: draft.tradeAllowance,
+      taxTotal,
+      customerTotal,
+      cashDown,
+      amountFinanced,
+      marginPct,
+    },
+  }), [
+    draft,
+    equipmentTotal,
+    attachmentTotal,
+    subtotal,
+    discountTotal,
+    taxTotal,
+    customerTotal,
+    cashDown,
+    amountFinanced,
+    marginPct,
+  ]);
+
+  useEffect(() => {
+    if (!localDraftHydrationComplete) return;
+    if (!packetReadiness.draft.ready) {
+      setAutoSaveState(isDraftEmpty(draft) ? "idle" : "local");
+      return;
+    }
+    if (saveMutation.isPending || submitApprovalMutation.isPending) return;
+    if (lastAutoSaveSignatureRef.current === draftSaveSignature) return;
+
+    const timer = window.setTimeout(() => {
+      setAutoSaveState("saving");
+      saveMutation.mutateAsync()
+        .then(() => {
+          lastAutoSaveSignatureRef.current = draftSaveSignature;
+          setAutoSaveState("saved");
+        })
+        .catch(() => {
+          setAutoSaveState("error");
+        });
+    }, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [
+    draft,
+    draftSaveSignature,
+    localDraftHydrationComplete,
+    packetReadiness.draft.ready,
+    saveMutation.isPending,
+    saveMutation.mutateAsync,
+    submitApprovalMutation.isPending,
+  ]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      if (!packetReadiness.draft.ready || saveMutation.isPending) return;
+      void handleSaveClick();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const voiceMutation = useMutation({
     mutationFn: async (payload: { blob: Blob; fileName: string }) => {
@@ -1000,6 +1147,118 @@ export function QuoteBuilderV2Page() {
     setStep(hasCustomerNow ? "equipment" : "customer");
   }
 
+  function handleDownloadPdf() {
+    void downloadPDF({
+      dealName: draft.dealId || draft.customerCompany || draft.customerName || "Quote",
+      customerName: draft.customerName || draft.customerCompany || "Customer",
+      preparedBy: "QEP Sales Team",
+      preparedDate: new Date().toLocaleDateString(),
+      aiRecommendationSummary: draft.recommendation?.reasoning ?? null,
+      equipment: draft.equipment.map((item) => ({
+        make: item.make ?? "",
+        model: item.model ?? item.title,
+        year: item.year ?? null,
+        price: item.unitPrice,
+      })),
+      attachments: draft.attachments.map((item) => ({ name: item.title, price: item.unitPrice })),
+      equipmentTotal,
+      attachmentTotal,
+      subtotal,
+      discountTotal,
+      tradeAllowance: draft.tradeAllowance,
+      taxTotal,
+      customerTotal,
+      cashDown,
+      amountFinanced,
+      netTotal,
+      financing: allFinanceScenarios.map((scenario) => ({
+        type: scenario.type,
+        label: scenario.label,
+        termMonths: scenario.termMonths ?? 0,
+        rate: scenario.rate ?? scenario.apr ?? 0,
+        monthlyPayment: scenario.monthlyPayment ?? 0,
+        totalCost: scenario.totalCost ?? 0,
+        lender: scenario.lender ?? "Preferred lender",
+      })),
+      selectedFinancingLabel: draft.selectedFinanceScenario,
+      branch: (() => {
+        const branch = selectedBranch as unknown as Record<string, unknown> | undefined;
+        return {
+          name: (branch?.display_name as string) ?? "Quality Equipment & Parts",
+          address: (branch?.address_line1 as string) ?? undefined,
+          city: (branch?.city as string) ?? undefined,
+          state: (branch?.state_province as string) ?? undefined,
+          postalCode: (branch?.postal_code as string) ?? undefined,
+          phone: (branch?.phone_main as string) ?? undefined,
+          email: (branch?.email_main as string) ?? undefined,
+          website: (branch?.website_url as string) ?? undefined,
+          footerText: (branch?.doc_footer_text as string) ?? undefined,
+        };
+      })(),
+    });
+  }
+
+  function handleAddCustomLine(kindLabel: "Warranty" | "Financing" | "Custom") {
+    const title = customLineTitle.trim() || `${kindLabel} line item`;
+    const unitPrice = Number.isFinite(customLinePrice) && customLinePrice > 0 ? customLinePrice : 0;
+    const kind = kindLabel.toLowerCase() as "warranty" | "financing" | "custom";
+    setDraft((current) => ({
+      ...current,
+      attachments: [
+        ...current.attachments,
+        {
+          kind,
+          id: `${kindLabel.toLowerCase()}-${Date.now()}`,
+          sourceCatalog: "manual",
+          sourceId: null,
+          dealerCost: null,
+          title: `${kindLabel}: ${title}`,
+          quantity: 1,
+          unitPrice,
+        },
+      ],
+    }));
+    setCustomLineTitle("");
+    setCustomLinePrice(0);
+    setPackageToolsOpen(false);
+  }
+
+  function handlePrimaryAction() {
+    if (quoteStatus === "sent" || quoteStatus === "accepted") {
+      void handleSaveClick();
+      return;
+    }
+    if (approvalGranted && packetReadiness.send.ready) {
+      setReviewSendOpen(true);
+      return;
+    }
+    if (canSubmitForApproval) {
+      void submitApprovalMutation.mutateAsync();
+      return;
+    }
+    void handleSaveClick();
+  }
+
+  async function handleIssueShareLink() {
+    if (!activeQuotePackageId) return;
+    setShareBusy(true);
+    setShareError(null);
+    try {
+      const { token } = await issueShareToken(activeQuotePackageId);
+      const url = `${window.location.origin}/q/${token}`;
+      setShareUrl(url);
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        // Clipboard can be unavailable in preview or restricted browsers.
+      }
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : "Unable to create share link.");
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   const firstEquipment = draft.equipment[0];
 
   // Gate for advancing off the Customer step — any of name, company,
@@ -1031,8 +1290,606 @@ export function QuoteBuilderV2Page() {
     />
   );
 
+  const primaryActionLabel =
+    saveMutation.isPending || submitApprovalMutation.isPending
+      ? "Working..."
+      : quoteStatus === "sent" || quoteStatus === "accepted"
+        ? "Update"
+        : approvalGranted && packetReadiness.send.ready
+          ? "Review & Send"
+          : canSubmitForApproval
+            ? "Submit Approval"
+            : "Save Draft";
+  const primaryActionDisabled =
+    saveMutation.isPending
+    || submitApprovalMutation.isPending
+    || (!packetReadiness.draft.ready && primaryActionLabel !== "Review & Send");
+
   return (
-    <div className="mx-auto flex w-full max-w-7xl gap-6 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 pb-24 pt-2 sm:px-6 lg:px-8">
+      <div className="sticky top-0 z-30 rounded-xl border border-border/70 bg-background/95 p-3 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs">
+              <Link to="/floor"><ArrowLeft className="mr-1 h-3.5 w-3.5" /> Back to Floor</Link>
+            </Button>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate text-sm font-semibold text-foreground">{quoteTitle}</p>
+                <span className="rounded-full border border-qep-orange/30 bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-qep-orange">
+                  {statusLabel(quoteStatus)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {autoSaveState === "saving"
+                    ? "Saving..."
+                    : autoSaveState === "error"
+                      ? "Save failed"
+                      : displayedSavedLabel
+                        ? `Saved ${displayedSavedLabel}`
+                        : autoSaveState === "local"
+                          ? "Local draft"
+                          : "Not saved"}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {packetReadiness.draft.ready
+                  ? "Cmd-S saves. Auto-save runs every 10 seconds when the draft is server-ready."
+                  : packetReadiness.draft.missing.length > 0
+                    ? `Missing: ${packetReadiness.draft.missing.join(", ")}`
+                    : "Start the quote to enable save."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
+            <div className="text-right">
+              <p className="font-kpi text-2xl font-extrabold tabular-nums text-qep-orange">
+                {money(customerTotal)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">{financeMethodLabel}</p>
+            </div>
+            <div className="flex rounded-lg border border-border bg-muted/30 p-1">
+              {(["workspace", "guided"] as BuilderMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setBuilderMode(mode)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                    builderMode === mode
+                      ? "bg-qep-orange text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {mode === "workspace" ? "Workspace" : "Guided"}
+                </button>
+              ))}
+            </div>
+            <Button onClick={handlePrimaryAction} disabled={primaryActionDisabled}>
+              {saveMutation.isPending || submitApprovalMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : approvalGranted && packetReadiness.send.ready ? (
+                <Send className="mr-1 h-4 w-4" />
+              ) : (
+                <Save className="mr-1 h-4 w-4" />
+              )}
+              {primaryActionLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {builderMode === "workspace" ? (
+        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_320px]">
+          <aside className="space-y-4">
+            <Card className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Customer</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Find the account, capture the need, and keep defaults out of the rep's way.</p>
+                </div>
+                {hasCustomer ? (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
+                    Set
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <CustomerSection
+                  draft={draft}
+                  onPick={(picked) => setDraft((cur) => ({
+                    ...cur,
+                    contactId:       picked.contactId ?? undefined,
+                    companyId:       picked.companyId ?? undefined,
+                    customerName:    picked.customerName,
+                    customerCompany: picked.customerCompany,
+                    customerPhone:   picked.customerPhone,
+                    customerEmail:   picked.customerEmail,
+                    customerSignals: picked.signals ?? null,
+                    customerWarmth:  picked.warmth ?? null,
+                  }))}
+                  onManualChange={(field, value) => setDraft((cur) => ({ ...cur, [field]: value }))}
+                  onClear={() => setDraft((cur) => ({
+                    ...cur,
+                    contactId:       undefined,
+                    companyId:       undefined,
+                    customerName:    "",
+                    customerCompany: "",
+                    customerPhone:   "",
+                    customerEmail:   "",
+                    customerSignals: null,
+                    customerWarmth:  null,
+                  }))}
+                />
+
+                <label className="block space-y-1 text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Opportunity description</span>
+                  <textarea
+                    value={draft.voiceSummary ?? ""}
+                    onChange={(event) => setDraft((current) => ({ ...current, voiceSummary: event.target.value }))}
+                    placeholder="What is the customer trying to accomplish?"
+                    className="min-h-[96px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Voice capture</span>
+                    {voiceMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" /> : null}
+                  </div>
+                  <VoiceRecorder
+                    onRecorded={(audioBlob, fileName) => {
+                      setDraft((current) => ({ ...current, entryMode: "voice" }));
+                      voiceMutation.mutate({ blob: audioBlob, fileName });
+                    }}
+                    disabled={voiceMutation.isPending}
+                  />
+                </div>
+
+                {branches.length > 0 && (
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-xs font-medium text-muted-foreground">Quoting branch</span>
+                    <select
+                      value={draft.branchSlug}
+                      onChange={(event) => setDraft((current) => ({ ...current, branchSlug: event.target.value }))}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    >
+                      <option value="">Use branch default...</option>
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.slug}>{branch.display_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDigitalTwinExpanded((value) => !value)}
+                className="flex min-h-20 w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-qep-orange">Customer Digital Twin</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {draft.customerSignals
+                      ? `${draft.customerSignals.openDeals} open deals, ${draft.customerSignals.pastQuoteCount} past quotes`
+                      : "Collapsed until a customer is selected."}
+                  </p>
+                </div>
+                {digitalTwinExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {digitalTwinExpanded && (
+                <div className="border-t border-border/60 p-4">
+                  <CustomerIntelPanel
+                    customerCompany={draft.customerCompany ?? ""}
+                    companyId={draft.companyId ?? null}
+                    signals={draft.customerSignals ?? null}
+                    warmth={draft.customerWarmth ?? null}
+                  />
+                </div>
+              )}
+            </Card>
+          </aside>
+
+          <main className="space-y-4">
+            <Card className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Start quote</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Choose the fastest entry path. All four routes land in this workspace.</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                {([
+                  { mode: "voice" as QuoteEntryMode, label: "Voice", icon: Mic, body: "Record the deal and seed customer need.", action: () => setDraft((cur) => ({ ...cur, entryMode: "voice" })) },
+                  { mode: "ai_chat" as QuoteEntryMode, label: "AI Chat", icon: MessageSquare, body: "Use the prompt below for recommendation.", action: () => setDraft((cur) => ({ ...cur, entryMode: "ai_chat" })) },
+                  { mode: "manual" as QuoteEntryMode, label: "Manual", icon: FileText, body: "Build package lines directly.", action: () => setDraft((cur) => ({ ...cur, entryMode: "manual" })) },
+                  { mode: "manual" as QuoteEntryMode, label: "Trade Photo", icon: Camera, body: "Open trade capture first.", action: () => { setDraft((cur) => ({ ...cur, entryMode: "manual" })); setTradeExpanded(true); } },
+                ]).map(({ mode, label, icon: Icon, body, action }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={action}
+                    className={`min-h-[116px] rounded-lg border p-3 text-left transition hover:border-qep-orange/60 ${
+                      draft.entryMode === mode && label !== "Trade Photo"
+                        ? "border-qep-orange bg-qep-orange/5"
+                        : "border-border bg-card/40"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 text-qep-orange" />
+                    <p className="mt-2 text-sm font-semibold text-foreground">{label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{body}</p>
+                  </button>
+                ))}
+              </div>
+              {draft.entryMode === "ai_chat" && (
+                <div className="mt-4 rounded-lg border border-border/70 bg-background/50 p-3">
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(event) => setAiPrompt(event.target.value)}
+                    placeholder="Describe the job, terrain, timeline, budget, and attachments."
+                    className="min-h-[88px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      size="sm"
+                      onClick={() => aiIntakeMutation.mutate(aiPrompt.trim())}
+                      disabled={aiIntakeMutation.isPending || aiPrompt.trim().length < 12}
+                    >
+                      {aiIntakeMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+                      Build with AI
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Package</p>
+                  <p className="mt-1 text-sm text-muted-foreground">One quote, many line items. Single equipment quotes are just a subset.</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPackageToolsOpen((value) => !value)}>
+                  <PackagePlus className="mr-1 h-4 w-4" /> Add item
+                </Button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {[...draft.equipment, ...draft.attachments].length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    Add equipment to start the package. Attachments, warranty, financing, and custom lines stay in the same package list.
+                  </div>
+                ) : (
+                  <>
+                    {draft.equipment.map((item, index) => (
+                      <QuoteWorkspaceLineRow
+                        key={`equipment-${index}-${item.id ?? item.title}`}
+                        label="Equipment"
+                        item={item}
+                        onPriceChange={(value: number) => setDraft((current) => ({
+                          ...current,
+                          equipment: current.equipment.map((line, rowIndex) => rowIndex === index ? { ...line, unitPrice: value } : line),
+                        }))}
+                        onRemove={() => setDraft((current) => ({
+                          ...current,
+                          equipment: current.equipment.filter((_, rowIndex) => rowIndex !== index),
+                        }))}
+                      />
+                    ))}
+                    {draft.attachments.map((item, index) => (
+                      <QuoteWorkspaceLineRow
+                        key={`attachment-${index}-${item.id ?? item.title}`}
+                        label={item.title.includes(":") ? item.title.split(":")[0] ?? "Attachment" : "Attachment"}
+                        item={item}
+                        onPriceChange={(value: number) => setDraft((current) => ({
+                          ...current,
+                          attachments: current.attachments.map((line, rowIndex) => rowIndex === index ? { ...line, unitPrice: value } : line),
+                        }))}
+                        onRemove={() => setDraft((current) => ({
+                          ...current,
+                          attachments: current.attachments.filter((_, rowIndex) => rowIndex !== index),
+                        }))}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {packageToolsOpen && (
+                <div className="mt-4 space-y-4 rounded-lg border border-border/70 bg-background/50 p-3">
+                  <EquipmentSelector
+                    onSelect={(entry) => {
+                      setAvailableOptions(entry.attachments ?? []);
+                      setAvailableOptionsLabel(`${entry.make} ${entry.model}`);
+                      const nextLine = {
+                        kind: "equipment" as const,
+                        id: entry.id,
+                        sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+                        sourceId: entry.sourceId ?? entry.id ?? null,
+                        dealerCost: entry.dealerCost ?? null,
+                        title: `${entry.make} ${entry.model}`,
+                        make: entry.make,
+                        model: entry.model,
+                        year: entry.year,
+                        quantity: 1,
+                        unitPrice: entry.list_price || 0,
+                      };
+                      const nextKey = equipmentKeyForLine(nextLine);
+                      setDraft((current) => ({
+                        ...current,
+                        equipment: current.equipment.some((item) => equipmentKeyForLine(item) === nextKey)
+                          ? current.equipment
+                          : [...current.equipment, nextLine],
+                      }));
+                    }}
+                    onRecommendation={(recommendation) => {
+                      setDraft((current) => ({ ...current, recommendation }));
+                    }}
+                  />
+
+                  {availableOptions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                        Attachments for {availableOptionsLabel ?? "selected equipment"}
+                      </p>
+                      {availableOptions.map((option) => {
+                        const selected = draft.attachments.some((attachment) => attachment.id === option.id);
+                        return (
+                          <div key={option.id} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-card/60 px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{option.name}</p>
+                              <p className="text-xs text-muted-foreground">{money(option.price)}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={selected ? "outline" : "default"}
+                              onClick={() => setDraft((current) => ({
+                                ...current,
+                                attachments: selected
+                                  ? current.attachments.filter((attachment) => attachment.id !== option.id)
+                                  : [...current.attachments, {
+                                    kind: "attachment",
+                                    id: option.id,
+                                    sourceCatalog: "qb_attachments",
+                                    sourceId: option.id,
+                                    dealerCost: null,
+                                    title: option.name,
+                                    quantity: 1,
+                                    unitPrice: option.price,
+                                  }],
+                              }))}
+                            >
+                              {selected ? "Remove" : "Add"}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="grid gap-2 md:grid-cols-[1fr_140px_auto_auto_auto]">
+                    <input
+                      value={customLineTitle}
+                      onChange={(event) => setCustomLineTitle(event.target.value)}
+                      placeholder="Custom, warranty, or financing line"
+                      className="rounded border border-input bg-card px-3 py-2 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      value={customLinePrice}
+                      onChange={(event) => setCustomLinePrice(Number(event.target.value) || 0)}
+                      className="rounded border border-input bg-card px-3 py-2 text-sm"
+                    />
+                    <Button size="sm" variant="outline" onClick={() => handleAddCustomLine("Warranty")}>Warranty</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleAddCustomLine("Financing")}>Financing</Button>
+                    <Button size="sm" onClick={() => handleAddCustomLine("Custom")}>Custom</Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setTradeExpanded((value) => !value)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Trade</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {draft.tradeAllowance > 0 ? `${money(draft.tradeAllowance)} trade credit applied` : "Collapsed by default. Snap photo, add manually, or mark no trade."}
+                  </p>
+                </div>
+                {tradeExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {tradeExpanded && (
+                <div className="space-y-4 border-t border-border/60 p-4">
+                  <PointShootTradeCard
+                    dealId={draft.dealId ?? null}
+                    appliedAllowanceDollars={draft.tradeAllowance || null}
+                    onApply={(allowanceDollars, valuationId) => setDraft((cur) => ({
+                      ...cur,
+                      tradeAllowance: allowanceDollars,
+                      tradeValuationId: valuationId,
+                    }))}
+                    onClear={() => setDraft((cur) => ({
+                      ...cur,
+                      tradeAllowance: 0,
+                      tradeValuationId: null,
+                    }))}
+                  />
+                  <TradeInInputCard
+                    tradeAllowance={draft.tradeAllowance}
+                    onChange={(value) => setDraft((current) => ({
+                      ...current,
+                      tradeAllowance: value,
+                      tradeValuationId: null,
+                    }))}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDraft((current) => ({ ...current, tradeAllowance: 0, tradeValuationId: null }))}
+                  >
+                    No Trade
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setTermsExpanded((value) => !value)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Commercial Terms</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Discount {money(discountTotal)} · Tax {money(taxTotal)} · Down {money(cashDown)}
+                  </p>
+                </div>
+                {termsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {termsExpanded && (
+                <div className="border-t border-border/60 p-4">
+                  <FinancingCalculator
+                    discountType={draft.commercialDiscountType}
+                    discountValue={draft.commercialDiscountValue}
+                    cashDown={draft.cashDown}
+                    tradeAllowance={draft.tradeAllowance}
+                    taxProfile={draft.taxProfile}
+                    packageSubtotal={subtotal}
+                    discountTotal={discountTotal}
+                    discountedSubtotal={discountedSubtotal}
+                    netTotal={netTotal}
+                    taxTotal={taxTotal}
+                    customerTotal={customerTotal}
+                    amountFinanced={amountFinanced}
+                    taxBreakdown={taxPreviewQuery.data}
+                    taxLoading={taxPreviewQuery.isLoading}
+                    taxError={taxPreviewQuery.isError}
+                    taxEnabled={Boolean(draft.branchSlug)}
+                    financeScenarios={allFinanceScenarios}
+                    financeLoading={financingPreviewQuery.isLoading}
+                    financeError={financingPreviewQuery.isError}
+                    selectedScenario={draft.selectedFinanceScenario}
+                    customFinanceEnabled={customFinanceEnabled}
+                    customFinanceRate={customFinanceRate}
+                    customFinanceTermMonths={customFinanceTermMonths}
+                    customFinancePreview={customFinanceScenario}
+                    taxProfiles={taxProfiles}
+                    onDiscountTypeChange={(value) => setDraft((current) => ({ ...current, commercialDiscountType: value }))}
+                    onDiscountValueChange={(value) => setDraft((current) => ({ ...current, commercialDiscountValue: value }))}
+                    onCashDownChange={(value) => setDraft((current) => ({ ...current, cashDown: value }))}
+                    onTaxProfileChange={(value) => setDraft((current) => ({ ...current, taxProfile: value }))}
+                    onSelectScenario={(label) => setDraft((current) => ({ ...current, selectedFinanceScenario: label }))}
+                    onCustomFinanceEnabledChange={setCustomFinanceEnabled}
+                    onCustomFinanceRateChange={setCustomFinanceRate}
+                    onCustomFinanceTermMonthsChange={setCustomFinanceTermMonths}
+                  />
+                </div>
+              )}
+            </Card>
+
+            <Card className="overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setMarginWaterfallExpanded((value) => !value)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Margin Waterfall</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Margin {marginPct.toFixed(1)}% · {money(marginAmount)} estimated net margin
+                  </p>
+                </div>
+                {marginWaterfallExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {marginWaterfallExpanded && (
+                <div className="border-t border-border/60 p-4">
+                  <MarginCheckBanner
+                    marginPct={marginPct}
+                    waterfall={{
+                      equipmentTotal: subtotal,
+                      dealerCost,
+                      tradeAllowance: draft.tradeAllowance,
+                      netTotal,
+                      marginAmount,
+                    }}
+                  />
+                </div>
+              )}
+            </Card>
+          </main>
+
+          <aside className="space-y-4 xl:sticky xl:top-28 xl:self-start">
+            <Card className="p-3">
+              <button
+                type="button"
+                onClick={() => setDealAssistantOpen(true)}
+                className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-sm text-muted-foreground transition hover:border-qep-orange/50 hover:text-foreground"
+              >
+                <Sparkles className="h-4 w-4 text-qep-orange" />
+                Ask about this quote...
+              </button>
+            </Card>
+
+            <Card className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Signals</p>
+              <div className="mt-3">
+                <WinProbabilityStrip draft={draft} context={winProbContext} verdicts={factorVerdicts} closedHistory={shadowHistory} shadowCalibration={shadowCalibration} />
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Suggestions</p>
+              {draft.recommendation?.machine ? (
+                <div className="mt-3 rounded-lg border border-qep-orange/25 bg-qep-orange/5 p-3">
+                  <p className="text-sm font-semibold text-foreground">{draft.recommendation.machine}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{draft.recommendation.reasoning}</p>
+                  <p className="mt-3 rounded border border-border/70 bg-background/60 px-2 py-1 text-[11px] text-muted-foreground">
+                    Trigger: {draft.recommendation.trigger?.sourceField
+                      ? draft.recommendation.trigger.sourceField.replace(/_/g, " ")
+                      : draft.entryMode === "voice"
+                        ? "voice transcript"
+                        : draft.entryMode === "ai_chat"
+                          ? "AI chat prompt"
+                          : "manual recommendation request"}
+                    {draft.recommendation.trigger?.excerpt ? ` - "${draft.recommendation.trigger.excerpt}"` : ""}
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => {
+                      if (!draft.recommendation?.machine) return;
+                      void addRecommendedMachine(draft.recommendation.machine);
+                    }}
+                  >
+                    Select Recommended
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  Empty until a voice note, AI prompt, or quote event creates a real trigger.
+                </div>
+              )}
+            </Card>
+
+            <DealCoachSidebar
+              draft={draft}
+              computed={{ equipmentTotal, attachmentTotal, subtotal, netTotal, marginAmount, marginPct }}
+              quotePackageId={activeQuotePackageId}
+            />
+          </aside>
+        </div>
+      ) : (
+        <div className="flex w-full gap-6">
       {/* Left column — wizard */}
       <div className="flex w-full max-w-2xl flex-1 flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
@@ -1183,11 +2040,12 @@ export function QuoteBuilderV2Page() {
           )}
 
           <h2 className="text-sm font-semibold text-foreground">How would you like to build this quote?</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             {([
               { mode: "voice" as QuoteEntryMode, icon: Mic, label: "Voice", desc: "Record a deal description — AI populates the quote workspace" },
               { mode: "ai_chat" as QuoteEntryMode, icon: MessageSquare, label: "AI Chat", desc: "Type the opportunity — AI recommends the setup" },
               { mode: "manual" as QuoteEntryMode, icon: FileText, label: "Manual", desc: "Build the quote directly from the commercial workspace" },
+              { mode: "trade_photo" as QuoteEntryMode, icon: Camera, label: "Trade Photo", desc: "Start with Point-Shoot-Trade, then finish the quote" },
             ]).map(({ mode, icon: Icon, label, desc }) => (
               <button
                 key={mode}
@@ -1198,6 +2056,8 @@ export function QuoteBuilderV2Page() {
                   // before the rep builds line items.
                   if (mode === "manual") {
                     setStep("customer");
+                  } else if (mode === "trade_photo") {
+                    setStep("tradeIn");
                   }
                 }}
                 className={`rounded-xl border p-4 text-left transition hover:border-qep-orange/50 ${
@@ -1397,6 +2257,9 @@ export function QuoteBuilderV2Page() {
               const nextLine = {
                 kind: "equipment" as const,
                 id: entry.id,
+                sourceCatalog: entry.sourceCatalog ?? "qb_equipment_models",
+                sourceId: entry.sourceId ?? entry.id ?? null,
+                dealerCost: entry.dealerCost ?? null,
                 title: `${entry.make} ${entry.model}`,
                 make: entry.make,
                 model: entry.model,
@@ -1528,6 +2391,9 @@ export function QuoteBuilderV2Page() {
                                   {
                                     kind: "attachment",
                                     id: option.id,
+                                    sourceCatalog: "qb_attachments",
+                                    sourceId: option.id,
+                                    dealerCost: null,
                                     title: option.name,
                                     quantity: 1,
                                     unitPrice: option.price,
@@ -2030,6 +2896,8 @@ export function QuoteBuilderV2Page() {
           )}
         </div>
       </aside>
+        </div>
+      )}
 
       {/* Deal Assistant / Copilot panel (Slice 05 cold-start + Slice 21
           per-quote copilot). The drawer auto-routes to the Copilot tab
@@ -2070,6 +2938,140 @@ export function QuoteBuilderV2Page() {
           // animation hooks (pulse the strip on delta, etc.).
         }}
       />
+
+      <Dialog open={reviewSendOpen} onOpenChange={setReviewSendOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Review & Send</DialogTitle>
+            <DialogDescription>
+              Confirm the customer packet, choose delivery, and send without leaving the workspace.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-4">
+              <Card className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">PDF preview</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {draft.customerCompany || draft.customerName || "Customer proposal"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {draft.equipment.length} equipment line{draft.equipment.length === 1 ? "" : "s"} · {draft.attachments.length} commercial add-on{draft.attachments.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-kpi text-2xl font-extrabold tabular-nums text-qep-orange">{money(customerTotal)}</p>
+                    <p className="text-[11px] text-muted-foreground">{financeMethodLabel}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-background/50 p-3">
+                  {[...draft.equipment, ...draft.attachments].slice(0, 6).map((line, index) => (
+                    <div key={`${line.title}-${index}`} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="truncate text-muted-foreground">{line.title || `${line.make ?? ""} ${line.model ?? ""}`.trim()}</span>
+                      <span className="font-medium text-foreground">{money(line.unitPrice * line.quantity)}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-border/70 pt-2">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-semibold text-foreground">Customer total</span>
+                      <span className="font-semibold text-qep-orange">{money(customerTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleDownloadPdf} disabled={pdfGenerating}>
+                    {pdfGenerating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <FileDown className="mr-1 h-4 w-4" />}
+                    PDF
+                  </Button>
+                  <Button variant="outline" onClick={handleDownloadPdf} disabled={pdfGenerating}>
+                    <Printer className="mr-1 h-4 w-4" /> Print
+                  </Button>
+                  <Button variant="outline" onClick={handleIssueShareLink} disabled={!activeQuotePackageId || shareBusy}>
+                    {shareBusy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Link2 className="mr-1 h-4 w-4" />}
+                    Copy Link
+                  </Button>
+                </div>
+                {shareUrl && (
+                  <p className="mt-2 break-all rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">
+                    Copied link: {shareUrl}
+                  </p>
+                )}
+                {shareError && <p className="mt-2 text-xs text-rose-400">{shareError}</p>}
+              </Card>
+
+              <Card className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Delivery options</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                  <DeliveryOption icon={<Mail className="h-4 w-4" />} label="Email" active />
+                  <DeliveryOption icon={<Smartphone className="h-4 w-4" />} label="SMS" disabled />
+                  <DeliveryOption icon={<Printer className="h-4 w-4" />} label="Print" active />
+                  <DeliveryOption icon={<Link2 className="h-4 w-4" />} label="Link" active />
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-xs font-medium text-muted-foreground">Recipient</span>
+                    <input
+                      value={draft.customerName || draft.customerCompany || ""}
+                      onChange={(event) => setDraft((current) => ({ ...current, customerName: event.target.value }))}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-xs font-medium text-muted-foreground">Email</span>
+                    <input
+                      value={draft.customerEmail ?? ""}
+                      onChange={(event) => setDraft((current) => ({ ...current, customerEmail: event.target.value }))}
+                      className="w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-4 block space-y-1 text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">Internal notes</span>
+                  <textarea
+                    value={internalNotes}
+                    onChange={(event) => setInternalNotes(event.target.value)}
+                    placeholder="Private note for follow-up, manager context, or delivery caveats."
+                    className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
+                  />
+                </label>
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <Card className="p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Readiness</p>
+                <div className="mt-3 space-y-2 text-sm">
+                  <ReadinessRow label="Draft" ready={packetReadiness.draft.ready} detail={packetReadiness.draft.missing.join(", ")} />
+                  <ReadinessRow label="Send" ready={packetReadiness.send.ready} detail={packetReadiness.send.missing.join(", ")} />
+                  <ReadinessRow label="Approval" ready={approvalGranted || !approvalState.requiresManagerApproval} detail={approvalState.reason ?? ""} />
+                </div>
+              </Card>
+
+              {activeQuotePackageId ? (
+                <SendQuoteSection
+                  quotePackageId={activeQuotePackageId}
+                  contactName={draft.customerName || draft.customerCompany || "customer"}
+                  onSent={() => {
+                    setDraft((current) => ({ ...current, quoteStatus: "sent" }));
+                    setReviewSendOpen(false);
+                  }}
+                />
+              ) : (
+                <Card className="border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="text-sm font-medium text-amber-400">Save before sending</p>
+                  <p className="mt-1 text-xs text-amber-300">A quote package id is required for email and share-link delivery.</p>
+                </Card>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2087,6 +3089,100 @@ export function QuoteBuilderV2Page() {
 // Keeps state minimal: the picker's query string and whether manual
 // fallback mode is active. Everything else lives in the draft.
 // ────────────────────────────────────────────────────────────────────────
+
+function QuoteWorkspaceLineRow({
+  label,
+  item,
+  onPriceChange,
+  onRemove,
+}: {
+  label: string;
+  item: QuoteLineItemDraft;
+  onPriceChange: (value: number) => void;
+  onRemove: () => void;
+}) {
+  const title = item.title || [item.make, item.model].filter(Boolean).join(" ") || "Line item";
+  return (
+    <div className="grid gap-3 rounded-lg border border-border/70 bg-card/50 p-3 sm:grid-cols-[120px_minmax(0,1fr)_150px_auto] sm:items-center">
+      <span className="rounded-full bg-muted px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">Qty {item.quantity}</p>
+      </div>
+      <label className="flex items-center gap-1 rounded border border-input bg-background px-2 py-1">
+        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="number"
+          min={0}
+          step={100}
+          value={item.unitPrice}
+          onChange={(event) => onPriceChange(Number(event.target.value) || 0)}
+          className="w-full bg-transparent text-right text-sm font-semibold outline-none"
+          aria-label={`Price for ${title}`}
+        />
+      </label>
+      <Button size="icon" variant="ghost" onClick={onRemove} aria-label={`Remove ${title}`}>
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function DeliveryOption({
+  icon,
+  label,
+  active,
+  disabled,
+}: {
+  icon: ReactNode;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border p-3 text-sm ${
+      disabled
+        ? "border-border/60 bg-muted/20 text-muted-foreground"
+        : active
+          ? "border-qep-orange/30 bg-qep-orange/5 text-foreground"
+          : "border-border bg-card/40 text-muted-foreground"
+    }`}>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="font-medium">{label}</span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {disabled ? "Backend gap" : "Available"}
+      </p>
+    </div>
+  );
+}
+
+function ReadinessRow({
+  label,
+  ready,
+  detail,
+}: {
+  label: string;
+  ready: boolean;
+  detail?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded border border-border/60 bg-background/50 px-3 py-2">
+      <div>
+        <p className="font-medium text-foreground">{label}</p>
+        {!ready && detail ? <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p> : null}
+      </div>
+      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+        ready ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-300"
+      }`}>
+        {ready ? "ready" : "open"}
+      </span>
+    </div>
+  );
+}
 
 function CustomerSection({
   draft,

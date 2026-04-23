@@ -29,6 +29,15 @@ function sumLineItems(items: QuoteLineItemDraft[]): number {
   return items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 }
 
+function sumDealerCost(items: QuoteLineItemDraft[]): number {
+  return items.reduce((sum, item) => {
+    const unitCost = Number.isFinite(item.dealerCost ?? NaN)
+      ? Number(item.dealerCost)
+      : item.unitPrice * 0.8;
+    return sum + Math.max(0, unitCost) * item.quantity;
+  }, 0);
+}
+
 export function hasQuoteCustomerIdentity(draft: Pick<
   QuoteWorkspaceDraft,
   "customerName" | "customerCompany" | "contactId" | "companyId"
@@ -80,7 +89,7 @@ export function computeQuoteWorkspace(draft: QuoteWorkspaceDraft): QuoteWorkspac
   const customerTotal = clampMoney(netTotal + taxTotal);
   const cashDown = clampMoney(draft.cashDown);
   const amountFinanced = clampMoney(customerTotal - cashDown);
-  const dealerCost = subtotal * 0.8;
+  const dealerCost = sumDealerCost([...draft.equipment, ...draft.attachments]);
   const marginAmount = netTotal - dealerCost;
   const marginPct = netTotal > 0 ? (marginAmount / netTotal) * 100 : 0;
 
