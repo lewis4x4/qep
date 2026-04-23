@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -596,6 +597,54 @@ const BlockerBoardPage = lazy(() =>
   }))
 );
 
+/**
+ * Auth-bootstrap spinner with a visible escape hatch after 5 seconds.
+ * If the auth flow is wedged on a stale token or a Safari network
+ * stall, the rep shouldn't have to wait for the 20s hard ceiling to
+ * self-recover — one click flushes auth state and reloads into a clean
+ * login page.
+ */
+function AuthLoadingShell() {
+  const [showEscape, setShowEscape] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setShowEscape(true), 5_000);
+    return () => clearTimeout(t);
+  }, []);
+
+  function resetAndReload() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("sb-") && k.endsWith("-auth-token"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* private mode — ignore */
+    }
+    window.location.reload();
+  }
+
+  return (
+    <div className="text-center" role="status" aria-label="Loading application">
+      <div
+        className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
+        aria-hidden="true"
+      />
+      <p className="text-sm text-muted-foreground">Loading...</p>
+      {showEscape ? (
+        <div className="mt-4 space-y-1">
+          <p className="text-xs text-muted-foreground">Taking longer than usual?</p>
+          <button
+            type="button"
+            onClick={resetAndReload}
+            className="text-xs font-semibold uppercase tracking-wider text-primary underline underline-offset-4 hover:text-primary/80"
+          >
+            Reset session and retry
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RouteFallback() {
   return (
     <div
@@ -762,17 +811,7 @@ function App() {
     return (
       <>
         <div className="min-h-screen bg-background flex items-center justify-center">
-          <div
-            className="text-center"
-            role="status"
-            aria-label="Loading application"
-          >
-            <div
-              className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"
-              aria-hidden="true"
-            />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
+          <AuthLoadingShell />
         </div>
         <Toaster />
       </>
