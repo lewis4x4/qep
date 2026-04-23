@@ -46,3 +46,5 @@ export function NotFoundPage(): React.ReactElement {
     </div>
   );
 }
+
+export default NotFoundPage;

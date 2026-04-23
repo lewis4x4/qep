@@ -56,3 +56,5 @@ export function OfflineBanner(): React.ReactElement | null {
     </div>
   );
 }
+
+export default OfflineBanner;

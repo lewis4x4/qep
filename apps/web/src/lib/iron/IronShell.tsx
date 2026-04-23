@@ -49,3 +49,5 @@ function IronShellInner() {
 export function IronShell() {
   return <IronShellInner />;
 }
+
+export default IronShell;

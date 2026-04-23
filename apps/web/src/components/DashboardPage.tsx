@@ -302,3 +302,5 @@ export function DashboardPage({ userId, userRole, userEmail, userName }: Dashboa
     </div>
   );
 }
+
+export default DashboardPage;

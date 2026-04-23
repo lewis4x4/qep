@@ -141,3 +141,5 @@ export function FlareProvider({ children }: FlareProviderProps) {
     </FlareErrorBoundary>
   );
 }
+
+export default FlareProvider;

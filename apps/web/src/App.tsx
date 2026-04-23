@@ -22,42 +22,26 @@ const PartsCompanionRoutes = lazy(() =>
   import("./features/parts-companion/PartsCompanionRoutes").then((m) => ({ default: m.PartsCompanionRoutes }))
 );
 
-const LoginPage = lazy(() =>
-  import("./components/LoginPage").then((m) => ({ default: m.LoginPage }))
-);
+const LoginPage = lazy(() => import("./components/LoginPage"));
 const PortalLoginPage = lazy(() =>
   import("./features/portal/pages/PortalLoginPage").then((m) => ({ default: m.PortalLoginPage }))
 );
 const VendorPricingPortalPage = lazy(() =>
   import("./features/service/pages/VendorPricingPortalPage").then((m) => ({ default: m.VendorPricingPortalPage }))
 );
-const AppLayout = lazy(() =>
-  import("./components/AppLayout").then((m) => ({ default: m.AppLayout }))
-);
-const DashboardPage = lazy(() =>
-  import("./components/DashboardPage").then((m) => ({ default: m.DashboardPage }))
-);
-const OfflineBanner = lazy(() =>
-  import("./components/OfflineBanner").then((m) => ({ default: m.OfflineBanner }))
-);
+const AppLayout = lazy(() => import("./components/AppLayout"));
+const DashboardPage = lazy(() => import("./components/DashboardPage"));
+const OfflineBanner = lazy(() => import("./components/OfflineBanner"));
 const SessionExpiredModal = lazy(() => import("./components/SessionExpiredModal"));
-const NotFoundPage = lazy(() =>
-  import("./components/NotFoundPage").then((m) => ({ default: m.NotFoundPage }))
-);
+const NotFoundPage = lazy(() => import("./components/NotFoundPage"));
 const NoProfileShell = lazy(() => import("./components/NoProfileShell"));
-const FlareProvider = lazy(() =>
-  import("@/lib/flare/FlareProvider").then((m) => ({ default: m.FlareProvider }))
-);
-const IronShell = lazy(() =>
-  import("@/lib/iron/IronShell").then((m) => ({ default: m.IronShell }))
-);
+const FlareProvider = lazy(() => import("@/lib/flare/FlareProvider"));
+const IronShell = lazy(() => import("@/lib/iron/IronShell"));
 const IronStoreProvider = lazy(() =>
   import("@/lib/iron/store").then((m) => ({ default: m.IronStoreProvider }))
 );
 
-const ChatPage = lazy(() =>
-  import("./components/ChatPage").then((m) => ({ default: m.ChatPage }))
-);
+const ChatPage = lazy(() => import("./components/ChatPage"));
 const AdminPage = lazy(() =>
   import("./components/AdminPage").then((m) => ({ default: m.AdminPage }))
 );

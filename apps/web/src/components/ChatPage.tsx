@@ -790,3 +790,5 @@ export function ChatPage({ userRole, userEmail }: ChatPageProps) {
     </div>
   );
 }
+
+export default ChatPage;

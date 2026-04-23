@@ -365,3 +365,5 @@ export function LoginPage({ authError, mode = "internal" }: LoginPageProps) {
     </div>
   );
 }
+
+export default LoginPage;
