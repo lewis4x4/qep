@@ -30,18 +30,16 @@ console.log(JSON.stringify({ verdict: "PASS", evidence }, null, 2));
 
 async function verifyNetlify(head) {
   const token = process.env.NETLIFY_AUTH_TOKEN;
-  if (!token) throw new Error("NETLIFY_AUTH_TOKEN is required for production deploy verification.");
-
-  const response = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys?per_page=1`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error(`Netlify deploy lookup failed: HTTP ${response.status}`);
-  const deploys = await response.json();
-  const latest = deploys?.[0];
-  if (!latest) throw new Error(`Netlify site ${siteId} returned no deploys.`);
+  const deploys = token
+    ? await listNetlifyDeploysWithToken(token)
+    : await listNetlifyDeploysWithCli();
+  const latest = deploys?.find((deploy) => deploy.context === "production" && deploy.branch === "main")
+    ?? deploys?.find((deploy) => deploy.branch === "main")
+    ?? deploys?.[0];
+  if (!latest) throw new Error(`Netlify site ${siteId} returned no production deploys.`);
 
   evidence.push({
-    check: "netlify.deploy",
+    check: "netlify.production_deploy",
     deploy_id: latest.id,
     state: latest.state,
     commit_ref: latest.commit_ref,
@@ -53,6 +51,24 @@ async function verifyNetlify(head) {
   if (latest.commit_ref !== head) {
     throw new Error(`Latest Netlify commit_ref ${latest.commit_ref} does not match HEAD ${head}.`);
   }
+}
+
+async function listNetlifyDeploysWithToken(token) {
+  const response = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys?per_page=20`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Netlify deploy lookup failed: HTTP ${response.status}`);
+  return response.json();
+}
+
+async function listNetlifyDeploysWithCli() {
+  const result = await run("netlify", [
+    "api",
+    "listSiteDeploys",
+    "--data",
+    JSON.stringify({ site_id: siteId, per_page: "20" }),
+  ], repoRoot);
+  return JSON.parse(result.stdout);
 }
 
 async function verifySupabaseMigrations() {
