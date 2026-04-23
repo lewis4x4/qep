@@ -1,27 +1,15 @@
-import { createAdminClient, createCallerClient } from "../_shared/dge-auth.ts";
+import { createAdminClient } from "../_shared/dge-auth.ts";
+import { requireAuthenticatedUser } from "../_shared/service-auth.ts";
 import { handleCrmAuthAuditRequest } from "./handler.ts";
 
-async function resolveActorUserId(authHeader: string | null): Promise<string | null> {
-  if (!authHeader) {
-    return null;
-  }
+Deno.serve(async (req: Request): Promise<Response> => {
+  const authHeader = req.headers.get("Authorization")?.trim() ?? null;
+  const auth = authHeader
+    ? await requireAuthenticatedUser(authHeader, req.headers.get("origin"))
+    : null;
 
-  const caller = createCallerClient(authHeader);
-  const { data, error } = await caller.auth.getUser();
-  if (error) {
-    console.error("[crm-auth-audit] auth resolution failed", {
-      code: error.code,
-      message: error.message,
-    });
-    return null;
-  }
-
-  return data.user?.id ?? null;
-}
-
-Deno.serve(async (req: Request): Promise<Response> =>
-  handleCrmAuthAuditRequest(req, {
+  return handleCrmAuthAuditRequest(req, {
     admin: createAdminClient(),
-    resolveActorUserId,
-  })
-);
+    actorUserId: auth?.ok ? auth.userId : null,
+  });
+});

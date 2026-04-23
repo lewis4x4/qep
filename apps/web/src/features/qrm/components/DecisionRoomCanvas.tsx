@@ -12,7 +12,7 @@
  * scale together. Seat sizes clamp between a mobile floor and desktop
  * ceiling so they never collide on narrow screens.
  */
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DecisionRoomSeat } from "../lib/decision-room-simulator";
 import { ARCHETYPE_AVATAR } from "../lib/decision-room-avatar";
 import { cn } from "@/lib/utils";
@@ -142,10 +142,61 @@ function stanceTone(seat: DecisionRoomSeat): { ring: string; bg: string; glow: s
   }
 }
 
+/** Compact seat fingerprint used to detect status/stance flips between
+ *  renders — if any of these change, the seat is worth pulsing. Seat id
+ *  is the key, so rename (unlikely) or power-weight changes aren't
+ *  treated as "changes" for this animation. */
+function seatFingerprint(seat: DecisionRoomSeat): string {
+  return `${seat.status}:${seat.stance}:${seat.name ?? ""}`;
+}
+
 export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, companyName, dealName }: Props) {
   const positioned = useMemo(() => placeSeats(seats), [seats]);
   const edges = useMemo(() => influenceEdges(positioned), [positioned]);
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  // Seat-change pulse: diff the new seats against what we rendered last
+  // time and flag any seat whose status/stance/name flipped. Flagged
+  // seats render a one-second ring animation, then the flag auto-clears.
+  // Mount is intentionally silent — we only pulse on actual transitions
+  // so the canvas doesn't flash every time a deal loads.
+  const prevFingerprints = useRef<Map<string, string> | null>(null);
+  const [pulsingIds, setPulsingIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const current = new Map<string, string>();
+    for (const s of seats) current.set(s.id, seatFingerprint(s));
+
+    // First render — establish the baseline without firing any pulses.
+    if (prevFingerprints.current === null) {
+      prevFingerprints.current = current;
+      return;
+    }
+
+    const changed = new Set<string>();
+    for (const [id, fp] of current) {
+      const prev = prevFingerprints.current.get(id);
+      if (prev !== undefined && prev !== fp) changed.add(id);
+    }
+    prevFingerprints.current = current;
+
+    if (changed.size === 0) return;
+    setPulsingIds((prev) => {
+      const next = new Set(prev);
+      for (const id of changed) next.add(id);
+      return next;
+    });
+    // Auto-expire after the animation settles so repeated flips stay
+    // visible and the DOM doesn't accumulate class flags.
+    const t = setTimeout(() => {
+      setPulsingIds((prev) => {
+        const next = new Set(prev);
+        for (const id of changed) next.delete(id);
+        return next;
+      });
+    }, 1_100);
+    return () => clearTimeout(t);
+  }, [seats]);
 
   function focusSeatAt(index: number) {
     if (seats.length === 0) return;
@@ -275,6 +326,7 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
           const rovingAnchor = selectedSeatId
             ? selectedSeatId === seat.id
             : index === 0;
+          const pulsing = pulsingIds.has(seat.id);
 
           return (
             <button
@@ -296,14 +348,26 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
               tabIndex={rovingAnchor ? 0 : -1}
             >
               <div className="relative">
+                {/* Seat-change pulse — expanding ring that fades out.
+                    Fires once when status/stance/name flips (reclassify,
+                    ghost → named, stance change). Pointer-events off so
+                    the underlying seat stays clickable. */}
+                {pulsing ? (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-full w-full -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-qep-orange/40"
+                    style={{ animationDuration: "1s", animationIterationCount: 1 }}
+                  />
+                ) : null}
                 <div
                   className={cn(
-                    "relative flex items-center justify-center overflow-hidden rounded-full border-2 ring-2 ring-offset-0",
+                    "relative flex items-center justify-center overflow-hidden rounded-full border-2 ring-2 ring-offset-0 transition-shadow duration-300",
                     tone.ring,
                     tone.bg,
                     tone.glow,
                     tone.text,
                     selected && "ring-4 ring-qep-orange/80",
+                    pulsing && "ring-4 ring-qep-orange/80 shadow-[0_0_32px_hsl(var(--qep-orange)/0.7)]",
                   )}
                   style={{ width: size, height: size }}
                 >

@@ -21,7 +21,7 @@ interface RequestBody {
 
 interface HandlerDeps {
   admin: CrmAuditClient;
-  resolveActorUserId: (authHeader: string | null) => Promise<string | null>;
+  actorUserId: string | null;
   requestIdFactory?: () => string;
 }
 
@@ -89,8 +89,7 @@ export async function handleCrmAuthAuditRequest(
     return new Response("Unsupported auth audit event.", { status: 400 });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  const actorUserId = await deps.resolveActorUserId(authHeader);
+  const actorUserId = deps.actorUserId;
   if (AUTH_REQUIRED_EVENTS.has(body.eventType) && !actorUserId) {
     return new Response("Authenticated audit event requires a valid bearer token.", {
       status: 401,

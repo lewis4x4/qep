@@ -23,6 +23,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 import { isServiceRoleCaller } from "../_shared/cron-auth.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
 interface Touch {
@@ -52,7 +53,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return safeJsonError("Method not allowed", 405, origin);
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
+    const authHeader = req.headers.get("Authorization")?.trim() ?? null;
     const providedServiceKey = req.headers.get("x-service-role-key")?.trim();
     const expectedServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -81,21 +82,10 @@ Deno.serve(async (req) => {
 
     // If user-authed, verify the user exists; cron path uses service key directly.
     let workspace = "default";
-    if (authHeader) {
-      const authedClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user }, error: authErr } = await authedClient.auth.getUser();
-      if (authErr || !user) return safeJsonError("Unauthorized", 401, origin);
-
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("active_workspace_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      workspace = (profile?.active_workspace_id as string | undefined) ?? "default";
+    if (authHeader && !serviceKeyValid && !cronCaller) {
+      const auth = await requireServiceUser(authHeader, origin);
+      if (!auth.ok) return auth.response;
+      workspace = auth.workspaceId;
     }
 
     const url = new URL(req.url);

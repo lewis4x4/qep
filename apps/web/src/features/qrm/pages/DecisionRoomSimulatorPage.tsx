@@ -16,7 +16,7 @@
  *     new velocity and grows the Move History panel.
  *   - Seat drawer — per-seat evidence + ghost find-guidance + persona chat.
  */
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, BarChart3 } from "lucide-react";
@@ -39,12 +39,6 @@ import { QrmPageHeader } from "../components/QrmPageHeader";
 import { QrmSubNav } from "../components/QrmSubNav";
 import { DecisionRoomCanvas } from "../components/DecisionRoomCanvas";
 import { DecisionRoomScoreboard } from "../components/DecisionRoomScoreboard";
-import { DecisionRoomSeatDrawer } from "../components/DecisionRoomSeatDrawer";
-import {
-  DecisionRoomCoachRead,
-  coachReadQueryKey,
-  fetchCoachRead,
-} from "../components/DecisionRoomCoachRead";
 import { DecisionRoomRecommendedMoves } from "../components/DecisionRoomRecommendedMoves";
 import { DecisionRoomMoveBar, type TriedMove } from "../components/DecisionRoomMoveBar";
 import { DecisionRoomMoveHistory } from "../components/DecisionRoomMoveHistory";
@@ -54,12 +48,21 @@ import { DecisionRoomWinFormula } from "../components/DecisionRoomWinFormula";
 import { DecisionRoomBriefExport } from "../components/DecisionRoomBriefExport";
 import { DecisionRoomGymPicker } from "../components/DecisionRoomGymPicker";
 import { DecisionRoomReplayBanner } from "../components/DecisionRoomReplayBanner";
+import { DecisionRoomDealLens } from "../components/DecisionRoomDealLens";
+import { coachReadQueryKey, fetchCoachRead } from "../lib/decision-room-coach-read-api";
 import {
   insertMoveToDb,
   loadMoveHistoryFromDb,
   loadMoveHistoryFromStorage,
   persistMoveHistoryToStorage,
 } from "../lib/decision-room-moves-persist";
+
+const DecisionRoomCoachRead = lazy(() =>
+  import("../components/DecisionRoomCoachRead").then((m) => ({ default: m.DecisionRoomCoachRead }))
+);
+const DecisionRoomSeatDrawer = lazy(() =>
+  import("../components/DecisionRoomSeatDrawer").then((m) => ({ default: m.DecisionRoomSeatDrawer }))
+);
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
@@ -365,7 +368,9 @@ export function DecisionRoomSimulatorPage() {
         dealName={board.dealName}
       />
 
-      <DecisionRoomCoachRead board={board} />
+      <Suspense fallback={<DeckSurface className="border-qep-orange/30 bg-gradient-to-br from-qep-orange/[0.06] to-qep-orange/[0.02] p-5"><div className="h-16 animate-pulse rounded bg-white/5" /></DeckSurface>}>
+        <DecisionRoomCoachRead board={board} />
+      </Suspense>
 
       <DecisionRoomScoreboard scores={board.scores} velocityDelta={velocityDelta} />
 
@@ -380,6 +385,14 @@ export function DecisionRoomSimulatorPage() {
       <DecisionRoomRecommendedMoves
         moves={recommendedMoves}
         onPickMove={handlePickRecommendedMove}
+      />
+
+      <DecisionRoomDealLens
+        dealId={dealId}
+        dealName={board.dealName}
+        dealAmount={composite.deal.amount ?? null}
+        machineInterest={composite.needsAssessment?.machine_interest ?? null}
+        onPickMove={(moveText) => setMovePrefill(moveText)}
       />
 
       {futureTicks.length > 0 ? <DecisionRoomFuturePulse ticks={futureTicks} /> : null}
@@ -451,17 +464,21 @@ export function DecisionRoomSimulatorPage() {
         </div>
       </DeckSurface>
 
-      <DecisionRoomSeatDrawer
-        seat={selectedSeat}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        dealId={dealId}
-        companyId={composite.company?.id ?? null}
-        companyName={board.companyName}
-        dealName={board.dealName}
-        repName={null}
-        allSeats={board.seats}
-      />
+      {drawerOpen && selectedSeat ? (
+        <Suspense fallback={null}>
+          <DecisionRoomSeatDrawer
+            seat={selectedSeat}
+            open={drawerOpen}
+            onOpenChange={setDrawerOpen}
+            dealId={dealId}
+            companyId={composite.company?.id ?? null}
+            companyName={board.companyName}
+            dealName={board.dealName}
+            repName={null}
+            allSeats={board.seats}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

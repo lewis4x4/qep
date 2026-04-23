@@ -14,6 +14,7 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { safeCorsHeaders, optionsResponse, safeJsonError, safeJsonOk } from "../_shared/safe-cors.ts";
 
 import { captureEdgeException } from "../_shared/sentry.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import type { TelematicsUsageSnapshot } from "../../../shared/qep-moonshot-contracts.ts";
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -23,7 +24,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization")?.trim();
+    const authHeader = req.headers.get("Authorization")?.trim() ?? null;
     if (!authHeader) {
       return safeJsonError("Unauthorized", 401, origin);
     }
@@ -41,26 +42,16 @@ Deno.serve(async (req) => {
     }
 
     if (!isServiceRole) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
+      const auth = await requireServiceUser(authHeader, origin);
+      if (!auth.ok) return auth.response;
+      if (!["admin", "owner"].includes(auth.role)) {
+        return safeJsonError("Telematics requires admin/owner role", 403, origin);
+      }
 
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) return safeJsonError("Unauthorized", 401, origin);
-
-      // Create admin client only after user is verified
       supabaseAdmin = createClient(
         Deno.env.get("SUPABASE_URL")!,
         serviceRoleKey!,
       );
-
-      const { data: profile } = await supabaseAdmin
-        .from("profiles").select("role").eq("id", user.id).single();
-      if (!profile || !["admin", "owner"].includes(profile.role)) {
-        return safeJsonError("Telematics requires admin/owner role", 403, origin);
-      }
     }
 
     if (!supabaseAdmin) {

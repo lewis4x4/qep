@@ -7,6 +7,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encryptToken } from "../_shared/hubspot-crypto.ts";
 import { resolveHubSpotRuntimeConfig } from "../_shared/hubspot-runtime-config.ts";
+import { requireServiceUser } from "../_shared/service-auth.ts";
 import {
   buildOAuthStateCookieHeader,
   clearOAuthStateCookieHeader,
@@ -90,15 +91,9 @@ async function initiateOAuthFlow(
     });
   }
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${sessionToken}` } } },
-  );
-
   try {
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const auth = await requireServiceUser(`Bearer ${sessionToken}`, req.headers.get("origin"));
+    if (!auth.ok) {
       return redirectWithOAuthError("not_authenticated", ch, {
         clearStateCookie: true,
       });
@@ -116,7 +111,7 @@ async function initiateOAuthFlow(
     }
 
     const sessionBinding = await hashSessionToken(sessionToken);
-    const stateRecord = createOAuthStateRecord(user.id, sessionBinding);
+    const stateRecord = createOAuthStateRecord(auth.userId, sessionBinding);
     const signedState = await createSignedOAuthStateCookie(
       stateRecord,
       stateSecret,

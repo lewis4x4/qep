@@ -1,19 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FileText, GitCompare, Plus } from "lucide-react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/database.types";
-import { QrmActivityComposer } from "../components/QrmActivityComposer";
-import { QrmActivityTimeline } from "../components/QrmActivityTimeline";
-import { QrmDealEditorSheet } from "../components/QrmDealEditorSheet";
-import { QrmDealEquipmentSection } from "../components/QrmDealEquipmentSection";
-import { QrmDealUpdateCard } from "../components/QrmDealUpdateCard";
-import { NeedsAssessmentCard } from "../components/NeedsAssessmentCard";
-import { CadenceTimeline } from "../components/CadenceTimeline";
-import { DemoRequestCard } from "../components/DemoRequestCard";
-import { DgeIntelligencePanel } from "../../dge/components/DgeIntelligencePanel";
-import { SopSuggestionWidget } from "../../sop/components/SopSuggestionWidget";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "../components/command-deck";
@@ -37,11 +27,53 @@ import { dealCompositeQueryKey } from "../lib/deal-composite-keys";
 import { fetchDealComposite } from "../lib/deal-composite-api";
 import type { QrmDealPatchInput } from "../lib/types";
 
+const QrmActivityComposer = lazy(() =>
+  import("../components/QrmActivityComposer").then((m) => ({ default: m.QrmActivityComposer }))
+);
+const QrmActivityTimeline = lazy(() =>
+  import("../components/QrmActivityTimeline").then((m) => ({ default: m.QrmActivityTimeline }))
+);
+const QrmDealEditorSheet = lazy(() =>
+  import("../components/QrmDealEditorSheet").then((m) => ({ default: m.QrmDealEditorSheet }))
+);
+const QrmDealEquipmentSection = lazy(() =>
+  import("../components/QrmDealEquipmentSection").then((m) => ({ default: m.QrmDealEquipmentSection }))
+);
+const QrmDealUpdateCard = lazy(() =>
+  import("../components/QrmDealUpdateCard").then((m) => ({ default: m.QrmDealUpdateCard }))
+);
+const NeedsAssessmentCard = lazy(() =>
+  import("../components/NeedsAssessmentCard").then((m) => ({ default: m.NeedsAssessmentCard }))
+);
+const CadenceTimeline = lazy(() =>
+  import("../components/CadenceTimeline").then((m) => ({ default: m.CadenceTimeline }))
+);
+const DemoRequestCard = lazy(() =>
+  import("../components/DemoRequestCard").then((m) => ({ default: m.DemoRequestCard }))
+);
+const DgeIntelligencePanel = lazy(() =>
+  import("../../dge/components/DgeIntelligencePanel").then((m) => ({ default: m.DgeIntelligencePanel }))
+);
+const SopSuggestionWidget = lazy(() =>
+  import("../../sop/components/SopSuggestionWidget").then((m) => ({ default: m.SopSuggestionWidget }))
+);
+
 interface QrmDealDetailPageProps {
   userId: string;
   userRole: UserRole;
   mode?: "detail" | "room" | "autopsy";
 }
+
+const OPEN_QUOTE_STATUSES = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "approved_with_conditions",
+  "changes_requested",
+  "ready",
+  "sent",
+  "viewed",
+] as const;
 
 export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDealDetailPageProps) {
   const { dealId } = useParams<{ dealId: string }>();
@@ -91,6 +123,37 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
       } catch {
         return [];
       }
+    },
+    staleTime: 30_000,
+  });
+
+  const activeQuoteQuery = useQuery({
+    queryKey: ["crm", "deal", dealId, "active-quote-package"],
+    enabled: Boolean(dealId),
+    queryFn: async (): Promise<{ id: string } | null> => {
+      const selectClause = "id, status, created_at";
+      const openRes = await supabase
+        .from("quote_packages")
+        .select(selectClause)
+        .eq("deal_id", dealId)
+        .in("status", [...OPEN_QUOTE_STATUSES])
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (openRes.error) throw openRes.error;
+      const openRow = openRes.data?.[0];
+      if (openRow?.id) {
+        return { id: String(openRow.id) };
+      }
+
+      const latestRes = await supabase
+        .from("quote_packages")
+        .select(selectClause)
+        .eq("deal_id", dealId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (latestRes.error) throw latestRes.error;
+      const latestRow = latestRes.data?.[0];
+      return latestRow?.id ? { id: String(latestRow.id) } : null;
     },
     staleTime: 30_000,
   });
@@ -263,6 +326,17 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         activities: activitiesData,
       })
     : null;
+  const quoteHref = (() => {
+    const params = new URLSearchParams();
+    if (activeQuoteQuery.data?.id) {
+      params.set("package_id", activeQuoteQuery.data.id);
+    }
+    params.set("crm_deal_id", dealId);
+    if (dealQueryData?.primaryContactId) {
+      params.set("crm_contact_id", dealQueryData.primaryContactId);
+    }
+    return `/quote-v2?${params.toString()}`;
+  })();
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 pb-28 pt-2 sm:px-6 lg:px-8 lg:pb-8">
@@ -301,8 +375,14 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
               )}
             </>
           )}
+          <Button asChild className="hidden sm:inline-flex">
+            <Link to={quoteHref}>
+              <FileText className="mr-2 h-4 w-4" />
+              Edit Quote
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => setEditorOpen(true)}>
-            Edit Deal
+            Deal Details
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
             <Link
@@ -311,16 +391,6 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
               }${dealQueryData?.companyId ? `&company_id=${dealQueryData.companyId}` : ""}`}
             >
               Ask Knowledge
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="hidden sm:inline-flex">
-            <Link
-              to={`/quote-v2?crm_deal_id=${dealId}${
-                dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""
-              }`}
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Open Quote
             </Link>
           </Button>
           <Button asChild variant="outline" className="hidden sm:inline-flex">
@@ -398,8 +468,8 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
                     <Link to={`/qrm/deals/${dealId}/decision-room`}>Decision Room Simulator</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link to={`/quote-v2?crm_deal_id=${dealId}${dealQueryData?.primaryContactId ? `&crm_contact_id=${dealQueryData.primaryContactId}` : ""}`}>
-                      Open Quote
+                    <Link to={quoteHref}>
+                      Edit Quote
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
@@ -473,13 +543,15 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
             </>
           )}
 
-          <SopSuggestionWidget
-            entityType="deal"
-            entityId={dealQueryData.id}
-            stage={selectedStage?.name}
-            department="sales"
-            compact
-          />
+          <Suspense fallback={<DeckSurface className="h-16 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <SopSuggestionWidget
+              entityType="deal"
+              entityId={dealQueryData.id}
+              stage={selectedStage?.name}
+              department="sales"
+              compact
+            />
+          </Suspense>
 
           <DeckSurface className="border-qep-deck-rule bg-qep-deck-elevated/70 p-4 sm:p-5">
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -518,34 +590,46 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
             </dl>
           </DeckSurface>
 
-          <QrmDealUpdateCard
-            stages={stagesQuery.data ?? []}
-            stageId={stageId}
-            setStageId={setStageId}
-            nextFollowUpInput={nextFollowUpInput}
-            setNextFollowUpInput={setNextFollowUpInput}
-            isElevatedRole={isElevatedRole}
-            showClosedLostFields={Boolean(selectedStage?.isClosedLost)}
-            lossReason={lossReason}
-            setLossReason={setLossReason}
-            competitor={competitor}
-            setCompetitor={setCompetitor}
-            formError={formError}
-            saveError={saveMutation.isError}
-            savePending={saveMutation.isPending}
-            stagesLoading={stagesQuery.isLoading}
-            onSave={() => void handleSave()}
-          />
+          <Suspense fallback={<DeckSurface className="h-40 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <QrmDealUpdateCard
+              stages={stagesQuery.data ?? []}
+              stageId={stageId}
+              setStageId={setStageId}
+              nextFollowUpInput={nextFollowUpInput}
+              setNextFollowUpInput={setNextFollowUpInput}
+              isElevatedRole={isElevatedRole}
+              showClosedLostFields={Boolean(selectedStage?.isClosedLost)}
+              lossReason={lossReason}
+              setLossReason={setLossReason}
+              competitor={competitor}
+              setCompetitor={setCompetitor}
+              formError={formError}
+              saveError={saveMutation.isError}
+              savePending={saveMutation.isPending}
+              stagesLoading={stagesQuery.isLoading}
+              onSave={() => void handleSave()}
+            />
+          </Suspense>
 
-          <NeedsAssessmentCard dealId={dealId!} prefetched={compositeQuery.data?.needsAssessment ?? null} />
+          <Suspense fallback={<DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <NeedsAssessmentCard dealId={dealId!} prefetched={compositeQuery.data?.needsAssessment ?? null} />
+          </Suspense>
 
-          <CadenceTimeline dealId={dealId!} prefetched={compositeQuery.data?.cadences ?? null} />
+          <Suspense fallback={<DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <CadenceTimeline dealId={dealId!} prefetched={compositeQuery.data?.cadences ?? null} />
+          </Suspense>
 
-          <DemoRequestCard dealId={dealId!} prefetched={compositeQuery.data?.demos ?? null} />
+          <Suspense fallback={<DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <DemoRequestCard dealId={dealId!} prefetched={compositeQuery.data?.demos ?? null} />
+          </Suspense>
 
-          <DgeIntelligencePanel dealId={dealId!} dealAmount={dealQueryData?.amount ?? undefined} userRole={userRole} />
+          <Suspense fallback={<DeckSurface className="h-40 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <DgeIntelligencePanel dealId={dealId!} dealAmount={dealQueryData?.amount ?? undefined} userRole={userRole} />
+          </Suspense>
 
-          <QrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
+          <Suspense fallback={<DeckSurface className="h-32 animate-pulse border-qep-deck-rule bg-qep-deck-elevated/40"><div className="h-full" /></DeckSurface>}>
+            <QrmDealEquipmentSection dealId={dealId} companyId={dealQueryData?.companyId ?? null} />
+          </Suspense>
 
           <DeckSurface>
             <div className="flex items-start justify-between gap-3 border-b border-qep-deck-rule/60 pb-3">
@@ -557,28 +641,30 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
               </div>
             </div>
             <div className="mt-4">
-              <QrmActivityTimeline
-                activities={activitiesData}
-                onLogActivity={() => setComposerOpen(true)}
-                entityLabel={dealName}
-                showEntityLabel={false}
-                pendingBodyId={pendingBodyId}
-                pendingOccurredAtId={pendingOccurredAtId}
-                pendingTaskId={pendingTaskId}
-                pendingDeliveryId={pendingDeliveryId}
-                onPatchBody={async (activity, body, updatedAt) => {
-                  await patchBody({ activityId: activity.id, body, updatedAt });
-                }}
-                onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
-                  await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
-                }}
-                onPatchTask={async (activity, task, updatedAt) => {
-                  await patchTask({ activityId: activity.id, task, updatedAt });
-                }}
-                onDeliverCommunication={async (activity) => {
-                  await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
-                }}
-              />
+              <Suspense fallback={<div className="h-24 animate-pulse rounded bg-muted/20" />}>
+                <QrmActivityTimeline
+                  activities={activitiesData}
+                  onLogActivity={() => setComposerOpen(true)}
+                  entityLabel={dealName}
+                  showEntityLabel={false}
+                  pendingBodyId={pendingBodyId}
+                  pendingOccurredAtId={pendingOccurredAtId}
+                  pendingTaskId={pendingTaskId}
+                  pendingDeliveryId={pendingDeliveryId}
+                  onPatchBody={async (activity, body, updatedAt) => {
+                    await patchBody({ activityId: activity.id, body, updatedAt });
+                  }}
+                  onPatchOccurredAt={async (activity, occurredAt, updatedAt) => {
+                    await patchOccurredAt({ activityId: activity.id, occurredAt, updatedAt });
+                  }}
+                  onPatchTask={async (activity, task, updatedAt) => {
+                    await patchTask({ activityId: activity.id, task, updatedAt });
+                  }}
+                  onDeliverCommunication={async (activity) => {
+                    await deliverActivity({ activityId: activity.id, updatedAt: activity.updatedAt });
+                  }}
+                />
+              </Suspense>
             </div>
           </DeckSurface>
         </>
@@ -592,21 +678,25 @@ export function QrmDealDetailPage({ userId, userRole, mode = "detail" }: QrmDeal
         Log Activity
       </Button>
 
-      <QrmActivityComposer
-        open={composerOpen}
-        onOpenChange={setComposerOpen}
-        isPending={createActivityMutation.isPending}
-        subjectLabel={dealName}
-        onSubmit={async (input) => {
-          await createActivityMutation.mutateAsync(input);
-        }}
-      />
-      <QrmDealEditorSheet
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        deal={dealQueryData}
-        onArchived={() => navigate("/qrm/deals")}
-      />
+      <Suspense fallback={null}>
+        <QrmActivityComposer
+          open={composerOpen}
+          onOpenChange={setComposerOpen}
+          isPending={createActivityMutation.isPending}
+          subjectLabel={dealName}
+          onSubmit={async (input) => {
+            await createActivityMutation.mutateAsync(input);
+          }}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <QrmDealEditorSheet
+          open={editorOpen}
+          onOpenChange={setEditorOpen}
+          deal={dealQueryData}
+          onArchived={() => navigate("/qrm/deals")}
+        />
+      </Suspense>
     </div>
   );
 }

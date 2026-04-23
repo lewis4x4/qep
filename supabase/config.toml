@@ -470,3 +470,9 @@ verify_jwt = false
 
 [functions.portal-notification-refresh]
 verify_jwt = false
+
+[functions.revenue-attribution-compute]
+verify_jwt = false
+
+[functions.telematics-ingest]
+verify_jwt = false

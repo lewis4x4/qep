@@ -130,6 +130,11 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
       // (the rep-insert RLS policy requires assigned_rep_id = auth.uid()).
       const { data: { user } } = await supabase.auth.getUser();
       const { firstName, lastName } = splitName(proposal.name);
+      // Pin the new contact directly to the archetype slot they were
+      // proposed for. Without this, a voice-mentioned Sarah Chen saved
+      // for the Economic Buyer seat falls through to Champion (the
+      // no-title default), which is silently wrong. The override wins
+      // over title inference in inferArchetypeForContact.
       const { error } = await supabase.from("crm_contacts").insert({
         first_name: firstName || proposal.name,
         last_name: lastName || "(unknown)",
@@ -143,6 +148,11 @@ export function DecisionRoomGhostProposals({ dealId, archetype, companyName, com
             confidence: proposal.confidence,
             evidence: proposal.evidence,
             deal_id: dealId,
+          },
+          decision_room_override: {
+            archetype,
+            set_at: new Date().toISOString(),
+            set_by: "ghost_propose_save",
           },
         },
       });

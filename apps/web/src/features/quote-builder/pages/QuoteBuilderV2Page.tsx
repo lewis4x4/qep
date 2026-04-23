@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Mic,
   MessageSquare,
@@ -14,7 +13,6 @@ import {
   Save,
   MapPin,
   Loader2,
-  PenTool,
 } from "lucide-react";
 import { CustomerInfoCard } from "../components/CustomerInfoCard";
 import { CustomerPicker, type PickedCustomer } from "../components/CustomerPicker";
@@ -44,25 +42,15 @@ import {
 import { MarginCheckBanner } from "../components/MarginCheckBanner";
 import { TradeInSection } from "../components/TradeInSection";
 import { TaxBreakdown } from "../components/TaxBreakdown";
-import { IncentiveStack } from "../components/IncentiveStack";
-import { SendQuoteSection } from "../components/SendQuoteSection";
 import {
-  buildPortalRevisionQuoteData,
   buildQuoteSavePayload,
   getAiEquipmentRecommendation,
   getClosedDealsAudit,
   getFactorVerdicts,
-  getQuoteApprovalCase,
   getSavedQuotePackage,
-  getPortalRevision,
-  publishPortalRevision,
-  returnPortalRevisionToDraft,
   saveQuotePackage,
-  saveQuoteSignature,
-  savePortalRevisionDraft,
   searchCatalog,
   submitQuoteForApproval,
-  submitPortalRevision,
   type QuotePackageSaveResponse,
   type QuoteFinancingRequest,
 } from "../lib/quote-api";
@@ -76,7 +64,6 @@ import { useQuoteTaxPreview } from "../hooks/useQuoteTaxPreview";
 import { buildCustomFinanceScenario } from "../lib/custom-finance";
 import { AskIronAdvisorButton } from "@/components/primitives";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "@/features/voice-qrm/components/VoiceRecorder";
 import { submitVoiceToQrm } from "@/features/voice-qrm/lib/voice-qrm-api";
 import {
@@ -84,11 +71,6 @@ import {
   DealAssistantTrigger,
   type ScenarioSelection,
 } from "../components/ConversationalDealEngine";
-import {
-  PortalSignaturePad,
-  signatureDataUrlToRawBase64,
-  type PortalSignaturePadHandle,
-} from "@/features/portal/components/PortalSignaturePad";
 import type {
   QuoteEntryMode,
   QuoteFinanceScenario,
@@ -200,6 +182,12 @@ function equipmentKeyForLine(item: Pick<QuoteLineItemDraft, "id" | "title" | "ma
   ].join("|");
 }
 
+const QuoteReviewWorkflowPanels = lazy(() =>
+  import("../components/QuoteReviewWorkflowPanels").then((module) => ({
+    default: module.QuoteReviewWorkflowPanels,
+  }))
+);
+
 export function QuoteBuilderV2Page() {
   const [searchParams] = useSearchParams();
   const packageId = searchParams.get("package_id") || "";
@@ -237,12 +225,8 @@ export function QuoteBuilderV2Page() {
   });
   const [aiPrompt, setAiPrompt] = useState("");
   const [dealAssistantOpen, setDealAssistantOpen] = useState(false);
-  const [signerName, setSignerName] = useState("");
-  const [dealerMessage, setDealerMessage] = useState("");
-  const [revisionSummary, setRevisionSummary] = useState("");
   const [availableOptions, setAvailableOptions] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [availableOptionsLabel, setAvailableOptionsLabel] = useState<string | null>(null);
-  const sigRef = useRef<PortalSignaturePadHandle>(null);
   const queryClient = useQueryClient();
 
   const branchesQ = useActiveBranches();
@@ -678,44 +662,7 @@ export function QuoteBuilderV2Page() {
     ?? saveMutation.data?.id
     ?? (typeof existingQuote?.id === "string" ? existingQuote.id : null);
 
-  const portalRevisionQuery = useQuery({
-    queryKey: ["quote-builder", "portal-revision", draft.dealId],
-    queryFn: () => getPortalRevision(draft.dealId!),
-    enabled: Boolean(activeQuotePackageId && draft.dealId),
-    staleTime: 5_000,
-  });
-
-  const activeApprovalCaseQuery = useQuery({
-    queryKey: ["quote-builder", "approval-case", activeQuotePackageId],
-    queryFn: () => getQuoteApprovalCase(activeQuotePackageId!),
-    enabled: Boolean(activeQuotePackageId),
-    staleTime: 5_000,
-  });
-  const activeApprovalCase = activeApprovalCaseQuery.data ?? null;
-
-  useEffect(() => {
-    const revisionDraft = portalRevisionQuery.data?.draft;
-    if (revisionDraft) {
-      setDealerMessage(revisionDraft.dealerMessage ?? "");
-      setRevisionSummary(revisionDraft.revisionSummary ?? "");
-      return;
-    }
-    const currentVersion = portalRevisionQuery.data?.review?.current_version;
-    setDealerMessage(currentVersion?.dealer_message ?? "");
-    setRevisionSummary(currentVersion?.revision_summary ?? "");
-  }, [portalRevisionQuery.data]);
-
-  const quoteStatus = activeApprovalCase?.status === "pending" || activeApprovalCase?.status === "escalated"
-    ? "pending_approval"
-    : activeApprovalCase?.status === "approved_with_conditions"
-      ? "approved_with_conditions"
-      : activeApprovalCase?.status === "changes_requested"
-        ? "changes_requested"
-        : activeApprovalCase?.status === "approved"
-          ? "approved"
-          : activeApprovalCase?.status === "rejected"
-            ? "rejected"
-            : draft.quoteStatus ?? "draft";
+  const quoteStatus = draft.quoteStatus ?? "draft";
   const approvalPending = quoteStatus === "pending_approval";
   const approvalGranted =
     quoteStatus === "approved"
@@ -731,11 +678,6 @@ export function QuoteBuilderV2Page() {
     && !approvalPending
     && quoteStatus !== "approved"
     && quoteStatus !== "approved_with_conditions";
-  const canShowSendSection =
-    Boolean(activeQuotePackageId)
-    && (activeApprovalCase?.canSend ?? packetReadiness.send.ready)
-    && quoteStatus !== "sent"
-    && quoteStatus !== "accepted";
   const showQuoteActions = Boolean(activeQuotePackageId);
 
   const voiceMutation = useMutation({
@@ -776,82 +718,6 @@ export function QuoteBuilderV2Page() {
         voiceSummary: prompt,
       }));
       setStep("customer");
-    },
-  });
-
-  const signMutation = useMutation({
-    mutationFn: async () => {
-      const quotePackageId = activeQuotePackageId;
-      if (!quotePackageId) throw new Error("Save the quote before capturing signature.");
-      const dataUrl = sigRef.current?.toDataUrl();
-      const base64 = dataUrl ? signatureDataUrlToRawBase64(dataUrl) : "";
-      return saveQuoteSignature({
-        quote_package_id: quotePackageId,
-        deal_id: draft.dealId,
-        signer_name: signerName,
-        signer_email: draft.contactId || null,
-        signature_png_base64: base64.length > 100 ? base64 : null,
-      });
-    },
-  });
-
-  const revisionDraftMutation = useMutation({
-    mutationFn: async () => {
-      if (!draft.dealId || !activeQuotePackageId) throw new Error("Save the quote before drafting a portal revision.");
-      return savePortalRevisionDraft({
-        deal_id: draft.dealId,
-        quote_package_id: activeQuotePackageId,
-        quote_data: buildPortalRevisionQuoteData(
-          draft,
-          {
-            subtotal,
-            discountTotal,
-            netTotal,
-            taxTotal,
-            customerTotal,
-            cashDown,
-            amountFinanced,
-          },
-          allFinanceScenarios,
-          dealerMessage,
-          revisionSummary,
-        ),
-        dealer_message: dealerMessage || null,
-        revision_summary: revisionSummary || null,
-      });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
-    },
-  });
-
-  const revisionSubmitMutation = useMutation({
-    mutationFn: async () => {
-      if (!draft.dealId) throw new Error("Save the quote before submitting a portal revision.");
-      return submitPortalRevision({ deal_id: draft.dealId });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
-    },
-  });
-
-  const revisionReturnMutation = useMutation({
-    mutationFn: async () => {
-      if (!draft.dealId) throw new Error("No portal revision draft found.");
-      return returnPortalRevisionToDraft({ deal_id: draft.dealId });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
-    },
-  });
-
-  const revisionPublishMutation = useMutation({
-    mutationFn: async () => {
-      if (!draft.dealId) throw new Error("No portal revision draft found.");
-      return publishPortalRevision({ deal_id: draft.dealId });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["quote-builder", "portal-revision", draft.dealId] });
     },
   });
 
@@ -1837,272 +1703,40 @@ export function QuoteBuilderV2Page() {
             </Card>
           )}
 
-          {showQuoteActions && (() => {
-            const savedId = activeQuotePackageId;
-            const canPublish = ["admin", "manager", "owner"].includes(userRoleQuery.data ?? "");
-            const portalRevision = portalRevisionQuery.data;
-            const compareSnapshot = portalRevision?.draft?.compareSnapshot;
-            const publicationStatus = portalRevision?.publishState?.publicationStatus ?? "none";
-            return savedId ? (
-              <>
-                <IncentiveStack quotePackageId={savedId} />
-
-                {activeApprovalCase && (
-                  <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Approval Case</p>
-                        <p className="text-xs text-muted-foreground">
-                          {activeApprovalCase.versionNumber != null
-                            ? `Quote version v${activeApprovalCase.versionNumber}`
-                            : "Version snapshot attached"}
-                          {activeApprovalCase.branchName ? ` · ${activeApprovalCase.branchName}` : ""}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
-                        {String(activeApprovalCase.status).replace(/_/g, " ")}
-                      </span>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Assigned approver</p>
-                        <p className="mt-2 text-sm font-semibold text-foreground">
-                          {activeApprovalCase.assignedToName ?? activeApprovalCase.assignedRole ?? "Unassigned"}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Route: {String(activeApprovalCase.routeMode).replace(/_/g, " ")}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Decision note</p>
-                        <p className="mt-2 text-sm text-foreground">
-                          {activeApprovalCase.decisionNote ?? "No decision note recorded yet."}
-                        </p>
-                      </div>
-                    </div>
-
-                    {activeApprovalCase.evaluations.length > 0 && (
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Condition checklist</p>
-                        <div className="mt-3 space-y-2">
-                          {activeApprovalCase.evaluations.map((evaluation) => (
-                            <div key={evaluation.id} className="rounded border border-border/60 bg-card/50 px-3 py-2">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-medium text-foreground">{evaluation.label}</p>
-                                <span className={cn(
-                                  "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                                  evaluation.satisfied
-                                    ? "bg-emerald-500/10 text-emerald-400"
-                                    : "bg-amber-500/10 text-amber-300",
-                                )}>
-                                  {evaluation.satisfied ? "met" : "open"}
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs text-muted-foreground">{evaluation.detail}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                )}
-
-                {canShowSendSection ? (
-                  <SendQuoteSection
-                    quotePackageId={savedId}
-                    contactName={draft.customerName || draft.customerCompany || "customer"}
-                    onSent={() => {
-                      setDraft((current) => ({ ...current, quoteStatus: "sent" }));
-                    }}
-                  />
-                ) : quoteStatus === "sent" || quoteStatus === "accepted" ? (
-                  <Card className="border-emerald-500/20 bg-emerald-500/5 p-4">
-                    <p className="text-sm font-medium text-emerald-400">
-                      {quoteStatus === "accepted" ? "Quote accepted" : "Quote already sent"}
-                    </p>
-                  </Card>
-                ) : approvalPending ? (
-                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-                    <p className="text-sm font-medium text-amber-400">Approval requested</p>
-                    <p className="mt-1 text-xs text-amber-300">
-                      {submitApprovalMutation.data?.assignedToName
-                        ? `This quote is waiting on ${submitApprovalMutation.data.assignedToName} in Approval Center.`
-                        : submitApprovalMutation.data?.branchName
-                          ? `This quote is waiting in the ${submitApprovalMutation.data.branchName} approval queue.`
-                          : "This quote is waiting in Approval Center for sales manager review."}
-                    </p>
-                  </Card>
-                ) : approvalState.requiresManagerApproval && !approvalGranted ? (
-                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-                    <p className="text-sm font-medium text-amber-400">Manager approval required before send</p>
-                    <p className="mt-1 text-xs text-amber-300">
-                      {draft.branchSlug
-                        ? "Save the quote, then use Submit for Approval to route it to the branch sales manager."
-                        : "Select a quoting branch, save the quote, then submit it for approval."}
-                    </p>
-                  </Card>
-                ) : (
-                  <Card className="border-amber-500/20 bg-amber-500/5 p-4">
-                    <p className="text-sm font-medium text-amber-400">Quote saved, but not ready to send</p>
-                    <p className="mt-1 text-xs text-amber-300">
-                      Missing: {packetReadiness.send.missing.join(", ")}
-                    </p>
-                  </Card>
-                )}
-
-                {portalRevision?.review && (
-                  <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Portal Revision</p>
-                        <p className="text-xs text-muted-foreground">
-                          Publish a revised customer proposal from this quote workflow with manager approval.
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-qep-orange/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-qep-orange">
-                        {publicationStatus.replace(/_/g, " ")}
-                      </span>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Current portal proposal</p>
-                        <p className="mt-2 text-sm font-semibold text-foreground">
-                          {portalRevision.review.current_version?.version_number
-                            ? `Version ${portalRevision.review.current_version.version_number}`
-                            : "Legacy live proposal"}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Last dealer summary: {portalRevision.review.current_version?.revision_summary ?? "None recorded"}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Latest customer request</p>
-                        <p className="mt-2 text-sm text-foreground">
-                          {portalRevision.publishState?.latestCustomerRequestSnapshot ?? "No requested changes are recorded on the active portal proposal."}
-                        </p>
-                      </div>
-                    </div>
-
-                    <label className="block space-y-1 text-sm">
-                      <span className="text-muted-foreground">Dealer response message</span>
-                      <textarea
-                        value={dealerMessage}
-                        onChange={(event) => setDealerMessage(event.target.value)}
-                        className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                        placeholder="Explain what changed and what the customer should notice in the revised proposal."
-                      />
-                    </label>
-
-                    <label className="block space-y-1 text-sm">
-                      <span className="text-muted-foreground">Revision summary</span>
-                      <textarea
-                        value={revisionSummary}
-                        onChange={(event) => setRevisionSummary(event.target.value)}
-                        className="min-h-[90px] w-full rounded border border-input bg-card px-3 py-2 text-sm"
-                        placeholder="Summarize the revision in one concise line."
-                      />
-                    </label>
-
-                    {compareSnapshot?.hasChanges && (
-                      <div className="rounded-lg border border-border/60 bg-background/60 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Compare preview</p>
-                        <div className="mt-2 space-y-2 text-sm text-foreground">
-                          {(compareSnapshot.priceChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                          {(compareSnapshot.equipmentChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                          {(compareSnapshot.financingChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                          {(compareSnapshot.termsChanges ?? []).map((line: string) => <p key={line}>{line}</p>)}
-                          {compareSnapshot.dealerMessageChange ? <p>{compareSnapshot.dealerMessageChange}</p> : null}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => revisionDraftMutation.mutate()}
-                        disabled={revisionDraftMutation.isPending || !dealerMessage.trim() || !revisionSummary.trim()}
-                      >
-                        {revisionDraftMutation.isPending ? "Saving..." : "Save draft"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => revisionSubmitMutation.mutate()}
-                        disabled={revisionSubmitMutation.isPending || publicationStatus === "awaiting_approval"}
-                      >
-                        {revisionSubmitMutation.isPending ? "Submitting..." : "Submit for approval"}
-                      </Button>
-                      {canPublish && publicationStatus === "awaiting_approval" && (
-                        <Button
-                          variant="outline"
-                          onClick={() => revisionReturnMutation.mutate()}
-                          disabled={revisionReturnMutation.isPending}
-                        >
-                          {revisionReturnMutation.isPending ? "Returning..." : "Return to draft"}
-                        </Button>
-                      )}
-                      {canPublish && (
-                        <Button
-                          onClick={() => revisionPublishMutation.mutate()}
-                          disabled={revisionPublishMutation.isPending || publicationStatus === "none"}
-                        >
-                          {revisionPublishMutation.isPending ? "Publishing..." : "Approve & publish"}
-                        </Button>
-                      )}
-                    </div>
-
-                    {(revisionDraftMutation.error || revisionSubmitMutation.error || revisionReturnMutation.error || revisionPublishMutation.error) && (
-                      <p className="text-xs text-red-400">
-                        {[
-                          revisionDraftMutation.error,
-                          revisionSubmitMutation.error,
-                          revisionReturnMutation.error,
-                          revisionPublishMutation.error,
-                        ].find(Boolean) instanceof Error
-                          ? ([
-                            revisionDraftMutation.error,
-                            revisionSubmitMutation.error,
-                            revisionReturnMutation.error,
-                            revisionPublishMutation.error,
-                          ].find(Boolean) as Error).message
-                          : "Portal revision action failed"}
-                      </p>
-                    )}
-                  </Card>
-                )}
-                <Card className="border-border/60 bg-card/60 p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <PenTool className="h-4 w-4 text-qep-orange" />
-                    <p className="text-sm font-medium text-foreground">E-signature</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Capture signer name, IP, timestamp, and signature image for the quote package.
-                  </p>
-                  <Input
-                    value={signerName}
-                    onChange={(event) => setSignerName(event.target.value)}
-                    placeholder="Signer full name"
-                  />
-                  <PortalSignaturePad ref={sigRef} />
-                  <Button
-                    onClick={() => signMutation.mutate()}
-                    disabled={signMutation.isPending || !signerName.trim()}
-                  >
-                    {signMutation.isPending ? "Saving signature..." : "Capture Signature"}
-                  </Button>
-                  {signMutation.isSuccess && (
-                    <p className="text-xs text-emerald-400">Signature captured successfully.</p>
-                  )}
-                  {signMutation.isError && (
-                    <p className="text-xs text-red-400">
-                      {signMutation.error instanceof Error ? signMutation.error.message : "Signature save failed"}
-                    </p>
-                  )}
+          {showQuoteActions && activeQuotePackageId && (
+            <Suspense
+              fallback={(
+                <Card className="border-border/60 bg-card/60 p-4">
+                  <p className="text-sm text-muted-foreground">Loading review workflow…</p>
                 </Card>
-              </>
-            ) : null;
-          })()}
+              )}
+            >
+              <QuoteReviewWorkflowPanels
+                quotePackageId={activeQuotePackageId}
+                draft={draft}
+                financeScenarios={allFinanceScenarios}
+                computed={{
+                  subtotal,
+                  discountTotal,
+                  netTotal,
+                  taxTotal,
+                  customerTotal,
+                  cashDown,
+                  amountFinanced,
+                }}
+                sendReadiness={packetReadiness.send}
+                requiresManagerApproval={approvalState.requiresManagerApproval}
+                userRole={userRoleQuery.data ?? null}
+                submitApprovalResult={submitApprovalMutation.data}
+                quoteStatus={quoteStatus}
+                onQuoteStatusChange={(nextStatus) => {
+                  setDraft((current) => current.quoteStatus === nextStatus
+                    ? current
+                    : { ...current, quoteStatus: nextStatus });
+                }}
+              />
+            </Suspense>
+          )}
 
           {saveMutation.isError && (
             <Card className="border-red-500/30 bg-red-500/5 p-4">
