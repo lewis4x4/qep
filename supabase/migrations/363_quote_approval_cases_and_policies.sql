@@ -82,7 +82,12 @@ create table if not exists public.quote_approval_cases (
   quote_package_id uuid not null references public.quote_packages(id) on delete cascade,
   quote_package_version_id uuid not null references public.quote_package_versions(id) on delete restrict,
   version_number integer not null,
-  deal_id uuid references public.crm_deals(id) on delete set null,
+  -- FK targets the base table `qrm_deals` rather than the `crm_deals`
+  -- view. Postgres rejects foreign keys against views (42809), so
+  -- pointing at the view would break `create table`. The view itself
+  -- exposes `qrm_deals` rows 1:1, so any consumer resolving deals via
+  -- either name still sees the same row.
+  deal_id uuid references public.qrm_deals(id) on delete set null,
   quote_number text,
   branch_slug text,
   branch_name text,
