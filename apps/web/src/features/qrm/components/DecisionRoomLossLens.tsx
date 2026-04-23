@@ -14,6 +14,7 @@ import { AlertTriangle, TrendingDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DeckSurface } from "./command-deck";
 import { cn } from "@/lib/utils";
+import { DecisionRoomCompetitorCounter } from "./DecisionRoomCompetitorCounter";
 
 interface Props {
   dealId: string;
@@ -160,22 +161,32 @@ export function DecisionRoomLossLens({ dealId, companyId, companyName, dealAmoun
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
               Competitors that won
             </p>
-            <ul className="space-y-1">
-              {patterns.competitors.map((bucket) => (
-                <li
-                  key={bucket.key}
-                  className="flex items-center justify-between gap-2 text-xs text-foreground/90"
-                >
-                  <span className="truncate">{bucket.key}</span>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-200",
-                    )}
-                  >
-                    ×{bucket.count}
-                  </span>
-                </li>
-              ))}
+            <ul className="space-y-2">
+              {patterns.competitors.map((bucket) => {
+                const dominantLossReason = patterns.reasons[0]?.key ?? null;
+                return (
+                  <li key={bucket.key} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-xs text-foreground/90">
+                      <span className="truncate">{bucket.key}</span>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span
+                          className={cn(
+                            "rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-200",
+                          )}
+                        >
+                          ×{bucket.count}
+                        </span>
+                        <DecisionRoomCompetitorCounter
+                          dealId={dealId}
+                          competitor={bucket.key}
+                          companyName={companyName}
+                          lossReasonHint={dominantLossReason}
+                        />
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ) : null}

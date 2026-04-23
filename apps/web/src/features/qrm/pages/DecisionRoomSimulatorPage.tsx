@@ -54,42 +54,18 @@ import { DecisionRoomWinFormula } from "../components/DecisionRoomWinFormula";
 import { DecisionRoomBriefExport } from "../components/DecisionRoomBriefExport";
 import { DecisionRoomGymPicker } from "../components/DecisionRoomGymPicker";
 import { DecisionRoomReplayBanner } from "../components/DecisionRoomReplayBanner";
+import {
+  insertMoveToDb,
+  loadMoveHistoryFromDb,
+  loadMoveHistoryFromStorage,
+  persistMoveHistoryToStorage,
+} from "../lib/decision-room-moves-persist";
 
 const EMPTY_RELATIONSHIP_BOARD: RelationshipMapBoard = {
   summary: { contacts: 0, signers: 0, deciders: 0, influencers: 0, operators: 0, blockers: 0 },
   contacts: [],
   unmatchedStakeholders: [],
 };
-
-const MOVE_HISTORY_STORAGE_VERSION = 1;
-const MOVE_HISTORY_MAX_ENTRIES = 20;
-
-function moveHistoryStorageKey(dealId: string): string {
-  return `qep:decision-room:moves:v${MOVE_HISTORY_STORAGE_VERSION}:${dealId}`;
-}
-
-function loadMoveHistory(dealId: string): TriedMove[] {
-  try {
-    const raw = localStorage.getItem(moveHistoryStorageKey(dealId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.slice(0, MOVE_HISTORY_MAX_ENTRIES) as TriedMove[];
-  } catch {
-    return [];
-  }
-}
-
-function persistMoveHistory(dealId: string, history: TriedMove[]): void {
-  try {
-    localStorage.setItem(
-      moveHistoryStorageKey(dealId),
-      JSON.stringify(history.slice(0, MOVE_HISTORY_MAX_ENTRIES)),
-    );
-  } catch {
-    // Out-of-quota or private-mode — ignore silently.
-  }
-}
 
 export function DecisionRoomSimulatorPage() {
   const { dealId } = useParams<{ dealId: string }>();
@@ -99,16 +75,30 @@ export function DecisionRoomSimulatorPage() {
   const [moveHistory, setMoveHistory] = useState<TriedMove[]>([]);
   const [movePrefill, setMovePrefill] = useState<string | null>(null);
 
-  // Restore move history when the dealId changes (including first mount).
+  // Hydrate from localStorage immediately (instant flash-free render),
+  // then let the DB query authoritative-overlay once it resolves.
   useEffect(() => {
     if (!dealId) return;
-    setMoveHistory(loadMoveHistory(dealId));
+    const cached = loadMoveHistoryFromStorage(dealId);
+    if (cached.length > 0) setMoveHistory(cached);
   }, [dealId]);
 
-  // Persist after every history update so nothing is lost on refresh.
+  const dbMoveHistoryQuery = useQuery({
+    queryKey: ["decision-room-simulator", dealId, "moves"],
+    queryFn: () => loadMoveHistoryFromDb(dealId!),
+    enabled: Boolean(dealId),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!dbMoveHistoryQuery.data) return;
+    setMoveHistory(dbMoveHistoryQuery.data);
+  }, [dbMoveHistoryQuery.data]);
+
+  // Mirror to localStorage so the next page mount gets the instant hydrate.
   useEffect(() => {
     if (!dealId) return;
-    persistMoveHistory(dealId, moveHistory);
+    persistMoveHistoryToStorage(dealId, moveHistory);
   }, [dealId, moveHistory]);
 
   const compositeQuery = useQuery({
@@ -313,6 +303,12 @@ export function DecisionRoomSimulatorPage() {
 
   function handleMoveResult(result: TriedMove) {
     setMoveHistory((prev) => [result, ...prev].slice(0, 20));
+    // Persist to DB in the background — local state already updated, so the
+    // UI doesn't block on the round-trip. Best-effort on failure: the
+    // localStorage mirror still covers the happy path.
+    void insertMoveToDb(dealId!, result).catch((err) => {
+      console.warn("[decision-room] move persist failed", err);
+    });
   }
 
   return (
