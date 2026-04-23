@@ -325,18 +325,20 @@ export function DecisionRoomCanvas({ seats, selectedSeatId, onSelectSeat, compan
                     <span className="text-sm font-semibold sm:text-base">{initials(seat)}</span>
                   )}
                 </div>
-                {/* Ghost / blocker badge — blocker wins if both apply */}
+                {/* Ghost / blocker badge — floats fully above the circle so
+                    it never covers the archetype portrait. Blocker wins if
+                    both apply. */}
                 {seat.stance === "blocker" ? (
                   <span
                     aria-hidden
-                    className="absolute -right-1 -top-1 rounded-full border border-red-400/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-red-300"
+                    className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-full border border-red-400/60 bg-black/85 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-red-300 shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
                   >
                     Blocker
                   </span>
                 ) : seat.status === "ghost" ? (
                   <span
                     aria-hidden
-                    className="absolute -right-1 -top-1 rounded-full border border-qep-orange/60 bg-black/80 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-qep-orange"
+                    className="absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-full border border-qep-orange/60 bg-black/85 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wider text-qep-orange shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
                   >
                     Ghost
                   </span>
