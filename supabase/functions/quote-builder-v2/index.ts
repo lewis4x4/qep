@@ -1255,14 +1255,27 @@ async function resolveQuoteApprovalAssignee(input: {
 
   const { data: escalationProfiles, error: escalationErr } = await input.admin
     .from("profiles")
-    .select("id, full_name, role, is_active, active_workspace_id")
+    .select("id, full_name, role, is_active, active_workspace_id, email")
     .eq("active_workspace_id", input.workspaceId)
     .eq("is_active", true)
     .in("role", input.ownerEscalationRole === "owner" ? ["owner", "admin"] : ["admin", "owner"]);
   if (escalationErr) throw new Error(escalationErr.message);
 
-  const escalationProfile = (escalationProfiles ?? []).find((profile: { role?: string }) =>
-    profile.role === input.ownerEscalationRole) ?? (escalationProfiles ?? [])[0] ?? null;
+  // Filter out seeded demo/system accounts. The default workspace ships
+  // with fixture owners (Alex Mercer / Jordan Pike at @qep-demo.local)
+  // for the standalone demo flow; in production their presence causes
+  // the resolver to route approvals to a fake inbox instead of the real
+  // owners (Ryan + Rylee McKenzie etc.). Email suffix is the cleanest
+  // signal since profiles.role can't distinguish them from real humans.
+  const realProfiles = (escalationProfiles ?? []).filter((profile: { email?: string | null }) => {
+    const email = typeof profile.email === "string" ? profile.email.toLowerCase() : "";
+    if (email.endsWith("@qep-demo.local")) return false;
+    if (email.endsWith("@example.com")) return false;
+    return true;
+  });
+
+  const escalationProfile = realProfiles.find((profile: { role?: string }) =>
+    profile.role === input.ownerEscalationRole) ?? realProfiles[0] ?? null;
 
   if (escalationProfile?.id) {
     return {
